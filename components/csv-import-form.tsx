@@ -1,0 +1,143 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
+import { Upload } from "lucide-react";
+
+type CsvImportFormProps = {
+  profiles: Array<{ id: string; name: string }>;
+};
+
+type ImportResult = {
+  jobId: string;
+  replayed?: boolean;
+  idempotencyKey?: string;
+  raw: number;
+  normalized: number;
+  duplicates: number;
+  suppressed: number;
+  companies: number;
+  contacts: number;
+};
+
+export function CsvImportForm({ profiles }: CsvImportFormProps) {
+  const router = useRouter();
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    setResult(null);
+
+    const response = await fetch("/api/import/csv", {
+      method: "POST",
+      body: new FormData(event.currentTarget)
+    });
+
+    const payload = await response.json();
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(payload.error ?? "CSV import failed.");
+      return;
+    }
+
+    setResult(payload);
+    event.currentTarget.reset();
+    router.refresh();
+  }
+
+  return (
+    <section className="panel" id="import-csv">
+      <div className="panel-header">
+        <div className="panel-title-wrap">
+          <h2 className="section-title">CSV Upload And Field Mapping</h2>
+          <p className="section-subtitle">Upload external leads, map fields, store raw rows, normalize, dedupe, and create CRM-ready records.</p>
+        </div>
+      </div>
+      <form onSubmit={handleSubmit} className="panel-body form-grid">
+        <div className="field">
+          <label htmlFor="file">CSV file</label>
+          <input id="file" name="file" type="file" accept=".csv,text/csv" required />
+        </div>
+        <div className="field">
+          <label htmlFor="jobName">Lead job name</label>
+          <input id="jobName" name="jobName" placeholder="June imported lead list" required />
+        </div>
+        <div className="field">
+          <label htmlFor="source">Source label</label>
+          <input id="source" name="source" defaultValue="CSV Upload" required />
+        </div>
+        <div className="field">
+          <label htmlFor="searchProfileId">Search profile</label>
+          <select id="searchProfileId" name="searchProfileId">
+            <option value="">No profile</option>
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="companyName">Company column</label>
+          <input id="companyName" name="companyName" defaultValue="company" />
+        </div>
+        <div className="field">
+          <label htmlFor="contactName">Contact column</label>
+          <input id="contactName" name="contactName" defaultValue="contact" />
+        </div>
+        <div className="field">
+          <label htmlFor="title">Title column</label>
+          <input id="title" name="title" defaultValue="title" />
+        </div>
+        <div className="field">
+          <label htmlFor="email">Email column</label>
+          <input id="email" name="email" defaultValue="email" />
+        </div>
+        <div className="field">
+          <label htmlFor="phone">Phone column</label>
+          <input id="phone" name="phone" defaultValue="phone" />
+        </div>
+        <div className="field">
+          <label htmlFor="domain">Domain column</label>
+          <input id="domain" name="domain" defaultValue="domain" />
+        </div>
+        <div className="field">
+          <label htmlFor="website">Website column</label>
+          <input id="website" name="website" defaultValue="website" />
+        </div>
+        <div className="field">
+          <label htmlFor="city">City column</label>
+          <input id="city" name="city" defaultValue="city" />
+        </div>
+        <div className="field">
+          <label htmlFor="state">State column</label>
+          <input id="state" name="state" defaultValue="state" />
+        </div>
+        <div className="field">
+          <label htmlFor="industry">Industry column</label>
+          <input id="industry" name="industry" defaultValue="industry" />
+        </div>
+        <div className="field">
+          <label aria-hidden="true">&nbsp;</label>
+          <button className="button primary" disabled={loading} type="submit">
+            <Upload size={17} aria-hidden="true" />
+            {loading ? "Importing" : "Import and normalize"}
+          </button>
+        </div>
+        {error ? <p className="section-subtitle danger-text">{error}</p> : null}
+        {result ? (
+          <p className="section-subtitle success-text">
+            {result.replayed
+              ? `Reused job ${result.jobId}; this CSV import was already processed.`
+              : `Imported ${result.raw} rows into job ${result.jobId}. Created ${result.companies} companies and ${result.contacts} contacts.`}
+          </p>
+        ) : null}
+      </form>
+    </section>
+  );
+}
