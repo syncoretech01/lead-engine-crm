@@ -17,8 +17,8 @@ Summary:
 | Status | Count |
 |---|---:|
 | Done | 48 |
-| Partial | 25 |
-| Not started | 4 |
+| Partial | 27 |
+| Not started | 2 |
 | Total | 77 |
 
 ## 24.1 Lead Engine
