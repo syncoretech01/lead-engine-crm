@@ -34,3 +34,9 @@ export const outreachCampaignSendWriteTables = [
   "activities",
   "auditLogs"
 ] satisfies ProjectionTableName[];
+
+export const providerConnectionWriteTables = [
+  "providerConnections",
+  "providerCredentialAudits",
+  "auditLogs"
+] satisfies ProjectionTableName[];

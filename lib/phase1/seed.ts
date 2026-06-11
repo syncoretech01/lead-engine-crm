@@ -21,6 +21,7 @@ import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import { defaultExportRules } from "@/lib/phase1/exporting";
 import { ensureJobObservabilityDefaults } from "@/lib/phase1/jobs";
 import { ensureOutreachDefaults } from "@/lib/phase1/outreach";
+import { createDefaultProviderConnections } from "@/lib/phase1/provider-connections";
 import { ensureReportingDefaults } from "@/lib/phase1/reporting";
 import { defaultSegmentRules } from "@/lib/phase1/scoring";
 import { ensureSdrDefaults } from "@/lib/phase1/sdr";
@@ -310,10 +311,16 @@ export function createSeedState(): AppState {
   ];
 
   const state: AppState = {
-    version: 11,
+    version: 12,
     workspaces: [workspace],
     users,
     workspaceMembers,
+    providerConnections: createDefaultProviderConnections({
+      workspaceId,
+      now,
+      actorUserId: "user-nora"
+    }),
+    providerCredentialAudits: [],
     searchProfiles: seededProfiles,
     leadJobs: seededJobs,
     asyncJobRuns: [],

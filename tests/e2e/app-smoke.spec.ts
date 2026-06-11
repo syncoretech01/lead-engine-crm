@@ -14,6 +14,7 @@ const routes = [
   ["/sdr/manager", "SDR manager dashboard"],
   ["/outreach/campaigns", "Outreach campaigns"],
   ["/outreach/events", "Outreach event tracking"],
+  ["/integrations", "Integration Center"],
   ["/reports", "Admin reports"],
   ["/reports/compliance", "Compliance workflows"],
   ["/automation", "AI automation"],
@@ -40,6 +41,9 @@ test.describe("Syncore app smoke coverage", () => {
 
     await page.getByRole("link", { name: /Outreach/i }).click();
     await expect(page.getByRole("heading", { name: "Outreach campaigns", level: 1 })).toBeVisible();
+
+    await page.getByRole("link", { name: /Integrations/i }).click();
+    await expect(page.getByRole("heading", { name: "Integration Center", level: 1 })).toBeVisible();
   });
 
   test("scopes navigation and page access for an SDR session", async ({ page, context, baseURL }) => {

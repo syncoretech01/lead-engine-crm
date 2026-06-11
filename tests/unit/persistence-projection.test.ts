@@ -22,6 +22,8 @@ describe("normalized persistence projection", () => {
     const trackedCall = projection.trackedCalls.find((row) => row.recordingConsent === "Granted");
 
     expect(summary.tables.workspaces).toBe(state.workspaces.length);
+    expect(summary.tables.providerConnections).toBe(state.providerConnections.length);
+    expect(summary.tables.providerCredentialAudits).toBe(state.providerCredentialAudits.length);
     expect(summary.tables.contacts).toBe(state.contacts.length);
     expect(summary.tables.accounts).toBe(state.companies.length);
     expect(summary.tables.crmContacts).toBe(state.contacts.length);
@@ -47,6 +49,27 @@ describe("normalized persistence projection", () => {
     expect(trackedCall?.leadContactId).toBeTruthy();
     expect(trackedCall?.accountId).toBeTruthy();
     expect(summary.hash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("projects provider connection metadata without raw credentials", () => {
+    const state = createSeedState();
+    const projection = createNormalizedPersistenceProjection(state);
+    const connection = projection.providerConnections.find((row) => row.providerId === "apollo");
+
+    expect(projection.providerConnections).toHaveLength(10);
+    expect(connection).toMatchObject({
+      displayName: "Apollo",
+      status: "Not configured",
+      enabled: false,
+      executionMode: "mock",
+      secretStorage: "Not configured",
+      secretVersion: 0,
+      lastTestStatus: "Not tested"
+    });
+    expect(connection?.capabilities).toContain("discover_companies");
+    expect(connection?.secretRef).toBeUndefined();
+    expect(connection?.maskedSecretSuffix).toBeUndefined();
+    expect(JSON.stringify(connection)).not.toMatch(/api[_-]?key|secret-value|token-value/i);
   });
 
   it("produces deterministic hashes and changes when projected state changes", () => {
@@ -120,5 +143,36 @@ describe("normalized persistence projection", () => {
     ]));
     expect(result.tables.exports).toBe(projection.exports.length);
     expect(result.tables.emailEvents).toBe(projection.emailEvents.length);
+  });
+
+  it("can mirror only provider credential tables for integration settings writes", async () => {
+    const state = createSeedState();
+    const touchedDelegates = new Set<string>();
+    const client = new Proxy({}, {
+      get(_target, property) {
+        return {
+          deleteMany: async () => {
+            touchedDelegates.add(`${String(property)}.deleteMany`);
+          },
+          upsert: async () => {
+            touchedDelegates.add(`${String(property)}.upsert`);
+          }
+        };
+      }
+    });
+
+    const result = await syncNormalizedProjectionToPrisma(state, client, {
+      tables: ["providerConnections", "providerCredentialAudits", "auditLogs"]
+    });
+
+    expect(result.syncedTables).toEqual(["providerConnections", "providerCredentialAudits", "auditLogs"]);
+    expect(result.skippedTables).toEqual([]);
+    expect(touchedDelegates).toEqual(new Set([
+      "auditLog.deleteMany",
+      "providerCredentialAudit.deleteMany",
+      "providerConnection.deleteMany",
+      "providerConnection.upsert",
+      "auditLog.upsert"
+    ]));
   });
 });

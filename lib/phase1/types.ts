@@ -1,3 +1,5 @@
+import type { ProviderCapability, ProviderCategory, ProviderExecutionMode, ProviderId } from "@/lib/providers/types";
+
 export type WorkspaceRole =
   | "Admin"
   | "Manager"
@@ -227,6 +229,61 @@ export type JobIdempotencyRecord = {
   recordIds: string[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type ProviderConnectionStatus = "Not configured" | "Connected" | "Needs attention" | "Disabled";
+export type ProviderSecretStorage = "Not configured" | "Encrypted database" | "Managed secret store" | "Environment";
+export type ProviderConnectionTestStatus = "Not tested" | "Passed" | "Failed" | "Skipped";
+export type ProviderCredentialAuditAction =
+  | "Created"
+  | "Updated"
+  | "Secret rotated"
+  | "Tested"
+  | "Enabled"
+  | "Disabled"
+  | "Deleted"
+  | "Scopes changed";
+
+export type ProviderConnection = {
+  id: string;
+  workspaceId: string;
+  providerId: ProviderId;
+  displayName: string;
+  status: ProviderConnectionStatus;
+  enabled: boolean;
+  executionMode: ProviderExecutionMode;
+  categories: ProviderCategory[];
+  capabilities: ProviderCapability[];
+  scopes: string[];
+  allowedOperations: ProviderCapability[];
+  credentialLabel?: string;
+  secretRef?: string;
+  secretStorage: ProviderSecretStorage;
+  secretVersion: number;
+  maskedSecretSuffix?: string;
+  rateLimitPerMinute?: number;
+  dailyBudgetCents?: number;
+  waterfallOrder: number;
+  lastTestStatus: ProviderConnectionTestStatus;
+  lastTestedAt?: string;
+  lastTestedById?: string;
+  lastTestError?: string;
+  createdById?: string;
+  updatedById?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProviderCredentialAudit = {
+  id: string;
+  workspaceId: string;
+  providerConnectionId: string;
+  providerId: ProviderId;
+  actorUserId?: string;
+  action: ProviderCredentialAuditAction;
+  secretVersion: number;
+  redactedMetadata: Record<string, string | number | boolean | string[] | undefined>;
+  createdAt: string;
 };
 
 export type RawLead = {
@@ -1154,10 +1211,12 @@ export type AuditLog = {
 };
 
 export type AppState = {
-  version: 11;
+  version: 12;
   workspaces: Workspace[];
   users: User[];
   workspaceMembers: WorkspaceMember[];
+  providerConnections: ProviderConnection[];
+  providerCredentialAudits: ProviderCredentialAudit[];
   searchProfiles: SearchProfile[];
   leadJobs: LeadJob[];
   asyncJobRuns: AsyncJobRun[];

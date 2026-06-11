@@ -6,6 +6,8 @@ Updated: 2026-06-10
 
 Provider API keys should be stored per workspace and per provider connection. The database should store metadata such as provider ID, status, scopes, last tested time, creator/updater, and encrypted secret references. Raw API keys should never be stored in plaintext.
 
+Implementation status: provider connection metadata, secret-reference fields, masked suffix fields, last-test metadata, credential audit rows, server-only save/update/test/disable services, and an admin Integration Center UI shell now exist. The raw secret encryption/write path is still pending.
+
 ## Encrypted Secrets
 
 Production should use envelope encryption:
@@ -39,7 +41,7 @@ Each workspace should be able to configure provider connections independently:
 
 ## Provider Connection Testing
 
-Connection tests must run server-side only. A test should verify that the credential is present, has expected scopes, and can reach the provider when real adapters are enabled. In local/no-op mode, tests should validate only configuration shape.
+Connection tests must run server-side only. A test should verify that the credential is present, has expected scopes, and can reach the provider when real adapters are enabled. In local/no-op mode, tests validate configuration shape without network access.
 
 Connection test results should store:
 
@@ -74,3 +76,5 @@ Credential lifecycle events must write audit logs:
 - Provider execution paused/resumed
 
 Audit records should include actor, workspace, provider, action, timestamp, and redacted metadata only.
+
+Implementation status: dedicated credential audit rows, server-only service helpers, and the Integration Center UI shell are available for provider lifecycle events. The next build step should replace local secret references with encrypted database storage or a managed secret-store integration.

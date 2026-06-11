@@ -14,6 +14,8 @@ export type ProjectionTableName =
   | "workspaces"
   | "users"
   | "workspaceMembers"
+  | "providerConnections"
+  | "providerCredentialAudits"
   | "searchProfiles"
   | "leadJobs"
   | "rawLeads"
@@ -53,6 +55,8 @@ const projectionTables: ProjectionTableName[] = [
   "workspaces",
   "users",
   "workspaceMembers",
+  "providerConnections",
+  "providerCredentialAudits",
   "searchProfiles",
   "leadJobs",
   "rawLeads",
@@ -82,6 +86,8 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "workspaces", delegate: "workspace", workspaceScoped: false },
   { table: "users", delegate: "user", workspaceScoped: false },
   { table: "workspaceMembers", delegate: "workspaceMember", workspaceScoped: true },
+  { table: "providerConnections", delegate: "providerConnection", workspaceScoped: true },
+  { table: "providerCredentialAudits", delegate: "providerCredentialAudit", workspaceScoped: true },
   { table: "searchProfiles", delegate: "searchProfile", workspaceScoped: true },
   { table: "leadJobs", delegate: "leadJob", workspaceScoped: true },
   { table: "rawLeads", delegate: "rawLead", workspaceScoped: true },
@@ -136,6 +142,46 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       userId: member.userId,
       role: workspaceRoleValue(member.role),
       createdAt: state.workspaces.find((workspace) => workspace.id === member.workspaceId)?.createdAt ?? new Date(0).toISOString()
+    }))),
+    providerConnections: sortRows(state.providerConnections.map((connection) => ({
+      id: connection.id,
+      workspaceId: connection.workspaceId,
+      providerId: connection.providerId,
+      displayName: connection.displayName,
+      status: connection.status,
+      enabled: connection.enabled,
+      executionMode: connection.executionMode,
+      categories: connection.categories,
+      capabilities: connection.capabilities,
+      scopes: connection.scopes,
+      allowedOperations: connection.allowedOperations,
+      credentialLabel: connection.credentialLabel,
+      secretRef: connection.secretRef,
+      secretStorage: connection.secretStorage,
+      secretVersion: connection.secretVersion,
+      maskedSecretSuffix: connection.maskedSecretSuffix,
+      rateLimitPerMinute: connection.rateLimitPerMinute,
+      dailyBudgetCents: connection.dailyBudgetCents,
+      waterfallOrder: connection.waterfallOrder,
+      lastTestStatus: connection.lastTestStatus,
+      lastTestedAt: connection.lastTestedAt,
+      lastTestedById: connection.lastTestedById,
+      lastTestError: connection.lastTestError,
+      createdById: connection.createdById,
+      updatedById: connection.updatedById,
+      createdAt: connection.createdAt,
+      updatedAt: connection.updatedAt
+    }))),
+    providerCredentialAudits: sortRows(state.providerCredentialAudits.map((audit) => ({
+      id: audit.id,
+      workspaceId: audit.workspaceId,
+      providerConnectionId: audit.providerConnectionId,
+      providerId: audit.providerId,
+      actorUserId: audit.actorUserId,
+      action: audit.action,
+      secretVersion: audit.secretVersion,
+      redactedMetadata: audit.redactedMetadata,
+      createdAt: audit.createdAt
     }))),
     searchProfiles: sortRows(state.searchProfiles.map((profile) => ({
       id: profile.id,

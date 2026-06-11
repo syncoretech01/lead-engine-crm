@@ -22,7 +22,7 @@ The active compatibility source of truth is still `AppStateSnapshot`. In file mo
 - No real provider adapters are connected yet.
 - No production identity provider is wired.
 - No background worker queue is active for extraction, enrichment, verification, or campaign sync.
-- No encrypted workspace credential storage exists yet.
+- Provider connection metadata, secret-reference fields, credential audit tables, server-only management services, and an admin Integration Center UI shell exist. Raw secret encryption/KMS storage is not implemented yet.
 - No provider-native webhook signature validation exists yet.
 - No production object storage path is active for recordings, exports, or attachments.
 - No production migration, backup, restore, or tenant-isolation test lane exists yet.
@@ -36,6 +36,7 @@ Implemented:
 - Normalized projection sync to core Prisma tables.
 - Normalized read paths for contacts, accounts, CRM events, outreach events, exports, compliance rows, and reporting inputs.
 - Scoped normalized write sync for generated exports, outreach event creation, campaign send simulation, and signed email/SMS webhook processing.
+- Provider connection metadata and credential audit rows are now represented in `AppStateSnapshot`, Prisma tables, normalized projection sync, server-only save/test/disable services, and an admin UI shell.
 
 Still needed:
 
@@ -68,7 +69,7 @@ Still needed:
 
 - Production authentication and session signing.
 - SSO/OIDC/SAML provider integration.
-- Encrypted secret storage.
+- Raw API-key encryption, KMS/secret-store integration, and credential rotation flows.
 - Workspace-level provider connection permissions.
 - Credential rotation and audit evidence.
 - Provider-native webhook verification and replay-window checks.
@@ -90,12 +91,10 @@ Still needed:
 
 ## Immediate Next Build Order
 
-1. Stabilize typed provider interfaces, registry metadata, and no-op adapters.
-2. Add encrypted workspace credential storage design and database tables.
-3. Add provider connection test flows that never expose secrets to the frontend.
-4. Add provider job/run records for extraction, verification, enrichment, sending, and webhook sync.
-5. Cut over CRM/compliance/reporting write paths to selected normalized transactions.
-6. Add background worker queue support for provider jobs.
-7. Add real provider adapters one at a time behind feature flags and contract tests.
-8. Add production auth and signed session management.
-9. Add production migration, backup/restore, tenant-isolation, and deployment checks.
+1. Add raw API-key encryption or managed secret-store integration behind the provider connection metadata.
+2. Add provider job/run records for extraction, verification, enrichment, sending, and webhook sync.
+3. Cut over CRM/compliance/reporting write paths to selected normalized transactions.
+4. Add background worker queue support for provider jobs.
+5. Add real provider adapters one at a time behind feature flags and contract tests.
+6. Add production auth and signed session management.
+7. Add production migration, backup/restore, tenant-isolation, and deployment checks.

@@ -72,6 +72,11 @@ import {
   retentionRunModes,
   runRetentionPolicy
 } from "@/lib/phase1/reporting";
+import {
+  disableProviderConnectionForWorkspace,
+  saveProviderConnection,
+  testProviderConnection
+} from "@/lib/phase1/provider-connection-service";
 import { applySegmentsAndScores, createSegmentRuleFromForm } from "@/lib/phase1/scoring";
 import {
   applyReassignmentRecommendations,
@@ -121,6 +126,7 @@ import type {
   RecordingConsentStatus,
   TrackedCallStatus
 } from "@/lib/phase1/types";
+import type { ProviderCapability, ProviderId } from "@/lib/providers/types";
 
 export async function createSearchProfileAction(formData: FormData) {
   await updateState((state, session) => {
@@ -1748,6 +1754,36 @@ export async function dismissAiRecordAction(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
+export async function saveProviderConnectionAction(formData: FormData) {
+  await saveProviderConnection({
+    providerId: providerIdValue(formData.get("providerId")),
+    enabled: formData.get("enabled") === "on",
+    credentialLabel: stringValue(formData.get("credentialLabel")),
+    secretValue: stringValue(formData.get("secretValue")),
+    scopes: splitList(formData.get("scopes")),
+    allowedOperations: providerCapabilityValues(formData),
+    rateLimitPerMinute: optionalNumberValue(formData.get("rateLimitPerMinute")),
+    dailyBudgetCents: optionalNumberValue(formData.get("dailyBudgetCents")),
+    waterfallOrder: optionalNumberValue(formData.get("waterfallOrder"))
+  });
+
+  revalidatePath("/integrations");
+}
+
+export async function testProviderConnectionAction(formData: FormData) {
+  await testProviderConnection(providerIdValue(formData.get("providerId")));
+  revalidatePath("/integrations");
+}
+
+export async function disableProviderConnectionAction(formData: FormData) {
+  await disableProviderConnectionForWorkspace(
+    providerIdValue(formData.get("providerId")),
+    stringValue(formData.get("reason"), "Disabled from Integration Center")
+  );
+
+  revalidatePath("/integrations");
+}
+
 export async function resetPhase1DataAction() {
   await updateState((state, session) => {
     assertPermission(session, "manage_workspace");
@@ -1779,6 +1815,23 @@ function numberValue(value: FormDataEntryValue | null) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function optionalNumberValue(value: FormDataEntryValue | null) {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function providerIdValue(value: FormDataEntryValue | null): ProviderId {
+  return stringValue(value) as ProviderId;
+}
+
+function providerCapabilityValues(formData: FormData): ProviderCapability[] {
+  return formData.getAll("allowedOperations").map(String) as ProviderCapability[];
 }
 
 function exportName(type: ExportRecord["type"]) {

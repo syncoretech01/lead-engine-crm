@@ -101,6 +101,8 @@ model Workspace {
   updatedAt           DateTime             @updatedAt
   members             WorkspaceMember[]
   integrations        Integration[]
+  providerConnections ProviderConnection[]
+  providerCredentialAudits ProviderCredentialAudit[]
   searchProfiles      SearchProfile[]
   leadJobs            LeadJob[]
   rawLeads            RawLead[]
@@ -208,6 +210,59 @@ model Integration {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, provider])
+}
+
+model ProviderConnection {
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  providerId         String
+  displayName        String
+  status             String
+  enabled            Boolean   @default(false)
+  executionMode      String    @default("mock")
+  categories         String[]
+  capabilities       String[]
+  scopes             String[]
+  allowedOperations  String[]
+  credentialLabel    String?
+  secretRef          String?
+  secretStorage      String    @default("Not configured")
+  secretVersion      Int       @default(0)
+  maskedSecretSuffix String?
+  rateLimitPerMinute Int?
+  dailyBudgetCents   Int?
+  waterfallOrder     Int       @default(0)
+  lastTestStatus     String    @default("Not tested")
+  lastTestedAt       DateTime?
+  lastTestedById     String?
+  lastTestError      String?
+  createdById        String?
+  updatedById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  credentialAudits   ProviderCredentialAudit[]
+
+  @@unique([workspaceId, providerId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, enabled])
+}
+
+model ProviderCredentialAudit {
+  id                   String             @id @default(cuid())
+  workspaceId          String
+  providerConnectionId String
+  providerId           String
+  actorUserId          String?
+  action               String
+  secretVersion        Int                @default(0)
+  redactedMetadata     Json
+  createdAt            DateTime           @default(now())
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  providerConnection   ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, providerId, createdAt])
+  @@index([workspaceId, providerConnectionId])
 }
 
 model SearchProfile {

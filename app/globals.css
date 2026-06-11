@@ -145,7 +145,11 @@ button {
 
 .nav-list {
   display: grid;
+  flex: 1;
   gap: 5px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .nav-link {
@@ -356,6 +360,10 @@ button {
 
 .grid.two {
   grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+}
+
+.grid.two.integrations-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .grid.three {
@@ -740,6 +748,19 @@ tr:last-child td {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.integration-card {
+  align-content: start;
+}
+
+.integration-card .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.integration-options,
+.integration-actions {
+  grid-column: 1 / -1;
 }
 
 .item-card-actions form,

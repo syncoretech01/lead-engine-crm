@@ -9,6 +9,7 @@ The app still uses `AppStateSnapshot` as the broad compatibility source of truth
 Mirrored tables currently include:
 
 - Workspace, user, and workspace membership rows
+- Provider connection metadata and credential audit rows
 - Search profiles, lead jobs, raw leads, and normalized records
 - Companies, contacts, CRM accounts, CRM contacts, opportunities, activities, tasks, notes, call logs, and suppression records
 - Exports, outreach campaigns, campaign sequences, sequence steps, email events, SMS events, and tracked calls
@@ -26,6 +27,7 @@ Unit coverage verifies:
 - Selected write paths can request only the normalized tables they touch, avoiding a full projection sync for export generation and outreach event/webhook writes
 - Projection hashes are deterministic for a given state
 - Prisma-style delegates receive mirrored delete/upsert calls
+- Provider connection tables mirror metadata without storing raw credentials
 
 Run:
 
@@ -55,4 +57,4 @@ The normalized tables are now populated as a mirror. Contact and account list/de
 
 The first write-path cutover slice is in place for generated export records, manual outreach email/SMS/call events, campaign send simulation, and signed email/SMS webhook processing. These paths still update the snapshot for compatibility, but Prisma mode now syncs only the relevant normalized tables in the same transaction.
 
-The next persistence step is to continue the selected write-path cutover for CRM opportunities, tasks, notes, call logs, compliance requests, and report/retention actions. Production database migrations, backup/restore checks, and tenant/session tests should follow that write-path work.
+Provider connection metadata tables are now included in the normalized projection. The next persistence step is to add server-only provider connection write services, then continue the selected write-path cutover for CRM opportunities, tasks, notes, call logs, compliance requests, and report/retention actions. Production database migrations, backup/restore checks, and tenant/session tests should follow that write-path work.

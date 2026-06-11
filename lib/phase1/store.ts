@@ -15,6 +15,7 @@ import {
   type ProjectionTableName,
   type SyncNormalizedProjectionOptions
 } from "@/lib/phase1/persistence-projection";
+import { createDefaultProviderConnections } from "@/lib/phase1/provider-connections";
 import { ensureReportingDefaults } from "@/lib/phase1/reporting";
 import { createSeedState } from "@/lib/phase1/seed";
 import { defaultSegmentRules } from "@/lib/phase1/scoring";
@@ -230,8 +231,24 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
   const state = input;
   const workspaceId = state.workspaces[0]?.id;
 
-  if ((state as { version: number }).version !== 11) {
-    state.version = 11;
+  if ((state as { version: number }).version !== 12) {
+    state.version = 12;
+    changed = true;
+  }
+
+  if (!Array.isArray(state.providerConnections)) {
+    state.providerConnections = workspaceId
+      ? createDefaultProviderConnections({
+          workspaceId,
+          now: new Date().toISOString(),
+          actorUserId: state.users[0]?.id
+        })
+      : [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.providerCredentialAudits)) {
+    state.providerCredentialAudits = [];
     changed = true;
   }
 
