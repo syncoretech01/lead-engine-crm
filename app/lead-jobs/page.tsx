@@ -1,7 +1,16 @@
 import Link from "next/link";
-import { Activity, BadgeCheck, CircleDollarSign, Play, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+  Activity,
+  BadgeCheck,
+  CircleDollarSign,
+  Database,
+  Play,
+  RefreshCw,
+  ShieldCheck,
+  TimerReset
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { createLeadJobAction, retryLeadJobAction } from "@/app/actions";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -10,8 +19,6 @@ import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-
-const metricIcons = [Activity, BadgeCheck, ShieldCheck, CircleDollarSign];
 
 export default async function LeadJobsPage() {
   const { state, workspaceId } = await getWorkspaceContext("run_jobs");
@@ -27,32 +34,70 @@ export default async function LeadJobsPage() {
   const retryQueue = jobRows.filter(({ observability }) => observability.canRetry || observability.failedRuns > 0);
   const totalVerified = leadJobs.reduce((total, job) => total + job.verified, 0);
   const totalCost = leadJobs.reduce((total, job) => total + job.actualCost, 0);
+  const completedJobs = leadJobs.filter((job) => job.status === "Completed");
+  const queuedJobs = leadJobs.filter((job) => job.status === "Queued");
+  const runningJobs = leadJobs.filter((job) => job.status === "Running");
+  const exportReady = leadJobs.reduce((total, job) => total + job.exported + job.pushedToCrm, 0);
 
-  const metrics = [
+  const stats = [
     {
       label: "Active jobs",
-      value: activeJobs.length,
+      value: formatNumber(activeJobs.length),
       note: `${formatNumber(leadJobs.length)} total lead jobs`,
+      icon: Activity,
       tone: activeJobs.length ? "warning" as const : "success" as const
     },
     {
       label: "Verified",
-      value: totalVerified,
+      value: formatNumber(totalVerified),
       note: "Contacts passing verification",
+      icon: BadgeCheck,
       tone: "success" as const
     },
     {
       label: "Needs recovery",
-      value: retryQueue.length,
+      value: formatNumber(retryQueue.length),
       note: "Jobs with failed runs or retry options",
+      icon: ShieldCheck,
       tone: retryQueue.length ? "warning" as const : "success" as const
     },
     {
       label: "Spend tracked",
-      value: totalCost,
-      currency: true,
+      value: formatCurrencyCompact(totalCost),
       note: "Local provider cost simulation",
+      icon: CircleDollarSign,
       tone: "info" as const
+    }
+  ];
+
+  const statusCards = [
+    {
+      label: "Running",
+      value: runningJobs.length,
+      note: "Workers active now",
+      icon: Activity,
+      tone: "info" as const
+    },
+    {
+      label: "Queued",
+      value: queuedJobs.length,
+      note: "Waiting for source capacity",
+      icon: TimerReset,
+      tone: queuedJobs.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Completed",
+      value: completedJobs.length,
+      note: `${formatNumber(exportReady)} downstream writes`,
+      icon: BadgeCheck,
+      tone: "success" as const
+    },
+    {
+      label: "Recovery",
+      value: retryQueue.length,
+      note: retryQueue.length ? "Retry or review needed" : "No failed runs",
+      icon: RefreshCw,
+      tone: retryQueue.length ? "warning" as const : "success" as const
     }
   ];
 
@@ -76,11 +121,16 @@ export default async function LeadJobsPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="Lead job metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? Activity;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Lead job metrics">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
+        ))}
+      </section>
+
+      <section className="job-status-strip" aria-label="Lead job status summary">
+        {statusCards.map((card) => (
+          <JobStatusCard key={card.label} {...card} />
+        ))}
       </section>
 
       <section className="panel">
@@ -96,6 +146,7 @@ export default async function LeadJobsPage() {
             <thead>
               <tr>
                 <th>Job</th>
+                <th>Sources</th>
                 <th>Status</th>
                 <th>Progress</th>
                 <th>Data</th>
@@ -111,36 +162,45 @@ export default async function LeadJobsPage() {
                   <td>
                     <div className="entity">
                       <strong>{job.name}</strong>
-                      <span>{job.sources.join(", ")}</span>
                       <span>{formatDate(job.updatedAt)}</span>
+                      <span>{job.eta}</span>
                     </div>
+                  </td>
+                  <td>
+                    <SourceDots sources={job.sources} />
                   </td>
                   <td>
                     <StatusPill label={job.status} tone={statusTone(job.status)} />
                   </td>
-                  <td style={{ minWidth: 160 }}>
+                  <td className="progress-cell">
                     <ProgressBar value={job.progress} />
-                    <div className="section-subtitle">{job.progress}% complete</div>
+                    <span>{job.progress}% complete</span>
                   </td>
                   <td>
-                    <div className="entity">
+                    <div className="job-data-stack">
                       <strong>{formatNumber(job.raw)} raw</strong>
                       <span>{formatNumber(job.normalized)} normalized</span>
+                      <span>{formatNumber(job.enriched)} enriched</span>
                     </div>
                   </td>
                   <td>
-                    <div className="chip-row">
+                    <div className="job-quality-stack">
                       <span className="pill success">{formatNumber(job.verified)} verified</span>
                       <span className="pill warning">{formatNumber(job.duplicates)} dupes</span>
                       <span className="pill danger">{formatNumber(job.suppressed)} blocked</span>
                     </div>
                   </td>
-                  <td>{formatNumber(job.pushedToCrm)}</td>
-                  <td>{formatCurrency(job.actualCost)}</td>
                   <td>
                     <div className="entity">
+                      <strong>{formatNumber(job.pushedToCrm)}</strong>
+                      <span>{formatNumber(job.exported)} exported</span>
+                    </div>
+                  </td>
+                  <td>{formatCurrency(job.actualCost)}</td>
+                  <td>
+                    <div className="job-recovery-cell">
                       <strong>{observability.failedRuns ? `${observability.failedRuns} need review` : "Healthy"}</strong>
-                      <span>{observability.latestLog?.message ?? job.eta}</span>
+                      <span>{observability.latestLog?.message ?? job.errorSummary}</span>
                       {observability.canRetry ? (
                         <form action={retryLeadJobAction}>
                           <input name="id" type="hidden" value={job.id} />
@@ -156,7 +216,7 @@ export default async function LeadJobsPage() {
               ))}
               {jobRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>No lead jobs have been queued yet.</td>
+                  <td colSpan={9}>No lead jobs have been queued yet.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -249,7 +309,7 @@ export default async function LeadJobsPage() {
               ))}
             </select>
           </div>
-          <div className="field">
+          <div className="field full">
             <label>Sources</label>
             <div className="chip-row">
               {["CSV Upload", "Apollo", "Hunter", "Google Places"].map((source) => (
@@ -259,8 +319,7 @@ export default async function LeadJobsPage() {
               ))}
             </div>
           </div>
-          <div className="field">
-            <label aria-hidden="true">&nbsp;</label>
+          <div className="field full">
             <button className="button primary" type="submit">
               <Play size={17} aria-hidden="true" />
               Queue job
@@ -268,8 +327,73 @@ export default async function LeadJobsPage() {
           </div>
         </form>
       </section>
-
     </>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  note,
+  tone
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  note: string;
+  tone: "info" | "success" | "warning";
+}) {
+  return (
+    <article className={`stat-card ${tone}`}>
+      <div className="stat-label">
+        <span className="stat-icon">
+          <Icon size={15} aria-hidden="true" />
+        </span>
+        {label}
+      </div>
+      <strong className="stat-value">{value}</strong>
+      <span className="stat-note">{note}</span>
+    </article>
+  );
+}
+
+function JobStatusCard({
+  icon: Icon,
+  label,
+  value,
+  note,
+  tone
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  note: string;
+  tone: "info" | "success" | "warning";
+}) {
+  return (
+    <article className={`job-status-card ${tone}`}>
+      <div className="job-status-icon">
+        <Icon size={18} aria-hidden="true" />
+      </div>
+      <div className="job-status-copy">
+        <span>{label}</span>
+        <strong>{formatNumber(value)}</strong>
+        <p>{note}</p>
+      </div>
+    </article>
+  );
+}
+
+function SourceDots({ sources }: { sources: string[] }) {
+  return (
+    <span className="source-dot-row">
+      {sources.map((source) => (
+        <span className="source-dot" key={source} style={{ background: sourceColor(source) }} title={source}>
+          {source.slice(0, 1).toUpperCase()}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -279,4 +403,22 @@ function formatDate(value: string) {
     day: "numeric",
     year: "numeric"
   });
+}
+
+function formatCurrencyCompact(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
+function sourceColor(source: string) {
+  const normalized = source.toLowerCase();
+  if (normalized.includes("apollo")) return "var(--blue-500)";
+  if (normalized.includes("hunter")) return "var(--teal-600)";
+  if (normalized.includes("google")) return "var(--warning)";
+  if (normalized.includes("csv")) return "var(--ink-600)";
+  if (normalized.includes("apify")) return "var(--ink-700)";
+  return "var(--syn-primary)";
 }

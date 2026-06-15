@@ -66,6 +66,10 @@ describe("auth and RBAC session resolution", () => {
       userId: "user-ari",
       workspaceId: "workspace-syncore"
     });
+    const manager = resolveSession(state, {
+      userId: "user-mina",
+      workspaceId: "workspace-syncore"
+    });
     const leadOperator = resolveSession(state, {
       userId: "user-leo",
       workspaceId: "workspace-syncore"
@@ -80,12 +84,20 @@ describe("auth and RBAC session resolution", () => {
     expect(canUseDeveloperWorkspace(sdr)).toBe(false);
     expect(defaultWorkspacePath(sdr)).toBe("/crm");
 
+    expect(manager.role).toBe("Manager");
+    expect(canUseLeadGenerationWorkspace(manager)).toBe(true);
+    expect(canUseCrmWorkspace(manager)).toBe(true);
+    expect(canUseDeveloperWorkspace(manager)).toBe(false);
+    expect(defaultWorkspacePath(manager)).toBe("/");
+
     expect(canUseLeadGenerationWorkspace(leadOperator)).toBe(true);
     expect(canUseCrmWorkspace(leadOperator)).toBe(false);
     expect(canUseDeveloperWorkspace(leadOperator)).toBe(false);
     expect(defaultWorkspacePath(leadOperator)).toBe("/");
 
-    expect(rolePermissions("Manager")).not.toContain("manage_profiles");
+    expect(rolePermissions("Manager")).toContain("manage_profiles");
+    expect(rolePermissions("Manager")).toContain("manage_crm");
+    expect(rolePermissions("Manager")).not.toContain("manage_workspace");
     expect(rolePermissions("Data Operator")).not.toContain("manage_crm");
   });
 });

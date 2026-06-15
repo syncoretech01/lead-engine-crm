@@ -112,4 +112,29 @@ test.describe("Syncore app smoke coverage", () => {
     await page.goto("/outreach/campaigns", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "Lead command center", level: 1 })).toBeVisible();
   });
+
+  test("scopes navigation and page access for a manager session", async ({ page, context, baseURL }) => {
+    const url = baseURL ?? "http://localhost:3001";
+    await context.addCookies([
+      { name: "syncore_user_id", value: "user-mina", url },
+      { name: "syncore_workspace_id", value: "workspace-syncore", url }
+    ]);
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Lead command center", level: 1 })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Leads$/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^CRM$/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Dev$/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Integration Center/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /^Settings$/i })).toHaveCount(0);
+
+    await page.goto("/search-profiles", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Search profiles", level: 1 })).toBeVisible();
+
+    await page.goto("/crm", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "CRM workspace", level: 1 })).toBeVisible();
+
+    await page.goto("/integrations", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Lead command center", level: 1 })).toBeVisible();
+  });
 });

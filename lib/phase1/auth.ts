@@ -25,9 +25,15 @@ const permissionsByRole: Record<WorkspaceRole, Permission[]> = {
   ],
   Manager: [
     "view_all_records",
+    "manage_profiles",
+    "run_jobs",
+    "import_csv",
     "manage_crm",
     "manage_sdr",
-    "manage_outreach"
+    "manage_outreach",
+    "export_csv",
+    "manage_export_rules",
+    "manage_enrichment"
   ],
   SDR: ["view_all_records", "manage_crm", "manage_sdr", "manage_outreach"],
   "Data Operator": [
@@ -90,7 +96,7 @@ export function hasPermission(session: Session, permission: Permission) {
 }
 
 export function canUseLeadGenerationWorkspace(session: Session) {
-  return session.role === "Admin" || session.role === "Data Operator";
+  return session.role === "Admin" || session.role === "Manager" || session.role === "Data Operator";
 }
 
 export function canUseCrmWorkspace(session: Session) {
@@ -110,4 +116,10 @@ export function defaultWorkspacePath(session: Session) {
 
 export function rolePermissions(role: WorkspaceRole) {
   return permissionsByRole[role];
+}
+
+export function workspaceRoleLabel(role: WorkspaceRole) {
+  if (role === "Admin") return "Owner / Developer";
+  if (role === "Data Operator") return "Lead Engine Specialist";
+  return role;
 }

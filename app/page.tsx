@@ -7,24 +7,32 @@ import {
   Download,
   FileText,
   GitMerge,
+  Layers3,
   Play,
   Search,
   ShieldCheck,
   Target,
-  Upload
+  Upload,
+  Users
 } from "lucide-react";
-import { MetricCard } from "@/components/metric-card";
+import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { contactRowsForStaging, exportTemplates, sourceHealth } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { canUseLeadGenerationWorkspace, defaultWorkspacePath } from "@/lib/phase1/auth";
-import type { LeadJob, SearchProfile } from "@/lib/phase1/types";
+import type { Contact, LeadJob, Priority, SearchProfile } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 import { redirect } from "next/navigation";
 
-const metricIcons = [Target, Activity, Database, BadgeCheck];
+type StagedRow = ReturnType<typeof contactRowsForStaging>[number];
+type SegmentSummary = {
+  name: string;
+  count: number;
+  priority: Priority;
+  action: string;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -40,46 +48,117 @@ export default async function DashboardPage() {
   const profiles = state.searchProfiles.filter((profile) => profile.workspaceId === workspaceId);
   const jobs = state.leadJobs.filter((job) => job.workspaceId === workspaceId);
   const activeJobs = jobs.filter((job) => job.status !== "Completed");
+  const rawLeads = state.rawLeads.filter((lead) => lead.workspaceId === workspaceId);
+  const normalizedRecords = state.normalizedRecords.filter((record) => record.workspaceId === workspaceId);
+  const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId);
   const stagedRows = contactRowsForStaging(state, workspaceId);
-  const exportReadyContacts = state.contacts.filter(
-    (contact) => contact.workspaceId === workspaceId && !contact.isSuppressed && (contact.grade === "A" || contact.grade === "B")
+  const exportReadyContacts = contacts.filter(
+    (contact) => !contact.isSuppressed && (contact.grade === "A" || contact.grade === "B")
   );
-  const suppressedContacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId && contact.isSuppressed);
-  const duplicateRows = state.normalizedRecords.filter(
-    (record) => record.workspaceId === workspaceId && (record.duplicateCompanyId || record.duplicateContactId)
-  );
+  const suppressedContacts = contacts.filter((contact) => contact.isSuppressed);
+  const duplicateRows = normalizedRecords.filter((record) => record.duplicateCompanyId || record.duplicateContactId);
   const needsReviewRows = stagedRows.filter(
     (row) => row.status === "In review" || row.status === "Needs enrichment" || row.emailGrade === "C" || row.emailGrade === "D"
   );
   const templates = exportTemplates(state, workspaceId);
-  const monitorJobs = (activeJobs.length ? activeJobs : recentJobs(jobs)).slice(0, 5);
+  const recentJobRows = recentJobs(jobs).slice(0, 5);
   const canManageProfiles = session.permissions.includes("manage_profiles");
   const canImport = session.permissions.includes("import_csv");
+  const nonSuppressedContacts = contacts.filter((contact) => !contact.isSuppressed);
+  const verifiedRate = nonSuppressedContacts.length
+    ? Math.round((exportReadyContacts.length / nonSuppressedContacts.length) * 100)
+    : 0;
+  const exportedIds = new Set(
+    state.exports
+      .filter((exportRecord) => exportRecord.workspaceId === workspaceId)
+      .flatMap((exportRecord) => exportRecord.recordIds)
+  );
+  const exportedCount = exportedIds.size || templates.reduce((total, template) => total + template.eligible, 0);
+  const enrichedCount = contacts.filter((contact) => (contact.enrichmentCoverage ?? 0) > 0).length;
+  const dedupedCount = Math.max(normalizedRecords.length - duplicateRows.length, 0);
+  const funnelMax = Math.max(rawLeads.length, normalizedRecords.length, contacts.length, stagedRows.length, 1);
+  const topSegments = segmentSummaries(contacts, stagedRows).slice(0, 5);
 
-  const metrics = [
+  const stats = [
     {
-      label: "Saved profiles",
-      value: profiles.length,
-      note: `${formatNumber(profiles.reduce((total, profile) => total + profile.estimatedVolume, 0))} estimated leads`,
+      label: "Leads in staging",
+      value: formatNumber(stagedRows.length || rawLeads.length),
+      note: `${formatNumber(needsReviewRows.length)} need review`,
+      icon: Database,
       tone: "info" as const
     },
     {
-      label: "Active jobs",
-      value: activeJobs.length,
-      note: `${formatNumber(jobs.length)} total extraction runs`,
-      tone: activeJobs.length ? "warning" as const : "success" as const
-    },
-    {
-      label: "Staged records",
-      value: stagedRows.length,
-      note: `${formatNumber(needsReviewRows.length)} need operator review`,
-      tone: needsReviewRows.length ? "warning" as const : "success" as const
-    },
-    {
-      label: "Export-ready contacts",
-      value: exportReadyContacts.length,
-      note: `${formatNumber(suppressedContacts.length + duplicateRows.length)} blocked by quality gates`,
+      label: "Verified rate",
+      value: `${verifiedRate}%`,
+      note: `${formatNumber(exportReadyContacts.length)} A/B contacts`,
+      icon: BadgeCheck,
       tone: "success" as const
+    },
+    {
+      label: "Export-ready",
+      value: formatNumber(exportReadyContacts.length),
+      note: `${formatNumber(topSegments.filter((segment) => segment.priority === "P1").length)} P1 segments`,
+      icon: Download,
+      tone: "success" as const
+    },
+    {
+      label: "Suppressed",
+      value: formatNumber(suppressedContacts.length),
+      note: `${formatNumber(duplicateRows.length)} duplicate candidates`,
+      icon: ShieldCheck,
+      tone: suppressedContacts.length ? "warning" as const : "success" as const
+    }
+  ];
+
+  const funnelStages = [
+    {
+      label: "Raw data",
+      value: rawLeads.length || stagedRows.length,
+      note: "Imported and source-read",
+      icon: Database,
+      tone: "blue" as const
+    },
+    {
+      label: "Normalized",
+      value: normalizedRecords.length,
+      note: "Mapped to company/contact records",
+      icon: GitMerge,
+      tone: "blue" as const
+    },
+    {
+      label: "Deduped",
+      value: dedupedCount,
+      note: `${formatNumber(duplicateRows.length)} duplicates isolated`,
+      icon: Search,
+      tone: "teal" as const
+    },
+    {
+      label: "Suppressed",
+      value: suppressedContacts.length,
+      note: "DNC, bounces, customers, invalids",
+      icon: ShieldCheck,
+      tone: "warn" as const
+    },
+    {
+      label: "Verified",
+      value: exportReadyContacts.length,
+      note: "A/B email grade",
+      icon: BadgeCheck,
+      tone: "teal" as const
+    },
+    {
+      label: "Enriched",
+      value: enrichedCount,
+      note: "Firmographic and persona coverage",
+      icon: Layers3,
+      tone: "blue" as const
+    },
+    {
+      label: "Exported",
+      value: exportedCount,
+      note: "CSV and SDR handoff output",
+      icon: Download,
+      tone: "teal" as const
     }
   ];
 
@@ -142,18 +221,70 @@ export default async function DashboardPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="Lead generation metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? Database;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Lead generation metrics">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
+        ))}
+      </section>
+
+      <section className="grid lead-dashboard-main" aria-label="Lead engine overview">
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <div className="page-kicker">This week</div>
+              <h2 className="section-title">From raw data to SDR-ready</h2>
+              <p className="section-subtitle">Every record passes the staging pipeline before it can reach CRM or export.</p>
+            </div>
+            <Link href="/staging" className="button subtle">
+              Open staging
+              <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          </div>
+          <div className="panel-body funnel-list">
+            {funnelStages.map((stage) => (
+              <FunnelRow key={stage.label} max={funnelMax} {...stage} />
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <div className="page-kicker">Live</div>
+              <h2 className="section-title">Top segments</h2>
+              <p className="section-subtitle">High-volume groups and the next operator action.</p>
+            </div>
+            <Users size={20} aria-hidden="true" />
+          </div>
+          <div className="panel-body segment-list">
+            {topSegments.length ? (
+              topSegments.map((segment) => (
+                <div className="segment-row" key={segment.name}>
+                  <div className="segment-copy">
+                    <strong>{segment.name}</strong>
+                    <span>{segment.action}</span>
+                  </div>
+                  <div className="segment-metrics">
+                    <PriorityBadge priority={segment.priority} />
+                    <strong>{formatNumber(segment.count)}</strong>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state">
+                <Layers3 size={24} aria-hidden="true" />
+                <span>No segments calculated yet.</span>
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="grid four" aria-label="Lead generation workflow">
         {workflow.map((step) => {
           const Icon = step.icon;
           return (
-            <Link href={step.href} className="item-card workflow-card" key={step.title}>
+            <Link href={step.href} className="item-card workflow-card card-hover" key={step.title}>
               <div className="item-card-header">
                 <div>
                   <h2 className="card-title">{step.title}</h2>
@@ -174,27 +305,60 @@ export default async function DashboardPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Job monitor</h2>
-              <p className="section-subtitle">Current extraction and processing runs, with the same counts operators need before moving data forward.</p>
+              <h2 className="section-title">Recent lead jobs</h2>
+              <p className="section-subtitle">Extraction and processing runs with source mix, progress, records, and cost.</p>
             </div>
-            <Link href="/lead-jobs" className="icon-button" aria-label="Open jobs page">
-              <ArrowRight size={18} aria-hidden="true" />
+            <Link href="/lead-jobs" className="button secondary">
+              View all
             </Link>
           </div>
-          <div className="panel-body stage-list">
-            {monitorJobs.length ? (
-              monitorJobs.map((job) => <JobMonitorRow key={job.id} job={job} />)
-            ) : (
-              <div className="empty-state">
-                <Activity size={24} aria-hidden="true" />
-                <span>No lead jobs yet.</span>
-                {canManageProfiles ? (
-                  <Link href="/search-profiles#create-profile" className="button secondary">
-                    Create profile
-                  </Link>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Sources</th>
+                  <th>Status</th>
+                  <th>Progress</th>
+                  <th>Records</th>
+                  <th>Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentJobRows.map((job) => (
+                  <tr key={job.id}>
+                    <td>
+                      <div className="entity">
+                        <strong>{job.name}</strong>
+                        <span>{formatDate(job.updatedAt)}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <SourceDots sources={job.sources} />
+                    </td>
+                    <td>
+                      <StatusPill label={job.status} tone={statusTone(job.status)} />
+                    </td>
+                    <td className="progress-cell">
+                      <ProgressBar value={job.progress} />
+                      <span>{job.progress}%</span>
+                    </td>
+                    <td>
+                      <div className="entity">
+                        <strong>{formatNumber(job.normalized || job.raw)}</strong>
+                        <span>{formatNumber(job.verified)} verified</span>
+                      </div>
+                    </td>
+                    <td>{formatCurrencyCompact(job.actualCost)}</td>
+                  </tr>
+                ))}
+                {recentJobRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>No lead jobs yet.</td>
+                  </tr>
                 ) : null}
-              </div>
-            )}
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -347,28 +511,85 @@ export default async function DashboardPage() {
   );
 }
 
-function JobMonitorRow({ job }: { job: LeadJob }) {
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  note,
+  tone
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  note: string;
+  tone: "info" | "success" | "warning";
+}) {
   return (
-    <div className="stage-row">
-      <div className="stage-meta">
-        <div className="entity">
-          <strong>{job.name}</strong>
-          <span>{job.sources.join(", ")}</span>
-        </div>
-        <StatusPill label={job.status} tone={statusTone(job.status)} />
+    <article className={`stat-card ${tone}`}>
+      <div className="stat-label">
+        <span className="stat-icon">
+          <Icon size={15} aria-hidden="true" />
+        </span>
+        {label}
       </div>
-      <ProgressBar value={job.progress} />
-      <div className="row-meta">
-        <span>{job.progress}% complete</span>
-        <span>{job.eta}</span>
+      <strong className="stat-value">{value}</strong>
+      <span className="stat-note">{note}</span>
+    </article>
+  );
+}
+
+function FunnelRow({
+  icon: Icon,
+  label,
+  value,
+  note,
+  max,
+  tone
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  note: string;
+  max: number;
+  tone: "blue" | "teal" | "warn";
+}) {
+  const percent = max ? Math.max(value > 0 ? 2 : 0, Math.round((value / max) * 100)) : 0;
+
+  return (
+    <div className="funnel-row">
+      <div className="funnel-name">
+        <Icon size={16} aria-hidden="true" />
+        <span>{label}</span>
       </div>
-      <div className="chip-row">
-        <span className="pill">{formatNumber(job.raw)} raw</span>
-        <span className="pill">{formatNumber(job.normalized)} normalized</span>
-        <span className="pill success">{formatNumber(job.verified)} verified</span>
-        <span className="pill warning">{formatNumber(job.suppressed)} suppressed</span>
+      <div className="funnel-track">
+        <span className={`funnel-fill ${tone}`} style={{ width: `${Math.min(percent, 100)}%` }} />
+      </div>
+      <div className="funnel-value">
+        <strong>{formatNumber(value)}</strong>
+        <span>{note}</span>
       </div>
     </div>
+  );
+}
+
+function PriorityBadge({ priority }: { priority: Priority }) {
+  return (
+    <span className={`tier-badge tier-${priority.toLowerCase()}`}>
+      <span />
+      {priority}
+    </span>
+  );
+}
+
+function SourceDots({ sources }: { sources: string[] }) {
+  return (
+    <span className="source-dot-row">
+      {sources.map((source) => (
+        <span className="source-dot" key={source} style={{ background: sourceColor(source) }} title={source}>
+          {source.slice(0, 1).toUpperCase()}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -405,6 +626,74 @@ function ProfileSummaryCard({ profile }: { profile: SearchProfile }) {
   );
 }
 
+function segmentSummaries(contacts: Contact[], stagedRows: StagedRow[]): SegmentSummary[] {
+  const rows = contacts.length
+    ? contacts
+        .filter((contact) => !contact.isSuppressed)
+        .map((contact) => ({
+          segment: contact.segment,
+          priority: contact.priority
+        }))
+    : stagedRows.map((row) => ({
+        segment: row.segment,
+        priority: row.priority
+      }));
+  const segments = new Map<string, { count: number; p1: number; p2: number }>();
+
+  for (const row of rows) {
+    const name = row.segment || "Unsegmented";
+    const current = segments.get(name) ?? { count: 0, p1: 0, p2: 0 };
+    current.count += 1;
+    if (row.priority === "P1") current.p1 += 1;
+    if (row.priority === "P2") current.p2 += 1;
+    segments.set(name, current);
+  }
+
+  return Array.from(segments.entries())
+    .map(([name, value]) => ({
+      name,
+      count: value.count,
+      priority: value.p1 ? "P1" as const : value.p2 ? "P2" as const : "P3" as const,
+      action: segmentAction(name, value.count)
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function segmentAction(name: string, count: number) {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("local") || normalized.includes("dealer")) return "Check phone readiness and local source coverage";
+  if (normalized.includes("ecommerce") || normalized.includes("shopify")) return "Prioritize verified founders and growth leads";
+  if (normalized.includes("suppressed")) return "Keep blocked until compliance review clears";
+  if (count > 4) return "Review routing before export";
+  return "Monitor source quality";
+}
+
 function recentJobs(jobs: LeadJob[]) {
   return [...jobs].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+
+function formatCurrencyCompact(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
+function sourceColor(source: string) {
+  const normalized = source.toLowerCase();
+  if (normalized.includes("apollo")) return "var(--blue-500)";
+  if (normalized.includes("hunter")) return "var(--teal-600)";
+  if (normalized.includes("google")) return "var(--warning)";
+  if (normalized.includes("csv")) return "var(--ink-600)";
+  if (normalized.includes("apify")) return "var(--ink-700)";
+  return "var(--syn-primary)";
 }

@@ -334,7 +334,7 @@ export default async function CompliancePage() {
         <div className="item-card">
           <KeyRound size={22} aria-hidden="true" />
           <h2 className="card-title">RBAC baseline</h2>
-          <p className="section-subtitle">Admin, Manager, SDR, Data Operator, Viewer, and Compliance Admin roles are represented in the schema.</p>
+          <p className="section-subtitle">Owner/developer, Manager, SDR, Lead Engine Specialist, Viewer, and Compliance Admin roles are represented in the access model.</p>
         </div>
         <div className="item-card">
           <Database size={22} aria-hidden="true" />

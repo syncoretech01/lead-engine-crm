@@ -29,7 +29,8 @@ import type { Permission, Session } from "@/lib/phase1/types";
 import {
   canUseCrmWorkspace,
   canUseDeveloperWorkspace,
-  canUseLeadGenerationWorkspace
+  canUseLeadGenerationWorkspace,
+  workspaceRoleLabel
 } from "@/lib/phase1/auth";
 import { StatusPill } from "@/components/status-pill";
 import { cn } from "@/lib/utils";
@@ -181,7 +182,7 @@ export function AppShell({ children, session }: AppShellProps) {
               <StatusPill label={session.workspace.health} tone="success" />
             </div>
             <span className="metric-note">
-              {session.user.name} - {session.role}
+              {session.user.name} - {workspaceRoleLabel(session.role)}
             </span>
           </div>
           {canAccessDeveloperView ? (

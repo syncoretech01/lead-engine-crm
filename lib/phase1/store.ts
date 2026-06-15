@@ -240,6 +240,12 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
     changed = true;
   }
 
+  const seededManagerMember = state.workspaceMembers.find((member) => member.id === "member-mina");
+  if (seededManagerMember?.role === "SDR") {
+    seededManagerMember.role = "Manager";
+    changed = true;
+  }
+
   if (!Array.isArray(state.providerConnections)) {
     state.providerConnections = workspaceId
       ? createDefaultProviderConnections({

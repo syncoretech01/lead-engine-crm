@@ -85,7 +85,7 @@ export function createSeedState(): AppState {
   const workspaceMembers: WorkspaceMember[] = [
     { id: "member-nora", workspaceId, userId: "user-nora", role: "Admin" },
     { id: "member-ari", workspaceId, userId: "user-ari", role: "SDR" },
-    { id: "member-mina", workspaceId, userId: "user-mina", role: "SDR" },
+    { id: "member-mina", workspaceId, userId: "user-mina", role: "Manager" },
     { id: "member-leo", workspaceId, userId: "user-leo", role: "Data Operator" },
     { id: "member-rhea", workspaceId, userId: "user-compliance", role: "Compliance Admin" }
   ];
