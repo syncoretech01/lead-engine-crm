@@ -29,13 +29,13 @@ import {
   outreachEventReadRowsForWorkspace,
   stateWithOutreachEventReadRows
 } from "@/lib/phase1/outreach-read-path";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportsCompliancePage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_retention");
+  const { state, workspaceId } = await getDeveloperWorkspaceContext();
   const [complianceRows, crmRows, outreachRows, exportRows] = await Promise.all([
     complianceReadRowsForWorkspace(state, workspaceId),
     crmEventReadRowsForWorkspace(state, workspaceId),

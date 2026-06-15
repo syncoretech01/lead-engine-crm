@@ -5,6 +5,7 @@ import {
   mergeDuplicateAction,
   runVerificationAction
 } from "@/app/actions";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { getWorkspaceContext } from "@/lib/phase1/store";
@@ -12,6 +13,8 @@ import type { AppState } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+const metricIcons = [BadgeCheck, ShieldCheck, ShieldCheck, GitMerge];
 
 export default async function DataQualityPage() {
   const { state, workspaceId } = await getWorkspaceContext("run_jobs");
@@ -24,13 +27,41 @@ export default async function DataQualityPage() {
   const verified = contacts.filter((contact) => contact.grade === "A" || contact.grade === "B").length;
   const risky = contacts.filter((contact) => contact.grade === "C").length;
   const invalid = contacts.filter((contact) => contact.grade === "D").length;
+  const latestVerification = [...verificationResults].sort((a, b) => Date.parse(b.verifiedAt) - Date.parse(a.verifiedAt));
+
+  const metrics = [
+    {
+      label: "Verified A/B",
+      value: verified,
+      note: "Eligible under strict email gates",
+      tone: "success" as const
+    },
+    {
+      label: "Risk C",
+      value: risky,
+      note: "Needs enrichment or risk label",
+      tone: risky ? "warning" as const : "success" as const
+    },
+    {
+      label: "Blocked D/S",
+      value: invalid + suppressed,
+      note: "Invalid or globally suppressed",
+      tone: invalid + suppressed ? "danger" as const : "success" as const
+    },
+    {
+      label: "Open duplicates",
+      value: openMatches.length,
+      note: "Company/contact candidates",
+      tone: openMatches.length ? "warning" as const : "success" as const
+    }
+  ];
 
   return (
     <>
       <PageHeader
-        kicker="Data quality"
+        kicker="Lead generation"
         title="Data quality"
-        copy="Run deterministic local verification, maintain A/B/C/D/S grades, review verification history, and resolve duplicate company/contact candidates before export."
+        copy="Run local verification, maintain A/B/C/D/S grades, review duplicate candidates, and keep risky records out of export-ready lists."
         actions={
           <>
             <form action={runVerificationAction}>
@@ -49,96 +80,89 @@ export default async function DataQualityPage() {
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Verified A/B</span>
-            <BadgeCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(verified)}</div>
-          <span className="metric-note">Eligible under strict email rules when score/status pass.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Risk-labeled C</span>
-            <ShieldCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(risky)}</div>
-          <span className="metric-note">Role or catch-all heuristic; enrichment recommended.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Invalid D</span>
-            <ShieldCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(invalid)}</div>
-          <span className="metric-note">Blocked from verified email exports.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Suppressed S</span>
-            <ShieldCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(suppressed)}</div>
-          <span className="metric-note">Blocked globally by email, phone, or domain.</span>
-        </article>
+      <section className="grid metrics" aria-label="Data quality metrics">
+        {metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? BadgeCheck;
+          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
+        })}
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Duplicate candidates</h2>
-            <p className="section-subtitle">Matches use domain, email, company name/location, fuzzy company name, and full name/company keys.</p>
+      <section className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Duplicate candidates</h2>
+              <p className="section-subtitle">Resolve open candidates before export or CRM sync.</p>
+            </div>
+            <StatusPill label={`${openMatches.length} open`} tone={openMatches.length ? "warning" : "success"} />
           </div>
-          <StatusPill label={`${openMatches.length} open`} tone={openMatches.length ? "warning" : "success"} />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Primary</th>
-                <th>Duplicate</th>
-                <th>Reason</th>
-                <th>Confidence</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {openMatches.map((match) => (
-                <tr key={match.id}>
-                  <td>
-                    <StatusPill label={match.objectType} tone="info" />
-                  </td>
-                  <td>{entityName(state, match.objectType, match.primaryId)}</td>
-                  <td>{entityName(state, match.objectType, match.duplicateId)}</td>
-                  <td>{match.reason}</td>
-                  <td>{match.confidence}%</td>
-                  <td>
-                    <div className="item-card-actions">
-                      <form action={mergeDuplicateAction}>
-                        <input name="id" type="hidden" value={match.id} />
-                        <button className="button primary" type="submit">
-                          Merge
-                        </button>
-                      </form>
-                      <form action={ignoreDuplicateAction}>
-                        <input name="id" type="hidden" value={match.id} />
-                        <button className="button secondary" type="submit">
-                          Ignore
-                        </button>
-                      </form>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {openMatches.length === 0 ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={6}>No open duplicate candidates.</td>
+                  <th>Type</th>
+                  <th>Primary</th>
+                  <th>Duplicate</th>
+                  <th>Reason</th>
+                  <th>Action</th>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {openMatches.map((match) => (
+                  <tr key={match.id}>
+                    <td>
+                      <StatusPill label={match.objectType} tone="info" />
+                    </td>
+                    <td>{entityName(state, match.objectType, match.primaryId)}</td>
+                    <td>{entityName(state, match.objectType, match.duplicateId)}</td>
+                    <td>
+                      <div className="entity">
+                        <strong>{match.reason}</strong>
+                        <span>{match.confidence}% confidence</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="item-card-actions">
+                        <form action={mergeDuplicateAction}>
+                          <input name="id" type="hidden" value={match.id} />
+                          <button className="button primary" type="submit">
+                            Merge
+                          </button>
+                        </form>
+                        <form action={ignoreDuplicateAction}>
+                          <input name="id" type="hidden" value={match.id} />
+                          <button className="button secondary" type="submit">
+                            Ignore
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {openMatches.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>No open duplicate candidates.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Grade distribution</h2>
+              <p className="section-subtitle">Current contact quality by export eligibility.</p>
+            </div>
+            <ShieldCheck size={20} aria-hidden="true" />
+          </div>
+          <div className="panel-body stage-list">
+            <GradeRow label="A/B verified" value={verified} total={contacts.length} tone="success" />
+            <GradeRow label="C risk-labeled" value={risky} total={contacts.length} tone="warning" />
+            <GradeRow label="D invalid" value={invalid} total={contacts.length} tone="danger" />
+            <GradeRow label="S suppressed" value={suppressed} total={contacts.length} tone="warning" />
+          </div>
         </div>
       </section>
 
@@ -146,7 +170,7 @@ export default async function DataQualityPage() {
         <div className="panel-header">
           <div className="panel-title-wrap">
             <h2 className="section-title">Verification history</h2>
-            <p className="section-subtitle">Each verification run records provider, grade, checks, raw response, timestamp, and TTL.</p>
+            <p className="section-subtitle">Recent verification checks with grade, email, phone, checks, and expiry.</p>
           </div>
           <StatusPill label={`${verificationResults.length} checks`} tone="info" />
         </div>
@@ -159,12 +183,11 @@ export default async function DataQualityPage() {
                 <th>Email</th>
                 <th>Phone</th>
                 <th>Checks</th>
-                <th>Verified</th>
                 <th>Expires</th>
               </tr>
             </thead>
             <tbody>
-              {verificationResults.slice(0, 40).map((result) => (
+              {latestVerification.slice(0, 40).map((result) => (
                 <tr key={result.id}>
                   <td>{state.contacts.find((contact) => contact.id === result.contactId)?.name ?? "Unknown"}</td>
                   <td>
@@ -186,10 +209,14 @@ export default async function DataQualityPage() {
                       ))}
                     </div>
                   </td>
-                  <td>{formatDate(result.verifiedAt)}</td>
                   <td>{formatDate(result.expiresAt)}</td>
                 </tr>
               ))}
+              {latestVerification.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>No verification results have been recorded yet.</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -208,6 +235,33 @@ function entityName(
   }
 
   return state.contacts.find((contact) => contact.id === id)?.name ?? id;
+}
+
+function GradeRow({
+  label,
+  value,
+  total,
+  tone
+}: {
+  label: string;
+  value: number;
+  total: number;
+  tone: "success" | "info" | "warning" | "danger";
+}) {
+  const percent = total ? Math.round((value / total) * 100) : 0;
+
+  return (
+    <div className="stage-row">
+      <div className="stage-meta">
+        <strong>{label}</strong>
+        <StatusPill label={`${formatNumber(value)} contacts`} tone={tone} />
+      </div>
+      <div className="row-meta">
+        <span>{percent}% of contacts</span>
+        <span>{formatNumber(total)} total</span>
+      </div>
+    </div>
+  );
 }
 
 function formatDate(value: string) {

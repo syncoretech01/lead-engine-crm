@@ -152,6 +152,58 @@ button {
   padding-right: 2px;
 }
 
+.view-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(245, 254, 255, 0.05);
+  padding: 4px;
+}
+
+.view-tab {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.view-tab:hover,
+.view-tab.active {
+  background: linear-gradient(135deg, rgba(0, 118, 254, 0.3), rgba(5, 218, 195, 0.14));
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(5, 218, 195, 0.18);
+}
+
+.sidebar-section {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.sidebar-section-label,
+.mode-label {
+  color: var(--accent);
+  font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.sidebar-section-copy {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .nav-link {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
@@ -179,6 +231,27 @@ button {
   margin-top: auto;
   border-top: 1px solid var(--border);
   padding-top: 16px;
+}
+
+.mode-card {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(5, 218, 195, 0.18);
+  border-radius: 8px;
+  background: rgba(5, 218, 195, 0.07);
+  color: var(--muted);
+  padding: 12px;
+}
+
+.mode-card strong {
+  color: var(--text);
+  font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.mode-card span:last-child {
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .workspace-card {
@@ -368,6 +441,14 @@ button {
 
 .grid.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.grid.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .panel,
@@ -737,6 +818,11 @@ tr:last-child td {
   padding: 16px;
 }
 
+.workflow-card,
+.compact-profile-card {
+  align-content: start;
+}
+
 .item-card-header {
   display: flex;
   align-items: flex-start;
@@ -887,8 +973,18 @@ tr:last-child td {
 
   .brand-copy,
   .nav-link span,
+  .sidebar-section,
   .sidebar-footer {
     display: none;
+  }
+
+  .view-switcher {
+    grid-template-columns: 1fr;
+  }
+
+  .view-tab {
+    min-height: 34px;
+    font-size: 11px;
   }
 
   .nav-link {
@@ -897,11 +993,14 @@ tr:last-child td {
   }
 
   .grid.metrics,
+  .grid.five,
+  .grid.four,
   .grid.three {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .grid.two {
+  .grid.two,
+  .grid.two.integrations-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -920,8 +1019,17 @@ tr:last-child td {
 
   .brand-copy,
   .nav-link span,
+  .sidebar-section,
   .sidebar-footer {
     display: block;
+  }
+
+  .view-switcher {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sidebar-section {
+    display: grid;
   }
 
   .nav-list {
@@ -969,8 +1077,11 @@ tr:last-child td {
   }
 
   .grid.metrics,
+  .grid.five,
+  .grid.four,
   .grid.three,
-  .form-grid {
+  .form-grid,
+  .integration-card .form-grid {
     grid-template-columns: 1fr;
   }
 }

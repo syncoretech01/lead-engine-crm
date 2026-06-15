@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowRight,
   BarChart3,
   Clock,
   GitBranch,
@@ -16,7 +15,9 @@ import {
   deleteReassignmentRuleAction,
   reassignSdrAssignmentAction
 } from "@/app/actions";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
+import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
   assignmentMethods,
@@ -30,18 +31,52 @@ import { formatNumber, formatPercent } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+const metricIcons = [Users, ShieldCheck, AlertTriangle, Clock];
+
 export default async function SdrManagerPage() {
   const { state, workspaceId } = await getWorkspaceContext("manage_sdr");
   const snapshot = managerDashboardSnapshot(state, workspaceId);
   const users = sdrUsers(state, workspaceId);
   const teams = state.sdrTeams.filter((team) => team.workspaceId === workspaceId);
+  const activeTeams = teams.filter((team) => team.active);
+  const maxActiveLoad = Math.max(...snapshot.workloads.map((workload) => workload.active), 1);
+  const riskCount = snapshot.workloads.filter((workload) => workload.overdue > 0 || workload.p1 > 2).length;
+  const rulePreview = snapshot.rules.slice(0, 4);
+
+  const metrics = [
+    {
+      label: "Active assigned",
+      value: snapshot.metrics.activeAssigned,
+      note: "Open SDR assignments",
+      tone: "info" as const
+    },
+    {
+      label: "SLA adherence",
+      value: snapshot.metrics.slaAdherence,
+      suffix: "%",
+      note: `${formatPercent(snapshot.metrics.contactedRate)} touched rate`,
+      tone: snapshot.metrics.slaAdherence >= 80 ? "success" as const : "warning" as const
+    },
+    {
+      label: "Untouched P1",
+      value: snapshot.metrics.untouchedP1,
+      note: "High-priority leads without touch",
+      tone: snapshot.metrics.untouchedP1 ? "warning" as const : "success" as const
+    },
+    {
+      label: "Overdue",
+      value: snapshot.metrics.overdue,
+      note: "Assignments past active SLA",
+      tone: snapshot.metrics.overdue ? "danger" as const : "success" as const
+    }
+  ];
 
   return (
     <>
       <PageHeader
-        kicker="Phase 5"
+        kicker="CRM management"
         title="SDR manager dashboard"
-        copy="Monitor workload, SLA adherence, untouched P1 leads, follow-up risk, and reassignment recommendations."
+        copy="A manager-only workspace for team load, SLA risk, routing coverage, and controlled reassignment. SDRs keep the execution queue; managers get the controls."
         actions={
           <>
             <form action={applyReassignmentRulesAction}>
@@ -58,38 +93,56 @@ export default async function SdrManagerPage() {
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Active assigned</span>
-            <Users size={20} aria-hidden="true" />
+      <section className="grid metrics" aria-label="SDR manager metrics">
+        {metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? Users;
+          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
+        })}
+      </section>
+
+      <section className="grid four">
+        <article className="item-card workflow-card">
+          <div className="item-card-header">
+            <div>
+              <h2 className="card-title">Team coverage</h2>
+              <p className="section-subtitle">{activeTeams.length} active routing pods.</p>
+            </div>
+            <GitBranch size={20} aria-hidden="true" />
           </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.metrics.activeAssigned)}</div>
-          <span className="metric-note">Open SDR assignments.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">SLA adherence</span>
-            <ShieldCheck size={20} aria-hidden="true" />
+          <div className="chip-row">
+            <StatusPill label={`${teams.length} teams`} tone="info" />
+            <StatusPill label={`${users.length} reps`} tone="success" />
           </div>
-          <div className="metric-value gradient-text">{formatPercent(snapshot.metrics.slaAdherence)}</div>
-          <span className="metric-note">{formatPercent(snapshot.metrics.contactedRate)} touched rate.</span>
         </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Untouched P1</span>
+        <article className="item-card workflow-card">
+          <div className="item-card-header">
+            <div>
+              <h2 className="card-title">Risk watch</h2>
+              <p className="section-subtitle">Reps with overdue work or heavy P1 load.</p>
+            </div>
             <AlertTriangle size={20} aria-hidden="true" />
           </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.metrics.untouchedP1)}</div>
-          <span className="metric-note">Highest priority leads without touch.</span>
+          <div className="score-ring">{riskCount}</div>
         </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Overdue</span>
-            <Clock size={20} aria-hidden="true" />
+        <article className="item-card workflow-card">
+          <div className="item-card-header">
+            <div>
+              <h2 className="card-title">Recommendations</h2>
+              <p className="section-subtitle">Ready for manager approval.</p>
+            </div>
+            <RefreshCw size={20} aria-hidden="true" />
           </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.metrics.overdue)}</div>
-          <span className="metric-note">Assignments past active SLA.</span>
+          <div className="score-ring">{snapshot.recommendations.length}</div>
+        </article>
+        <article className="item-card workflow-card">
+          <div className="item-card-header">
+            <div>
+              <h2 className="card-title">Rules live</h2>
+              <p className="section-subtitle">Automation guardrails for rebalancing.</p>
+            </div>
+            <ShieldCheck size={20} aria-hidden="true" />
+          </div>
+          <div className="score-ring">{snapshot.rules.length}</div>
         </article>
       </section>
 
@@ -97,7 +150,7 @@ export default async function SdrManagerPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">SDR workload</h2>
+              <h2 className="section-title">Team workload</h2>
               <p className="section-subtitle">Active load, P1 pressure, meetings, and SLA adherence by rep.</p>
             </div>
             <BarChart3 size={20} aria-hidden="true" />
@@ -107,10 +160,8 @@ export default async function SdrManagerPage() {
               <thead>
                 <tr>
                   <th>SDR</th>
-                  <th>Active</th>
-                  <th>P1</th>
-                  <th>Overdue</th>
-                  <th>Touched</th>
+                  <th>Load</th>
+                  <th>Risk</th>
                   <th>Meetings</th>
                   <th>SLA</th>
                 </tr>
@@ -124,16 +175,32 @@ export default async function SdrManagerPage() {
                         <span>{teamForUser(teams, workload.userId)?.name ?? "No team"}</span>
                       </div>
                     </td>
-                    <td>{workload.active}</td>
-                    <td>{workload.p1}</td>
                     <td>
-                      <StatusPill label={`${workload.overdue}`} tone={workload.overdue ? "danger" : "success"} />
+                      <div className="entity">
+                        <strong>{workload.active}/{workload.assigned} active</strong>
+                        <ProgressBar value={Math.round((workload.active / maxActiveLoad) * 100)} />
+                      </div>
                     </td>
-                    <td>{workload.touched}</td>
-                    <td>{workload.meetings}</td>
-                    <td>{formatPercent(workload.slaAdherence)}</td>
+                    <td>
+                      <div className="chip-row">
+                        <StatusPill label={`${workload.p1} P1`} tone={workload.p1 ? "warning" : "success"} />
+                        <StatusPill label={`${workload.overdue} overdue`} tone={workload.overdue ? "danger" : "success"} />
+                      </div>
+                    </td>
+                    <td>{formatNumber(workload.meetings)}</td>
+                    <td>
+                      <div className="entity">
+                        <strong>{formatPercent(workload.slaAdherence)}</strong>
+                        <ProgressBar value={workload.slaAdherence} />
+                      </div>
+                    </td>
                   </tr>
                 ))}
+                {snapshot.workloads.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>No SDR workload data is available yet.</td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -142,15 +209,15 @@ export default async function SdrManagerPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Teams and routing coverage</h2>
-              <p className="section-subtitle">Territory and industry coverage used by the assignment engine.</p>
+              <h2 className="section-title">Routing coverage</h2>
+              <p className="section-subtitle">Territory and industry pods used by the assignment engine.</p>
             </div>
             <GitBranch size={20} aria-hidden="true" />
           </div>
           <div className="panel-body stage-list">
             {teams.map((team) => (
-              <div className="list-row" key={team.id}>
-                <div className="row-meta">
+              <div className="stage-row" key={team.id}>
+                <div className="stage-meta">
                   <strong>{team.name}</strong>
                   <StatusPill label={team.active ? "Active" : "Paused"} tone={team.active ? "success" : "warning"} />
                 </div>
@@ -162,10 +229,12 @@ export default async function SdrManagerPage() {
                   ))}
                 </div>
                 <p className="section-subtitle">
-                  Territories: {team.territories.join(", ")}. Industries: {team.industries.join(", ")}.
+                  Manager: {state.users.find((user) => user.id === team.managerUserId)?.name ?? "Unassigned"}. Territories:{" "}
+                  {team.territories.join(", ")}. Industries: {team.industries.join(", ")}.
                 </p>
               </div>
             ))}
+            {teams.length === 0 ? <p className="section-subtitle">No routing teams have been configured yet.</p> : null}
           </div>
         </div>
       </section>
@@ -176,7 +245,10 @@ export default async function SdrManagerPage() {
             <h2 className="section-title">Reassignment recommendations</h2>
             <p className="section-subtitle">Overdue SLA and P1 load-balance recommendations generated from current assignments.</p>
           </div>
-          <StatusPill label={`${snapshot.recommendations.length} recommended`} tone={snapshot.recommendations.length ? "warning" : "success"} />
+          <StatusPill
+            label={`${snapshot.recommendations.length} recommended`}
+            tone={snapshot.recommendations.length ? "warning" : "success"}
+          />
         </div>
         <div className="table-wrap">
           <table>
@@ -203,7 +275,9 @@ export default async function SdrManagerPage() {
                   <td>
                     <div className="entity">
                       <strong>{recommendation.reason}</strong>
-                      <span>{recommendation.method} - {recommendation.slaStatus}</span>
+                      <span>
+                        {recommendation.method} - {recommendation.slaStatus}
+                      </span>
                     </div>
                   </td>
                   <td>
@@ -338,7 +412,7 @@ export default async function SdrManagerPage() {
             </div>
           </form>
           <div className="panel-body stage-list">
-            {snapshot.rules.map((rule) => (
+            {rulePreview.map((rule) => (
               <div className="list-row" key={rule.id}>
                 <div className="row-meta">
                   <strong>{rule.name}</strong>
@@ -355,6 +429,9 @@ export default async function SdrManagerPage() {
                 </form>
               </div>
             ))}
+            {snapshot.rules.length > rulePreview.length ? (
+              <p className="section-subtitle">{snapshot.rules.length - rulePreview.length} more rules are configured.</p>
+            ) : null}
           </div>
         </div>
       </section>

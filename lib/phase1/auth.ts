@@ -24,31 +24,20 @@ const permissionsByRole: Record<WorkspaceRole, Permission[]> = {
     "manage_ai_automation"
   ],
   Manager: [
-    "manage_profiles",
-    "run_jobs",
     "view_all_records",
     "manage_crm",
     "manage_sdr",
-    "manage_outreach",
-    "export_csv",
-    "manage_enrichment",
-    "view_reports",
-    "manage_ai_automation"
+    "manage_outreach"
   ],
-  SDR: ["view_all_records", "manage_crm", "manage_sdr", "manage_outreach", "manage_ai_automation"],
+  SDR: ["view_all_records", "manage_crm", "manage_sdr", "manage_outreach"],
   "Data Operator": [
     "manage_profiles",
     "run_jobs",
     "import_csv",
     "view_all_records",
-    "manage_crm",
-    "manage_sdr",
-    "manage_outreach",
     "export_csv",
     "manage_export_rules",
-    "manage_enrichment",
-    "view_reports",
-    "manage_ai_automation"
+    "manage_enrichment"
   ],
   Viewer: ["view_all_records", "view_reports"],
   "Compliance Admin": ["view_all_records", "export_csv", "manage_compliance", "view_reports", "manage_retention"]
@@ -98,6 +87,25 @@ export function assertPermission(session: Session, permission: Permission) {
 
 export function hasPermission(session: Session, permission: Permission) {
   return session.permissions.includes(permission);
+}
+
+export function canUseLeadGenerationWorkspace(session: Session) {
+  return session.role === "Admin" || session.role === "Data Operator";
+}
+
+export function canUseCrmWorkspace(session: Session) {
+  return session.role === "Admin" || session.role === "Manager" || session.role === "SDR";
+}
+
+export function canUseDeveloperWorkspace(session: Session) {
+  return session.permissions.includes("manage_workspace");
+}
+
+export function defaultWorkspacePath(session: Session) {
+  if (canUseLeadGenerationWorkspace(session)) return "/";
+  if (canUseCrmWorkspace(session)) return "/crm";
+  if (canUseDeveloperWorkspace(session)) return "/integrations";
+  return "/";
 }
 
 export function rolePermissions(role: WorkspaceRole) {

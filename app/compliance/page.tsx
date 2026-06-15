@@ -4,14 +4,14 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { rolePermissions } from "@/lib/phase1/auth";
 import { complianceReadRowsForWorkspace } from "@/lib/phase1/compliance-read-path";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import type { SuppressionRecord } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompliancePage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_compliance");
+  const { state, workspaceId } = await getDeveloperWorkspaceContext();
   const complianceRows = await complianceReadRowsForWorkspace(state, workspaceId);
   const suppressionSummary = suppressionMetrics(complianceRows.suppressionRecords, workspaceId);
   const members = state.workspaceMembers

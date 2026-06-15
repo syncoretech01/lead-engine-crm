@@ -28,13 +28,13 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { aiAutomationDashboard } from "@/lib/phase1/ai";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function AutomationPage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_ai_automation");
+  const { state, workspaceId } = await getDeveloperWorkspaceContext();
   const dashboard = aiAutomationDashboard(state, workspaceId);
 
   return (

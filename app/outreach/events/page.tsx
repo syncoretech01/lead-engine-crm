@@ -1,18 +1,20 @@
 import Link from "next/link";
 import {
+  Activity,
   AlertTriangle,
   ArrowRight,
   Mail,
   MessageSquare,
   Mic,
   Phone,
-  ShieldCheck
+  Send
 } from "lucide-react";
 import {
   recordEmailEventAction,
   recordSmsEventAction,
   recordTrackedCallAction
 } from "@/app/actions";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
@@ -28,9 +30,22 @@ import {
 } from "@/lib/phase1/outreach-read-path";
 import { recordingConsentStatuses } from "@/lib/phase1/compliance";
 import { getWorkspaceContext } from "@/lib/phase1/store";
-import { formatNumber, formatPercent } from "@/lib/utils";
+import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+type EventRow = {
+  id: string;
+  channel: "Email" | "SMS" | "Call";
+  contactName: string;
+  companyName: string;
+  campaignName?: string;
+  status: string;
+  detail: string;
+  timestamp?: string;
+};
+
+const metricIcons = [Mail, AlertTriangle, MessageSquare, Phone];
 
 export default async function OutreachEventsPage() {
   const { state, workspaceId } = await getWorkspaceContext("manage_outreach");
@@ -42,67 +57,332 @@ export default async function OutreachEventsPage() {
   const sequences = state.campaignSequences.filter((sequence) => sequence.workspaceId === workspaceId);
   const steps = state.sequenceSteps.filter((step) => step.workspaceId === workspaceId);
 
+  const emailReplies = snapshot.emailEvents.filter((event) => event.eventType === "Replied");
+  const smsReplies = snapshot.smsEvents.filter((event) => event.status === "Replied");
+  const bouncedEmails = snapshot.emailEvents.filter((event) => event.eventType === "Bounced");
+  const unsubscribedEmails = snapshot.emailEvents.filter((event) => event.eventType === "Unsubscribed");
+  const spamComplaints = snapshot.emailEvents.filter((event) => event.eventType === "Spam complaint");
+  const smsOptOuts = snapshot.smsEvents.filter((event) => event.optOutFlag);
+  const hardStops = [...bouncedEmails, ...unsubscribedEmails, ...spamComplaints, ...smsOptOuts];
+  const callWins = snapshot.calls.filter((call) => call.disposition === "Interested" || call.disposition === "Meeting booked");
+  const callsWithRecordings = snapshot.calls.filter((call) => call.recordingUrl);
+  const responseCount = emailReplies.length + smsReplies.length + callWins.length;
+  const eventRows = eventStream(snapshot).slice(0, 40);
+  const responseRows = eventRows
+    .filter((event) => isResponseStatus(event.status))
+    .slice(0, 10);
+
+  const metrics = [
+    {
+      label: "Responses",
+      value: responseCount,
+      note: `${formatNumber(emailReplies.length)} email, ${formatNumber(smsReplies.length)} SMS, ${formatNumber(callWins.length)} calls`,
+      tone: responseCount ? "success" as const : "info" as const
+    },
+    {
+      label: "Hard stops",
+      value: hardStops.length,
+      note: "Bounces, unsubscribes, complaints, and SMS opt-outs",
+      tone: hardStops.length ? "danger" as const : "success" as const
+    },
+    {
+      label: "SMS events",
+      value: snapshot.smsEvents.length,
+      note: "RingCentral Local delivery and replies",
+      tone: "info" as const
+    },
+    {
+      label: "Recorded calls",
+      value: snapshot.calls.length,
+      note: `${formatNumber(callsWithRecordings.length)} with recordings`,
+      tone: callsWithRecordings.length ? "success" as const : "info" as const
+    }
+  ];
+
   return (
     <>
       <PageHeader
-        kicker="Phase 6"
+        kicker="CRM outreach"
         title="Outreach event tracking"
-        copy="Track email, SMS, calls, recordings, replies, bounces, unsubscribes, and hard suppression automation from local provider events."
+        copy="A CRM-facing activity monitor for replies, bounces, opt-outs, SMS delivery, call recordings, and webhook processing. Provider configuration stays in the developer view."
         actions={
           <>
             <Link href="/outreach/campaigns" className="button secondary">
               <ArrowRight size={17} aria-hidden="true" />
               Campaigns
             </Link>
-            <Link href="/compliance" className="button primary">
-              <ShieldCheck size={17} aria-hidden="true" />
-              Suppression controls
+            <Link href="/sdr/queue" className="button primary">
+              <Send size={17} aria-hidden="true" />
+              SDR queue
             </Link>
           </>
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Email events</span>
-            <Mail size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.emailEvents.length)}</div>
-          <span className="metric-note">{formatPercent(snapshot.metrics.replyRate)} reply rate.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">SMS events</span>
-            <MessageSquare size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.smsEvents.length)}</div>
-          <span className="metric-note">RingCentral Local delivery and opt-out events.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Call records</span>
-            <Phone size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.calls.length)}</div>
-          <span className="metric-note">{formatNumber(snapshot.metrics.callsRecorded)} with recordings.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Hard stops</span>
-            <AlertTriangle size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.metrics.suppressions)}</div>
-          <span className="metric-note">Bounces, unsubscribes, complaints, and SMS opt-outs.</span>
-        </article>
+      <section className="grid metrics" aria-label="Outreach event metrics">
+        {metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? Activity;
+          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
+        })}
       </section>
 
-      <section className="grid three">
+      <section className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Response stream</h2>
+              <p className="section-subtitle">Recent replies and positive call outcomes that need SDR follow-up.</p>
+            </div>
+            <StatusPill label={`${responseRows.length} visible`} tone={responseRows.length ? "success" : "info"} />
+          </div>
+          <div className="panel-body stage-list">
+            {responseRows.map((event) => (
+              <div className="stage-row" key={event.id}>
+                <div className="stage-meta">
+                  <div className="entity">
+                    <strong>{event.contactName}</strong>
+                    <span>{event.companyName}</span>
+                  </div>
+                  <StatusPill label={event.status} tone={statusTone(event.status)} />
+                </div>
+                <p className="section-subtitle">{event.detail}</p>
+                <div className="chip-row">
+                  <span className="pill">{event.channel}</span>
+                  {event.campaignName ? <span className="pill">{event.campaignName}</span> : null}
+                  <span className="pill">{formatDate(event.timestamp)}</span>
+                </div>
+              </div>
+            ))}
+            {responseRows.length === 0 ? <p className="section-subtitle">No response events are waiting right now.</p> : null}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Deliverability stops</h2>
+              <p className="section-subtitle">Events that suppress or block future outreach.</p>
+            </div>
+            <StatusPill label={`${hardStops.length} stops`} tone={hardStops.length ? "danger" : "success"} />
+          </div>
+          <div className="panel-body stage-list">
+            {bouncedEmails.slice(0, 4).map((event) => (
+              <div className="stage-row" key={event.id}>
+                <div className="stage-meta">
+                  <strong>{event.contactName}</strong>
+                  <StatusPill label={event.bounceType ? `${event.bounceType} bounce` : "Bounced"} tone="danger" />
+                </div>
+                <p className="section-subtitle">
+                  {event.recipientEmail} {event.smtpCode ? `- SMTP ${event.smtpCode}` : ""}
+                </p>
+              </div>
+            ))}
+            {unsubscribedEmails.slice(0, 3).map((event) => (
+              <div className="stage-row" key={event.id}>
+                <div className="stage-meta">
+                  <strong>{event.contactName}</strong>
+                  <StatusPill label="Unsubscribed" tone="danger" />
+                </div>
+                <p className="section-subtitle">{event.recipientEmail}</p>
+              </div>
+            ))}
+            {smsOptOuts.slice(0, 3).map((event) => (
+              <div className="stage-row" key={event.id}>
+                <div className="stage-meta">
+                  <strong>{event.contactName}</strong>
+                  <StatusPill label="SMS opt-out" tone="danger" />
+                </div>
+                <p className="section-subtitle">{event.toNumber}</p>
+              </div>
+            ))}
+            {hardStops.length === 0 ? <p className="section-subtitle">No hard-stop events recorded.</p> : null}
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
+            <h2 className="section-title">Event stream</h2>
+            <p className="section-subtitle">Combined email, SMS, and voice activity sorted by newest event timestamp.</p>
+          </div>
+          <StatusPill label={`${eventRows.length} latest`} tone="info" />
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Contact</th>
+                <th>Channel</th>
+                <th>Status</th>
+                <th>Campaign</th>
+                <th>Detail</th>
+                <th>When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {eventRows.map((event) => (
+                <tr key={event.id}>
+                  <td>
+                    <div className="entity">
+                      <strong>{event.contactName}</strong>
+                      <span>{event.companyName}</span>
+                    </div>
+                  </td>
+                  <td>{event.channel}</td>
+                  <td>
+                    <StatusPill label={event.status} tone={statusTone(event.status)} />
+                  </td>
+                  <td>{event.campaignName ?? "No campaign"}</td>
+                  <td>{event.detail}</td>
+                  <td>{formatDate(event.timestamp)}</td>
+                </tr>
+              ))}
+              {eventRows.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>No outreach events have been recorded yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">SMS events</h2>
+              <p className="section-subtitle">RingCentral Local delivery, replies, failures, and STOP handling.</p>
+            </div>
+            <MessageSquare size={20} aria-hidden="true" />
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Contact</th>
+                  <th>Status</th>
+                  <th>Direction</th>
+                  <th>Body</th>
+                  <th>Opt-out</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshot.smsEvents.slice(0, 15).map((event) => (
+                  <tr key={event.id}>
+                    <td>
+                      <div className="entity">
+                        <strong>{event.contactName}</strong>
+                        <span>{event.toNumber}</span>
+                        <span>{event.companyName}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <StatusPill label={event.status} tone={statusTone(event.status)} />
+                    </td>
+                    <td>{event.direction}</td>
+                    <td>{event.body}</td>
+                    <td>{event.optOutFlag ? "Yes" : "No"}</td>
+                  </tr>
+                ))}
+                {snapshot.smsEvents.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>No SMS events have been recorded yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Call recordings</h2>
+              <p className="section-subtitle">Voice events with recording metadata, consent, summary, and next step.</p>
+            </div>
+            <Phone size={20} aria-hidden="true" />
+          </div>
+          <div className="panel-body stage-list">
+            {snapshot.calls.slice(0, 12).map((call) => (
+              <div className="stage-row" key={call.id}>
+                <div className="stage-meta">
+                  <div className="entity">
+                    <strong>{call.contactName}</strong>
+                    <span>{call.companyName}</span>
+                  </div>
+                  <StatusPill label={call.disposition} tone={statusTone(call.disposition)} />
+                </div>
+                <p className="section-subtitle">
+                  {call.callStatus}, {minutes(call.durationSeconds)} - {call.sdrName}
+                </p>
+                <div className="chip-row">
+                  <span className="pill">{call.recordingUrl ? "Recording attached" : "No recording"}</span>
+                  <span className="pill">Consent {call.recordingConsent}</span>
+                  {call.recordingStoragePath ? <span className="pill">{call.recordingStoragePath}</span> : null}
+                </div>
+                {call.callSummary ? <p className="section-subtitle">{call.callSummary}</p> : null}
+                {call.nextStep ? <p className="section-subtitle">Next: {call.nextStep}</p> : null}
+              </div>
+            ))}
+            {snapshot.calls.length === 0 ? <p className="section-subtitle">No calls have been tracked yet.</p> : null}
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
+            <h2 className="section-title">Webhook receipts</h2>
+            <p className="section-subtitle">Signed provider events with idempotency status and processed record links.</p>
+          </div>
+          <StatusPill
+            label={`${formatNumber(snapshot.metrics.webhooksProcessed)} processed / ${formatNumber(snapshot.metrics.webhookDuplicates)} duplicates`}
+            tone="success"
+          />
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Target</th>
+                <th>Event</th>
+                <th>Status</th>
+                <th>Idempotency key</th>
+                <th>Received</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshot.webhookEvents.slice(0, 20).map((event) => (
+                <tr key={event.id}>
+                  <td>{event.provider}</td>
+                  <td>{event.target}</td>
+                  <td>{event.eventType}</td>
+                  <td>
+                    <StatusPill label={event.status} tone={statusTone(event.status)} />
+                  </td>
+                  <td>{event.idempotencyKey}</td>
+                  <td>{formatDate(event.receivedAt)}</td>
+                </tr>
+              ))}
+              {snapshot.webhookEvents.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>No webhook receipts have been recorded yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="grid" id="manual-event-capture">
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Record email event</h2>
-              <p className="section-subtitle">Hard bounce, unsubscribe, and complaint events immediately suppress contacts.</p>
+              <p className="section-subtitle">Hard bounces, unsubscribes, and complaints immediately suppress contacts.</p>
             </div>
             <Mail size={20} aria-hidden="true" />
           </div>
@@ -112,7 +392,7 @@ export default async function OutreachEventsPage() {
               <select id="emailContactId" name="contactId" required>
                 {contacts.map((contact) => (
                   <option key={contact.id} value={contact.id}>
-                    {contact.name} - {contact.email}
+                    {contact.name}
                   </option>
                 ))}
               </select>
@@ -193,7 +473,7 @@ export default async function OutreachEventsPage() {
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Record SMS event</h2>
-              <p className="section-subtitle">SMS Opt-out events suppress the contact phone for future SMS.</p>
+              <p className="section-subtitle">SMS opt-out events suppress the contact phone for future SMS.</p>
             </div>
             <MessageSquare size={20} aria-hidden="true" />
           </div>
@@ -203,7 +483,7 @@ export default async function OutreachEventsPage() {
               <select id="smsContactId" name="contactId" required>
                 {contacts.map((contact) => (
                   <option key={contact.id} value={contact.id}>
-                    {contact.name} - {contact.phone || "no phone"}
+                    {contact.name}
                   </option>
                 ))}
               </select>
@@ -263,7 +543,7 @@ export default async function OutreachEventsPage() {
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Record call</h2>
-              <p className="section-subtitle">Tracked calls include recording URL, storage path, transcript, summary, and next step.</p>
+              <p className="section-subtitle">Tracked calls include recording, consent, transcript, summary, and next step.</p>
             </div>
             <Mic size={20} aria-hidden="true" />
           </div>
@@ -273,7 +553,7 @@ export default async function OutreachEventsPage() {
               <select id="callContactId" name="contactId" required>
                 {contacts.map((contact) => (
                   <option key={contact.id} value={contact.id}>
-                    {contact.name} - {contact.phone || "no phone"}
+                    {contact.name}
                   </option>
                 ))}
               </select>
@@ -351,169 +631,65 @@ export default async function OutreachEventsPage() {
           </form>
         </div>
       </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Email event history</h2>
-            <p className="section-subtitle">Provider, message ID, event timestamp, bounce data, and raw local payload.</p>
-          </div>
-          <StatusPill label={`${snapshot.emailEvents.length} events`} tone="info" />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Contact</th>
-                <th>Campaign</th>
-                <th>Event</th>
-                <th>Subject</th>
-                <th>Provider</th>
-                <th>Bounce</th>
-                <th>When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {snapshot.emailEvents.slice(0, 30).map((event) => (
-                <tr key={event.id}>
-                  <td>
-                    <div className="entity">
-                      <strong>{event.contactName}</strong>
-                      <span>{event.recipientEmail}</span>
-                      <span>{event.companyName}</span>
-                    </div>
-                  </td>
-                  <td>{event.campaignName}</td>
-                  <td>
-                    <StatusPill label={event.eventType} tone={statusTone(event.eventType)} />
-                  </td>
-                  <td>{event.subject}</td>
-                  <td>{event.provider}</td>
-                  <td>{event.bounceType ? `${event.bounceType} ${event.smtpCode ?? ""}` : "None"}</td>
-                  <td>{formatDate(event.unsubscribeAt ?? event.bouncedAt ?? event.repliedAt ?? event.openedAt ?? event.deliveredAt ?? event.sentAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Webhook receipts</h2>
-            <p className="section-subtitle">Signed provider events with idempotency status and processed record links.</p>
-          </div>
-          <StatusPill
-            label={`${formatNumber(snapshot.metrics.webhooksProcessed)} processed / ${formatNumber(snapshot.metrics.webhookDuplicates)} duplicates`}
-            tone="success"
-          />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th>Target</th>
-                <th>Event</th>
-                <th>Status</th>
-                <th>Idempotency key</th>
-                <th>Received</th>
-              </tr>
-            </thead>
-            <tbody>
-              {snapshot.webhookEvents.slice(0, 20).map((event) => (
-                <tr key={event.id}>
-                  <td>{event.provider}</td>
-                  <td>{event.target}</td>
-                  <td>{event.eventType}</td>
-                  <td>
-                    <StatusPill label={event.status} tone={statusTone(event.status)} />
-                  </td>
-                  <td>{event.idempotencyKey}</td>
-                  <td>{formatDate(event.receivedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">SMS events</h2>
-              <p className="section-subtitle">RingCentral Local status, replies, failures, and STOP handling.</p>
-            </div>
-            <MessageSquare size={20} aria-hidden="true" />
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Contact</th>
-                  <th>Status</th>
-                  <th>Direction</th>
-                  <th>Body</th>
-                  <th>Opt-out</th>
-                </tr>
-              </thead>
-              <tbody>
-                {snapshot.smsEvents.slice(0, 15).map((event) => (
-                  <tr key={event.id}>
-                    <td>
-                      <div className="entity">
-                        <strong>{event.contactName}</strong>
-                        <span>{event.toNumber}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <StatusPill label={event.status} tone={statusTone(event.status)} />
-                    </td>
-                    <td>{event.direction}</td>
-                    <td>{event.body}</td>
-                    <td>{event.optOutFlag ? "Yes" : "No"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Call recordings</h2>
-              <p className="section-subtitle">Voice events with recording metadata, transcript, call summary, and next step.</p>
-            </div>
-            <Phone size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
-            {snapshot.calls.slice(0, 12).map((call) => (
-              <div className="list-row" key={call.id}>
-                <div className="row-meta">
-                  <strong>{call.contactName}</strong>
-                  <StatusPill label={call.disposition} tone={statusTone(call.disposition)} />
-                </div>
-                <p className="section-subtitle">
-                  {call.companyName} - {call.callStatus}, {call.durationSeconds}s - {call.sdrName}
-                </p>
-                <div className="chip-row">
-                  <span className="pill">{call.recordingUrl ? "Recording attached" : "No recording"}</span>
-                  <span className="pill">Consent {call.recordingConsent}</span>
-                  {call.recordingStoragePath ? <span className="pill">{call.recordingStoragePath}</span> : null}
-                </div>
-                {call.recordingConsentSource ? <p className="section-subtitle">Consent source: {call.recordingConsentSource}</p> : null}
-                {call.callSummary ? <p className="section-subtitle">{call.callSummary}</p> : null}
-                {call.nextStep ? <p className="section-subtitle">Next: {call.nextStep}</p> : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
     </>
   );
+}
+
+function eventStream(snapshot: ReturnType<typeof outreachDashboardSnapshot>): EventRow[] {
+  const rows: EventRow[] = [
+    ...snapshot.emailEvents.map((event) => ({
+      id: event.id,
+      channel: "Email" as const,
+      contactName: event.contactName,
+      companyName: event.companyName,
+      campaignName: event.campaignName,
+      status: event.eventType,
+      detail: event.subject || event.bodySnapshot || event.messageId,
+      timestamp: emailTimestamp(event)
+    })),
+    ...snapshot.smsEvents.map((event) => ({
+      id: event.id,
+      channel: "SMS" as const,
+      contactName: event.contactName,
+      companyName: event.companyName,
+      campaignName: undefined,
+      status: event.status,
+      detail: event.body,
+      timestamp: event.repliedAt ?? event.deliveredAt ?? event.failedAt ?? event.createdAt
+    })),
+    ...snapshot.calls.map((call) => ({
+      id: call.id,
+      channel: "Call" as const,
+      contactName: call.contactName,
+      companyName: call.companyName,
+      campaignName: undefined,
+      status: call.disposition,
+      detail: call.callSummary ?? call.nextStep ?? `${call.callStatus}, ${minutes(call.durationSeconds)}`,
+      timestamp: call.createdAt
+    }))
+  ];
+
+  return rows.sort((a, b) => Date.parse(b.timestamp ?? "") - Date.parse(a.timestamp ?? ""));
+}
+
+function emailTimestamp(event: ReturnType<typeof outreachDashboardSnapshot>["emailEvents"][number]) {
+  return (
+    event.unsubscribeAt ??
+    event.bouncedAt ??
+    event.repliedAt ??
+    event.clickedAt ??
+    event.openedAt ??
+    event.deliveredAt ??
+    event.sentAt
+  );
+}
+
+function isResponseStatus(status: string) {
+  return ["Replied", "Interested", "Meeting booked", "Clicked", "Opened"].includes(status);
+}
+
+function minutes(seconds: number) {
+  return `${Math.max(1, Math.round(seconds / 60))} min`;
 }
 
 function formatDate(value?: string) {

@@ -1,6 +1,16 @@
 import Link from "next/link";
-import { ArrowRight, Building2, CircleDollarSign, ListChecks, Users } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Building2,
+  CircleDollarSign,
+  ClipboardList,
+  Target,
+  Users
+} from "lucide-react";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
+import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
   crmEventReadRowsForWorkspace,
@@ -9,136 +19,235 @@ import {
 import { opportunityStages } from "@/lib/phase1/crm";
 import { accountViewsForWorkspace, opportunityViews } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/utils";
+
+const metricIcons = [Building2, Target, CircleDollarSign, ClipboardList];
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountsPage() {
-  const { state, workspaceId } = await getWorkspaceContext("view_all_records");
+  const { state, workspaceId } = await getWorkspaceContext("manage_crm");
   const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
   const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
   const accounts = await accountViewsForWorkspace(readState, workspaceId);
   const opportunities = opportunityViews(readState, workspaceId);
-  const stageOrder = opportunityStages.filter((stage) => accounts.some((account) => account.stage === stage));
-  const openPipeline = opportunities
-    .filter((opportunity) => opportunity.stage !== "Closed won" && opportunity.stage !== "Closed lost")
-    .reduce((total, opportunity) => total + opportunity.amount, 0);
+  const openOpportunities = opportunities.filter(
+    (opportunity) => opportunity.stage !== "Closed won" && opportunity.stage !== "Closed lost"
+  );
+  const openPipeline = openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
+  const taskAccounts = accounts.filter((account) => account.openTasks > 0);
+  const p1Accounts = accounts.filter((account) => account.priority === "P1");
+  const stageRows = opportunityStages
+    .map((stage) => {
+      const stageAccounts = accounts.filter((account) => account.stage === stage);
+      const stageAmount = stageAccounts.reduce((total, account) => total + account.amount, 0);
+
+      return { stage, count: stageAccounts.length, amount: stageAmount };
+    })
+    .filter((row) => row.count > 0);
+  const maxStageCount = Math.max(...stageRows.map((row) => row.count), 1);
+  const watchlist = [...accounts]
+    .sort((a, b) => b.openTasks - a.openTasks || priorityWeight(a.priority) - priorityWeight(b.priority) || b.score - a.score)
+    .slice(0, 8);
+  const sourceRows = sourceSummary(accounts).slice(0, 5);
+
+  const metrics = [
+    {
+      label: "CRM accounts",
+      value: accounts.length,
+      note: `${formatNumber(accounts.reduce((total, account) => total + account.contacts, 0))} linked contacts`,
+      tone: "info" as const
+    },
+    {
+      label: "P1 accounts",
+      value: p1Accounts.length,
+      note: "Highest-priority account focus",
+      tone: p1Accounts.length ? "success" as const : "info" as const
+    },
+    {
+      label: "Open pipeline",
+      value: openPipeline,
+      currency: true,
+      note: `${formatNumber(openOpportunities.length)} open opportunities`,
+      tone: "success" as const
+    },
+    {
+      label: "Accounts with tasks",
+      value: taskAccounts.length,
+      note: "Open account or contact work",
+      tone: taskAccounts.length ? "warning" as const : "success" as const
+    }
+  ];
 
   return (
     <>
       <PageHeader
         kicker="Sales CRM"
         title="Accounts"
-        copy="Golden company records become CRM accounts with contacts, opportunities, source history, activity, notes, tasks, and compliance context."
+        copy="A clean account workspace for SDRs and managers: spot priority companies, see pipeline stage health, and open the right account without digging through backend details."
         actions={
           <>
-            <Link href="/crm/contacts" className="button secondary">
-              <ListChecks size={17} aria-hidden="true" />
-              Contacts
+            <Link href="/crm" className="button secondary">
+              <BarChart3 size={17} aria-hidden="true" />
+              CRM workspace
             </Link>
             <Link href="/crm/opportunities" className="button primary">
-              <Building2 size={17} aria-hidden="true" />
+              <CircleDollarSign size={17} aria-hidden="true" />
               Pipeline
             </Link>
           </>
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Accounts</span>
-            <Building2 size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{accounts.length}</div>
-          <span className="metric-note">Golden companies promoted to CRM accounts.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Open pipeline</span>
-            <CircleDollarSign size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatCurrency(openPipeline)}</div>
-          <span className="metric-note">{opportunities.length} opportunities tracked.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Open tasks</span>
-            <ListChecks size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">
-            {readState.tasks.filter((task) => task.workspaceId === workspaceId && task.status !== "Completed").length}
-          </div>
-          <span className="metric-note">Account and contact work queue.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Activity events</span>
-            <Users size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">
-            {readState.activities.filter((activity) => activity.workspaceId === workspaceId).length}
-          </div>
-          <span className="metric-note">Calls, notes, tasks, and stage changes.</span>
-        </article>
+      <section className="grid metrics" aria-label="Account metrics">
+        {metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? Building2;
+          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
+        })}
       </section>
 
-      <section className="kanban" aria-label="Opportunity stages">
-        {stageOrder.map((stage) => {
-          const stageAccounts = accounts.filter((account) => account.stage === stage);
-
-          return (
-            <div className="kanban-column" key={stage}>
-              <div className="workspace-row">
-                <strong>{stage}</strong>
-                <StatusPill label={`${stageAccounts.length}`} tone="info" />
-              </div>
-              {stageAccounts.map((account) => (
-                <Link href={`/crm/accounts/${account.id}`} className="item-card" key={account.id}>
-                  <div className="item-card-header">
-                    <div>
-                      <h2 className="card-title">{account.name}</h2>
-                      <p className="section-subtitle">{account.location}</p>
-                    </div>
-                    <div className="score-ring">{account.score}</div>
-                  </div>
-                  <div className="chip-row">
-                    <StatusPill label={account.priority} tone={account.priority === "P1" ? "success" : "warning"} />
-                    <StatusPill label={formatCurrency(account.amount)} tone="info" />
-                    <StatusPill label={`${account.openTasks} tasks`} tone={account.openTasks ? "warning" : "success"} />
-                  </div>
-                  <div className="row-meta">
-                    <span>{account.owner}</span>
-                    <ArrowRight size={16} aria-hidden="true" />
-                  </div>
-                </Link>
-              ))}
+      <section className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Account watchlist</h2>
+              <p className="section-subtitle">Accounts with open work, high priority, or strong score should be handled first.</p>
             </div>
-          );
-        })}
+            <StatusPill label={`${watchlist.length} focus`} tone="info" />
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Owner</th>
+                  <th>Stage</th>
+                  <th>Tasks</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {watchlist.map((account) => (
+                  <tr key={account.id}>
+                    <td>
+                      <Link href={`/crm/accounts/${account.id}`} className="entity">
+                        <strong>{account.name}</strong>
+                        <span>{account.domain}</span>
+                        <span>{account.source}</span>
+                      </Link>
+                    </td>
+                    <td>{account.owner}</td>
+                    <td>
+                      <StatusPill label={account.stage} tone={statusTone(account.stage)} />
+                    </td>
+                    <td>
+                      <StatusPill label={`${account.openTasks}`} tone={account.openTasks ? "warning" : "success"} />
+                    </td>
+                    <td>{account.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Stage overview</h2>
+              <p className="section-subtitle">Account distribution by active opportunity stage.</p>
+            </div>
+            <CircleDollarSign size={20} aria-hidden="true" />
+          </div>
+          <div className="panel-body stage-list">
+            {stageRows.map((row) => (
+              <div className="stage-row" key={row.stage}>
+                <div className="stage-meta">
+                  <strong>{row.stage}</strong>
+                  <StatusPill label={`${formatNumber(row.count)} accounts`} tone={statusTone(row.stage)} />
+                </div>
+                <ProgressBar value={Math.round((row.count / maxStageCount) * 100)} />
+                <div className="row-meta">
+                  <span>{formatCurrency(row.amount)}</span>
+                  <span>{Math.round((row.count / accounts.length) * 100)}% of accounts</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Source mix</h2>
+              <p className="section-subtitle">Where CRM accounts came from, kept visible for attribution and list quality review.</p>
+            </div>
+            <Target size={20} aria-hidden="true" />
+          </div>
+          <div className="panel-body stage-list">
+            {sourceRows.map((row) => (
+              <div className="list-row" key={row.source}>
+                <div className="row-meta">
+                  <strong>{row.source}</strong>
+                  <StatusPill label={`${formatNumber(row.count)} accounts`} tone="info" />
+                </div>
+                <p className="section-subtitle">
+                  {formatNumber(row.contacts)} contacts, average score {row.averageScore}.
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Account actions</h2>
+              <p className="section-subtitle">Shortcuts for the CRM work around account records.</p>
+            </div>
+            <ArrowRight size={20} aria-hidden="true" />
+          </div>
+          <div className="panel-body grid three">
+            <Link href="/crm/contacts" className="item-card compact-profile-card">
+              <Users size={22} aria-hidden="true" />
+              <h3 className="card-title">Contacts</h3>
+              <p className="section-subtitle">Open people linked to CRM accounts.</p>
+            </Link>
+            <Link href="/crm/opportunities" className="item-card compact-profile-card">
+              <CircleDollarSign size={22} aria-hidden="true" />
+              <h3 className="card-title">Pipeline</h3>
+              <p className="section-subtitle">Review stage, amount, owner, and forecast.</p>
+            </Link>
+            <Link href="/sdr/queue" className="item-card compact-profile-card">
+              <ClipboardList size={22} aria-hidden="true" />
+              <h3 className="card-title">SDR queue</h3>
+              <p className="section-subtitle">Work assigned contacts from account context.</p>
+            </Link>
+          </div>
+        </div>
       </section>
 
       <section className="panel">
         <div className="panel-header">
           <div className="panel-title-wrap">
-            <h2 className="section-title">Account table</h2>
-            <p className="section-subtitle">Source-attributed accounts with opportunity and task context.</p>
+            <h2 className="section-title">Account directory</h2>
+            <p className="section-subtitle">A compact account table for scanning owner, stage, activity, and source context.</p>
           </div>
-          <Users size={20} aria-hidden="true" />
+          <StatusPill label={`${formatNumber(accounts.length)} accounts`} tone="info" />
         </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Account</th>
-                <th>Priority</th>
                 <th>Owner</th>
                 <th>Stage</th>
-                <th>Amount</th>
                 <th>Contacts</th>
-                <th>Opps</th>
-                <th>Tasks</th>
-                <th>Compliance</th>
+                <th>Open work</th>
+                <th>Pipeline</th>
+                <th>Source</th>
               </tr>
             </thead>
             <tbody>
@@ -148,45 +257,57 @@ export default async function AccountsPage() {
                     <Link href={`/crm/accounts/${account.id}`} className="entity">
                       <strong>{account.name}</strong>
                       <span>{account.domain}</span>
-                      <span>{account.industry}</span>
+                      <span>{account.location || account.industry}</span>
                     </Link>
-                  </td>
-                  <td>
-                    <StatusPill label={account.priority} tone={account.priority === "P1" ? "success" : "warning"} />
                   </td>
                   <td>{account.owner}</td>
                   <td>
                     <StatusPill label={account.stage} tone={statusTone(account.stage)} />
                   </td>
+                  <td>{formatNumber(account.contacts)}</td>
+                  <td>
+                    <div className="entity">
+                      <strong>{formatNumber(account.openTasks)} tasks</strong>
+                      <span>{account.lastActivity}</span>
+                    </div>
+                  </td>
                   <td>{formatCurrency(account.amount)}</td>
-                  <td>{account.contacts}</td>
-                  <td>{account.opportunities}</td>
-                  <td>{account.openTasks}</td>
-                  <td>{account.compliance}</td>
+                  <td>{account.source}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
-
-      <section className="grid three">
-        <Link href="/crm/opportunities" className="item-card">
-          <CircleDollarSign size={22} aria-hidden="true" />
-          <h2 className="card-title">Opportunity tracking</h2>
-          <p className="section-subtitle">Stage, amount, probability, owner, close date, and source attribution.</p>
-        </Link>
-        <Link href="/crm/contacts" className="item-card">
-          <Users size={22} aria-hidden="true" />
-          <h2 className="card-title">Contact pages</h2>
-          <p className="section-subtitle">Contacts inherit account context while preserving verification, enrichment, and consent metadata.</p>
-        </Link>
-        <Link href="/crm/accounts" className="item-card">
-          <ListChecks size={22} aria-hidden="true" />
-          <h2 className="card-title">Activity timeline</h2>
-          <p className="section-subtitle">Calls, notes, tasks, emails, SMS events, meetings, and status changes share one timeline pattern.</p>
-        </Link>
-      </section>
     </>
   );
+}
+
+type AccountView = Awaited<ReturnType<typeof accountViewsForWorkspace>>[number];
+
+function sourceSummary(accounts: AccountView[]) {
+  const rows = new Map<string, { source: string; count: number; contacts: number; score: number }>();
+
+  for (const account of accounts) {
+    const existing = rows.get(account.source) ?? { source: account.source, count: 0, contacts: 0, score: 0 };
+    existing.count += 1;
+    existing.contacts += account.contacts;
+    existing.score += account.score;
+    rows.set(account.source, existing);
+  }
+
+  return [...rows.values()]
+    .map((row) => ({
+      ...row,
+      averageScore: row.count ? Math.round(row.score / row.count) : 0
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function priorityWeight(priority: string) {
+  if (priority === "P1") return 1;
+  if (priority === "P2") return 2;
+  if (priority === "P3") return 3;
+  if (priority === "P4") return 4;
+  return 5;
 }

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { assertPermission, resolveSession } from "@/lib/phase1/auth";
+import {
+  assertPermission,
+  canUseCrmWorkspace,
+  canUseDeveloperWorkspace,
+  canUseLeadGenerationWorkspace,
+  defaultWorkspacePath,
+  resolveSession,
+  rolePermissions
+} from "@/lib/phase1/auth";
 import { createSeedState } from "@/lib/phase1/seed";
 
 describe("auth and RBAC session resolution", () => {
@@ -49,5 +57,35 @@ describe("auth and RBAC session resolution", () => {
     });
 
     expect(() => assertPermission(session, "manage_profiles")).toThrow(/does not have/);
+  });
+
+  it("keeps workspace views scoped to the intended roles", () => {
+    const state = createSeedState();
+    const admin = resolveSession(state, {});
+    const sdr = resolveSession(state, {
+      userId: "user-ari",
+      workspaceId: "workspace-syncore"
+    });
+    const leadOperator = resolveSession(state, {
+      userId: "user-leo",
+      workspaceId: "workspace-syncore"
+    });
+
+    expect(canUseDeveloperWorkspace(admin)).toBe(true);
+    expect(canUseLeadGenerationWorkspace(admin)).toBe(true);
+    expect(canUseCrmWorkspace(admin)).toBe(true);
+
+    expect(canUseLeadGenerationWorkspace(sdr)).toBe(false);
+    expect(canUseCrmWorkspace(sdr)).toBe(true);
+    expect(canUseDeveloperWorkspace(sdr)).toBe(false);
+    expect(defaultWorkspacePath(sdr)).toBe("/crm");
+
+    expect(canUseLeadGenerationWorkspace(leadOperator)).toBe(true);
+    expect(canUseCrmWorkspace(leadOperator)).toBe(false);
+    expect(canUseDeveloperWorkspace(leadOperator)).toBe(false);
+    expect(defaultWorkspacePath(leadOperator)).toBe("/");
+
+    expect(rolePermissions("Manager")).not.toContain("manage_profiles");
+    expect(rolePermissions("Data Operator")).not.toContain("manage_crm");
   });
 });

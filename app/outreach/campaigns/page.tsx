@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   Mail,
   Pause,
@@ -18,7 +19,9 @@ import {
   simulateCampaignSendAction,
   updateOutreachProviderStatusAction
 } from "@/app/actions";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
+import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
   campaignStatuses,
@@ -33,9 +36,11 @@ import {
 } from "@/lib/phase1/outreach-read-path";
 import { defaultPhysicalAddress } from "@/lib/phase1/compliance";
 import { getWorkspaceContext } from "@/lib/phase1/store";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+const metricIcons = [Workflow, Mail, BarChart3, ShieldCheck];
 
 export default async function OutreachCampaignsPage() {
   const { state, workspaceId } = await getWorkspaceContext("manage_outreach");
@@ -44,13 +49,49 @@ export default async function OutreachCampaignsPage() {
   const snapshot = outreachDashboardSnapshot(readState, workspaceId);
   const sequences = state.campaignSequences.filter((sequence) => sequence.workspaceId === workspaceId);
   const steps = state.sequenceSteps.filter((step) => step.workspaceId === workspaceId);
+  const sentToday = snapshot.providers.reduce((total, provider) => total + provider.sentToday, 0);
+  const dailyLimit = snapshot.providers.reduce((total, provider) => total + provider.dailyLimit, 0);
+  const emailProviders = snapshot.providers.filter((provider) => provider.kind === "Email");
+  const authenticatedEmailProviders = emailProviders.filter((provider) => provider.spf && provider.dkim && provider.dmarc);
+  const providerRisk = snapshot.providers.filter(
+    (provider) => provider.status !== "Connected" || provider.bounceRate > 3 || provider.complaintRate > 1
+  );
+
+  const metrics = [
+    {
+      label: "Active campaigns",
+      value: snapshot.metrics.activeCampaigns,
+      note: "Email, SMS, call, and multichannel",
+      tone: "info" as const
+    },
+    {
+      label: "Sent",
+      value: snapshot.metrics.sent,
+      note: "Local provider send events",
+      tone: "success" as const
+    },
+    {
+      label: "Reply rate",
+      value: snapshot.metrics.replyRate,
+      suffix: "%",
+      note: "Email and SMS replies",
+      tone: snapshot.metrics.replyRate ? "success" as const : "info" as const
+    },
+    {
+      label: "Bounce rate",
+      value: snapshot.metrics.bounceRate,
+      suffix: "%",
+      note: `${formatNumber(snapshot.metrics.suppressions)} hard-stop events`,
+      tone: snapshot.metrics.bounceRate > 5 ? "danger" as const : "success" as const
+    }
+  ];
 
   return (
     <>
       <PageHeader
-        kicker="Phase 6"
+        kicker="CRM outreach"
         title="Outreach campaigns"
-        copy="Local email, SMS, and voice provider tracking with campaigns, sequences, sequence steps, deliverability guardrails, and provider simulation."
+        copy="A CRM-facing campaign control room for sender readiness, active sequences, deliverability signals, and simulated sends. Provider setup remains isolated in the developer view."
         actions={
           <>
             <Link href="/outreach/events" className="button secondary">
@@ -65,124 +106,202 @@ export default async function OutreachCampaignsPage() {
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Active campaigns</span>
-            <Workflow size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.metrics.activeCampaigns)}</div>
-          <span className="metric-note">Email, SMS, call, and multichannel campaigns.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Sent</span>
-            <Mail size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.metrics.sent)}</div>
-          <span className="metric-note">Local provider send events.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Reply rate</span>
-            <BarChart3 size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatPercent(snapshot.metrics.replyRate)}</div>
-          <span className="metric-note">Email and SMS replies.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Bounce rate</span>
-            <ShieldCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatPercent(snapshot.metrics.bounceRate)}</div>
-          <span className="metric-note">{formatNumber(snapshot.metrics.suppressions)} hard-stop events.</span>
-        </article>
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Provider connections</h2>
-            <p className="section-subtitle">Local stand-ins for email provider and RingCentral SMS/voice integrations.</p>
-          </div>
-          <RadioTower size={20} aria-hidden="true" />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th>Sender</th>
-                <th>Health</th>
-                <th>Limits</th>
-                <th>Auth</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {snapshot.providers.map((provider) => (
-                <tr key={provider.id}>
-                  <td>
-                    <div className="entity">
-                      <strong>{provider.provider}</strong>
-                      <span>{provider.kind}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="entity">
-                      <strong>{provider.senderEmail ?? provider.fromNumber}</strong>
-                      <span>{provider.sendingDomain ?? provider.mailboxGroup ?? provider.warmupStage}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="chip-row">
-                      <span className="pill">Bounce {provider.bounceRate}%</span>
-                      <span className="pill">Unsub {provider.unsubscribeRate}%</span>
-                      <span className="pill">Complaint {provider.complaintRate}%</span>
-                    </div>
-                  </td>
-                  <td>{provider.sentToday}/{provider.dailyLimit}</td>
-                  <td>
-                    <div className="chip-row">
-                      {provider.kind === "Email" ? (
-                        <>
-                          <StatusPill label="SPF" tone={provider.spf ? "success" : "warning"} />
-                          <StatusPill label="DKIM" tone={provider.dkim ? "success" : "warning"} />
-                          <StatusPill label="DMARC" tone={provider.dmarc ? "success" : "warning"} />
-                        </>
-                      ) : null}
-                      <StatusPill label="TLS" tone={provider.tls ? "success" : "warning"} />
-                    </div>
-                  </td>
-                  <td>
-                    <form action={updateOutreachProviderStatusAction} className="inline-form">
-                      <input name="id" type="hidden" value={provider.id} />
-                      <select name="status" defaultValue={provider.status} aria-label="Provider status">
-                        {outreachProviderStatuses.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                      <button className="icon-button" type="submit" aria-label="Save provider status">
-                        {provider.status === "Paused" ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <section className="grid metrics" aria-label="Outreach campaign metrics">
+        {metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? Workflow;
+          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
+        })}
       </section>
 
       <section className="grid two">
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
+              <h2 className="section-title">Campaign focus</h2>
+              <p className="section-subtitle">Active and recent campaigns with send progress, replies, and deliverability risk.</p>
+            </div>
+            <StatusPill label={`${snapshot.campaigns.length} campaigns`} tone="info" />
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Campaign</th>
+                  <th>Status</th>
+                  <th>Progress</th>
+                  <th>Replies</th>
+                  <th>Risk</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshot.campaigns.map((campaign) => {
+                  const sentPercent = campaign.totalLeads ? Math.round((campaign.sentCount / campaign.totalLeads) * 100) : 0;
+
+                  return (
+                    <tr key={campaign.id}>
+                      <td>
+                        <div className="entity">
+                          <strong>{campaign.name}</strong>
+                          <span>{campaign.targetSegment}</span>
+                          <span>{campaign.ownerName}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <StatusPill label={campaign.status} tone={statusTone(campaign.status)} />
+                      </td>
+                      <td>
+                        <div className="entity">
+                          <strong>
+                            {formatNumber(campaign.sentCount)}/{formatNumber(campaign.totalLeads)} sent
+                          </strong>
+                          <ProgressBar value={sentPercent} />
+                        </div>
+                      </td>
+                      <td>
+                        {formatNumber(campaign.replyCount)} ({campaign.replyRate}%)
+                      </td>
+                      <td>
+                        <div className="chip-row">
+                          <StatusPill
+                            label={`${campaign.bounceRate}% bounce`}
+                            tone={campaign.bounceRate > 5 ? "danger" : campaign.bounceRate > 2 ? "warning" : "success"}
+                          />
+                          <StatusPill
+                            label={`${campaign.unsubscribeRate}% unsub`}
+                            tone={campaign.unsubscribeRate > 3 ? "warning" : "success"}
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <form action={simulateCampaignSendAction}>
+                          <input name="campaignId" type="hidden" value={campaign.id} />
+                          <button className="button secondary" type="submit">
+                            Simulate send
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {snapshot.campaigns.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>No outreach campaigns have been created yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Provider readiness</h2>
+              <p className="section-subtitle">CRM-visible sender status, daily limits, authentication, and local provider health.</p>
+            </div>
+            <RadioTower size={20} aria-hidden="true" />
+          </div>
+          <div className="panel-body stage-list">
+            {snapshot.providers.map((provider) => {
+              const usagePercent = provider.dailyLimit ? Math.round((provider.sentToday / provider.dailyLimit) * 100) : 0;
+
+              return (
+                <div className="stage-row" key={provider.id}>
+                  <div className="stage-meta">
+                    <div className="entity">
+                      <strong>{provider.provider}</strong>
+                      <span>{provider.senderEmail ?? provider.fromNumber}</span>
+                    </div>
+                    <StatusPill label={provider.status} tone={statusTone(provider.status)} />
+                  </div>
+                  <ProgressBar value={usagePercent} />
+                  <div className="chip-row">
+                    <span className="pill">{provider.sentToday}/{provider.dailyLimit} today</span>
+                    <span className="pill">Bounce {provider.bounceRate}%</span>
+                    <span className="pill">Complaint {provider.complaintRate}%</span>
+                    {provider.kind === "Email" ? (
+                      <>
+                        <StatusPill label="SPF" tone={provider.spf ? "success" : "warning"} />
+                        <StatusPill label="DKIM" tone={provider.dkim ? "success" : "warning"} />
+                        <StatusPill label="DMARC" tone={provider.dmarc ? "success" : "warning"} />
+                      </>
+                    ) : null}
+                    <StatusPill label="TLS" tone={provider.tls ? "success" : "warning"} />
+                  </div>
+                  <form action={updateOutreachProviderStatusAction} className="inline-form">
+                    <input name="id" type="hidden" value={provider.id} />
+                    <select name="status" defaultValue={provider.status} aria-label="Provider status">
+                      {outreachProviderStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="icon-button" type="submit" aria-label="Save provider status">
+                      {provider.status === "Paused" ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid four">
+        <article className="item-card workflow-card">
+          <div className="item-card-header">
+            <div>
+              <h2 className="card-title">Sender auth</h2>
+              <p className="section-subtitle">SPF, DKIM, and DMARC coverage.</p>
+            </div>
+            <ShieldCheck size={20} aria-hidden="true" />
+          </div>
+          <div className="score-ring">{authenticatedEmailProviders.length}/{Math.max(emailProviders.length, 1)}</div>
+        </article>
+        <article className="item-card workflow-card">
+          <div className="item-card-header">
+            <div>
+              <h2 className="card-title">Daily usage</h2>
+              <p className="section-subtitle">Current provider send load.</p>
+            </div>
+            <Mail size={20} aria-hidden="true" />
+          </div>
+          <ProgressBar value={dailyLimit ? Math.round((sentToday / dailyLimit) * 100) : 0} />
+          <span className="section-subtitle">{sentToday}/{dailyLimit} sends today</span>
+        </article>
+        <article className="item-card workflow-card">
+          <div className="item-card-header">
+            <div>
+              <h2 className="card-title">Risk flags</h2>
+              <p className="section-subtitle">Paused or deliverability-sensitive providers.</p>
+            </div>
+            <AlertTriangle size={20} aria-hidden="true" />
+          </div>
+          <div className="score-ring">{providerRisk.length}</div>
+        </article>
+        <article className="item-card workflow-card">
+          <div className="item-card-header">
+            <div>
+              <h2 className="card-title">Sync events</h2>
+              <p className="section-subtitle">Webhook and call records processed locally.</p>
+            </div>
+            <Activity size={20} aria-hidden="true" />
+          </div>
+          <div className="chip-row">
+            <StatusPill label={`${snapshot.metrics.webhooksProcessed} webhooks`} tone="info" />
+            <StatusPill label={`${snapshot.metrics.callsRecorded} calls`} tone="success" />
+          </div>
+        </article>
+      </section>
+
+      <section className="grid two">
+        <div className="panel" id="create-campaign">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
               <h2 className="section-title">Create campaign</h2>
-              <p className="section-subtitle">Campaigns track target segment, sending domain, mailbox group, status, and performance counters.</p>
+              <p className="section-subtitle">Create the campaign shell; sequence content and steps can be added after the campaign exists.</p>
             </div>
             <Plus size={20} aria-hidden="true" />
           </div>
@@ -246,11 +365,11 @@ export default async function OutreachCampaignsPage() {
           </form>
         </div>
 
-        <div className="panel">
+        <div className="panel" id="sequence-builder">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Create sequence and step</h2>
-              <p className="section-subtitle">Sequences stop on reply, bounce, or unsubscribe and steps define channel-specific content.</p>
+              <h2 className="section-title">Sequence builder</h2>
+              <p className="section-subtitle">Add a sequence and its next email, SMS, call, or manual step.</p>
             </div>
             <Workflow size={20} aria-hidden="true" />
           </div>
@@ -347,121 +466,93 @@ export default async function OutreachCampaignsPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Campaign performance</h2>
-            <p className="section-subtitle">Counters update from email, SMS, call, meeting, opportunity, and revenue events.</p>
+      <section className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Campaign performance</h2>
+              <p className="section-subtitle">Revenue, meetings, and engagement counters from local outreach events.</p>
+            </div>
+            <StatusPill label={`${formatNumber(snapshot.campaigns.length)} campaigns`} tone="info" />
           </div>
-          <StatusPill label={`${snapshot.campaigns.length} campaigns`} tone="info" />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Campaign</th>
-                <th>Status</th>
-                <th>Leads</th>
-                <th>Sent</th>
-                <th>Replies</th>
-                <th>Bounces</th>
-                <th>Unsubs</th>
-                <th>Meetings</th>
-                <th>Revenue won</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {snapshot.campaigns.map((campaign) => (
-                <tr key={campaign.id}>
-                  <td>
-                    <div className="entity">
-                      <strong>{campaign.name}</strong>
-                      <span>{campaign.targetSegment}</span>
-                      <span>{campaign.ownerName}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <StatusPill label={campaign.status} tone={statusTone(campaign.status)} />
-                  </td>
-                  <td>{campaign.totalLeads}</td>
-                  <td>{campaign.sentCount}</td>
-                  <td>{campaign.replyCount} ({campaign.replyRate}%)</td>
-                  <td>{campaign.bounceCount} ({campaign.bounceRate}%)</td>
-                  <td>{campaign.unsubscribeCount} ({campaign.unsubscribeRate}%)</td>
-                  <td>{campaign.meetingsBooked}</td>
-                  <td>{formatCurrency(campaign.revenueWon)}</td>
-                  <td>
-                    <form action={simulateCampaignSendAction}>
-                      <input name="campaignId" type="hidden" value={campaign.id} />
-                      <button className="button secondary" type="submit">
-                        Simulate send
-                      </button>
-                    </form>
-                  </td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Campaign</th>
+                  <th>Leads</th>
+                  <th>Meetings</th>
+                  <th>Revenue won</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {snapshot.campaigns.map((campaign) => (
+                  <tr key={campaign.id}>
+                    <td>
+                      <div className="entity">
+                        <strong>{campaign.name}</strong>
+                        <span>{campaign.status}</span>
+                      </div>
+                    </td>
+                    <td>{formatNumber(campaign.totalLeads)}</td>
+                    <td>{formatNumber(campaign.meetingsBooked)}</td>
+                    <td>{formatCurrency(campaign.revenueWon)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Sequence steps</h2>
-            <p className="section-subtitle">Channel steps with delay rules, templates, scripts, variables, and required fields.</p>
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Sequence steps</h2>
+              <p className="section-subtitle">Channel steps with delay rules, templates, scripts, variables, and compliance notes.</p>
+            </div>
+            <StatusPill label={`${steps.length} steps`} tone="info" />
           </div>
-          <StatusPill label={`${steps.length} steps`} tone="info" />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Sequence</th>
-                <th>Step</th>
-                <th>Channel</th>
-                <th>Delay</th>
-                <th>Template/script</th>
-                <th>Requirements</th>
-                <th>Compliance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {steps.map((step) => (
-                <tr key={step.id}>
-                  <td>{sequences.find((sequence) => sequence.id === step.sequenceId)?.name ?? "Unknown sequence"}</td>
-                  <td>{step.stepNumber}</td>
-                  <td>
-                    <StatusPill label={step.channel} tone="info" />
-                  </td>
-                  <td>{step.delayDays}d</td>
-                  <td>
-                    <div className="entity">
-                      <strong>{step.subject ?? step.smsTemplate ?? step.callScript ?? step.manualTaskInstruction ?? "No copy"}</strong>
-                      <span>{step.bodyTemplate}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="chip-row">
-                      {step.requiredFields.map((field) => (
-                        <span className="pill" key={field}>
-                          {field}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td>
-                    <div className="entity">
-                      <StatusPill label={step.complianceStatus} tone={step.complianceStatus === "Compliant" ? "success" : "warning"} />
-                      <span>{step.complianceNotes}</span>
-                      {step.physicalAddress ? <span>{step.physicalAddress}</span> : null}
-                    </div>
-                  </td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Sequence</th>
+                  <th>Step</th>
+                  <th>Channel</th>
+                  <th>Template</th>
+                  <th>Compliance</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {steps.map((step) => (
+                  <tr key={step.id}>
+                    <td>{sequences.find((sequence) => sequence.id === step.sequenceId)?.name ?? "Unknown sequence"}</td>
+                    <td>{step.stepNumber} after {step.delayDays}d</td>
+                    <td>
+                      <StatusPill label={step.channel} tone="info" />
+                    </td>
+                    <td>
+                      <div className="entity">
+                        <strong>{step.subject ?? step.smsTemplate ?? step.callScript ?? step.manualTaskInstruction ?? "No copy"}</strong>
+                        <span>{step.bodyTemplate}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="entity">
+                        <StatusPill label={step.complianceStatus} tone={step.complianceStatus === "Compliant" ? "success" : "warning"} />
+                        <span>{step.complianceNotes}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {steps.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>No sequence steps have been created yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </>

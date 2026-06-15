@@ -6,6 +6,7 @@ import {
   CircleDollarSign,
   Save,
   SlidersHorizontal,
+  TrendingUp,
   Users
 } from "lucide-react";
 import {
@@ -14,7 +15,9 @@ import {
   setCustomFieldValueAction,
   updateOpportunityStageAction
 } from "@/app/actions";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
+import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
   crmEventReadRowsForWorkspace,
@@ -25,134 +28,215 @@ import { opportunityViews } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
+const metricIcons = [CircleDollarSign, TrendingUp, Calendar, CircleDollarSign];
+
 export const dynamic = "force-dynamic";
 
 export default async function OpportunitiesPage() {
-  const { state, workspaceId } = await getWorkspaceContext("view_all_records");
+  const { state, workspaceId } = await getWorkspaceContext("manage_crm");
   const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
   const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
   const opportunities = opportunityViews(readState, workspaceId);
-  const openOpportunities = opportunities.filter(
-    (opportunity) => opportunity.stage !== "Closed won" && opportunity.stage !== "Closed lost"
-  );
+  const openOpportunities = opportunities.filter((opportunity) => !isClosedStage(opportunity.stage));
   const openPipeline = openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
   const weightedForecast = openOpportunities.reduce(
     (total, opportunity) => total + Math.round(opportunity.amount * (opportunity.probability / 100)),
     0
   );
+  const proposalOpportunities = opportunities.filter((opportunity) => opportunity.stage === "Proposal");
+  const wonOpportunities = opportunities.filter((opportunity) => opportunity.stage === "Closed won");
   const opportunityFields = state.customFields.filter(
     (field) => field.workspaceId === workspaceId && field.objectType === "opportunity"
   );
+  const stageRows = stageSummary(opportunities);
+  const maxStageAmount = Math.max(...stageRows.map((row) => row.amount), 1);
+  const focusOpportunities = [...openOpportunities]
+    .sort((a, b) => b.amount - a.amount || b.probability - a.probability)
+    .slice(0, 8);
+
+  const metrics = [
+    {
+      label: "Open pipeline",
+      value: openPipeline,
+      currency: true,
+      note: `${formatNumber(openOpportunities.length)} open opportunities`,
+      tone: "success" as const
+    },
+    {
+      label: "Weighted forecast",
+      value: weightedForecast,
+      currency: true,
+      note: "Amount weighted by probability",
+      tone: "info" as const
+    },
+    {
+      label: "Proposal stage",
+      value: proposalOpportunities.length,
+      note: "Late-stage active opportunities",
+      tone: proposalOpportunities.length ? "warning" as const : "info" as const
+    },
+    {
+      label: "Closed won",
+      value: wonOpportunities.length,
+      note: `${formatCurrency(wonOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0))} retained in history`,
+      tone: "success" as const
+    }
+  ];
 
   return (
     <>
       <PageHeader
         kicker="Sales CRM"
         title="Opportunities"
-        copy="Track deal stage, amount, probability, expected close date, source attribution, owner, activities, and custom forecast fields."
+        copy="A focused pipeline workspace for managers and SDRs: review deal value, stage health, forecast, next activity, and move opportunities without touching backend settings."
         actions={
           <>
             <Link href="/crm/accounts" className="button secondary">
               <Building2 size={17} aria-hidden="true" />
               Accounts
             </Link>
-            <Link href="/crm/contacts" className="button primary">
-              <Users size={17} aria-hidden="true" />
-              Contacts
-            </Link>
+            <a href="#create-opportunity" className="button primary">
+              <CircleDollarSign size={17} aria-hidden="true" />
+              Add opportunity
+            </a>
           </>
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Open pipeline</span>
-            <CircleDollarSign size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatCurrency(openPipeline)}</div>
-          <span className="metric-note">{formatNumber(openOpportunities.length)} open opportunities.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Weighted forecast</span>
-            <SlidersHorizontal size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatCurrency(weightedForecast)}</div>
-          <span className="metric-note">Amount multiplied by stage probability.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Proposal stage</span>
-            <Calendar size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">
-            {opportunities.filter((opportunity) => opportunity.stage === "Proposal").length}
-          </div>
-          <span className="metric-note">Late-stage active opportunities.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Closed won</span>
-            <CircleDollarSign size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">
-            {opportunities.filter((opportunity) => opportunity.stage === "Closed won").length}
-          </div>
-          <span className="metric-note">Won opportunities retained in history.</span>
-        </article>
-      </section>
-
-      <section className="kanban" aria-label="Opportunity pipeline">
-        {opportunityStages.map((stage) => {
-          const stageOpportunities = opportunities.filter((opportunity) => opportunity.stage === stage);
-
-          return (
-            <div className="kanban-column" key={stage}>
-              <div className="workspace-row">
-                <strong>{stage}</strong>
-                <StatusPill label={`${stageOpportunities.length}`} tone={stageOpportunities.length ? statusTone(stage) : "default"} />
-              </div>
-              {stageOpportunities.map((opportunity) => (
-                <article className="item-card" key={opportunity.id}>
-                  <div className="item-card-header">
-                    <div>
-                      <h2 className="card-title">{opportunity.name}</h2>
-                      <p className="section-subtitle">{opportunity.companyName}</p>
-                    </div>
-                    <div className="score-ring">{opportunity.probability}%</div>
-                  </div>
-                  <div className="chip-row">
-                    <StatusPill label={formatCurrency(opportunity.amount)} tone="info" />
-                    <StatusPill label={opportunity.owner} tone="default" />
-                    <StatusPill label={`${opportunity.openTasks} tasks`} tone={opportunity.openTasks ? "warning" : "success"} />
-                  </div>
-                  <form action={updateOpportunityStageAction} className="inline-form">
-                    <input name="id" type="hidden" value={opportunity.id} />
-                    <select name="stage" defaultValue={opportunity.stage} aria-label="Stage">
-                      {opportunityStages.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                    <button className="icon-button" type="submit" aria-label="Save stage">
-                      <Save size={16} aria-hidden="true" />
-                    </button>
-                  </form>
-                  <Link href={`/crm/accounts/${opportunity.companyId}`} className="button secondary">
-                    <ArrowRight size={16} aria-hidden="true" />
-                    Account
-                  </Link>
-                </article>
-              ))}
-            </div>
-          );
+      <section className="grid metrics" aria-label="Opportunity metrics">
+        {metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? CircleDollarSign;
+          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
         })}
       </section>
 
       <section className="grid two">
         <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Pipeline focus</h2>
+              <p className="section-subtitle">Highest-value open opportunities with stage, owner, and last activity.</p>
+            </div>
+            <StatusPill label={`${focusOpportunities.length} focus`} tone="info" />
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Opportunity</th>
+                  <th>Stage</th>
+                  <th>Amount</th>
+                  <th>Owner</th>
+                  <th>Activity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {focusOpportunities.map((opportunity) => (
+                  <tr key={opportunity.id}>
+                    <td>
+                      <Link href={`/crm/accounts/${opportunity.companyId}`} className="entity">
+                        <strong>{opportunity.name}</strong>
+                        <span>{opportunity.companyName}</span>
+                        <span>{opportunity.contactName}</span>
+                      </Link>
+                    </td>
+                    <td>
+                      <StatusPill label={opportunity.stage} tone={statusTone(opportunity.stage)} />
+                    </td>
+                    <td>{formatCurrency(opportunity.amount)}</td>
+                    <td>{opportunity.owner}</td>
+                    <td>{opportunity.lastActivity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Stage health</h2>
+              <p className="section-subtitle">Open and closed stages by count, value, and weighted value.</p>
+            </div>
+            <SlidersHorizontal size={20} aria-hidden="true" />
+          </div>
+          <div className="panel-body stage-list">
+            {stageRows.map((row) => (
+              <div className="stage-row" key={row.stage}>
+                <div className="stage-meta">
+                  <strong>{row.stage}</strong>
+                  <StatusPill label={`${formatNumber(row.count)} opps`} tone={statusTone(row.stage)} />
+                </div>
+                <ProgressBar value={Math.round((row.amount / maxStageAmount) * 100)} />
+                <div className="row-meta">
+                  <span>{formatCurrency(row.amount)}</span>
+                  <span>{formatCurrency(row.weighted)} weighted</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
+            <h2 className="section-title">Stage board</h2>
+            <p className="section-subtitle">Move opportunities between stages without opening the full account record.</p>
+          </div>
+          <StatusPill label={`${formatNumber(opportunities.length)} opportunities`} tone="info" />
+        </div>
+        <div className="kanban" aria-label="Opportunity pipeline">
+          {opportunityStages.map((stage) => {
+            const stageOpportunities = opportunities.filter((opportunity) => opportunity.stage === stage);
+
+            return (
+              <div className="kanban-column" key={stage}>
+                <div className="workspace-row">
+                  <strong>{stage}</strong>
+                  <StatusPill label={`${stageOpportunities.length}`} tone={stageOpportunities.length ? statusTone(stage) : "default"} />
+                </div>
+                {stageOpportunities.map((opportunity) => (
+                  <article className="item-card compact-profile-card" key={opportunity.id}>
+                    <div className="item-card-header">
+                      <div>
+                        <h3 className="card-title">{opportunity.name}</h3>
+                        <p className="section-subtitle">{opportunity.companyName}</p>
+                      </div>
+                      <div className="score-ring">{opportunity.probability}%</div>
+                    </div>
+                    <div className="chip-row">
+                      <StatusPill label={formatCurrency(opportunity.amount)} tone="info" />
+                      <StatusPill label={`${opportunity.openTasks} tasks`} tone={opportunity.openTasks ? "warning" : "success"} />
+                    </div>
+                    <form action={updateOpportunityStageAction} className="inline-form">
+                      <input name="id" type="hidden" value={opportunity.id} />
+                      <select name="stage" defaultValue={opportunity.stage} aria-label="Stage">
+                        {opportunityStages.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="icon-button" type="submit" aria-label="Save stage">
+                        <Save size={16} aria-hidden="true" />
+                      </button>
+                    </form>
+                    <Link href={`/crm/accounts/${opportunity.companyId}`} className="button secondary">
+                      <ArrowRight size={16} aria-hidden="true" />
+                      Account
+                    </Link>
+                  </article>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="grid two">
+        <div className="panel" id="create-opportunity">
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Create opportunity</h2>
@@ -167,10 +251,10 @@ export default async function OpportunitiesPage() {
                 {state.companies
                   .filter((company) => company.workspaceId === workspaceId)
                   .map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.name}
-                  </option>
-                ))}
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
               </select>
             </div>
             <div className="field">
@@ -180,10 +264,10 @@ export default async function OpportunitiesPage() {
                 {state.contacts
                   .filter((contact) => contact.workspaceId === workspaceId)
                   .map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.name}
-                  </option>
-                ))}
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                    </option>
+                  ))}
               </select>
             </div>
             <div className="field">
@@ -230,8 +314,8 @@ export default async function OpportunitiesPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Opportunity custom fields</h2>
-              <p className="section-subtitle">Forecast and pipeline fields managed by the CRM team.</p>
+              <h2 className="section-title">Forecast fields</h2>
+              <p className="section-subtitle">Optional custom forecast fields managed by the CRM team.</p>
             </div>
             <StatusPill label={`${opportunityFields.length} fields`} tone="info" />
           </div>
@@ -267,7 +351,7 @@ export default async function OpportunitiesPage() {
               </button>
             </div>
           </form>
-          <form action={createCustomFieldAction} className="panel-body form-grid">
+          <form action={createCustomFieldAction} className="panel-body form-grid compact-form">
             <input name="objectType" type="hidden" value="opportunity" />
             <div className="field">
               <label htmlFor="field-name">Field name</label>
@@ -299,10 +383,10 @@ export default async function OpportunitiesPage() {
       <section className="panel">
         <div className="panel-header">
           <div className="panel-title-wrap">
-            <h2 className="section-title">Opportunity table</h2>
-            <p className="section-subtitle">Pipeline records with account, contact, source, owner, and latest activity.</p>
+            <h2 className="section-title">Opportunity directory</h2>
+            <p className="section-subtitle">Pipeline records with account, contact, source, owner, and custom forecast fields.</p>
           </div>
-          <StatusPill label={`${opportunities.length} records`} tone="info" />
+          <StatusPill label={`${formatNumber(opportunities.length)} records`} tone="info" />
         </div>
         <div className="table-wrap">
           <table>
@@ -310,12 +394,11 @@ export default async function OpportunitiesPage() {
               <tr>
                 <th>Opportunity</th>
                 <th>Account</th>
-                <th>Contact</th>
                 <th>Stage</th>
                 <th>Amount</th>
                 <th>Close</th>
                 <th>Owner</th>
-                <th>Custom fields</th>
+                <th>Fields</th>
               </tr>
             </thead>
             <tbody>
@@ -334,10 +417,9 @@ export default async function OpportunitiesPage() {
                     <td>
                       <Link href={`/crm/accounts/${opportunity.companyId}`} className="entity">
                         <strong>{opportunity.companyName}</strong>
-                        <span>{opportunity.companyDomain}</span>
+                        <span>{opportunity.contactName}</span>
                       </Link>
                     </td>
-                    <td>{opportunity.contactName}</td>
                     <td>
                       <StatusPill label={opportunity.stage} tone={statusTone(opportunity.stage)} />
                     </td>
@@ -362,6 +444,25 @@ export default async function OpportunitiesPage() {
       </section>
     </>
   );
+}
+
+type OpportunityView = ReturnType<typeof opportunityViews>[number];
+
+function isClosedStage(stage: OpportunityView["stage"]) {
+  return stage === "Closed won" || stage === "Closed lost";
+}
+
+function stageSummary(opportunities: OpportunityView[]) {
+  return opportunityStages.map((stage) => {
+    const stageOpportunities = opportunities.filter((opportunity) => opportunity.stage === stage);
+    const amount = stageOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
+    const weighted = stageOpportunities.reduce(
+      (total, opportunity) => total + Math.round(opportunity.amount * (opportunity.probability / 100)),
+      0
+    );
+
+    return { stage, count: stageOpportunities.length, amount, weighted };
+  });
 }
 
 function formatDate(value: string) {

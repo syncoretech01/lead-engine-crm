@@ -1,5 +1,6 @@
 import { Download, FileText, Mail, Phone, ShieldCheck } from "lucide-react";
 import { createExportAction, createExportRuleAction, deleteExportRuleAction } from "@/app/actions";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { exportReadRowsForWorkspace } from "@/lib/phase1/export-read-path";
@@ -9,18 +10,50 @@ import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+const metricIcons = [Download, ShieldCheck, FileText, Mail];
+
 export default async function ExportsPage() {
   const { state, workspaceId } = await getWorkspaceContext("export_csv");
   const templates = exportTemplates(state, workspaceId);
   const exportHistory = await exportReadRowsForWorkspace(state, workspaceId);
   const rules = state.exportRules.filter((rule) => rule.workspaceId === workspaceId);
+  const eligibleTotal = templates.reduce((total, template) => total + template.eligible, 0);
+  const blockedTotal = exportHistory.reduce((total, exportItem) => total + (exportItem.blockedCount ?? 0), 0);
+  const readyExports = exportHistory.filter((exportItem) => exportItem.status === "Ready").length;
+
+  const metrics = [
+    {
+      label: "Export types",
+      value: templates.length,
+      note: "CSV and SDR handoff templates",
+      tone: "info" as const
+    },
+    {
+      label: "Eligible records",
+      value: eligibleTotal,
+      note: "Across current export templates",
+      tone: "success" as const
+    },
+    {
+      label: "Ready exports",
+      value: readyExports,
+      note: `${formatNumber(exportHistory.length)} total generated`,
+      tone: "success" as const
+    },
+    {
+      label: "Blocked rows",
+      value: blockedTotal,
+      note: "Stopped by export gates",
+      tone: blockedTotal ? "warning" as const : "success" as const
+    }
+  ];
 
   return (
     <>
       <PageHeader
-        kicker="CSV and CRM sync"
+        kicker="Lead generation"
         title="Exports"
-        copy="Create approved output from clean records only: companies, contacts, verified email leads, phone-ready leads, segmented lists, and SDR assignment queues."
+        copy="Generate approved output from clean records only: verified email leads, phone-ready contacts, segmented lists, company records, and SDR handoff queues."
         actions={
           <>
             <a href="#export-history" className="button secondary">
@@ -35,9 +68,16 @@ export default async function ExportsPage() {
         }
       />
 
-      <section className="grid three" id="export-templates">
+      <section className="grid metrics" aria-label="Export metrics">
+        {metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? Download;
+          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
+        })}
+      </section>
+
+      <section className="grid four" id="export-templates">
         {templates.map((template) => (
-          <article className="item-card" key={template.id}>
+          <article className="item-card workflow-card" key={template.id}>
             <div className="item-card-header">
               <div>
                 <h2 className="card-title">{template.name}</h2>
@@ -46,7 +86,7 @@ export default async function ExportsPage() {
               <StatusPill label={`${formatNumber(template.eligible)} eligible`} tone="success" />
             </div>
             <div className="chip-row">
-              {template.columns.map((column) => (
+              {template.columns.slice(0, 5).map((column) => (
                 <span className="pill" key={column}>
                   {column}
                 </span>
@@ -77,14 +117,101 @@ export default async function ExportsPage() {
         ))}
       </section>
 
+      <section className="panel" id="export-history">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
+            <h2 className="section-title">Export history</h2>
+            <p className="section-subtitle">Every output stores user, timestamp, source job, filter snapshot, and record count.</p>
+          </div>
+          <StatusPill label={`${formatNumber(exportHistory.length)} exports`} tone="info" />
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Export</th>
+                <th>Records</th>
+                <th>Created by</th>
+                <th>Created</th>
+                <th>Source job</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {exportHistory.map((exportItem) => (
+                <tr key={exportItem.id}>
+                  <td>
+                    <div className="entity">
+                      <strong>{exportItem.name}</strong>
+                      <span>{exportItem.id}</span>
+                    </div>
+                  </td>
+                  <td>{formatNumber(exportItem.recordCount)}</td>
+                  <td>{state.users.find((user) => user.id === exportItem.createdById)?.name ?? "Syncore user"}</td>
+                  <td>{formatDate(exportItem.createdAt)}</td>
+                  <td>{exportItem.leadJobId ?? "Manual"}</td>
+                  <td>
+                    <div className="chip-row">
+                      <StatusPill label={exportItem.status} tone={statusTone(exportItem.status)} />
+                      {exportItem.blockedCount ? <StatusPill label={`${exportItem.blockedCount} blocked`} tone="warning" /> : null}
+                      <a className="button secondary" href={`/api/exports/${exportItem.id}`}>
+                        Download
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {exportHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>No exports have been generated yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section className="grid two">
         <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Export rules</h2>
+              <p className="section-subtitle">Active gates used when generating CSV output.</p>
+            </div>
+            <StatusPill label={`${rules.length} rules`} tone="info" />
+          </div>
+          <div className="panel-body stage-list">
+            {rules.map((rule) => (
+              <div className="stage-row" key={rule.id}>
+                <div className="stage-meta">
+                  <strong>{rule.name}</strong>
+                  <StatusPill label={rule.exportType} tone="info" />
+                </div>
+                <div className="chip-row">
+                  <span className="pill">grades {rule.allowedGrades.join("/")}</span>
+                  <span className="pill">score {rule.minScore}+</span>
+                  <span className="pill">{rule.excludeSuppressed ? "suppression blocked" : "suppression allowed"}</span>
+                  <span className="pill">{rule.requirePhone ? "phone required" : "phone optional"}</span>
+                </div>
+                <form action={deleteExportRuleAction}>
+                  <input name="id" type="hidden" value={rule.id} />
+                  <button className="button danger" type="submit">
+                    Delete
+                  </button>
+                </form>
+              </div>
+            ))}
+            {rules.length === 0 ? <p className="section-subtitle">No custom export rules have been created yet.</p> : null}
+          </div>
+        </div>
+
+        <div className="panel" id="create-export-rule">
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Create export rule</h2>
               <p className="section-subtitle">Rules enforce verification grade, score, status, suppression, role email, catch-all, and phone requirements.</p>
             </div>
-            <StatusPill label="Export rules" tone="success" />
+            <StatusPill label="Rule setup" tone="success" />
           </div>
           <form action={createExportRuleAction} className="panel-body form-grid">
             <div className="field">
@@ -145,107 +272,20 @@ export default async function ExportsPage() {
             </div>
           </form>
         </div>
-
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Export rules</h2>
-              <p className="section-subtitle">Active gates used when generating CSV output.</p>
-            </div>
-            <StatusPill label={`${rules.length} rules`} tone="info" />
-          </div>
-          <div className="panel-body stage-list">
-            {rules.map((rule) => (
-              <div className="list-row" key={rule.id}>
-                <div className="row-meta">
-                  <strong>{rule.name}</strong>
-                  <StatusPill label={rule.exportType} tone="info" />
-                </div>
-                <div className="chip-row">
-                  <span className="pill">grades {rule.allowedGrades.join("/")}</span>
-                  <span className="pill">score {rule.minScore}+</span>
-                  <span className="pill">{rule.excludeSuppressed ? "suppression blocked" : "suppression allowed"}</span>
-                  <span className="pill">{rule.requirePhone ? "phone required" : "phone optional"}</span>
-                </div>
-                <form action={deleteExportRuleAction}>
-                  <input name="id" type="hidden" value={rule.id} />
-                  <button className="button danger" type="submit">
-                    Delete
-                  </button>
-                </form>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="panel" id="export-history">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Export history</h2>
-            <p className="section-subtitle">Every output stores user, timestamp, source job, filter snapshot, and record count.</p>
-          </div>
-          <StatusPill label="Audit-ready" tone="info" />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Export</th>
-                <th>Records</th>
-                <th>Created by</th>
-                <th>Created</th>
-                <th>Source job</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {exportHistory.map((exportItem) => (
-                <tr key={exportItem.id}>
-                  <td>
-                    <div className="entity">
-                      <strong>{exportItem.name}</strong>
-                      <span>{exportItem.id}</span>
-                    </div>
-                  </td>
-                  <td>{formatNumber(exportItem.recordCount)}</td>
-                  <td>{state.users.find((user) => user.id === exportItem.createdById)?.name ?? "Syncore user"}</td>
-                  <td>
-                    {new Date(exportItem.createdAt).toLocaleString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit"
-                    })}
-                  </td>
-                  <td>{exportItem.leadJobId ?? "Manual"}</td>
-                  <td>
-                    <StatusPill label={exportItem.status} tone={statusTone(exportItem.status)} />
-                    {exportItem.blockedCount ? <StatusPill label={`${exportItem.blockedCount} blocked`} tone="warning" /> : null}
-                    <a className="button secondary" href={`/api/exports/${exportItem.id}`}>
-                      Download
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </section>
 
       <section className="grid three">
-        <div className="item-card">
+        <div className="item-card workflow-card">
           <Mail size={22} aria-hidden="true" />
           <h2 className="card-title">Email CSV</h2>
           <p className="section-subtitle">Excludes D-grade emails, suppressed contacts, and hard-bounced addresses.</p>
         </div>
-        <div className="item-card">
+        <div className="item-card workflow-card">
           <Phone size={22} aria-hidden="true" />
           <h2 className="card-title">Phone CSV</h2>
           <p className="section-subtitle">Includes phone-normalized leads with DNC and SMS opt-out controls applied.</p>
         </div>
-        <div className="item-card">
+        <div className="item-card workflow-card">
           <ShieldCheck size={22} aria-hidden="true" />
           <h2 className="card-title">CRM sync</h2>
           <p className="section-subtitle">Future sync jobs can use the same dedupe, source, assignment, and audit patterns.</p>
@@ -253,4 +293,14 @@ export default async function ExportsPage() {
       </section>
     </>
   );
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }

@@ -24,7 +24,9 @@ import {
   setCustomFieldValueAction,
   updateOpportunityStageAction
 } from "@/app/actions";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
+import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
   callOutcomes,
@@ -39,8 +41,8 @@ import {
 } from "@/lib/phase1/crm-event-read-path";
 import { accountDetailReadModelForWorkspace } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
-import type { ActivityType, CustomField } from "@/lib/phase1/types";
-import { formatCurrency } from "@/lib/utils";
+import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -55,10 +57,11 @@ const activityIcons: Record<ActivityType, typeof NotebookPen> = {
   Verification: ShieldCheck,
   Opportunity: CircleDollarSign
 };
+const metricIcons = [CircleDollarSign, CircleDollarSign, Users, Calendar];
 
 export default async function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { state, workspaceId } = await getWorkspaceContext("view_all_records");
+  const { state, workspaceId } = await getWorkspaceContext("manage_crm");
   const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
   const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
   const readModel = await accountDetailReadModelForWorkspace(readState, workspaceId, id);
@@ -85,7 +88,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   const activities = readState.activities
     .filter((activity) => activity.workspaceId === workspaceId && activity.companyId === account.id)
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, 18);
+    .slice(0, 14);
   const companyFields = state.customFields.filter(
     (field) => field.workspaceId === workspaceId && field.objectType === "company"
   );
@@ -95,18 +98,51 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
     (total, opportunity) => total + Math.round(opportunity.amount * (opportunity.probability / 100)),
     0
   );
+  const focusTasks = activeTasks.slice(0, 5);
+  const recentInteractions = [...notes.slice(0, 4), ...calls.slice(0, 4)]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 6);
+
+  const metrics = [
+    {
+      label: "Open pipeline",
+      value: account.amount,
+      currency: true,
+      note: `${account.probability}% primary probability`,
+      tone: account.amount ? "success" as const : "info" as const
+    },
+    {
+      label: "Weighted forecast",
+      value: weightedForecast,
+      currency: true,
+      note: `${formatNumber(opportunities.length)} linked opportunities`,
+      tone: "info" as const
+    },
+    {
+      label: "Contacts",
+      value: accountContacts.length,
+      note: `${account.owner} owns the active path`,
+      tone: accountContacts.length ? "success" as const : "warning" as const
+    },
+    {
+      label: "Open tasks",
+      value: activeTasks.length,
+      note: account.lastActivity,
+      tone: activeTasks.length ? "warning" as const : "success" as const
+    }
+  ];
 
   return (
     <>
       <PageHeader
-        kicker="Account workspace"
+        kicker="Sales CRM"
         title={account.name}
-        copy={account.description}
+        copy="Account workspace for SDRs and managers: current health, contacts, pipeline, open work, and recent activity without backend configuration."
         actions={
           <>
             <Link href="/crm/accounts" className="button secondary">
               <ArrowRight size={17} aria-hidden="true" />
-              Account list
+              Accounts
             </Link>
             <Link href="/crm/contacts" className="button primary">
               <Users size={17} aria-hidden="true" />
@@ -116,52 +152,25 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Open pipeline</span>
-            <StatusPill label={account.stage} tone={statusTone(account.stage)} />
-          </div>
-          <div className="metric-value">{formatCurrency(account.amount)}</div>
-          <span className="metric-note">{account.probability}% primary probability</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Weighted forecast</span>
-            <CircleDollarSign size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value">{formatCurrency(weightedForecast)}</div>
-          <span className="metric-note">{opportunities.length} linked opportunities</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Contacts</span>
-            <Building2 size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value">{account.contacts}</div>
-          <span className="metric-note">{account.owner} owns the active path</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Open tasks</span>
-            <Calendar size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value">{activeTasks.length}</div>
-          <span className="metric-note">{account.lastActivity}</span>
-        </article>
+      <section className="grid metrics" aria-label="Account metrics">
+        {metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? Building2;
+          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
+        })}
       </section>
 
       <section className="grid two">
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Account details</h2>
-              <p className="section-subtitle">Firmographics, owner, source, and compliance guardrails.</p>
+              <h2 className="section-title">Account snapshot</h2>
+              <p className="section-subtitle">Firmographics, routing owner, source lineage, and compliance state.</p>
             </div>
             <StatusPill label={account.priority} tone={account.priority === "P1" ? "success" : "warning"} />
           </div>
           <div className="panel-body stage-list">
             {[
+              ["Stage", account.stage],
               ["Domain", account.domain],
               ["Industry", account.industry],
               ["Location", account.location],
@@ -170,8 +179,8 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
               ["Source", account.source],
               ["Compliance", account.compliance]
             ].map(([label, value]) => (
-              <div className="list-row" key={label}>
-                <div className="row-meta">
+              <div className="stage-row" key={label}>
+                <div className="stage-meta">
                   <strong>{label}</strong>
                   <span>{value}</span>
                 </div>
@@ -183,52 +192,35 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Custom fields</h2>
-              <p className="section-subtitle">Account-specific fields available to the CRM team.</p>
+              <h2 className="section-title">Current work</h2>
+              <p className="section-subtitle">Open tasks the CRM team should act on next.</p>
             </div>
-            <StatusPill label={`${companyFields.length} fields`} tone="info" />
+            <StatusPill label={`${activeTasks.length} open`} tone={activeTasks.length ? "warning" : "success"} />
           </div>
           <div className="panel-body stage-list">
-            {companyFields.map((field) => (
-              <form action={setCustomFieldValueAction} className="list-row" key={field.id}>
-                <input name="customFieldId" type="hidden" value={field.id} />
-                <input name="objectId" type="hidden" value={account.id} />
-                <div className="row-meta">
-                  <strong>{field.name}</strong>
-                  <CustomFieldInput field={field} value={fieldValueMap.get(field.id)?.value ?? ""} />
+            {focusTasks.map((task) => (
+              <div className="stage-row" key={task.id}>
+                <div className="stage-meta">
+                  <strong>{task.title}</strong>
+                  <StatusPill label={task.status} tone={statusTone(task.status)} />
                 </div>
-                <button className="button secondary" type="submit">
-                  <Save size={16} aria-hidden="true" />
-                  Save field
-                </button>
-              </form>
+                <div className="chip-row">
+                  <span className="pill">{task.priority}</span>
+                  <span className="pill">{userNameForId(state, task.ownerUserId)}</span>
+                  {task.dueAt ? <span className="pill">Due {formatDate(task.dueAt)}</span> : null}
+                </div>
+                {task.status !== "Completed" ? (
+                  <form action={completeTaskAction}>
+                    <input name="id" type="hidden" value={task.id} />
+                    <button className="button secondary" type="submit">
+                      <Check size={16} aria-hidden="true" />
+                      Complete
+                    </button>
+                  </form>
+                ) : null}
+              </div>
             ))}
-            <form action={createCustomFieldAction} className="form-grid compact-form">
-              <input name="objectType" type="hidden" value="company" />
-              <div className="field">
-                <label htmlFor="company-field-name">Field name</label>
-                <input id="company-field-name" name="name" placeholder="Renewal risk" />
-              </div>
-              <div className="field">
-                <label htmlFor="company-field-type">Type</label>
-                <select id="company-field-type" name="fieldType" defaultValue="text">
-                  <option value="text">Text</option>
-                  <option value="number">Number</option>
-                  <option value="date">Date</option>
-                  <option value="select">Select</option>
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="company-field-options">Options</label>
-                <input id="company-field-options" name="options" placeholder="Low, Medium, High" />
-              </div>
-              <div className="field">
-                <label aria-hidden="true">&nbsp;</label>
-                <button className="button primary" type="submit">
-                  Create field
-                </button>
-              </div>
-            </form>
+            {focusTasks.length === 0 ? <p className="section-subtitle">No open account tasks right now.</p> : null}
           </div>
         </div>
       </section>
@@ -237,69 +229,121 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Create opportunity</h2>
-              <p className="section-subtitle">Track deal amount, stage, probability, owner, and source.</p>
+              <h2 className="section-title">Pipeline</h2>
+              <p className="section-subtitle">Linked opportunities with stage, amount, probability, close date, and owner.</p>
             </div>
-            <CircleDollarSign size={20} aria-hidden="true" />
+            <Link href="/crm/opportunities" className="button secondary">
+              Open pipeline
+            </Link>
           </div>
-          <form action={createOpportunityAction} className="panel-body form-grid">
-            <input name="companyId" type="hidden" value={account.id} />
-            <div className="field">
-              <label htmlFor="opp-name">Name</label>
-              <input id="opp-name" name="name" defaultValue={`${account.name} expansion`} />
-            </div>
-            <div className="field">
-              <label htmlFor="opp-contact">Primary contact</label>
-              <select id="opp-contact" name="contactId" defaultValue={accountContacts[0]?.id ?? ""}>
-                <option value="">No primary contact</option>
-                {accountContacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.name}
-                  </option>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Opportunity</th>
+                  <th>Stage</th>
+                  <th>Amount</th>
+                  <th>Probability</th>
+                  <th>Move</th>
+                </tr>
+              </thead>
+              <tbody>
+                {opportunities.map((opportunity) => (
+                  <tr key={opportunity.id}>
+                    <td>
+                      <div className="entity">
+                        <strong>{opportunity.name}</strong>
+                        <span>{userNameForId(state, opportunity.ownerUserId)}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <StatusPill label={opportunity.stage} tone={statusTone(opportunity.stage)} />
+                    </td>
+                    <td>{formatCurrency(opportunity.amount)}</td>
+                    <td>
+                      <div className="entity">
+                        <strong>{opportunity.probability}%</strong>
+                        <ProgressBar value={opportunity.probability} />
+                      </div>
+                    </td>
+                    <td>
+                      <form action={updateOpportunityStageAction} className="inline-form">
+                        <input name="id" type="hidden" value={opportunity.id} />
+                        <select name="stage" defaultValue={opportunity.stage} aria-label="Stage">
+                          {opportunityStages.map((stage) => (
+                            <option key={stage} value={stage}>
+                              {stage}
+                            </option>
+                          ))}
+                        </select>
+                        <button className="icon-button" type="submit" aria-label="Save stage">
+                          <Save size={16} aria-hidden="true" />
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
                 ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="opp-stage">Stage</label>
-              <select id="opp-stage" name="stage" defaultValue="Prospecting">
-                {opportunityStages.map((stage) => (
-                  <option key={stage} value={stage}>
-                    {stage}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="opp-amount">Amount</label>
-              <input id="opp-amount" name="amount" type="number" min="0" step="500" defaultValue="25000" />
-            </div>
-            <div className="field">
-              <label htmlFor="opp-close">Expected close</label>
-              <input id="opp-close" name="expectedCloseDate" type="date" />
-            </div>
-            <div className="field">
-              <label htmlFor="opp-owner">Owner</label>
-              <select id="opp-owner" name="ownerUserId" defaultValue={state.users[0]?.id}>
-                {state.users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="opp-source">Source</label>
-              <input id="opp-source" name="source" defaultValue={account.source} />
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
-                Add opportunity
-              </button>
-            </div>
-          </form>
+                {opportunities.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>No opportunities are linked to this account yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </div>
 
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Contacts</h2>
+              <p className="section-subtitle">People linked to this account with verification, score, and owner.</p>
+            </div>
+            <StatusPill label={`${accountContacts.length} contacts`} tone="info" />
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Contact</th>
+                  <th>Grade</th>
+                  <th>Score</th>
+                  <th>Status</th>
+                  <th>Owner</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accountContacts.map((contact) => (
+                  <tr key={contact.id}>
+                    <td>
+                      <Link href={`/crm/contacts/${contact.id}`} className="entity">
+                        <strong>{contact.name}</strong>
+                        <span>{contact.title}</span>
+                        <span>{contact.email}</span>
+                      </Link>
+                    </td>
+                    <td>
+                      <span className={`grade ${contact.grade.toLowerCase()}`}>{contact.grade}</span>
+                    </td>
+                    <td>{contact.score}</td>
+                    <td>
+                      <StatusPill label={contact.status} tone={statusTone(contact.status)} />
+                    </td>
+                    <td>{contact.owner}</td>
+                  </tr>
+                ))}
+                {accountContacts.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>No contacts are linked to this account yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid two">
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -328,79 +372,41 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                 </div>
               );
             })}
+            {activities.length === 0 ? <p className="section-subtitle">No activity has been recorded yet.</p> : null}
           </div>
         </div>
-      </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Opportunities</h2>
-            <p className="section-subtitle">Stage, amount, probability, close date, and owner by deal.</p>
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Recent notes and calls</h2>
+              <p className="section-subtitle">Latest manual account context and call outcomes.</p>
+            </div>
+            <Phone size={20} aria-hidden="true" />
           </div>
-          <Link href="/crm/opportunities" className="button secondary">
-            Open pipeline
-          </Link>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Opportunity</th>
-                <th>Stage</th>
-                <th>Amount</th>
-                <th>Probability</th>
-                <th>Close</th>
-                <th>Owner</th>
-                <th>Move</th>
-              </tr>
-            </thead>
-            <tbody>
-              {opportunities.map((opportunity) => (
-                <tr key={opportunity.id}>
-                  <td>
-                    <div className="entity">
-                      <strong>{opportunity.name}</strong>
-                      <span>{opportunity.source}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <StatusPill label={opportunity.stage} tone={statusTone(opportunity.stage)} />
-                  </td>
-                  <td>{formatCurrency(opportunity.amount)}</td>
-                  <td>{opportunity.probability}%</td>
-                  <td>{opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : "Not set"}</td>
-                  <td>{userNameForId(state, opportunity.ownerUserId)}</td>
-                  <td>
-                    <form action={updateOpportunityStageAction} className="inline-form">
-                      <input name="id" type="hidden" value={opportunity.id} />
-                      <select name="stage" defaultValue={opportunity.stage} aria-label="Stage">
-                        {opportunityStages.map((stage) => (
-                          <option key={stage} value={stage}>
-                            {stage}
-                          </option>
-                        ))}
-                      </select>
-                      <button className="icon-button" type="submit" aria-label="Save stage">
-                        <Save size={16} aria-hidden="true" />
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="panel-body stage-list">
+            {recentInteractions.map((item) => (
+              <div className="stage-row" key={item.id}>
+                <div className="stage-meta">
+                  <strong>{isCall(item) ? item.outcome : "Note"}</strong>
+                  <span>{formatDate(item.createdAt)}</span>
+                </div>
+                <p className="section-subtitle">{isCall(item) ? item.notes : item.body}</p>
+              </div>
+            ))}
+            {recentInteractions.length === 0 ? <p className="section-subtitle">No notes or calls have been logged yet.</p> : null}
+          </div>
         </div>
       </section>
 
       <section className="grid two">
-        <div className="panel">
+        <div className="panel" id="add-account-work">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Tasks</h2>
-              <p className="section-subtitle">Owner-assigned CRM work linked to the account or contact.</p>
+              <h2 className="section-title">Add account work</h2>
+              <p className="section-subtitle">Create the next task or opportunity from this account record.</p>
             </div>
-            <StatusPill label={`${activeTasks.length} open`} tone={activeTasks.length ? "warning" : "success"} />
+            <Calendar size={20} aria-hidden="true" />
           </div>
           <form action={createTaskAction} className="panel-body form-grid">
             <input name="companyId" type="hidden" value={account.id} />
@@ -450,39 +456,71 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
               </button>
             </div>
           </form>
-          <div className="panel-body stage-list">
-            {tasks.slice(0, 8).map((task) => (
-              <div className="list-row" key={task.id}>
-                <div className="row-meta">
-                  <strong>{task.title}</strong>
-                  <StatusPill label={task.status} tone={statusTone(task.status)} />
-                </div>
-                <div className="chip-row">
-                  <span className="pill">{task.priority}</span>
-                  <span className="pill">{userNameForId(state, task.ownerUserId)}</span>
-                  {task.dueAt ? <span className="pill">Due {formatDate(task.dueAt)}</span> : null}
-                </div>
-                {task.status !== "Completed" ? (
-                  <form action={completeTaskAction}>
-                    <input name="id" type="hidden" value={task.id} />
-                    <button className="button secondary" type="submit">
-                      <Check size={16} aria-hidden="true" />
-                      Complete
-                    </button>
-                  </form>
-                ) : null}
-              </div>
-            ))}
-          </div>
+          <form action={createOpportunityAction} className="panel-body form-grid compact-form">
+            <input name="companyId" type="hidden" value={account.id} />
+            <div className="field">
+              <label htmlFor="opp-name">Opportunity</label>
+              <input id="opp-name" name="name" defaultValue={`${account.name} expansion`} />
+            </div>
+            <div className="field">
+              <label htmlFor="opp-contact">Primary contact</label>
+              <select id="opp-contact" name="contactId" defaultValue={accountContacts[0]?.id ?? ""}>
+                <option value="">No primary contact</option>
+                {accountContacts.map((contact) => (
+                  <option key={contact.id} value={contact.id}>
+                    {contact.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="opp-stage">Stage</label>
+              <select id="opp-stage" name="stage" defaultValue="Prospecting">
+                {opportunityStages.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {stage}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="opp-amount">Amount</label>
+              <input id="opp-amount" name="amount" type="number" min="0" step="500" defaultValue="25000" />
+            </div>
+            <div className="field">
+              <label htmlFor="opp-close">Expected close</label>
+              <input id="opp-close" name="expectedCloseDate" type="date" />
+            </div>
+            <div className="field">
+              <label htmlFor="opp-owner">Owner</label>
+              <select id="opp-owner" name="ownerUserId" defaultValue={state.users[0]?.id}>
+                {state.users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="opp-source">Source</label>
+              <input id="opp-source" name="source" defaultValue={account.source} />
+            </div>
+            <div className="field">
+              <label aria-hidden="true">&nbsp;</label>
+              <button className="button secondary" type="submit">
+                Add opportunity
+              </button>
+            </div>
+          </form>
         </div>
 
-        <div className="panel">
+        <div className="panel" id="log-account-activity">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Notes and calls</h2>
-              <p className="section-subtitle">Manual notes and call logs tied into the activity stream.</p>
+              <h2 className="section-title">Log activity</h2>
+              <p className="section-subtitle">Add notes or call outcomes without leaving the account.</p>
             </div>
-            <Phone size={20} aria-hidden="true" />
+            <NotebookPen size={20} aria-hidden="true" />
           </div>
           <form action={createNoteAction} className="panel-body form-grid">
             <input name="companyId" type="hidden" value={account.id} />
@@ -508,7 +546,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
               </button>
             </div>
           </form>
-          <form action={createCallLogAction} className="panel-body form-grid">
+          <form action={createCallLogAction} className="panel-body form-grid compact-form">
             <input name="companyId" type="hidden" value={account.id} />
             <div className="field">
               <label htmlFor="call-contact">Call contact</label>
@@ -549,69 +587,58 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
               </button>
             </div>
           </form>
-          <div className="panel-body stage-list">
-            {[...notes.slice(0, 4), ...calls.slice(0, 4)]
-              .sort((a, b) => Date.parse("createdAt" in b ? b.createdAt : "") - Date.parse("createdAt" in a ? a.createdAt : ""))
-              .slice(0, 6)
-              .map((item) => (
-                <div className="list-row" key={item.id}>
-                  <div className="row-meta">
-                    <strong>{"outcome" in item ? item.outcome : "Note"}</strong>
-                    <span>{formatDate(item.createdAt)}</span>
-                  </div>
-                  <p className="section-subtitle">{"outcome" in item ? item.notes : item.body}</p>
-                </div>
-              ))}
-          </div>
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel" id="account-custom-fields">
         <div className="panel-header">
           <div className="panel-title-wrap">
-            <h2 className="section-title">Contacts</h2>
-            <p className="section-subtitle">Contacts linked to this account with verification, score, and working state.</p>
+            <h2 className="section-title">Custom fields</h2>
+            <p className="section-subtitle">Account-specific CRM fields for the team.</p>
           </div>
-          <Link href="/crm/contacts" className="button secondary">
-            Contact list
-          </Link>
+          <StatusPill label={`${companyFields.length} fields`} tone="info" />
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Contact</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Grade</th>
-                <th>Score</th>
-                <th>Status</th>
-                <th>Owner</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accountContacts.map((contact) => (
-                <tr key={contact.id}>
-                  <td>
-                    <Link href={`/crm/contacts/${contact.id}`} className="entity">
-                      <strong>{contact.name}</strong>
-                      <span>{contact.title}</span>
-                    </Link>
-                  </td>
-                  <td>{contact.email}</td>
-                  <td>{contact.phone}</td>
-                  <td>
-                    <span className={`grade ${contact.grade.toLowerCase()}`}>{contact.grade}</span>
-                  </td>
-                  <td>{contact.score}</td>
-                  <td>
-                    <StatusPill label={contact.status} tone={statusTone(contact.status)} />
-                  </td>
-                  <td>{contact.owner}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="panel-body stage-list">
+          {companyFields.map((field) => (
+            <form action={setCustomFieldValueAction} className="stage-row" key={field.id}>
+              <input name="customFieldId" type="hidden" value={field.id} />
+              <input name="objectId" type="hidden" value={account.id} />
+              <div className="stage-meta">
+                <strong>{field.name}</strong>
+                <CustomFieldInput field={field} value={fieldValueMap.get(field.id)?.value ?? ""} />
+              </div>
+              <button className="button secondary" type="submit">
+                <Save size={16} aria-hidden="true" />
+                Save field
+              </button>
+            </form>
+          ))}
+          <form action={createCustomFieldAction} className="form-grid compact-form">
+            <input name="objectType" type="hidden" value="company" />
+            <div className="field">
+              <label htmlFor="company-field-name">Field name</label>
+              <input id="company-field-name" name="name" placeholder="Renewal risk" />
+            </div>
+            <div className="field">
+              <label htmlFor="company-field-type">Type</label>
+              <select id="company-field-type" name="fieldType" defaultValue="text">
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="date">Date</option>
+                <option value="select">Select</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="company-field-options">Options</label>
+              <input id="company-field-options" name="options" placeholder="Low, Medium, High" />
+            </div>
+            <div className="field">
+              <label aria-hidden="true">&nbsp;</label>
+              <button className="button primary" type="submit">
+                Create field
+              </button>
+            </div>
+          </form>
         </div>
       </section>
     </>
@@ -633,6 +660,10 @@ function CustomFieldInput({ field, value }: { field: CustomField; value: string 
   }
 
   return <input name="value" type={field.fieldType} defaultValue={value} aria-label={field.name} />;
+}
+
+function isCall(item: Note | CallLog): item is CallLog {
+  return "outcome" in item;
 }
 
 function formatDate(value: string) {

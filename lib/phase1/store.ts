@@ -22,7 +22,7 @@ import { defaultSegmentRules } from "@/lib/phase1/scoring";
 import { ensureSdrDefaults } from "@/lib/phase1/sdr";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import type { AppState, AuditLog, Permission, Session } from "@/lib/phase1/types";
-import { hasPermission, resolveSession, type SessionSelection } from "@/lib/phase1/auth";
+import { defaultWorkspacePath, hasPermission, resolveSession, type SessionSelection } from "@/lib/phase1/auth";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
 
 const dataDir = path.join(process.cwd(), ".syncore-data");
@@ -110,10 +110,14 @@ export async function getWorkspaceContext(permission?: Permission) {
 
   if (permission && !hasPermission(session, permission)) {
     const { redirect } = await import("next/navigation");
-    redirect("/");
+    redirect(defaultWorkspacePath(session));
   }
 
   return { state, session, workspaceId: session.workspace.id };
+}
+
+export async function getDeveloperWorkspaceContext() {
+  return getWorkspaceContext("manage_workspace");
 }
 
 export async function resetStore() {

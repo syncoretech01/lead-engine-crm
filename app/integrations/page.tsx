@@ -16,14 +16,14 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { providerConnectionViewsForWorkspace } from "@/lib/phase1/provider-connections";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import type { ProviderConnectionSafeView } from "@/lib/phase1/provider-connections";
 import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function IntegrationsPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_workspace");
+  const { state, session, workspaceId } = await getDeveloperWorkspaceContext();
   const connections = providerConnectionViewsForWorkspace(state, workspaceId);
   const audits = state.providerCredentialAudits
     .filter((audit) => audit.workspaceId === workspaceId)

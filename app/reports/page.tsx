@@ -26,13 +26,13 @@ import {
   stateWithOutreachEventReadRows
 } from "@/lib/phase1/outreach-read-path";
 import { reportCategories, reportingDashboardSnapshot } from "@/lib/phase1/reporting";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
-  const { state, workspaceId } = await getWorkspaceContext("view_reports");
+  const { state, workspaceId } = await getDeveloperWorkspaceContext();
   const [complianceRows, crmRows, outreachRows, exportRows] = await Promise.all([
     complianceReadRowsForWorkspace(state, workspaceId),
     crmEventReadRowsForWorkspace(state, workspaceId),

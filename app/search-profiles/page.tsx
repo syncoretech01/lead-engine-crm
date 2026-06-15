@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Copy, Play, Plus, Trash2 } from "lucide-react";
+import { Copy, Database, Play, Plus, Search, Target, Trash2 } from "lucide-react";
 import {
   createLeadJobAction,
   createSearchProfileAction,
   deleteSearchProfileAction,
   duplicateSearchProfileAction
 } from "@/app/actions";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { getWorkspaceContext } from "@/lib/phase1/store";
@@ -13,33 +14,199 @@ import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+const metricIcons = [Target, Database, Search, Play];
+
 export default async function SearchProfilesPage() {
   const { state, workspaceId } = await getWorkspaceContext("manage_profiles");
   const searchProfiles = state.searchProfiles.filter((profile) => profile.workspaceId === workspaceId);
+  const leadJobs = state.leadJobs.filter((job) => job.workspaceId === workspaceId);
+  const activeJobs = leadJobs.filter((job) => job.status !== "Completed");
+  const sourceCount = new Set(searchProfiles.flatMap((profile) => profile.sources)).size;
+  const totalEstimatedVolume = searchProfiles.reduce((total, profile) => total + profile.estimatedVolume, 0);
+  const recentProfiles = [...searchProfiles].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+
+  const metrics = [
+    {
+      label: "Saved profiles",
+      value: searchProfiles.length,
+      note: "Reusable ICP templates",
+      tone: "info" as const
+    },
+    {
+      label: "Estimated volume",
+      value: totalEstimatedVolume,
+      note: "Expected leads across profiles",
+      tone: "success" as const
+    },
+    {
+      label: "Source mix",
+      value: sourceCount,
+      note: "Distinct acquisition sources",
+      tone: sourceCount ? "info" as const : "warning" as const
+    },
+    {
+      label: "Active jobs",
+      value: activeJobs.length,
+      note: "Runs launched from profiles",
+      tone: activeJobs.length ? "warning" as const : "success" as const
+    }
+  ];
 
   return (
     <>
       <PageHeader
-        kicker="Saved ICP templates"
+        kicker="Lead generation"
         title="Search profiles"
-        copy="Reusable filters keep list-building repeatable: target market, source preferences, required fields, scoring model, routing rules, and compliance notes travel together."
+        copy="Saved ICP profiles package the target market, geography, titles, source mix, required fields, routing, and compliance note used to launch repeatable lead jobs."
         actions={
           <>
-            <a href="#create-profile" className="button primary">
+            <a href="#create-profile" className="button secondary">
               <Plus size={17} aria-hidden="true" />
-              Create profile
+              New profile
             </a>
+            <Link href="/lead-jobs" className="button primary">
+              <Play size={17} aria-hidden="true" />
+              Lead jobs
+            </Link>
           </>
         }
       />
 
+      <section className="grid metrics" aria-label="Search profile metrics">
+        {metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? Target;
+          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
+        })}
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
+            <h2 className="section-title">Profile library</h2>
+            <p className="section-subtitle">Run, copy, or delete saved ICPs without opening a backend configuration area.</p>
+          </div>
+          <StatusPill label={`${formatNumber(searchProfiles.length)} profiles`} tone="info" />
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Profile</th>
+                <th>Target</th>
+                <th>Sources</th>
+                <th>Required fields</th>
+                <th>Volume</th>
+                <th>Updated</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentProfiles.map((profile) => (
+                <tr key={profile.id}>
+                  <td>
+                    <div className="entity">
+                      <strong>{profile.name}</strong>
+                      <span>{profile.defaultRouting}</span>
+                      <span>{profile.complianceNote}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="entity">
+                      <strong>{profile.targetMarket}</strong>
+                      <span>{profile.geographies.join(", ")}</span>
+                      <span>{profile.industries.join(", ")}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="chip-row">
+                      {profile.sources.map((source) => (
+                        <span className="source-chip" key={source}>
+                          {source}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="chip-row">
+                      {profile.requiredFields.slice(0, 4).map((field) => (
+                        <span className="pill success" key={field}>
+                          {field}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td>{formatNumber(profile.estimatedVolume)}</td>
+                  <td>{formatDate(profile.updatedAt)}</td>
+                  <td>
+                    <div className="item-card-actions">
+                      <form action={createLeadJobAction}>
+                        <input name="searchProfileId" type="hidden" value={profile.id} />
+                        <input name="name" type="hidden" value={`${profile.name} - Manual run`} />
+                        {profile.sources.map((source) => (
+                          <input key={source} name="sources" type="hidden" value={source} />
+                        ))}
+                        <button className="button primary" type="submit">
+                          <Play size={16} aria-hidden="true" />
+                          Run
+                        </button>
+                      </form>
+                      <form action={duplicateSearchProfileAction}>
+                        <input name="id" type="hidden" value={profile.id} />
+                        <button className="button secondary" type="submit">
+                          <Copy size={16} aria-hidden="true" />
+                          Copy
+                        </button>
+                      </form>
+                      <form action={deleteSearchProfileAction}>
+                        <input name="id" type="hidden" value={profile.id} />
+                        <button className="button danger" type="submit">
+                          <Trash2 size={16} aria-hidden="true" />
+                          Delete
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {recentProfiles.length === 0 ? (
+                <tr>
+                  <td colSpan={7}>No search profiles exist yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="grid three">
+        {recentProfiles.slice(0, 3).map((profile) => (
+          <article className="item-card compact-profile-card" key={`profile-card-${profile.id}`}>
+            <div className="item-card-header">
+              <div>
+                <h2 className="card-title">{profile.name}</h2>
+                <p className="section-subtitle">{profile.targetMarket}</p>
+              </div>
+              <StatusPill label={`${formatNumber(profile.estimatedVolume)} est.`} tone="info" />
+            </div>
+            <div className="chip-row">
+              {profile.titles.slice(0, 3).map((title) => (
+                <span className="pill" key={title}>
+                  {title}
+                </span>
+              ))}
+            </div>
+            <p className="section-subtitle">{profile.segmentRules.join(", ")}</p>
+          </article>
+        ))}
+      </section>
+
       <section className="panel" id="create-profile">
         <div className="panel-header">
           <div className="panel-title-wrap">
-            <h2 className="section-title">Create Search Profile</h2>
-            <p className="section-subtitle">Save ICP filters, source preferences, required fields, scoring, routing, and compliance notes.</p>
+            <h2 className="section-title">Create profile</h2>
+            <p className="section-subtitle">Save a reusable ICP once the target, source mix, and required fields are clear.</p>
           </div>
-          <StatusPill label="Profile CRUD" tone="success" />
+          <StatusPill label="Profile setup" tone="success" />
         </div>
         <form action={createSearchProfileAction} className="panel-body form-grid">
           <div className="field">
@@ -105,103 +272,14 @@ export default async function SearchProfilesPage() {
           </div>
         </form>
       </section>
-
-      <section className="grid three">
-        {searchProfiles.map((profile) => (
-          <article className="item-card" key={profile.id}>
-            <div className="item-card-header">
-              <div>
-                <h2 className="card-title">{profile.name}</h2>
-                <p className="section-subtitle">{profile.targetMarket}</p>
-              </div>
-              <StatusPill label={`${formatNumber(profile.estimatedVolume)} est.`} tone="info" />
-            </div>
-
-            <div className="stage-list">
-              <div className="list-row">
-                <div className="row-meta">
-                  <strong>Sources</strong>
-                  <span>{profile.updatedAt}</span>
-                </div>
-                <div className="chip-row">
-                  {profile.sources.map((source) => (
-                    <span className="source-chip" key={source}>
-                      {source}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="list-row">
-                <strong>Geography</strong>
-                <div className="chip-row">
-                  {profile.geographies.map((geo) => (
-                    <span className="pill" key={geo}>
-                      {geo}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="list-row">
-                <strong>Target titles</strong>
-                <div className="chip-row">
-                  {profile.titles.map((title) => (
-                    <span className="pill" key={title}>
-                      {title}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="list-row">
-                <strong>Required fields</strong>
-                <div className="chip-row">
-                  {profile.requiredFields.map((field) => (
-                    <span className="pill success" key={field}>
-                      {field}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <p className="section-subtitle">{profile.complianceNote}</p>
-            </div>
-
-            <div className="item-card-actions">
-              <form action={createLeadJobAction}>
-                <input name="searchProfileId" type="hidden" value={profile.id} />
-                <input name="name" type="hidden" value={`${profile.name} - Manual run`} />
-                {profile.sources.map((source) => (
-                  <input key={source} name="sources" type="hidden" value={source} />
-                ))}
-                <button className="button primary" type="submit">
-                  <Play size={16} aria-hidden="true" />
-                  Run
-                </button>
-              </form>
-              <form action={duplicateSearchProfileAction}>
-                <input name="id" type="hidden" value={profile.id} />
-                <button className="button secondary" type="submit">
-                  <Copy size={16} aria-hidden="true" />
-                  Copy
-                </button>
-              </form>
-              <form action={deleteSearchProfileAction}>
-                <input name="id" type="hidden" value={profile.id} />
-                <button className="button danger" type="submit">
-                  <Trash2 size={16} aria-hidden="true" />
-                  Delete
-                </button>
-              </form>
-              <Link href="/lead-jobs" className="button secondary">
-                <Play size={16} aria-hidden="true" />
-                Jobs
-              </Link>
-            </div>
-          </article>
-        ))}
-      </section>
     </>
   );
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
 }
