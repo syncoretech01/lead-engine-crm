@@ -31,6 +31,7 @@ import {
 } from "@/lib/phase1/outreach-read-path";
 import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
+import { StatCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,44 @@ export default async function ReportsCompliancePage() {
   const openDataSubjectRequests = dataSubjectRequests.filter(
     (request) => request.status !== "Completed" && request.status !== "Rejected"
   );
+  const retentionCandidateCount = snapshot.retention.reduce((total, policy) => total + policy.candidateCount, 0);
+  const stats = [
+    {
+      label: "Passing controls",
+      value: formatNumber(snapshot.compliance.statusCounts.Pass),
+      note: `${formatNumber(snapshot.compliance.statusCounts.Warning)} warnings and ${formatNumber(snapshot.compliance.statusCounts.Fail)} failures.`,
+      icon: ClipboardCheck,
+      tone: snapshot.compliance.statusCounts.Fail ? "warning" as const : "success" as const
+    },
+    {
+      label: "Retention candidates",
+      value: formatNumber(retentionCandidateCount),
+      note: "Across active TTL policies.",
+      icon: SlidersHorizontal,
+      tone: retentionCandidateCount ? "warning" as const : "success" as const
+    },
+    {
+      label: "Deliverability alerts",
+      value: formatNumber(snapshot.compliance.openAlerts.length),
+      note: "Hard bounce, spam, unsubscribe, auth, and limit guardrails.",
+      icon: AlertTriangle,
+      tone: snapshot.compliance.openAlerts.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Privacy requests",
+      value: formatNumber(openDataSubjectRequests.length),
+      note: "Open access, deletion, suppression, correction, and export requests.",
+      icon: ShieldCheck,
+      tone: openDataSubjectRequests.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Audit events",
+      value: formatNumber(auditLogs.length),
+      note: "Workspace-level actor, object, action, and reason history.",
+      icon: Database,
+      tone: "info" as const
+    }
+  ];
 
   return (
     <>
@@ -85,51 +124,10 @@ export default async function ReportsCompliancePage() {
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Passing controls</span>
-            <ClipboardCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.compliance.statusCounts.Pass)}</div>
-          <span className="metric-note">
-            {formatNumber(snapshot.compliance.statusCounts.Warning)} warnings and {formatNumber(snapshot.compliance.statusCounts.Fail)} failures.
-          </span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Retention candidates</span>
-            <SlidersHorizontal size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">
-            {formatNumber(snapshot.retention.reduce((total, policy) => total + policy.candidateCount, 0))}
-          </div>
-          <span className="metric-note">Across active TTL policies.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Deliverability alerts</span>
-            <AlertTriangle size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.compliance.openAlerts.length)}</div>
-          <span className="metric-note">Hard bounce, spam, unsubscribe, auth, and limit guardrails.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Privacy requests</span>
-            <ShieldCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(openDataSubjectRequests.length)}</div>
-          <span className="metric-note">Open access, deletion, suppression, correction, and export requests.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Audit events</span>
-            <Database size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(auditLogs.length)}</div>
-          <span className="metric-note">Workspace-level actor, object, action, and reason history.</span>
-        </article>
+      <section className="stat-grid admin-five" aria-label="Compliance workflow metrics">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
+        ))}
       </section>
 
       <section className="grid two">

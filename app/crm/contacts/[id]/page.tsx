@@ -26,7 +26,6 @@ import {
   updateContactComplianceAction,
   updateOpportunityStageAction
 } from "@/app/actions";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -45,7 +44,8 @@ import { consentStatuses, lawfulBases } from "@/lib/phase1/compliance";
 import { contactDetailReadModelForWorkspace } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/utils";
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,6 @@ const activityIcons: Record<ActivityType, typeof NotebookPen> = {
   Verification: BadgeCheck,
   Opportunity: CircleDollarSign
 };
-const metricIcons = [BadgeCheck, Calendar, CircleDollarSign];
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -108,22 +107,63 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
   const metrics = [
     {
+      label: "Grade",
+      value: contact.grade,
+      note: contact.verification,
+      icon: BadgeCheck,
+      tone: contact.grade === "A" || contact.grade === "B" ? "success" as const : "warning" as const
+    },
+    {
       label: "Score",
-      value: contact.score,
+      value: formatNumber(contact.score),
       note: `${contact.priority} - ${contact.segment}`,
+      icon: BadgeCheck,
       tone: contact.priority === "P1" ? "success" as const : "info" as const
     },
     {
       label: "Open tasks",
-      value: activeTasks.length,
+      value: formatNumber(activeTasks.length),
       note: `Owned by ${contact.owner}`,
+      icon: Calendar,
       tone: activeTasks.length ? "warning" as const : "success" as const
     },
     {
       label: "Opportunities",
-      value: opportunities.length,
+      value: formatNumber(opportunities.length),
       note: formatCurrency(totalOpportunityValue),
+      icon: CircleDollarSign,
       tone: opportunities.length ? "success" as const : "info" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "Email channel",
+      value: contact.email ? 1 : 0,
+      note: contact.email || "No email",
+      icon: Mail,
+      tone: contact.email ? "success" as const : "warning" as const
+    },
+    {
+      label: "Phone channel",
+      value: contact.phone ? 1 : 0,
+      note: contact.phone || "No phone",
+      icon: Phone,
+      tone: contact.phone ? "info" as const : "warning" as const
+    },
+    {
+      label: "Open work",
+      value: activeTasks.length,
+      note: `${formatNumber(activities.length)} timeline events`,
+      icon: Check,
+      tone: activeTasks.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Guardrails",
+      value: contact.doNotContact ? 1 : 0,
+      note: contact.doNotContact ? "Do not contact" : contact.consentStatus,
+      icon: ShieldCheck,
+      tone: contact.doNotContact ? "warning" as const : "success" as const
     }
   ];
 
@@ -149,25 +189,16 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         }
       />
 
-      <section className="grid metrics" aria-label="Contact metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Grade</span>
-            <StatusPill
-              label={contact.grade === "A" || contact.grade === "B" ? "verified" : "review"}
-              tone={contact.grade === "A" || contact.grade === "B" ? "success" : "warning"}
-            />
-          </div>
-          <div className="metric-value gradient-text">{contact.grade}</div>
-          <div className="workspace-row">
-            <span className="metric-note">{contact.verification}</span>
-            <BadgeCheck size={20} aria-hidden="true" />
-          </div>
-        </article>
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? BadgeCheck;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Contact metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
+      </section>
+
+      <section className="ops-stage-strip four-up" aria-label="Contact work lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
       </section>
 
       <section className="grid two">
@@ -621,6 +652,7 @@ function CustomFieldInput({ field, value }: { field: CustomField; value: string 
 
   return <input name="value" type={field.fieldType} defaultValue={value} aria-label={field.name} />;
 }
+
 
 function isCall(item: Note | CallLog): item is CallLog {
   return "outcome" in item;

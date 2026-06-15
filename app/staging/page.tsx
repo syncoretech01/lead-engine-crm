@@ -20,6 +20,7 @@ import { StatusPill } from "@/components/status-pill";
 import { contactRowsForStaging } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -143,7 +144,7 @@ export default async function StagingPage() {
 
       <section className="ops-stage-strip" aria-label="Lead staging pipeline">
         {pipeline.map((stage) => (
-          <PipelineCard key={stage.label} {...stage} />
+          <LaneCard key={stage.label} {...stage} />
         ))}
       </section>
 
@@ -239,59 +240,6 @@ export default async function StagingPage() {
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  note,
-  tone
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  note: string;
-  tone: "info" | "success" | "warning";
-}) {
-  return (
-    <article className={`stat-card ${tone}`}>
-      <div className="stat-label">
-        <span className="stat-icon">
-          <Icon size={15} aria-hidden="true" />
-        </span>
-        {label}
-      </div>
-      <strong className="stat-value">{value}</strong>
-      <span className="stat-note">{note}</span>
-    </article>
-  );
-}
-
-function PipelineCard({
-  icon: Icon,
-  label,
-  value,
-  note,
-  tone
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: number;
-  note: string;
-  tone: "info" | "success" | "warning";
-}) {
-  return (
-    <article className={`ops-stage-card ${tone}`}>
-      <span className="ops-stage-icon">
-        <Icon size={17} aria-hidden="true" />
-      </span>
-      <div>
-        <strong>{formatNumber(value)}</strong>
-        <span>{label}</span>
-        <p>{note}</p>
-      </div>
-    </article>
-  );
-}
 
 function SummaryMeter({
   label,
@@ -335,15 +283,17 @@ function GateCard({
   tone: "success" | "info" | "warning";
 }) {
   return (
-    <article className="item-card workflow-card">
-      <div className="item-card-header">
+    <article className={`lead-gate-card ${tone}`}>
+      <span className="lead-gate-icon">
+        <Icon size={18} aria-hidden="true" />
+      </span>
+      <div className="lead-gate-copy">
         <div>
-          <h2 className="card-title">{title}</h2>
-          <p className="section-subtitle">{copy}</p>
+          <strong>{title}</strong>
+          <span>{copy}</span>
         </div>
-        <Icon size={20} aria-hidden="true" />
+        <StatusPill label={label} tone={tone} />
       </div>
-      <StatusPill label={label} tone={tone} />
     </article>
   );
 }

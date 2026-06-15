@@ -19,6 +19,7 @@ import { providerConnectionViewsForWorkspace } from "@/lib/phase1/provider-conne
 import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import type { ProviderConnectionSafeView } from "@/lib/phase1/provider-connections";
 import { formatNumber } from "@/lib/utils";
+import { StatCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,36 @@ export default async function IntegrationsPage() {
   const enabled = connections.filter((connection) => connection.enabled).length;
   const needsAttention = connections.filter((connection) => connection.status === "Needs attention").length;
   const configured = connections.filter((connection) => connection.hasSecret).length;
+  const stats = [
+    {
+      label: "Providers",
+      value: formatNumber(connections.length),
+      note: "Selected provider strategy for production readiness.",
+      icon: PlugZap,
+      tone: "info" as const
+    },
+    {
+      label: "Configured",
+      value: formatNumber(configured),
+      note: "Connections with a server-side secret reference.",
+      icon: KeyRound,
+      tone: configured ? "success" as const : "warning" as const
+    },
+    {
+      label: "Enabled",
+      value: formatNumber(enabled),
+      note: "Providers allowed for future job execution.",
+      icon: Zap,
+      tone: enabled ? "success" as const : "info" as const
+    },
+    {
+      label: "Needs attention",
+      value: formatNumber(needsAttention),
+      note: `${formatNumber(connected)} mock connection tests passed.`,
+      icon: ShieldCheck,
+      tone: needsAttention ? "warning" as const : "success" as const
+    }
+  ];
 
   return (
     <>
@@ -41,39 +72,10 @@ export default async function IntegrationsPage() {
         copy="Provider connection controls for lead sources, verification, enrichment, outreach, and transactional email. Configuration runs through server-only actions with redacted credential state."
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Providers</span>
-            <PlugZap size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(connections.length)}</div>
-          <span className="metric-note">Selected provider strategy for production readiness.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Configured</span>
-            <KeyRound size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(configured)}</div>
-          <span className="metric-note">Connections with a server-side secret reference.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Enabled</span>
-            <Zap size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(enabled)}</div>
-          <span className="metric-note">Providers allowed for future job execution.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Needs attention</span>
-            <ShieldCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(needsAttention)}</div>
-          <span className="metric-note">{formatNumber(connected)} mock connection tests passed.</span>
-        </article>
+      <section className="stat-grid" aria-label="Integration metrics">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
+        ))}
       </section>
 
       <section className="grid two integrations-grid">
@@ -295,6 +297,7 @@ function ProviderConnectionCard({ connection }: { connection: ProviderConnection
     </article>
   );
 }
+
 
 function labelize(value: string) {
   return value

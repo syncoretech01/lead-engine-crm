@@ -9,7 +9,6 @@ import {
   ShieldCheck,
   Users
 } from "lucide-react";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -20,8 +19,7 @@ import {
 import { contactViewsForWorkspace } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
-
-const metricIcons = [Users, BadgeCheck, Phone, Calendar];
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -44,27 +42,62 @@ export default async function ContactsPage() {
   const metrics = [
     {
       label: "CRM contacts",
-      value: contacts.length,
+      value: formatNumber(contacts.length),
       note: "People linked to account records",
+      icon: Users,
       tone: "info" as const
     },
     {
       label: "Verified A/B",
-      value: verified.length,
+      value: formatNumber(verified.length),
       note: "Email-ready for controlled outreach",
+      icon: BadgeCheck,
+      tone: "success" as const
+    },
+    {
+      label: "Call-ready",
+      value: formatNumber(callReady.length),
+      note: "Phone-present contacts not suppressed",
+      icon: Phone,
+      tone: "info" as const
+    },
+    {
+      label: "Open tasks",
+      value: formatNumber(openTasks),
+      note: `${formatNumber(needsAttention.length)} contacts need review`,
+      icon: Calendar,
+      tone: openTasks ? "warning" as const : "success" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "Email-ready",
+      value: verified.length,
+      note: "A/B grade contacts",
+      icon: Mail,
       tone: "success" as const
     },
     {
       label: "Call-ready",
       value: callReady.length,
-      note: "Phone-present contacts not suppressed",
+      note: "Phone present",
+      icon: Phone,
       tone: "info" as const
     },
     {
-      label: "Open tasks",
-      value: openTasks,
-      note: `${formatNumber(needsAttention.length)} contacts need review`,
-      tone: openTasks ? "warning" as const : "success" as const
+      label: "Needs review",
+      value: needsAttention.length,
+      note: "Tasks or quality flags",
+      icon: ShieldCheck,
+      tone: needsAttention.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Owners",
+      value: ownerRows.length,
+      note: "Active contact owners",
+      icon: Users,
+      tone: "info" as const
     }
   ];
 
@@ -88,11 +121,16 @@ export default async function ContactsPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="Contact metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? Users;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Contact metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
+      </section>
+
+      <section className="ops-stage-strip four-up" aria-label="Contact readiness lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
       </section>
 
       <section className="grid two">
@@ -290,6 +328,7 @@ export default async function ContactsPage() {
 }
 
 type ContactView = Awaited<ReturnType<typeof contactViewsForWorkspace>>[number];
+
 
 function ReadinessRow({
   label,

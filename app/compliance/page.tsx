@@ -7,6 +7,7 @@ import { complianceReadRowsForWorkspace } from "@/lib/phase1/compliance-read-pat
 import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import type { SuppressionRecord } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
+import { StatCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,13 @@ export default async function CompliancePage() {
       user: state.users.find((user) => user.id === member.userId)
     }));
   const retentionPolicies = state.retentionPolicies.filter((policy) => policy.workspaceId === workspaceId);
+  const stats = suppressionSummary.map((item) => ({
+    label: item.label,
+    value: formatNumber(item.count),
+    note: `${item.policy}; enforced before export, CRM assignment, and outreach.`,
+    icon: ShieldCheck,
+    tone: item.count ? "warning" as const : "success" as const
+  }));
 
   return (
     <>
@@ -48,16 +56,9 @@ export default async function CompliancePage() {
         }
       />
 
-      <section className="grid metrics">
-        {suppressionSummary.map((item) => (
-          <article className="metric-card" key={item.label}>
-            <div className="metric-top">
-              <span className="metric-label">{item.label}</span>
-              <StatusPill label={item.policy} tone="warning" />
-            </div>
-            <div className="metric-value">{formatNumber(item.count)}</div>
-            <span className="metric-note">Enforced before export, CRM assignment, and outreach.</span>
-          </article>
+      <section className="stat-grid admin-five" aria-label="Compliance suppression metrics">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
         ))}
       </section>
 
@@ -350,6 +351,7 @@ export default async function CompliancePage() {
     </>
   );
 }
+
 
 function suppressionMetrics(records: SuppressionRecord[], workspaceId: string) {
   const groups = [

@@ -15,7 +15,6 @@ import {
   deleteReassignmentRuleAction,
   reassignSdrAssignmentAction
 } from "@/app/actions";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -28,10 +27,9 @@ import {
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import type { AppState } from "@/lib/phase1/types";
 import { formatNumber, formatPercent } from "@/lib/utils";
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
-
-const metricIcons = [Users, ShieldCheck, AlertTriangle, Clock];
 
 export default async function SdrManagerPage() {
   const { state, workspaceId } = await getWorkspaceContext("manage_sdr");
@@ -46,28 +44,62 @@ export default async function SdrManagerPage() {
   const metrics = [
     {
       label: "Active assigned",
-      value: snapshot.metrics.activeAssigned,
+      value: formatNumber(snapshot.metrics.activeAssigned),
       note: "Open SDR assignments",
+      icon: Users,
       tone: "info" as const
     },
     {
       label: "SLA adherence",
-      value: snapshot.metrics.slaAdherence,
-      suffix: "%",
+      value: formatPercent(snapshot.metrics.slaAdherence),
       note: `${formatPercent(snapshot.metrics.contactedRate)} touched rate`,
+      icon: ShieldCheck,
       tone: snapshot.metrics.slaAdherence >= 80 ? "success" as const : "warning" as const
     },
     {
       label: "Untouched P1",
-      value: snapshot.metrics.untouchedP1,
+      value: formatNumber(snapshot.metrics.untouchedP1),
       note: "High-priority leads without touch",
+      icon: AlertTriangle,
       tone: snapshot.metrics.untouchedP1 ? "warning" as const : "success" as const
     },
     {
       label: "Overdue",
-      value: snapshot.metrics.overdue,
+      value: formatNumber(snapshot.metrics.overdue),
       note: "Assignments past active SLA",
+      icon: Clock,
       tone: snapshot.metrics.overdue ? "danger" as const : "success" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "Active teams",
+      value: activeTeams.length,
+      note: `${formatNumber(users.length)} reps covered`,
+      icon: GitBranch,
+      tone: "info" as const
+    },
+    {
+      label: "Risk watch",
+      value: riskCount,
+      note: "Heavy P1 or overdue load",
+      icon: AlertTriangle,
+      tone: riskCount ? "warning" as const : "success" as const
+    },
+    {
+      label: "Recommendations",
+      value: snapshot.recommendations.length,
+      note: "Ready for review",
+      icon: RefreshCw,
+      tone: snapshot.recommendations.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Rules live",
+      value: snapshot.rules.length,
+      note: "Rebalancing guardrails",
+      icon: ShieldCheck,
+      tone: "success" as const
     }
   ];
 
@@ -93,57 +125,16 @@ export default async function SdrManagerPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="SDR manager metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? Users;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="SDR manager metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
       </section>
 
-      <section className="grid four">
-        <article className="item-card workflow-card">
-          <div className="item-card-header">
-            <div>
-              <h2 className="card-title">Team coverage</h2>
-              <p className="section-subtitle">{activeTeams.length} active routing pods.</p>
-            </div>
-            <GitBranch size={20} aria-hidden="true" />
-          </div>
-          <div className="chip-row">
-            <StatusPill label={`${teams.length} teams`} tone="info" />
-            <StatusPill label={`${users.length} reps`} tone="success" />
-          </div>
-        </article>
-        <article className="item-card workflow-card">
-          <div className="item-card-header">
-            <div>
-              <h2 className="card-title">Risk watch</h2>
-              <p className="section-subtitle">Reps with overdue work or heavy P1 load.</p>
-            </div>
-            <AlertTriangle size={20} aria-hidden="true" />
-          </div>
-          <div className="score-ring">{riskCount}</div>
-        </article>
-        <article className="item-card workflow-card">
-          <div className="item-card-header">
-            <div>
-              <h2 className="card-title">Recommendations</h2>
-              <p className="section-subtitle">Ready for manager approval.</p>
-            </div>
-            <RefreshCw size={20} aria-hidden="true" />
-          </div>
-          <div className="score-ring">{snapshot.recommendations.length}</div>
-        </article>
-        <article className="item-card workflow-card">
-          <div className="item-card-header">
-            <div>
-              <h2 className="card-title">Rules live</h2>
-              <p className="section-subtitle">Automation guardrails for rebalancing.</p>
-            </div>
-            <ShieldCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="score-ring">{snapshot.rules.length}</div>
-        </article>
+      <section className="ops-stage-strip four-up" aria-label="SDR manager lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
       </section>
 
       <section className="grid two">
@@ -438,6 +429,7 @@ export default async function SdrManagerPage() {
     </>
   );
 }
+
 
 function teamForUser(teams: AppState["sdrTeams"], userId: string) {
   return teams.find((team) => team.memberUserIds.includes(userId));

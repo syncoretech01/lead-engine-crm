@@ -15,7 +15,6 @@ import {
   setCustomFieldValueAction,
   updateOpportunityStageAction
 } from "@/app/actions";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -27,8 +26,7 @@ import { customFieldValuesForObject, opportunityStages, userNameForId } from "@/
 import { opportunityViews } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
-
-const metricIcons = [CircleDollarSign, TrendingUp, Calendar, CircleDollarSign];
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -57,29 +55,62 @@ export default async function OpportunitiesPage() {
   const metrics = [
     {
       label: "Open pipeline",
-      value: openPipeline,
-      currency: true,
+      value: formatCurrency(openPipeline),
       note: `${formatNumber(openOpportunities.length)} open opportunities`,
+      icon: CircleDollarSign,
       tone: "success" as const
     },
     {
       label: "Weighted forecast",
-      value: weightedForecast,
-      currency: true,
+      value: formatCurrency(weightedForecast),
       note: "Amount weighted by probability",
+      icon: TrendingUp,
       tone: "info" as const
     },
     {
       label: "Proposal stage",
-      value: proposalOpportunities.length,
+      value: formatNumber(proposalOpportunities.length),
       note: "Late-stage active opportunities",
+      icon: Calendar,
       tone: proposalOpportunities.length ? "warning" as const : "info" as const
     },
     {
       label: "Closed won",
-      value: wonOpportunities.length,
+      value: formatNumber(wonOpportunities.length),
       note: `${formatCurrency(wonOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0))} retained in history`,
+      icon: CircleDollarSign,
       tone: "success" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "Open deals",
+      value: openOpportunities.length,
+      note: formatCurrency(openPipeline),
+      icon: CircleDollarSign,
+      tone: "success" as const
+    },
+    {
+      label: "Proposal",
+      value: proposalOpportunities.length,
+      note: "Late stage",
+      icon: Calendar,
+      tone: proposalOpportunities.length ? "warning" as const : "info" as const
+    },
+    {
+      label: "Stage columns",
+      value: stageRows.filter((row) => row.count > 0).length,
+      note: "Active pipeline stages",
+      icon: SlidersHorizontal,
+      tone: "info" as const
+    },
+    {
+      label: "Forecast fields",
+      value: opportunityFields.length,
+      note: "Custom CRM fields",
+      icon: TrendingUp,
+      tone: "info" as const
     }
   ];
 
@@ -103,11 +134,16 @@ export default async function OpportunitiesPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="Opportunity metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? CircleDollarSign;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Opportunity metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
+      </section>
+
+      <section className="ops-stage-strip four-up" aria-label="Opportunity operating lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
       </section>
 
       <section className="grid two">
@@ -204,7 +240,10 @@ export default async function OpportunitiesPage() {
                         <h3 className="card-title">{opportunity.name}</h3>
                         <p className="section-subtitle">{opportunity.companyName}</p>
                       </div>
-                      <div className="score-ring">{opportunity.probability}%</div>
+                      <div className="table-score-cell">
+                        <strong>{opportunity.probability}%</strong>
+                        <ProgressBar value={opportunity.probability} />
+                      </div>
                     </div>
                     <div className="chip-row">
                       <StatusPill label={formatCurrency(opportunity.amount)} tone="info" />
@@ -447,6 +486,7 @@ export default async function OpportunitiesPage() {
 }
 
 type OpportunityView = ReturnType<typeof opportunityViews>[number];
+
 
 function isClosedStage(stage: OpportunityView["stage"]) {
   return stage === "Closed won" || stage === "Closed lost";

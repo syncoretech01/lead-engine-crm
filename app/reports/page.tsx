@@ -28,6 +28,7 @@ import {
 import { reportCategories, reportingDashboardSnapshot } from "@/lib/phase1/reporting";
 import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { StatCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,36 @@ export default async function ReportsPage() {
   );
   const snapshot = reportingDashboardSnapshot(readState, workspaceId);
   const latestSnapshot = snapshot.snapshots[0];
+  const stats = [
+    {
+      label: "Verified contacts",
+      value: formatNumber(snapshot.metrics.verifiedContacts),
+      note: `${formatRate(snapshot.funnelRows[2].rate)} raw-to-verified from ${formatNumber(snapshot.metrics.rawLeads)} raw leads.`,
+      icon: Database,
+      tone: "success" as const
+    },
+    {
+      label: "Reply to meeting",
+      value: formatRate(snapshot.funnelRows[7].rate),
+      note: `${formatNumber(snapshot.metrics.replies)} replies and ${formatNumber(snapshot.metrics.meetings)} meetings.`,
+      icon: Users,
+      tone: snapshot.metrics.meetings ? "success" as const : "info" as const
+    },
+    {
+      label: "Open pipeline",
+      value: formatCurrency(snapshot.metrics.openPipeline),
+      note: `${formatCurrency(snapshot.metrics.wonRevenue)} revenue won.`,
+      icon: TrendingUp,
+      tone: "success" as const
+    },
+    {
+      label: "Deliverability alerts",
+      value: formatNumber(snapshot.metrics.openDeliverabilityAlerts),
+      note: `Bounce ${formatRate(snapshot.metrics.bounceRate)}, spam ${formatRate(snapshot.metrics.spamComplaintRate)}.`,
+      icon: Gauge,
+      tone: snapshot.metrics.openDeliverabilityAlerts ? "warning" as const : "success" as const
+    }
+  ];
 
   return (
     <>
@@ -77,45 +108,10 @@ export default async function ReportsPage() {
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Verified contacts</span>
-            <Database size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.metrics.verifiedContacts)}</div>
-          <span className="metric-note">
-            {formatRate(snapshot.funnelRows[2].rate)} raw-to-verified from {formatNumber(snapshot.metrics.rawLeads)} raw leads.
-          </span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Reply to meeting</span>
-            <Users size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatRate(snapshot.funnelRows[7].rate)}</div>
-          <span className="metric-note">
-            {formatNumber(snapshot.metrics.replies)} replies and {formatNumber(snapshot.metrics.meetings)} meetings.
-          </span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Open pipeline</span>
-            <TrendingUp size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatCurrency(snapshot.metrics.openPipeline)}</div>
-          <span className="metric-note">{formatCurrency(snapshot.metrics.wonRevenue)} revenue won.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Deliverability alerts</span>
-            <Gauge size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(snapshot.metrics.openDeliverabilityAlerts)}</div>
-          <span className="metric-note">
-            Bounce {formatRate(snapshot.metrics.bounceRate)}, spam {formatRate(snapshot.metrics.spamComplaintRate)}.
-          </span>
-        </article>
+      <section className="stat-grid" aria-label="Report metrics">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
+        ))}
       </section>
 
       <section className="panel">
@@ -535,6 +531,7 @@ export default async function ReportsPage() {
     </>
   );
 }
+
 
 function formatRate(value: number) {
   return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;

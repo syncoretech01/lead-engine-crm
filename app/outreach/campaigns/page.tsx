@@ -19,7 +19,6 @@ import {
   simulateCampaignSendAction,
   updateOutreachProviderStatusAction
 } from "@/app/actions";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -37,10 +36,9 @@ import {
 import { defaultPhysicalAddress } from "@/lib/phase1/compliance";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
-
-const metricIcons = [Workflow, Mail, BarChart3, ShieldCheck];
 
 export default async function OutreachCampaignsPage() {
   const { state, workspaceId } = await getWorkspaceContext("manage_outreach");
@@ -60,29 +58,62 @@ export default async function OutreachCampaignsPage() {
   const metrics = [
     {
       label: "Active campaigns",
-      value: snapshot.metrics.activeCampaigns,
+      value: formatNumber(snapshot.metrics.activeCampaigns),
       note: "Email, SMS, call, and multichannel",
+      icon: Workflow,
       tone: "info" as const
     },
     {
       label: "Sent",
-      value: snapshot.metrics.sent,
+      value: formatNumber(snapshot.metrics.sent),
       note: "Local provider send events",
+      icon: Mail,
       tone: "success" as const
     },
     {
       label: "Reply rate",
-      value: snapshot.metrics.replyRate,
-      suffix: "%",
+      value: `${snapshot.metrics.replyRate}%`,
       note: "Email and SMS replies",
+      icon: BarChart3,
       tone: snapshot.metrics.replyRate ? "success" as const : "info" as const
     },
     {
       label: "Bounce rate",
-      value: snapshot.metrics.bounceRate,
-      suffix: "%",
+      value: `${snapshot.metrics.bounceRate}%`,
       note: `${formatNumber(snapshot.metrics.suppressions)} hard-stop events`,
+      icon: ShieldCheck,
       tone: snapshot.metrics.bounceRate > 5 ? "danger" as const : "success" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "Sender auth",
+      value: authenticatedEmailProviders.length,
+      note: `${formatNumber(emailProviders.length)} email providers`,
+      icon: ShieldCheck,
+      tone: authenticatedEmailProviders.length === emailProviders.length ? "success" as const : "warning" as const
+    },
+    {
+      label: "Daily usage",
+      value: sentToday,
+      note: `${formatNumber(dailyLimit)} total send capacity`,
+      icon: Mail,
+      tone: dailyLimit && sentToday / dailyLimit > 0.8 ? "warning" as const : "info" as const
+    },
+    {
+      label: "Risk flags",
+      value: providerRisk.length,
+      note: "Provider health issues",
+      icon: AlertTriangle,
+      tone: providerRisk.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Sync events",
+      value: snapshot.metrics.webhooksProcessed + snapshot.metrics.callsRecorded,
+      note: `${formatNumber(snapshot.metrics.webhooksProcessed)} webhooks, ${formatNumber(snapshot.metrics.callsRecorded)} calls`,
+      icon: Activity,
+      tone: "info" as const
     }
   ];
 
@@ -106,11 +137,16 @@ export default async function OutreachCampaignsPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="Outreach campaign metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? Workflow;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Outreach campaign metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
+      </section>
+
+      <section className="ops-stage-strip four-up" aria-label="Outreach readiness lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
       </section>
 
       <section className="grid two">
@@ -247,53 +283,6 @@ export default async function OutreachCampaignsPage() {
             })}
           </div>
         </div>
-      </section>
-
-      <section className="grid four">
-        <article className="item-card workflow-card">
-          <div className="item-card-header">
-            <div>
-              <h2 className="card-title">Sender auth</h2>
-              <p className="section-subtitle">SPF, DKIM, and DMARC coverage.</p>
-            </div>
-            <ShieldCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="score-ring">{authenticatedEmailProviders.length}/{Math.max(emailProviders.length, 1)}</div>
-        </article>
-        <article className="item-card workflow-card">
-          <div className="item-card-header">
-            <div>
-              <h2 className="card-title">Daily usage</h2>
-              <p className="section-subtitle">Current provider send load.</p>
-            </div>
-            <Mail size={20} aria-hidden="true" />
-          </div>
-          <ProgressBar value={dailyLimit ? Math.round((sentToday / dailyLimit) * 100) : 0} />
-          <span className="section-subtitle">{sentToday}/{dailyLimit} sends today</span>
-        </article>
-        <article className="item-card workflow-card">
-          <div className="item-card-header">
-            <div>
-              <h2 className="card-title">Risk flags</h2>
-              <p className="section-subtitle">Paused or deliverability-sensitive providers.</p>
-            </div>
-            <AlertTriangle size={20} aria-hidden="true" />
-          </div>
-          <div className="score-ring">{providerRisk.length}</div>
-        </article>
-        <article className="item-card workflow-card">
-          <div className="item-card-header">
-            <div>
-              <h2 className="card-title">Sync events</h2>
-              <p className="section-subtitle">Webhook and call records processed locally.</p>
-            </div>
-            <Activity size={20} aria-hidden="true" />
-          </div>
-          <div className="chip-row">
-            <StatusPill label={`${snapshot.metrics.webhooksProcessed} webhooks`} tone="info" />
-            <StatusPill label={`${snapshot.metrics.callsRecorded} calls`} tone="success" />
-          </div>
-        </article>
       </section>
 
       <section className="grid two">

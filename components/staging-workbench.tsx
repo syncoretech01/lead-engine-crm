@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Filter, SlidersHorizontal, UserPlus } from "lucide-react";
+import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import type { LeadGrade, LeadStatus } from "@/lib/phase1/types";
 
@@ -146,7 +147,10 @@ export function StagingWorkbench({ leads }: StagingWorkbenchProps) {
                     <span className={`grade ${lead.emailGrade.toLowerCase()}`}>{lead.emailGrade}</span>
                   </td>
                   <td>
-                    <div className="score-ring">{lead.score}</div>
+                    <div className="table-score-cell">
+                      <strong>{lead.score}</strong>
+                      <ProgressBar value={lead.score} />
+                    </div>
                   </td>
                   <td>
                     <StatusPill label={lead.status} tone={statusTone(lead.status)} />

@@ -14,7 +14,6 @@ import {
   recordSmsEventAction,
   recordTrackedCallAction
 } from "@/app/actions";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
@@ -31,6 +30,7 @@ import {
 import { recordingConsentStatuses } from "@/lib/phase1/compliance";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -44,8 +44,6 @@ type EventRow = {
   detail: string;
   timestamp?: string;
 };
-
-const metricIcons = [Mail, AlertTriangle, MessageSquare, Phone];
 
 export default async function OutreachEventsPage() {
   const { state, workspaceId } = await getWorkspaceContext("manage_outreach");
@@ -75,27 +73,62 @@ export default async function OutreachEventsPage() {
   const metrics = [
     {
       label: "Responses",
-      value: responseCount,
+      value: formatNumber(responseCount),
       note: `${formatNumber(emailReplies.length)} email, ${formatNumber(smsReplies.length)} SMS, ${formatNumber(callWins.length)} calls`,
+      icon: Mail,
       tone: responseCount ? "success" as const : "info" as const
     },
     {
       label: "Hard stops",
-      value: hardStops.length,
+      value: formatNumber(hardStops.length),
       note: "Bounces, unsubscribes, complaints, and SMS opt-outs",
+      icon: AlertTriangle,
       tone: hardStops.length ? "danger" as const : "success" as const
     },
     {
       label: "SMS events",
-      value: snapshot.smsEvents.length,
+      value: formatNumber(snapshot.smsEvents.length),
       note: "RingCentral Local delivery and replies",
+      icon: MessageSquare,
       tone: "info" as const
     },
     {
       label: "Recorded calls",
-      value: snapshot.calls.length,
+      value: formatNumber(snapshot.calls.length),
       note: `${formatNumber(callsWithRecordings.length)} with recordings`,
+      icon: Phone,
       tone: callsWithRecordings.length ? "success" as const : "info" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "Email replies",
+      value: emailReplies.length,
+      note: "Replies to route back to SDRs",
+      icon: Mail,
+      tone: emailReplies.length ? "success" as const : "info" as const
+    },
+    {
+      label: "SMS replies",
+      value: smsReplies.length,
+      note: "Inbound SMS responses",
+      icon: MessageSquare,
+      tone: smsReplies.length ? "success" as const : "info" as const
+    },
+    {
+      label: "Call wins",
+      value: callWins.length,
+      note: "Interested or meeting booked",
+      icon: Phone,
+      tone: callWins.length ? "success" as const : "info" as const
+    },
+    {
+      label: "Suppression risk",
+      value: hardStops.length,
+      note: "Hard stops and opt-outs",
+      icon: AlertTriangle,
+      tone: hardStops.length ? "warning" as const : "success" as const
     }
   ];
 
@@ -119,11 +152,16 @@ export default async function OutreachEventsPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="Outreach event metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? Activity;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Outreach event metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
+      </section>
+
+      <section className="ops-stage-strip four-up" aria-label="Outreach event lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
       </section>
 
       <section className="grid two">
@@ -671,6 +709,7 @@ function eventStream(snapshot: ReturnType<typeof outreachDashboardSnapshot>): Ev
 
   return rows.sort((a, b) => Date.parse(b.timestamp ?? "") - Date.parse(a.timestamp ?? ""));
 }
+
 
 function emailTimestamp(event: ReturnType<typeof outreachDashboardSnapshot>["emailEvents"][number]) {
   return (

@@ -17,6 +17,7 @@ import { StatusPill, statusTone } from "@/components/status-pill";
 import { jobObservabilitySnapshot } from "@/lib/phase1/jobs";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { StatCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -331,32 +332,6 @@ export default async function LeadJobsPage() {
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  note,
-  tone
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  note: string;
-  tone: "info" | "success" | "warning";
-}) {
-  return (
-    <article className={`stat-card ${tone}`}>
-      <div className="stat-label">
-        <span className="stat-icon">
-          <Icon size={15} aria-hidden="true" />
-        </span>
-        {label}
-      </div>
-      <strong className="stat-value">{value}</strong>
-      <span className="stat-note">{note}</span>
-    </article>
-  );
-}
 
 function JobStatusCard({
   icon: Icon,

@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   BadgeCheck,
-  Calendar,
+  CalendarClock,
   Clock,
   ListChecks,
   Mail,
@@ -16,20 +16,19 @@ import {
   logFirstTouchAction,
   runSdrAssignmentAction
 } from "@/app/actions";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot } from "@/lib/phase1/sdr";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
 const touchStatuses = sdrLeadStatuses.filter((status) =>
   ["Contacted", "Replied", "Interested", "Meeting Booked", "Qualified", "Nurture", "Disqualified", "Invalid"].includes(status)
 );
-const metricIcons = [ListChecks, BadgeCheck, Calendar, Clock];
 
 export default async function SdrQueuePage() {
   const { state, session, workspaceId } = await getWorkspaceContext("manage_sdr");
@@ -47,40 +46,69 @@ export default async function SdrQueuePage() {
   const callReady = activeAssignments.filter((assignment) => assignment.phone);
   const meetingFollowUps = activeAssignments.filter((assignment) => assignment.status === "Meeting Booked");
   const pageTitle = session.role === "SDR" ? "My SDR queue" : "SDR queue";
+  const recentlyReplied = snapshot.queueViews.find((view) => view.name === "Recently Replied")?.count ?? 0;
 
   const metrics = [
     {
       label: "Assigned leads",
-      value: snapshot.metrics.assigned,
+      value: formatNumber(snapshot.metrics.assigned),
       note: "Active SDR assignments",
+      icon: ListChecks,
       tone: "info" as const
     },
     {
       label: "P1 leads",
-      value: snapshot.metrics.p1,
+      value: formatNumber(snapshot.metrics.p1),
       note: "Highest-priority queue items",
+      icon: BadgeCheck,
       tone: snapshot.metrics.p1 ? "success" as const : "info" as const
     },
     {
       label: "Due today",
-      value: snapshot.metrics.dueToday,
+      value: formatNumber(snapshot.metrics.dueToday),
       note: "First touches and follow-ups",
+      icon: CalendarClock,
       tone: snapshot.metrics.dueToday ? "warning" as const : "success" as const
     },
     {
       label: "Overdue",
-      value: snapshot.metrics.overdue,
+      value: formatNumber(snapshot.metrics.overdue),
       note: "SLA or reminder misses",
+      icon: Clock,
       tone: snapshot.metrics.overdue ? "danger" as const : "success" as const
     }
   ];
 
-  const focusCards = [
-    snapshot.queueViews.find((view) => view.name === "My P1 Leads"),
-    snapshot.queueViews.find((view) => view.name === "Due Today"),
-    snapshot.queueViews.find((view) => view.name === "Overdue"),
-    snapshot.queueViews.find((view) => view.name === "Recently Replied")
-  ].filter((view): view is NonNullable<typeof view> => Boolean(view));
+  const lanes = [
+    {
+      label: "Email-ready",
+      value: emailReady.length,
+      note: "Verified inboxes to work",
+      icon: Mail,
+      tone: "success" as const
+    },
+    {
+      label: "Call-ready",
+      value: callReady.length,
+      note: "Phone numbers available",
+      icon: Phone,
+      tone: "info" as const
+    },
+    {
+      label: "Meeting follow-up",
+      value: meetingFollowUps.length,
+      note: "Booked meetings to advance",
+      icon: CalendarClock,
+      tone: meetingFollowUps.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Recent replies",
+      value: recentlyReplied,
+      note: "Replies needing attention",
+      icon: Mail,
+      tone: recentlyReplied ? "warning" as const : "success" as const
+    }
+  ];
 
   return (
     <>
@@ -104,24 +132,15 @@ export default async function SdrQueuePage() {
         }
       />
 
-      <section className="grid metrics" aria-label="SDR queue metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? ListChecks;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="SDR queue metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
       </section>
 
-      <section className="grid four">
-        {focusCards.map((view) => (
-          <article className="item-card workflow-card" key={view.name}>
-            <div className="item-card-header">
-              <div>
-                <h2 className="card-title">{view.name}</h2>
-                <p className="section-subtitle">{view.purpose}</p>
-              </div>
-              <div className="score-ring">{view.count}</div>
-            </div>
-          </article>
+      <section className="ops-stage-strip four-up" aria-label="SDR work lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
         ))}
       </section>
 
@@ -377,6 +396,7 @@ export default async function SdrQueuePage() {
 }
 
 type AssignmentView = ReturnType<typeof sdrQueueSnapshot>["assignments"][number];
+
 
 function activeStatus(status: string) {
   return !["Won", "Lost", "Disqualified", "Invalid", "Unsubscribed", "Suppressed"].includes(status);

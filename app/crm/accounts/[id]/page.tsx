@@ -24,7 +24,6 @@ import {
   setCustomFieldValueAction,
   updateOpportunityStageAction
 } from "@/app/actions";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -43,6 +42,7 @@ import { accountDetailReadModelForWorkspace } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +57,6 @@ const activityIcons: Record<ActivityType, typeof NotebookPen> = {
   Verification: ShieldCheck,
   Opportunity: CircleDollarSign
 };
-const metricIcons = [CircleDollarSign, CircleDollarSign, Users, Calendar];
 
 export default async function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -106,29 +105,62 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   const metrics = [
     {
       label: "Open pipeline",
-      value: account.amount,
-      currency: true,
+      value: formatCurrency(account.amount),
       note: `${account.probability}% primary probability`,
+      icon: CircleDollarSign,
       tone: account.amount ? "success" as const : "info" as const
     },
     {
       label: "Weighted forecast",
-      value: weightedForecast,
-      currency: true,
+      value: formatCurrency(weightedForecast),
       note: `${formatNumber(opportunities.length)} linked opportunities`,
+      icon: CircleDollarSign,
       tone: "info" as const
     },
     {
       label: "Contacts",
-      value: accountContacts.length,
+      value: formatNumber(accountContacts.length),
       note: `${account.owner} owns the active path`,
+      icon: Users,
       tone: accountContacts.length ? "success" as const : "warning" as const
     },
     {
       label: "Open tasks",
-      value: activeTasks.length,
+      value: formatNumber(activeTasks.length),
       note: account.lastActivity,
+      icon: Calendar,
       tone: activeTasks.length ? "warning" as const : "success" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "Account score",
+      value: account.score,
+      note: `${account.priority} priority`,
+      icon: Building2,
+      tone: account.priority === "P1" ? "success" as const : "info" as const
+    },
+    {
+      label: "Current work",
+      value: focusTasks.length,
+      note: `${formatNumber(activeTasks.length)} open tasks`,
+      icon: Check,
+      tone: activeTasks.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Recent activity",
+      value: recentInteractions.length,
+      note: `${formatNumber(activities.length)} timeline events`,
+      icon: NotebookPen,
+      tone: recentInteractions.length ? "info" as const : "success" as const
+    },
+    {
+      label: "Custom fields",
+      value: companyFields.length,
+      note: "Account CRM fields",
+      icon: Sparkles,
+      tone: "info" as const
     }
   ];
 
@@ -152,11 +184,16 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         }
       />
 
-      <section className="grid metrics" aria-label="Account metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? Building2;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Account metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
+      </section>
+
+      <section className="ops-stage-strip four-up" aria-label="Account work lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
       </section>
 
       <section className="grid two">
@@ -661,6 +698,7 @@ function CustomFieldInput({ field, value }: { field: CustomField; value: string 
 
   return <input name="value" type={field.fieldType} defaultValue={value} aria-label={field.name} />;
 }
+
 
 function isCall(item: Note | CallLog): item is CallLog {
   return "outcome" in item;

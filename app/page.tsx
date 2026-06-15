@@ -25,6 +25,7 @@ import { canUseLeadGenerationWorkspace, defaultWorkspacePath } from "@/lib/phase
 import type { Contact, LeadJob, Priority, SearchProfile } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 import { redirect } from "next/navigation";
+import { StatCard } from "@/components/ui-metrics";
 
 type StagedRow = ReturnType<typeof contactRowsForStaging>[number];
 type SegmentSummary = {
@@ -280,19 +281,19 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid four" aria-label="Lead generation workflow">
+      <section className="lead-action-grid" aria-label="Lead generation workflow">
         {workflow.map((step) => {
           const Icon = step.icon;
           return (
-            <Link href={step.href} className="item-card workflow-card card-hover" key={step.title}>
-              <div className="item-card-header">
-                <div>
-                  <h2 className="card-title">{step.title}</h2>
-                  <p className="section-subtitle">{step.copy}</p>
-                </div>
-                <Icon size={20} aria-hidden="true" />
+            <Link href={step.href} className="lead-action-card card-hover" key={step.title}>
+              <span className="lead-action-icon">
+                <Icon size={18} aria-hidden="true" />
+              </span>
+              <div className="lead-action-copy">
+                <strong>{step.title}</strong>
+                <span>{step.copy}</span>
               </div>
-              <div className="row-meta">
+              <div className="lead-action-meta">
                 <StatusPill label={`${formatNumber(step.count)} ${step.label}`} tone={step.count ? "info" : "default"} />
                 <ArrowRight size={17} aria-hidden="true" />
               </div>
@@ -511,32 +512,6 @@ export default async function DashboardPage() {
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  note,
-  tone
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  note: string;
-  tone: "info" | "success" | "warning";
-}) {
-  return (
-    <article className={`stat-card ${tone}`}>
-      <div className="stat-label">
-        <span className="stat-icon">
-          <Icon size={15} aria-hidden="true" />
-        </span>
-        {label}
-      </div>
-      <strong className="stat-value">{value}</strong>
-      <span className="stat-note">{note}</span>
-    </article>
-  );
-}
 
 function FunnelRow({
   icon: Icon,

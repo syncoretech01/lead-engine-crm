@@ -12,7 +12,6 @@ import {
   Target,
   Users
 } from "lucide-react";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -25,8 +24,7 @@ import { sdrQueueSnapshot } from "@/lib/phase1/sdr";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import type { Opportunity } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
-
-const metricIcons = [ClipboardList, CalendarClock, CircleDollarSign, Building2];
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -68,28 +66,62 @@ export default async function CrmDashboardPage() {
   const metrics = [
     {
       label: session.role === "SDR" ? "My active leads" : "Assigned leads",
-      value: activeAssignments,
+      value: formatNumber(activeAssignments),
       note: `${formatNumber(queueSnapshot?.metrics.p1 ?? 0)} P1 leads in queue`,
+      icon: ClipboardList,
       tone: activeAssignments ? "info" as const : "success" as const
     },
     {
       label: "Due today",
-      value: dueToday,
+      value: formatNumber(dueToday),
       note: overdue ? `${formatNumber(overdue)} overdue items need attention` : "No overdue work",
+      icon: CalendarClock,
       tone: overdue ? "warning" as const : "success" as const
     },
     {
       label: "Open pipeline",
-      value: openPipeline,
-      currency: true,
+      value: formatCurrency(openPipeline),
       note: `${formatCurrency(weightedForecast)} weighted forecast`,
+      icon: CircleDollarSign,
       tone: "success" as const
     },
     {
       label: "CRM accounts",
-      value: accounts.length,
+      value: formatNumber(accounts.length),
       note: `${formatNumber(contacts.length)} contacts linked to accounts`,
+      icon: Building2,
       tone: "info" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "Priority work",
+      value: activeAssignments,
+      note: `${formatNumber(dueToday)} due today`,
+      icon: ClipboardList,
+      tone: overdue ? "warning" as const : "info" as const
+    },
+    {
+      label: "Open deals",
+      value: openOpportunities.length,
+      note: formatCurrency(openPipeline),
+      icon: CircleDollarSign,
+      tone: "success" as const
+    },
+    {
+      label: "Accounts",
+      value: accounts.length,
+      note: `${formatNumber(accountWatchlist.length)} on watchlist`,
+      icon: Building2,
+      tone: "info" as const
+    },
+    {
+      label: "Campaigns",
+      value: activeCampaigns.length,
+      note: "Active outreach lanes",
+      icon: Megaphone,
+      tone: activeCampaigns.length ? "info" as const : "success" as const
     }
   ];
 
@@ -163,11 +195,16 @@ export default async function CrmDashboardPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="CRM metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? BarChart3;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="CRM metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
+      </section>
+
+      <section className="ops-stage-strip four-up" aria-label="CRM workspace lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
       </section>
 
       <section className="grid five" aria-label="CRM workspace shortcuts">
@@ -398,6 +435,7 @@ export default async function CrmDashboardPage() {
 function isClosedStage(stage: Opportunity["stage"]) {
   return stage === "Closed won" || stage === "Closed lost";
 }
+
 
 function openTasksDueToday(tasks: { workspaceId: string; status: string; dueAt?: string }[], workspaceId: string) {
   return tasks.filter((task) => task.workspaceId === workspaceId && task.status !== "Completed" && task.dueAt && isToday(task.dueAt)).length;

@@ -1,21 +1,30 @@
-import { BadgeCheck, DatabaseZap, Gem, Layers3, RefreshCw, Tags } from "lucide-react";
+import {
+  BadgeCheck,
+  DatabaseZap,
+  Gem,
+  Layers3,
+  RefreshCw,
+  ServerCog,
+  Sparkles,
+  Tags,
+  Target,
+  Users
+} from "lucide-react";
 import {
   applySegmentsAndScoresAction,
   createSegmentRuleAction,
   deleteSegmentRuleAction,
   runEnrichmentAction
 } from "@/app/actions";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill } from "@/components/status-pill";
 import { getWorkspaceContext } from "@/lib/phase1/store";
-import type { AppState } from "@/lib/phase1/types";
+import type { AppState, EnrichmentProvider } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
-
-const metricIcons = [Gem, BadgeCheck, DatabaseZap, Tags];
 
 export default async function EnrichmentPage() {
   const { state, workspaceId } = await getWorkspaceContext("manage_enrichment");
@@ -30,33 +39,71 @@ export default async function EnrichmentPage() {
   const averageContactCoverage = average(contacts.map((contact) => contact.enrichmentCoverage ?? 0));
   const cacheHits = cache.reduce((total, entry) => total + entry.hits, 0);
   const scoreRows = latestScores(scores);
+  const p1Scores = scoreRows.filter((score) => score.priority === "P1").length;
+  const lowCoverageContacts = contacts.filter((contact) => (contact.enrichmentCoverage ?? 0) < 50).length;
+  const providerRows = providerSummaries(enrichments, cache);
 
-  const metrics = [
+  const stats = [
     {
       label: "Company coverage",
-      value: averageCompanyCoverage,
-      suffix: "%",
+      value: `${averageCompanyCoverage}%`,
       note: "Firmographic and web signal coverage",
+      icon: Gem,
       tone: averageCompanyCoverage >= 70 ? "success" as const : "warning" as const
     },
     {
       label: "Contact coverage",
-      value: averageContactCoverage,
-      suffix: "%",
+      value: `${averageContactCoverage}%`,
       note: "Persona and contact data coverage",
+      icon: BadgeCheck,
       tone: averageContactCoverage >= 70 ? "success" as const : "warning" as const
     },
     {
       label: "Provider cache",
-      value: cache.length,
+      value: formatNumber(cache.length),
       note: `${formatNumber(cacheHits)} cache hits recorded`,
+      icon: DatabaseZap,
       tone: "info" as const
     },
     {
       label: "Segmented records",
-      value: recordSegments.length,
+      value: formatNumber(recordSegments.length),
       note: `${formatNumber(segmentRules.length)} active segment rules`,
+      icon: Tags,
       tone: "success" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "Company enrich",
+      value: averageCompanyCoverage,
+      suffix: "%",
+      note: `${formatNumber(companies.length)} companies`,
+      icon: ServerCog,
+      tone: averageCompanyCoverage >= 70 ? "success" as const : "warning" as const
+    },
+    {
+      label: "Contact enrich",
+      value: averageContactCoverage,
+      suffix: "%",
+      note: `${formatNumber(lowCoverageContacts)} below 50%`,
+      icon: Users,
+      tone: averageContactCoverage >= 70 ? "success" as const : "warning" as const
+    },
+    {
+      label: "P1 scores",
+      value: p1Scores,
+      note: "Highest priority leads",
+      icon: Target,
+      tone: p1Scores ? "success" as const : "warning" as const
+    },
+    {
+      label: "Providers",
+      value: providerRows.length,
+      note: "Local enrichment lanes",
+      icon: Sparkles,
+      tone: "info" as const
     }
   ];
 
@@ -84,43 +131,49 @@ export default async function EnrichmentPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="Enrichment metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? Gem;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Enrichment metrics">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
+        ))}
       </section>
 
-      <section className="grid two">
+      <section className="ops-stage-strip four-up" aria-label="Enrichment workflow lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
+      </section>
+
+      <section className="grid two enrichment-ops-grid">
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
+              <div className="page-kicker">Scoring</div>
               <h2 className="section-title">Score focus</h2>
               <p className="section-subtitle">Latest lead scores with priority, reasons, and scoring component breakdown.</p>
             </div>
             <StatusPill label={`${formatNumber(scoreRows.length)} latest`} tone="info" />
           </div>
-          <div className="panel-body stage-list">
-            {scoreRows.map((score) => {
+          <div className="panel-body signal-list">
+            {scoreRows.slice(0, 8).map((score) => {
               const contact = state.contacts.find((item) => item.id === score.contactId);
               return (
-                <div className="stage-row" key={score.id}>
-                  <div className="stage-meta">
+                <div className="score-focus-row" key={score.id}>
+                  <div className="score-focus-top">
                     <div className="entity">
                       <strong>{contact?.name ?? "Unknown contact"}</strong>
                       <span>{contact?.email}</span>
                     </div>
                     <StatusPill label={score.priority} tone={score.priority === "P1" ? "success" : "info"} />
                   </div>
-                  <div className="entity">
-                    <strong>{score.score} score</strong>
+                  <div className="score-meter">
+                    <strong>{score.score}</strong>
                     <ProgressBar value={score.score} />
                   </div>
-                  <div className="chip-row">
-                    <span className="pill">verification {score.breakdown.verification}</span>
-                    <span className="pill">enrichment {score.breakdown.enrichment}</span>
-                    <span className="pill">segment {score.breakdown.segment}</span>
-                    <span className="pill">fit {score.breakdown.fit}</span>
+                  <div className="score-breakdown-grid">
+                    <Breakdown label="Verify" value={score.breakdown.verification} />
+                    <Breakdown label="Enrich" value={score.breakdown.enrichment} />
+                    <Breakdown label="Segment" value={score.breakdown.segment} />
+                    <Breakdown label="Fit" value={score.breakdown.fit} />
                   </div>
                   <p className="section-subtitle">{score.reasons.slice(0, 2).join(" | ")}</p>
                 </div>
@@ -133,10 +186,40 @@ export default async function EnrichmentPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
+              <div className="page-kicker">Providers</div>
+              <h2 className="section-title">Local enrichment waterfall</h2>
+              <p className="section-subtitle">Provider-style lanes, cache reuse, confidence, and target coverage.</p>
+            </div>
+            <Layers3 size={20} aria-hidden="true" />
+          </div>
+          <div className="panel-body provider-waterfall-list">
+            {providerRows.map((row) => (
+              <div className="provider-waterfall-row" key={row.provider}>
+                <div className="stage-meta">
+                  <strong>{providerLabel(row.provider)}</strong>
+                  <StatusPill label={`${formatNumber(row.results)} results`} tone="info" />
+                </div>
+                <SummaryMeter label="Average confidence" value={row.confidence} total={100} note={`${formatNumber(row.cacheHits)} cache hits`} />
+                <div className="chip-row">
+                  <span className="pill">{formatNumber(row.companies)} companies</span>
+                  <span className="pill">{formatNumber(row.contacts)} contacts</span>
+                  <span className="pill">{formatNumber(row.cacheEntries)} cache entries</span>
+                </div>
+              </div>
+            ))}
+            {providerRows.length === 0 ? <p className="section-subtitle">No enrichment provider results yet.</p> : null}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
               <h2 className="section-title">Segment rules</h2>
               <p className="section-subtitle">Active rules used by the deterministic segment engine.</p>
             </div>
-            <Layers3 size={20} aria-hidden="true" />
+            <StatusPill label={`${formatNumber(segmentRules.length)} rules`} tone="info" />
           </div>
           <div className="panel-body stage-list">
             {segmentRules.map((rule) => (
@@ -163,33 +246,6 @@ export default async function EnrichmentPage() {
             {segmentRules.length === 0 ? <p className="section-subtitle">No segment rules have been created yet.</p> : null}
           </div>
         </div>
-      </section>
-
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Provider cache</h2>
-              <p className="section-subtitle">TTL-backed local cache entries that prevent repeated enrichment work.</p>
-            </div>
-            <StatusPill label={`${cache.length} entries`} tone="info" />
-          </div>
-          <div className="panel-body stage-list">
-            {cache.slice(0, 8).map((entry) => (
-              <div className="stage-row" key={entry.id}>
-                <div className="stage-meta">
-                  <strong>{entry.provider}</strong>
-                  <span>{entry.hits} hits</span>
-                </div>
-                <p className="section-subtitle">{entry.cacheKey}</p>
-                <div className="chip-row">
-                  <span className="pill">confidence {entry.confidence}</span>
-                  <span className="pill">expires {formatDate(entry.expiresAt)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
         <div className="panel">
           <div className="panel-header">
@@ -203,7 +259,7 @@ export default async function EnrichmentPage() {
             {enrichments.slice(0, 8).map((result) => (
               <div className="stage-row" key={result.id}>
                 <div className="stage-meta">
-                  <strong>{result.provider}</strong>
+                  <strong>{providerLabel(result.provider)}</strong>
                   <span>{result.targetType}</span>
                 </div>
                 <div className="chip-row">
@@ -275,7 +331,7 @@ export default async function EnrichmentPage() {
             <label htmlFor="signalKeywords">Signal keywords</label>
             <input id="signalKeywords" name="signalKeywords" placeholder="hiring growth, phone ready" />
           </div>
-          <div className="field">
+          <div className="field full">
             <label>Allowed grades</label>
             <div className="chip-row">
               {["A", "B", "C", "D"].map((grade) => (
@@ -285,7 +341,7 @@ export default async function EnrichmentPage() {
               ))}
             </div>
           </div>
-          <div className="field">
+          <div className="field full">
             <label>Gates</label>
             <div className="chip-row">
               <label className="pill">
@@ -293,8 +349,7 @@ export default async function EnrichmentPage() {
               </label>
             </div>
           </div>
-          <div className="field">
-            <label aria-hidden="true">&nbsp;</label>
+          <div className="field full">
             <button className="button primary" type="submit">
               Save and score
             </button>
@@ -302,6 +357,44 @@ export default async function EnrichmentPage() {
         </form>
       </section>
     </>
+  );
+}
+
+
+function Breakdown({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="score-breakdown-cell">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function SummaryMeter({
+  label,
+  value,
+  total,
+  note
+}: {
+  label: string;
+  value: number;
+  total: number;
+  note: string;
+}) {
+  const percent = total ? Math.round((value / total) * 100) : 0;
+
+  return (
+    <div className="summary-meter">
+      <div className="row-meta">
+        <strong>{label}</strong>
+        <span>{formatNumber(value)}</span>
+      </div>
+      <ProgressBar value={percent} />
+      <div className="row-meta">
+        <span>{percent}%</span>
+        <span>{note}</span>
+      </div>
+    </div>
   );
 }
 
@@ -325,6 +418,31 @@ function latestScores(scores: AppState["leadScores"]) {
       return true;
     })
     .slice(0, 30);
+}
+
+function providerSummaries(enrichments: AppState["enrichmentResults"], cache: AppState["providerCache"]) {
+  const providers = new Set<EnrichmentProvider>([
+    ...enrichments.map((result) => result.provider),
+    ...cache.map((entry) => entry.provider)
+  ]);
+
+  return Array.from(providers).map((provider) => {
+    const results = enrichments.filter((result) => result.provider === provider);
+    const cacheEntries = cache.filter((entry) => entry.provider === provider);
+    return {
+      provider,
+      results: results.length,
+      confidence: average(results.map((result) => result.confidence)),
+      companies: results.filter((result) => result.targetType === "company").length,
+      contacts: results.filter((result) => result.targetType === "contact").length,
+      cacheEntries: cacheEntries.length,
+      cacheHits: cacheEntries.reduce((total, entry) => total + entry.hits, 0)
+    };
+  });
+}
+
+function providerLabel(provider: EnrichmentProvider) {
+  return provider.replace("Syncore ", "").replace(" Local", "");
 }
 
 function formatDate(value: string) {

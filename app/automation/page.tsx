@@ -30,12 +30,43 @@ import { StatusPill, statusTone } from "@/components/status-pill";
 import { aiAutomationDashboard } from "@/lib/phase1/ai";
 import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { StatCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
 export default async function AutomationPage() {
   const { state, workspaceId } = await getDeveloperWorkspaceContext();
   const dashboard = aiAutomationDashboard(state, workspaceId);
+  const stats = [
+    {
+      label: "Personalizations",
+      value: formatNumber(dashboard.metrics.personalizations),
+      note: "First lines, angles, offers, and recommended channels.",
+      icon: Lightbulb,
+      tone: "info" as const
+    },
+    {
+      label: "Reply classifications",
+      value: formatNumber(dashboard.metrics.classifiedReplies),
+      note: "Positive, negative, objection, OOO, unsubscribe, and neutral intent.",
+      icon: MessageSquareText,
+      tone: "info" as const
+    },
+    {
+      label: "AI lead scores",
+      value: formatNumber(dashboard.metrics.leadScorePredictions),
+      note: `${formatNumber(dashboard.metrics.appliedRecords)} applied AI records.`,
+      icon: Brain,
+      tone: dashboard.metrics.appliedRecords ? "success" as const : "info" as const
+    },
+    {
+      label: "Revenue insights",
+      value: formatNumber(dashboard.metrics.revenueInsights),
+      note: "Source, campaign, and SDR attribution signals.",
+      icon: TrendingUp,
+      tone: "success" as const
+    }
+  ];
 
   return (
     <>
@@ -55,39 +86,10 @@ export default async function AutomationPage() {
         }
       />
 
-      <section className="grid metrics">
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Personalizations</span>
-            <Lightbulb size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(dashboard.metrics.personalizations)}</div>
-          <span className="metric-note">First lines, angles, offers, and recommended channels.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Reply classifications</span>
-            <MessageSquareText size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(dashboard.metrics.classifiedReplies)}</div>
-          <span className="metric-note">Positive, negative, objection, OOO, unsubscribe, and neutral intent.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">AI lead scores</span>
-            <Brain size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(dashboard.metrics.leadScorePredictions)}</div>
-          <span className="metric-note">{formatNumber(dashboard.metrics.appliedRecords)} applied AI records.</span>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top">
-            <span className="metric-label">Revenue insights</span>
-            <TrendingUp size={20} aria-hidden="true" />
-          </div>
-          <div className="metric-value gradient-text">{formatNumber(dashboard.metrics.revenueInsights)}</div>
-          <span className="metric-note">Source, campaign, and SDR attribution signals.</span>
-        </article>
+      <section className="stat-grid" aria-label="AI automation metrics">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
+        ))}
       </section>
 
       <section className="panel">
@@ -518,6 +520,7 @@ export default async function AutomationPage() {
     </>
   );
 }
+
 
 type AiRecordActionsProps = {
   recordId: string;

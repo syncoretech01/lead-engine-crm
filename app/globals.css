@@ -664,7 +664,6 @@ button {
 }
 
 .panel,
-.metric-card,
 .item-card {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -710,27 +709,6 @@ button {
   padding: 18px;
 }
 
-.metric-card {
-  display: grid;
-  gap: 12px;
-  min-height: 132px;
-  padding: 18px;
-}
-
-.metric-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.metric-label {
-  color: var(--fg2);
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .metric-value {
   color: var(--fg1);
   font-family: var(--font-display);
@@ -757,6 +735,10 @@ button {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+
+.stat-grid.admin-five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .stat-card {
@@ -950,6 +932,106 @@ button {
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 850;
+}
+
+.lead-action-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.lead-action-card,
+.lead-gate-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  padding: 15px;
+  text-decoration: none;
+}
+
+.lead-action-card {
+  grid-template-rows: auto 1fr auto;
+  min-height: 178px;
+}
+
+.lead-action-icon,
+.lead-gate-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--blue-50);
+  color: var(--blue-700);
+}
+
+.lead-action-copy,
+.lead-gate-copy {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.lead-action-copy {
+  grid-column: 1 / -1;
+}
+
+.lead-action-copy strong,
+.lead-gate-copy strong {
+  color: var(--fg1);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.lead-action-copy span,
+.lead-gate-copy span {
+  color: var(--fg2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.lead-action-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--fg3);
+}
+
+.lead-gate-card.success .lead-gate-icon {
+  background: var(--teal-50);
+  color: var(--teal-800);
+}
+
+.lead-gate-card.warning .lead-gate-icon {
+  background: var(--warning-soft);
+  color: #7a4e00;
+}
+
+.table-score-cell {
+  display: grid;
+  width: 78px;
+  gap: 5px;
+}
+
+.table-score-cell strong {
+  color: var(--fg1);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.table-score-cell .progress-track {
+  height: 6px;
 }
 
 .tier-badge {
@@ -1342,6 +1424,10 @@ button {
   gap: 16px;
 }
 
+.ops-stage-strip.four-up {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .ops-stage-card {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
@@ -1558,6 +1644,105 @@ button {
 
 .compact-empty {
   min-height: 112px;
+}
+
+.enrichment-ops-grid {
+  align-items: start;
+}
+
+.score-focus-row,
+.provider-waterfall-row {
+  display: grid;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 14px;
+}
+
+.score-focus-row:last-child,
+.provider-waterfall-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.score-focus-top,
+.score-meter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.score-meter strong {
+  flex: 0 0 auto;
+  color: var(--fg1);
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.score-meter .progress-track {
+  max-width: 240px;
+}
+
+.score-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.score-breakdown-cell {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  padding: 9px;
+}
+
+.score-breakdown-cell span {
+  color: var(--fg2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.score-breakdown-cell strong {
+  color: var(--fg1);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 850;
+}
+
+.provider-waterfall-list {
+  display: grid;
+  gap: 14px;
+}
+
+.export-template-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.export-template-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+}
+
+.template-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--blue-50);
+  color: var(--blue-700);
 }
 
 .success-text {
@@ -1947,21 +2132,6 @@ tbody tr:hover {
   background: var(--danger);
 }
 
-.score-ring {
-  display: grid;
-  width: 54px;
-  height: 54px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 7px solid var(--blue-50);
-  border-top-color: var(--teal-500);
-  border-radius: 50%;
-  color: var(--blue-700);
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 850;
-}
-
 .kanban {
   display: grid;
   grid-template-columns: repeat(4, minmax(220px, 1fr));
@@ -2065,9 +2235,13 @@ tbody tr:hover {
 
   .grid.metrics,
   .stat-grid,
+  .stat-grid.admin-five,
+  .lead-action-grid,
   .profile-card-grid,
   .job-status-strip,
   .ops-stage-strip,
+  .ops-stage-strip.four-up,
+  .export-template-grid,
   .grid.five,
   .grid.four,
   .grid.three {
@@ -2113,6 +2287,14 @@ tbody tr:hover {
 
   .view-switcher {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .lead-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lead-action-card {
+    min-height: auto;
   }
 
   .sidebar-section {
@@ -2176,6 +2358,12 @@ tbody tr:hover {
     align-items: flex-start;
   }
 
+  .score-focus-top,
+  .score-meter {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .job-status-card,
   .ops-stage-card {
     grid-template-columns: 1fr;
@@ -2196,8 +2384,11 @@ tbody tr:hover {
   .profile-meta-grid,
   .job-status-strip,
   .ops-stage-strip,
+  .ops-stage-strip.four-up,
   .quality-grade-grid,
   .split-signal-grid,
+  .export-template-grid,
+  .score-breakdown-grid,
   .grid.five,
   .grid.four,
   .grid.three,

@@ -8,7 +8,6 @@ import {
   Target,
   Users
 } from "lucide-react";
-import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -20,8 +19,7 @@ import { opportunityStages } from "@/lib/phase1/crm";
 import { accountViewsForWorkspace, opportunityViews } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
-
-const metricIcons = [Building2, Target, CircleDollarSign, ClipboardList];
+import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -54,28 +52,62 @@ export default async function AccountsPage() {
   const metrics = [
     {
       label: "CRM accounts",
-      value: accounts.length,
+      value: formatNumber(accounts.length),
       note: `${formatNumber(accounts.reduce((total, account) => total + account.contacts, 0))} linked contacts`,
+      icon: Building2,
       tone: "info" as const
     },
     {
       label: "P1 accounts",
-      value: p1Accounts.length,
+      value: formatNumber(p1Accounts.length),
       note: "Highest-priority account focus",
+      icon: Target,
       tone: p1Accounts.length ? "success" as const : "info" as const
     },
     {
       label: "Open pipeline",
-      value: openPipeline,
-      currency: true,
+      value: formatCurrency(openPipeline),
       note: `${formatNumber(openOpportunities.length)} open opportunities`,
+      icon: CircleDollarSign,
       tone: "success" as const
     },
     {
       label: "Accounts with tasks",
-      value: taskAccounts.length,
+      value: formatNumber(taskAccounts.length),
       note: "Open account or contact work",
+      icon: ClipboardList,
       tone: taskAccounts.length ? "warning" as const : "success" as const
+    }
+  ];
+
+  const lanes = [
+    {
+      label: "P1 accounts",
+      value: p1Accounts.length,
+      note: "Highest account priority",
+      icon: Target,
+      tone: p1Accounts.length ? "success" as const : "info" as const
+    },
+    {
+      label: "Open work",
+      value: taskAccounts.length,
+      note: "Accounts with tasks",
+      icon: ClipboardList,
+      tone: taskAccounts.length ? "warning" as const : "success" as const
+    },
+    {
+      label: "Open deals",
+      value: openOpportunities.length,
+      note: formatCurrency(openPipeline),
+      icon: CircleDollarSign,
+      tone: "success" as const
+    },
+    {
+      label: "Sources",
+      value: sourceRows.length,
+      note: "Account acquisition lanes",
+      icon: Building2,
+      tone: "info" as const
     }
   ];
 
@@ -99,11 +131,16 @@ export default async function AccountsPage() {
         }
       />
 
-      <section className="grid metrics" aria-label="Account metrics">
-        {metrics.map((metric, index) => {
-          const Icon = metricIcons[index] ?? Building2;
-          return <MetricCard key={metric.label} {...metric} icon={Icon} />;
-        })}
+      <section className="stat-grid" aria-label="Account metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
+        ))}
+      </section>
+
+      <section className="ops-stage-strip four-up" aria-label="Account operating lanes">
+        {lanes.map((lane) => (
+          <LaneCard key={lane.label} {...lane} />
+        ))}
       </section>
 
       <section className="grid two">
@@ -284,6 +321,7 @@ export default async function AccountsPage() {
 }
 
 type AccountView = Awaited<ReturnType<typeof accountViewsForWorkspace>>[number];
+
 
 function sourceSummary(accounts: AccountView[]) {
   const rows = new Map<string, { source: string; count: number; contacts: number; score: number }>();
