@@ -40,9 +40,13 @@ export default async function DataQualityPage() {
   const catchAll = verificationResults.filter((result) => result.catchAll).length;
   const roleEmail = verificationResults.filter((result) => result.roleEmail).length;
   const validPhones = verificationResults.filter((result) => result.phoneStatus === "Valid").length;
+  const verificationReferenceTime = verificationResults.reduce(
+    (latest, result) => Math.max(latest, Date.parse(result.verifiedAt) || 0),
+    0
+  );
   const expiringSoon = verificationResults.filter((result) => {
     const expiresAt = Date.parse(result.expiresAt);
-    return Number.isFinite(expiresAt) && expiresAt - Date.now() < 1000 * 60 * 60 * 24 * 30;
+    return Number.isFinite(expiresAt) && expiresAt - verificationReferenceTime < 1000 * 60 * 60 * 24 * 30;
   }).length;
   const latestVerification = [...verificationResults].sort((a, b) => Date.parse(b.verifiedAt) - Date.parse(a.verifiedAt));
   const gradeRows = gradeDistribution(contacts);

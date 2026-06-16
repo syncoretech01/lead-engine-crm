@@ -311,14 +311,13 @@ function ExportTemplateCard({
   template: ExportTemplate;
   rules: Array<{ id: string; name: string }>;
 }) {
-  const Icon = templateIcon(template.id);
   const readiness = Math.min(100, Math.max(0, Math.round(template.eligible * 10)));
 
   return (
     <article className="export-template-card card-hover">
       <div className="item-card-header">
         <div className="template-icon">
-          <Icon size={18} aria-hidden="true" />
+          {templateIcon(template.id)}
         </div>
         <StatusPill label={`${formatNumber(template.eligible)} eligible`} tone={template.eligible ? "success" : "warning"} />
       </div>
@@ -404,10 +403,10 @@ function GateCard({
 }
 
 function templateIcon(type: ExportRecord["type"]) {
-  if (type === "verified_email_leads") return Mail;
-  if (type === "sdr_assignments") return Users;
-  if (type === "contacts") return Phone;
-  return FileText;
+  if (type === "verified_email_leads") return <Mail size={18} aria-hidden="true" />;
+  if (type === "sdr_assignments") return <Users size={18} aria-hidden="true" />;
+  if (type === "contacts") return <Phone size={18} aria-hidden="true" />;
+  return <FileText size={18} aria-hidden="true" />;
 }
 
 function formatDate(value: string) {

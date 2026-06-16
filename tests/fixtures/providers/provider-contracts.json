@@ -223,6 +223,37 @@
     }
   },
   {
+    "id": "ringcentral-webhook-mock",
+    "providerId": "ringcentral",
+    "operation": "process_webhook",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "RingCentral call and SMS webhook contract placeholder.",
+    "input": {
+      "providerEventId": "rc-event-demo",
+      "eventType": "SMS_DELIVERED",
+      "payload": {
+        "eventType": "SMS_DELIVERED"
+      }
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 1,
+      "warningIncludes": "Mock outreach sender"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "eventType": "SMS_DELIVERED"
+    },
+    "normalizedResultFixture": {
+      "webhookEvents": [
+        {
+          "status": "ignored"
+        }
+      ]
+    }
+  },
+  {
     "id": "amazon-ses-webhook-mock",
     "providerId": "amazon_ses",
     "operation": "process_webhook",

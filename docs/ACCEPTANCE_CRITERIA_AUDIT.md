@@ -44,7 +44,7 @@ Summary:
 | D-grade emails are never exported as verified email leads. | Done | `lib/phase1/exporting.ts:recordIdsForExport`, `defaultExportRules` | Add automated tests. |
 | Suppressed emails are never exported or assigned. | Done | `lib/phase1/exporting.ts`, `lib/phase1/sdr.ts`, `lib/phase1/verification.ts` | Add end-to-end suppression tests. |
 | Catch-all and risky emails are segmented separately. | Partial | `VerificationResult.catchAll`, grade `C`, `app/data-quality/page.tsx` | Risk flags exist, but dedicated segmentation/export views need tightening. |
-| Phone numbers are normalized and validated where possible. | Done | `lib/phase1/normalization.ts`, `lib/phase1/verification.ts:phoneStatusFor` | Add RingCentral where applicable plus a dedicated phone lookup provider if needed. |
+| Phone numbers are normalized and validated where possible. | Done | `lib/phase1/normalization.ts`, `lib/phase1/verification.ts:phoneStatusFor` | Connect Twilio Lookup for validation and RingCentral for telephony/SMS once credentials exist. |
 | Verification result stores provider, timestamp, raw response, and TTL. | Done | `VerificationResult` in `lib/phase1/types.ts`, `lib/phase1/verification.ts` | Add provider-specific raw payload preservation. |
 | Stale verification can be re-run without duplicating records. | Partial | `runWorkspaceVerification` updates contacts and writes verification history | No stale-only TTL selector; repeated runs append new verification history. |
 

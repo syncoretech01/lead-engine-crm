@@ -1,6 +1,6 @@
 # Syncore Production Architecture
 
-Last updated: 2026-06-09
+Last updated: 2026-06-16
 
 This document locks the target production stack for Syncore Lead Engine & CRM. The current app remains a local MVP with provider simulations and snapshot-first persistence; these decisions define what we will connect as we harden the product.
 
@@ -17,8 +17,9 @@ This document locks the target production stack for Syncore Lead Engine & CRM. T
 | Queue/cache | Redis plus a worker runner | Not connected |
 | Object storage | S3-compatible storage for recordings, CSV exports, attachments, and provider payload archives | Not connected |
 | Telephony/SMS | RingCentral | Local placeholder updated to `RingCentral Local`; real API integration pending |
-| Phone validation | Dedicated lookup/verification provider if RingCentral does not cover validation needs | Not connected |
-| Email sending | Dedicated ESP such as Resend, Postmark, or SendGrid | Local provider only |
+| Phone validation | Twilio Lookup | Mock provider registry only |
+| Cold outbound email | Smartlead | Mock provider registry only |
+| Transactional app email | Amazon SES | Mock provider registry only |
 | Auth | Clerk/Auth0/OIDC-compatible identity provider | Demo cookie/env session only |
 | Search | PostgreSQL search first; OpenSearch only when lead search volume requires it | Deferred |
 | Analytics warehouse | PostgreSQL reports first; ClickHouse only when event/report scale requires it | Deferred |
@@ -37,7 +38,17 @@ RingCentral is the preferred production provider for telephony and SMS. It shoul
 - CRM activity creation from call/SMS events
 - suppression side effects from STOP/opt-out events
 
-RingCentral should not be treated as the only data-quality provider. Phone normalization exists locally; production phone validation may still require a dedicated lookup provider.
+RingCentral should not be treated as the phone validation provider. Phone normalization exists locally; production phone validation should use Twilio Lookup before phone-ready exports, SMS sends, or calling workflows.
+
+## Email Scope
+
+Smartlead is the selected production provider for cold outbound campaign sending and reply/bounce/unsubscribe sync. Amazon SES is the selected production provider for transactional application email such as invites, login/admin messages, and system notifications.
+
+Smartlead and Amazon SES should remain separate integration lanes:
+
+- Smartlead owns prospecting campaign email and outreach engagement events.
+- Amazon SES owns product/system email and provider-native delivery/bounce/complaint webhooks.
+- Neither provider should receive suppressed contacts or records that fail Syncore verification gates.
 
 ## AWS EC2 Scope
 
@@ -65,11 +76,13 @@ OpenSearch/Elasticsearch, ClickHouse, Kafka, Kubernetes, Terraform, and full Ope
 1. Continue Prisma/PostgreSQL hardening by cutting low-risk reads from snapshot state to normalized tables.
 2. Add production auth and signed sessions.
 3. Add Redis-backed workers for extraction, enrichment, verification, exports, and webhook side effects.
-4. Connect RingCentral behind the existing SMS/call event interfaces.
-5. Add S3-compatible storage for recordings, exports, and attachments.
-6. Connect the selected email provider and provider-native email webhooks.
-7. Add observability, deployment environments, backups, and incident runbooks.
-8. Add search/analytics infrastructure only when measured volume justifies it.
+4. Connect Twilio Lookup behind the phone validation interface.
+5. Connect RingCentral behind the existing SMS/call event interfaces.
+6. Add S3-compatible storage for recordings, exports, attachments, and provider payload archives.
+7. Connect Smartlead cold outbound sync and webhooks.
+8. Connect Amazon SES transactional email and webhooks.
+9. Add observability, deployment environments, backups, and incident runbooks.
+10. Add search/analytics infrastructure only when measured volume justifies it.
 
 ## Manual Inputs Needed Later
 
@@ -78,6 +91,8 @@ The user does not need to provide anything for the current architecture-lock ste
 - creating production PostgreSQL and storage resources
 - choosing the auth provider account
 - creating a RingCentral developer app and supplying credentials
-- choosing the email provider and setting DNS records
+- creating Twilio credentials with Lookup access
+- creating a Smartlead account and supplying API credentials
+- creating an Amazon SES identity and completing DNS verification
 - creating S3 bucket credentials or AWS IAM roles
 - completing legal/privacy review before live outbound sending

@@ -24,21 +24,21 @@ import { formatCurrency, formatNumber } from "@/lib/utils";
 export const sourceHealth = [
   {
     source: "Apollo",
-    status: "Connected",
+    status: "Mock ready",
     trust: 85,
     credits: "12.4k",
     fields: ["company", "contact", "email", "title"]
   },
   {
     source: "Hunter",
-    status: "Connected",
+    status: "Mock ready",
     trust: 80,
     credits: "7.8k",
     fields: ["email finder", "verification", "confidence"]
   },
   {
     source: "Google Places",
-    status: "Connected",
+    status: "Mock ready",
     trust: 75,
     credits: "billing cap on",
     fields: ["local business", "phone", "rating", "place id"]

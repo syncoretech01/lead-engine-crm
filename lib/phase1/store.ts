@@ -82,8 +82,8 @@ export async function updateState<T>(
 }
 
 async function getPrismaClient() {
-  const module = await import("@/lib/prisma");
-  return module.prisma;
+  const prismaModule = await import("@/lib/prisma");
+  return prismaModule.prisma;
 }
 
 export function appendAudit(

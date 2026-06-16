@@ -74,6 +74,20 @@ export const providerRegistry: ProviderConfig[] = [
     executionMode: "mock"
   },
   {
+    id: "ringcentral",
+    name: "RingCentral",
+    categories: ["telephony_sms", "outreach_sender"],
+    capabilities: ["send_campaign", "process_webhook"],
+    envVars: [
+      "RINGCENTRAL_CLIENT_ID",
+      "RINGCENTRAL_CLIENT_SECRET",
+      "RINGCENTRAL_JWT",
+      "RINGCENTRAL_SERVER_URL"
+    ],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
     id: "smartlead",
     name: "Smartlead",
     categories: ["outreach_sender"],

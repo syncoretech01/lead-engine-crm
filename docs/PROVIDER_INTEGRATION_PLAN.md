@@ -1,6 +1,6 @@
 # Provider Integration Plan
 
-Updated: 2026-06-10
+Updated: 2026-06-16
 
 This plan defines the selected provider strategy only. It does not add live provider calls.
 
@@ -16,6 +16,7 @@ This plan defines the selected provider strategy only. It does not add live prov
 | Lusha | Email/phone fallback provider | Fallback contact details when Apollo/Hunter/PDL are incomplete. |
 | People Data Labs | Person/company enrichment fallback | Company/person enrichment and profile normalization. |
 | Twilio Lookup | Phone validation | Phone number format, carrier, line type, and validity checks. |
+| RingCentral | Telephony and SMS | Calls, SMS, delivery/reply/STOP webhooks, and call recording metadata. |
 | Smartlead | Cold email sender | Campaign sending, reply/bounce/open/click/unsubscribe sync. |
 | Amazon SES | Transactional app email | Application notifications, passwordless/login/admin system email if needed. |
 
@@ -28,6 +29,8 @@ This plan defines the selected provider strategy only. It does not add live prov
 - Each provider call must produce a job/run record, raw response reference, normalized result, and audit trail.
 - Retries must be idempotent by workspace, provider, provider record ID, and operation.
 - Real provider adapters should be added behind feature flags or disabled-by-default configuration.
+- RingCentral owns telephony/SMS execution; Twilio Lookup only validates phone numbers.
+- Smartlead owns cold outbound email; Amazon SES only sends transactional app email.
 
 ## Contract Test Harness
 
@@ -40,11 +43,12 @@ Provider adapter contract helpers live in `lib/providers/contract-testing.ts`. M
 3. Apollo lead source adapter.
 4. Google Places local source adapter.
 5. Twilio Lookup phone validation adapter.
-6. People Data Labs enrichment fallback adapter.
-7. Lusha fallback contact data adapter.
-8. Smartlead outbound sync adapter.
-9. Amazon SES transactional email adapter.
-10. Apify controlled custom extraction adapter.
+6. RingCentral telephony/SMS webhook adapter.
+7. People Data Labs enrichment fallback adapter.
+8. Lusha fallback contact data adapter.
+9. Smartlead outbound sync adapter.
+10. Amazon SES transactional email adapter.
+11. Apify controlled custom extraction adapter.
 
 ## Non-Goals For The Current Stabilization Pass
 

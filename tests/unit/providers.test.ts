@@ -35,6 +35,7 @@ describe("provider registry", () => {
       "lusha",
       "people_data_labs",
       "twilio_lookup",
+      "ringcentral",
       "smartlead",
       "amazon_ses"
     ]);
@@ -50,6 +51,8 @@ describe("provider registry", () => {
     expect(providerSupportsCategory("lusha", "phone_lookup")).toBe(true);
     expect(providerSupportsCategory("people_data_labs", "enrichment")).toBe(true);
     expect(providerSupportsCategory("twilio_lookup", "phone_lookup")).toBe(true);
+    expect(providerSupportsCategory("ringcentral", "telephony_sms")).toBe(true);
+    expect(providerSupportsCategory("ringcentral", "outreach_sender")).toBe(true);
     expect(providerSupportsCategory("smartlead", "outreach_sender")).toBe(true);
     expect(providerSupportsCategory("amazon_ses", "transactional_email")).toBe(true);
     expect(providersByCategory("lead_source").map((provider) => provider.id)).toEqual([
@@ -62,6 +65,12 @@ describe("provider registry", () => {
   it("exposes required future env vars through provider config", () => {
     expect(providerConfig("apollo").envVars).toEqual(["APOLLO_API_KEY"]);
     expect(providerConfig("twilio_lookup").envVars).toEqual(["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"]);
+    expect(providerConfig("ringcentral").envVars).toEqual([
+      "RINGCENTRAL_CLIENT_ID",
+      "RINGCENTRAL_CLIENT_SECRET",
+      "RINGCENTRAL_JWT",
+      "RINGCENTRAL_SERVER_URL"
+    ]);
     expect(providerConfig("amazon_ses").envVars).toEqual([
       "AWS_SES_REGION",
       "AWS_ACCESS_KEY_ID",
@@ -76,6 +85,7 @@ describe("provider registry", () => {
     const phoneLookup = createMockPhoneLookupProvider("twilio_lookup");
     const enrichment = createMockEnrichmentProvider("people_data_labs");
     const sender = createMockOutreachSenderProvider("smartlead");
+    const telephonySender = createMockOutreachSenderProvider("ringcentral");
 
     await expect(leadSource.discoverCompanies({ query: "dealers" }, context)).resolves.toMatchObject({
       status: "skipped",
@@ -106,6 +116,15 @@ describe("provider registry", () => {
       data: []
     });
     await expect(sender.sendCampaign({ campaignId: "campaign-1" }, context)).resolves.toMatchObject({
+      status: "skipped",
+      data: []
+    });
+    await expect(
+      telephonySender.sendCampaign({ campaignId: "sms-campaign-1" }, {
+        ...context,
+        providerId: "ringcentral"
+      })
+    ).resolves.toMatchObject({
       status: "skipped",
       data: []
     });

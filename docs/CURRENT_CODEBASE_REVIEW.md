@@ -1,6 +1,6 @@
 # Current Codebase Review
 
-Updated: 2026-06-10
+Updated: 2026-06-16
 
 ## Current Architecture
 
@@ -12,14 +12,14 @@ The active compatibility source of truth is still `AppStateSnapshot`. In file mo
 
 - CSV import simulates lead ingestion and source staging.
 - Local normalization, dedupe, verification, enrichment, scoring, routing, outreach, reporting, retention, and AI automation run without external services.
-- Outreach providers are local placeholders for email and RingCentral-style SMS/voice behavior.
+- Outreach providers are local placeholders for Syncore Mail Local and RingCentral Local SMS/voice behavior.
 - Webhooks are signed with a Syncore HMAC scheme for local testing.
 - RBAC/session behavior uses cookies or environment-selected demo users.
 - Brand assets and Syncore UI styling are included locally.
 
 ## Real Production Gaps
 
-- No real provider adapters are connected yet.
+- No real provider adapters are connected yet for Apollo, Google Places, Apify, Hunter, ZeroBounce, Lusha, People Data Labs, Twilio Lookup, RingCentral, Smartlead, or Amazon SES.
 - No production identity provider is wired.
 - Provider job/run records and a local mock worker queue exist for extraction, enrichment, verification, sending, and webhook sync. No real provider network execution is active yet.
 - Provider connection metadata, encrypted database secret records, secret-reference fields, credential audit tables, server-only management services, and an admin Integration Center UI shell exist. Managed KMS/secret-store integration is not implemented yet.
@@ -53,6 +53,7 @@ Current provider behavior is intentionally local:
 - Local email/SMS/voice provider records stand in for outbound event capture.
 - Provider execution jobs/runs and the local worker can claim queued work, lease runs, recover expired locks, queue due retries, and complete mock execution without making network calls.
 - Provider adapter contract fixtures and no-network contract tests exist for the selected provider strategy.
+- The selected production provider lanes are Apollo, Google Places, Apify, Hunter, ZeroBounce, Lusha, People Data Labs, Twilio Lookup for phone validation, RingCentral for telephony/SMS, Smartlead for cold outbound email, and Amazon SES for transactional app email.
 - Local webhook processing tests idempotency and suppression side effects.
 
 Real provider work should start only after the typed provider abstraction, credential model, provider job model, and no-network contract tests are stable.
@@ -93,6 +94,6 @@ Still needed:
 
 1. Cut over CRM/compliance/reporting write paths to selected normalized transactions.
 2. Add managed KMS/secret-store support or rotate away from the local encryption key path before production.
-3. Add real provider adapters one at a time behind feature flags and contract tests.
+3. Add real provider adapters one at a time behind feature flags and contract tests, starting with Twilio Lookup/RingCentral/Smartlead only after credentials and compliance review are ready.
 4. Add production auth and signed session management.
 5. Add production migration, backup/restore, tenant-isolation, and deployment checks.

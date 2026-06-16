@@ -1,6 +1,6 @@
 # Provider Waterfall
 
-Updated: 2026-06-10
+Updated: 2026-06-16
 
 This waterfall describes production routing intent. The current codebase only includes typed interfaces and no-op adapters.
 
@@ -12,6 +12,7 @@ This waterfall describes production routing intent. The current codebase only in
 4. Lusha for fallback phone or email data when the prior sources are incomplete.
 5. ZeroBounce for final email verification before export or outreach.
 6. Twilio Lookup for phone validation before phone-ready exports, SMS, or calls.
+7. RingCentral for SMS/call execution only after suppression and validation gates pass.
 
 ## Local Business Waterfall
 
@@ -22,6 +23,7 @@ This waterfall describes production routing intent. The current codebase only in
 5. ZeroBounce for email verification.
 6. Twilio Lookup for phone validation.
 7. Lusha fallback for missing phone/contact details.
+8. RingCentral for SMS/call execution only after compliance gates pass.
 
 ## Niche And Apify Waterfall
 
@@ -47,7 +49,8 @@ This waterfall describes production routing intent. The current codebase only in
 2. Check DNC/SMS opt-out suppression.
 3. Twilio Lookup for validity, line type, and carrier where permitted.
 4. Lusha fallback if no phone exists and the record is high value.
-5. Store provider, normalized number, validation status, line type, timestamp, TTL, and compliance flags.
+5. Mark RingCentral readiness only after the number is validated and not suppressed.
+6. Store provider, normalized number, validation status, line type, timestamp, TTL, and compliance flags.
 
 ## Enrichment Waterfall
 
@@ -63,7 +66,8 @@ This waterfall describes production routing intent. The current codebase only in
 
 1. Export or sync only records that pass suppression, consent/lawful basis, verification, and segment gates.
 2. Smartlead handles cold outbound campaign sending and reply/bounce/unsubscribe sync.
-3. Amazon SES handles transactional product email only.
-4. Provider webhook events enter Syncore through signed routes.
-5. Events update outreach history, suppression records, campaign metrics, SDR activity, and audit logs.
-6. Positive replies can be classified before opportunity creation once automation guardrails are in place.
+3. RingCentral handles SMS, voice, call recording metadata, delivery/reply/failure, and STOP webhooks.
+4. Amazon SES handles transactional product email only.
+5. Provider webhook events enter Syncore through signed routes.
+6. Events update outreach history, suppression records, campaign metrics, SDR activity, and audit logs.
+7. Positive replies can be classified before opportunity creation once automation guardrails are in place.

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
@@ -130,10 +131,24 @@ export function AppShell({ children, session }: AppShellProps) {
       <aside className="sidebar" aria-label="Primary navigation">
         <Link href="/" className="brand">
           <span className="brand-mark">
-            <img src={syncoreBrand.logo.logomark} alt="" className="brand-mark-image" />
+            <Image
+              src={syncoreBrand.logo.logomark}
+              alt=""
+              width={46}
+              height={46}
+              className="brand-mark-image"
+              priority
+            />
           </span>
           <span className="brand-copy">
-            <img src={syncoreBrand.logo.wordmark} alt={syncoreBrand.shortName} className="brand-wordmark" />
+            <Image
+              src={syncoreBrand.logo.wordmark}
+              alt={syncoreBrand.shortName}
+              width={248}
+              height={72}
+              className="brand-wordmark"
+              priority
+            />
             <span className="brand-subtitle">{syncoreBrand.productName}</span>
           </span>
         </Link>

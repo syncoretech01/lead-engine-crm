@@ -7,6 +7,7 @@ export type ProviderId =
   | "lusha"
   | "people_data_labs"
   | "twilio_lookup"
+  | "ringcentral"
   | "smartlead"
   | "amazon_ses";
 
@@ -15,6 +16,7 @@ export type ProviderCategory =
   | "email_finder"
   | "email_verification"
   | "phone_lookup"
+  | "telephony_sms"
   | "enrichment"
   | "outreach_sender"
   | "transactional_email";

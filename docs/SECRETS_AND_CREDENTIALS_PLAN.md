@@ -1,6 +1,6 @@
 # Secrets And Credentials Plan
 
-Updated: 2026-06-10
+Updated: 2026-06-16
 
 ## API Key Storage
 
@@ -32,7 +32,7 @@ Examples:
 
 - `DATABASE_URL`
 - `SYNCORE_STORAGE_DRIVER`
-- provider fallback placeholders for local development
+- provider fallback placeholders for local development, including Apollo, Google Places, Apify, Hunter, ZeroBounce, Lusha, People Data Labs, Twilio Lookup, RingCentral, Smartlead, and Amazon SES
 - encryption/KMS configuration
 
 ## Workspace-Level Provider Config

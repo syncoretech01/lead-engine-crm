@@ -15,7 +15,7 @@ An MVP scaffold for the lead acquisition engine and Salesforce-style CRM describ
 - Phase 3 enrichment workspace with provider cache, waterfall, segment rules, and explainable scoring
 - Phase 4 CRM workspace with account/contact pages, opportunities, timelines, notes, tasks, manual call logs, and custom fields
 - Phase 5 SDR operations with lead assignment, queue views, SLA timers, reminders, manager dashboard, and reassignment rules
-- Phase 6 outreach tracking with local email plus RingCentral-style SMS/voice providers, campaigns, sequences, events, bounce/unsubscribe handling, SMS opt-outs, and call recording metadata
+- Phase 6 outreach tracking with local email plus RingCentral Local SMS/voice providers, campaigns, sequences, events, bounce/unsubscribe handling, SMS opt-outs, and call recording metadata
 - Phase 7 reporting and compliance with admin dashboards, source/SDR/campaign performance, deliverability health, pipeline reports, retention workflows, compliance evidence, and audit history
 - Phase 8 AI and advanced automation with local AI personalization, reply classification, call summaries, predictive lead scoring, ICP recommendations, deliverability advice, revenue attribution insights, and automation run history
 - Suppression management that immediately re-verifies affected contacts
@@ -60,7 +60,7 @@ For local schema iteration without a migration history yet, use `npm run prisma:
 
 ## Production architecture direction
 
-The selected production direction is documented in `docs/PRODUCTION_ARCHITECTURE.md`. In short: keep Next.js and Prisma/PostgreSQL, use RingCentral for telephony/SMS, use S3-compatible object storage for recordings/exports/attachments, add Redis-backed workers for async jobs, and defer OpenSearch/ClickHouse/Kafka/Kubernetes until measured scale requires them.
+The selected production direction is documented in `docs/PRODUCTION_ARCHITECTURE.md`. In short: keep Next.js and Prisma/PostgreSQL, use RingCentral for telephony/SMS, Twilio Lookup for phone validation, Smartlead for cold outbound email, Amazon SES for transactional app email, S3-compatible object storage for recordings/exports/attachments, Redis-backed workers for async jobs, and defer OpenSearch/ClickHouse/Kafka/Kubernetes until measured scale requires them.
 
 ## Session and RBAC
 
@@ -77,6 +77,7 @@ Provider webhooks post to `/api/webhooks/email` and `/api/webhooks/sms`. Request
 ## Test baseline
 
 ```bash
+npm run lint
 npm run typecheck
 npm run test
 npm run test:e2e
