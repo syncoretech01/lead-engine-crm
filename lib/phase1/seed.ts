@@ -311,7 +311,7 @@ export function createSeedState(): AppState {
   ];
 
   const state: AppState = {
-    version: 12,
+    version: 14,
     workspaces: [workspace],
     users,
     workspaceMembers,
@@ -321,6 +321,9 @@ export function createSeedState(): AppState {
       actorUserId: "user-nora"
     }),
     providerCredentialAudits: [],
+    providerEncryptedSecrets: [],
+    providerJobs: [],
+    providerJobRuns: [],
     searchProfiles: seededProfiles,
     leadJobs: seededJobs,
     asyncJobRuns: [],

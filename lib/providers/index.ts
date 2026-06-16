@@ -8,6 +8,12 @@ export type {
   PhoneLookupProvider
 } from "@/lib/providers/interfaces";
 export {
+  assertProviderFixtureIsRedacted,
+  assertProviderResultContract,
+  runProviderContractFixture,
+  type ProviderContractFixture
+} from "@/lib/providers/contract-testing";
+export {
   createMockEmailFinderProvider,
   createMockEmailVerificationProvider,
   createMockEnrichmentProvider,

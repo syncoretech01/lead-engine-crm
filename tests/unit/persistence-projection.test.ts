@@ -5,6 +5,9 @@ import {
   normalizedProjectionSummary,
   syncNormalizedProjectionToPrisma
 } from "@/lib/phase1/persistence-projection";
+import { resolveSession } from "@/lib/phase1/auth";
+import { createProviderJob } from "@/lib/phase1/provider-jobs";
+import { saveProviderConnectionConfig } from "@/lib/phase1/provider-connections";
 import { createSeedState } from "@/lib/phase1/seed";
 
 describe("normalized persistence projection", () => {
@@ -24,6 +27,9 @@ describe("normalized persistence projection", () => {
     expect(summary.tables.workspaces).toBe(state.workspaces.length);
     expect(summary.tables.providerConnections).toBe(state.providerConnections.length);
     expect(summary.tables.providerCredentialAudits).toBe(state.providerCredentialAudits.length);
+    expect(summary.tables.providerEncryptedSecrets).toBe(state.providerEncryptedSecrets.length);
+    expect(summary.tables.providerJobs).toBe(state.providerJobs.length);
+    expect(summary.tables.providerJobRuns).toBe(state.providerJobRuns.length);
     expect(summary.tables.contacts).toBe(state.contacts.length);
     expect(summary.tables.accounts).toBe(state.companies.length);
     expect(summary.tables.crmContacts).toBe(state.contacts.length);
@@ -70,6 +76,46 @@ describe("normalized persistence projection", () => {
     expect(connection?.secretRef).toBeUndefined();
     expect(connection?.maskedSecretSuffix).toBeUndefined();
     expect(JSON.stringify(connection)).not.toMatch(/api[_-]?key|secret-value|token-value/i);
+    expect(projection.providerEncryptedSecrets).toHaveLength(0);
+    expect(projection.providerJobs).toHaveLength(0);
+    expect(projection.providerJobRuns).toHaveLength(0);
+  });
+
+  it("projects provider job/run records without raw credentials", () => {
+    const state = createSeedState();
+    const session = resolveSession(state, {
+      userId: "user-nora",
+      workspaceId: "workspace-syncore"
+    });
+    saveProviderConnectionConfig(state, session, {
+      providerId: "apollo",
+      enabled: true,
+      secretValue: "apollo-secret-value",
+      allowedOperations: ["discover_companies"]
+    });
+    const created = createProviderJob(state, session, {
+      providerId: "apollo",
+      operation: "discover_companies",
+      inputSummary: { industry: "SaaS", apiToken: "never-project-this" },
+      startImmediately: true
+    });
+    const projection = createNormalizedPersistenceProjection(state);
+    const job = projection.providerJobs.find((row) => row.id === created.job.id);
+    const run = projection.providerJobRuns.find((row) => row.id === created.run.id);
+
+    expect(job).toMatchObject({
+      providerId: "apollo",
+      operation: "discover_companies",
+      status: "Running"
+    });
+    expect(run).toMatchObject({
+      providerId: "apollo",
+      operation: "discover_companies",
+      status: "Running",
+      attempt: 1
+    });
+    expect(JSON.stringify(job)).not.toContain("never-project-this");
+    expect(JSON.stringify(run)).not.toContain("never-project-this");
   });
 
   it("produces deterministic hashes and changes when projected state changes", () => {
@@ -147,6 +193,15 @@ describe("normalized persistence projection", () => {
 
   it("can mirror only provider credential tables for integration settings writes", async () => {
     const state = createSeedState();
+    const session = resolveSession(state, {
+      userId: "user-nora",
+      workspaceId: "workspace-syncore"
+    });
+    saveProviderConnectionConfig(state, session, {
+      providerId: "apollo",
+      enabled: true,
+      secretValue: "apollo-secret-value"
+    });
     const touchedDelegates = new Set<string>();
     const client = new Proxy({}, {
       get(_target, property) {
@@ -162,16 +217,71 @@ describe("normalized persistence projection", () => {
     });
 
     const result = await syncNormalizedProjectionToPrisma(state, client, {
-      tables: ["providerConnections", "providerCredentialAudits", "auditLogs"]
+      tables: ["providerConnections", "providerCredentialAudits", "providerEncryptedSecrets", "auditLogs"]
     });
 
-    expect(result.syncedTables).toEqual(["providerConnections", "providerCredentialAudits", "auditLogs"]);
+    expect(result.syncedTables).toEqual([
+      "providerConnections",
+      "providerCredentialAudits",
+      "providerEncryptedSecrets",
+      "auditLogs"
+    ]);
     expect(result.skippedTables).toEqual([]);
     expect(touchedDelegates).toEqual(new Set([
       "auditLog.deleteMany",
+      "providerEncryptedSecret.deleteMany",
       "providerCredentialAudit.deleteMany",
       "providerConnection.deleteMany",
       "providerConnection.upsert",
+      "providerCredentialAudit.upsert",
+      "providerEncryptedSecret.upsert",
+      "auditLog.upsert"
+    ]));
+  });
+
+  it("can mirror only provider job tables for provider execution writes", async () => {
+    const state = createSeedState();
+    const session = resolveSession(state, {
+      userId: "user-nora",
+      workspaceId: "workspace-syncore"
+    });
+    saveProviderConnectionConfig(state, session, {
+      providerId: "zerobounce",
+      enabled: true,
+      secretValue: "zerobounce-secret",
+      allowedOperations: ["verify_email"]
+    });
+    createProviderJob(state, session, {
+      providerId: "zerobounce",
+      operation: "verify_email",
+      inputSummary: { email: "nora@syncore.tech" }
+    });
+    const touchedDelegates = new Set<string>();
+    const client = new Proxy({}, {
+      get(_target, property) {
+        return {
+          deleteMany: async () => {
+            touchedDelegates.add(`${String(property)}.deleteMany`);
+          },
+          upsert: async () => {
+            touchedDelegates.add(`${String(property)}.upsert`);
+          }
+        };
+      }
+    });
+
+    const result = await syncNormalizedProjectionToPrisma(state, client, {
+      tables: ["providerJobs", "providerJobRuns", "auditLogs"]
+    });
+
+    expect(result.syncedTables).toEqual(["providerJobs", "providerJobRuns", "auditLogs"]);
+    expect(result.skippedTables).toEqual([]);
+    expect(touchedDelegates).toEqual(new Set([
+      "auditLog.deleteMany",
+      "providerJobRun.deleteMany",
+      "providerJob.deleteMany",
+      "providerJob.upsert",
+      "providerJobRun.upsert",
       "auditLog.upsert"
     ]));
   });

@@ -103,6 +103,9 @@ model Workspace {
   integrations        Integration[]
   providerConnections ProviderConnection[]
   providerCredentialAudits ProviderCredentialAudit[]
+  providerEncryptedSecrets ProviderEncryptedSecret[]
+  providerJobs        ProviderJob[]
+  providerJobRuns     ProviderJobRun[]
   searchProfiles      SearchProfile[]
   leadJobs            LeadJob[]
   rawLeads            RawLead[]
@@ -242,6 +245,9 @@ model ProviderConnection {
   updatedAt          DateTime  @updatedAt
   workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   credentialAudits   ProviderCredentialAudit[]
+  encryptedSecrets   ProviderEncryptedSecret[]
+  providerJobs        ProviderJob[]
+  providerJobRuns     ProviderJobRun[]
 
   @@unique([workspaceId, providerId])
   @@index([workspaceId, status])
@@ -263,6 +269,108 @@ model ProviderCredentialAudit {
 
   @@index([workspaceId, providerId, createdAt])
   @@index([workspaceId, providerConnectionId])
+}
+
+model ProviderEncryptedSecret {
+  id                   String             @id @default(cuid())
+  workspaceId          String
+  providerConnectionId String
+  providerId           String
+  secretRef            String             @unique
+  secretVersion        Int                @default(0)
+  storage              String             @default("Encrypted database")
+  algorithm            String
+  keyId                String
+  ciphertext           String
+  iv                   String
+  authTag              String
+  checksum             String
+  rotatedFromSecretRef String?
+  createdById          String?
+  createdAt            DateTime           @default(now())
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  providerConnection   ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([providerConnectionId, secretVersion])
+  @@index([workspaceId, providerId, secretVersion])
+  @@index([workspaceId, providerConnectionId])
+}
+
+model ProviderJob {
+  id                   String             @id @default(cuid())
+  workspaceId          String
+  providerConnectionId String
+  providerId           String
+  operation            String
+  status               String
+  priority             Int                @default(5)
+  idempotencyKey       String
+  requestHash          String
+  sourceObjectType     String?
+  sourceObjectId       String?
+  inputSummary         Json
+  resultSummary        Json?
+  recordsRead          Int                @default(0)
+  recordsWritten       Int                @default(0)
+  costCents            Int                @default(0)
+  errorMessage         String?
+  maxAttempts          Int                @default(3)
+  queuedAt             DateTime
+  startedAt            DateTime?
+  completedAt          DateTime?
+  nextRetryAt          DateTime?
+  createdById          String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  providerConnection   ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Cascade)
+  runs                 ProviderJobRun[]
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, providerId, operation, status])
+  @@index([workspaceId, status, priority])
+  @@index([workspaceId, sourceObjectType, sourceObjectId])
+}
+
+model ProviderJobRun {
+  id                   String             @id @default(cuid())
+  workspaceId          String
+  providerJobId        String
+  providerConnectionId String
+  providerId           String
+  operation            String
+  status               String
+  attempt              Int                @default(1)
+  maxAttempts          Int                @default(3)
+  idempotencyKey       String
+  providerRequestId    String
+  providerRunId        String?
+  checkpoint           Json?
+  requestSummary       Json?
+  responseSummary      Json?
+  rawResponseRef       String?
+  recordsRead          Int                @default(0)
+  recordsWritten       Int                @default(0)
+  costCents            Int                @default(0)
+  durationMs           Int?
+  errorMessage         String?
+  lockedBy             String?
+  lockedAt             DateTime?
+  lockExpiresAt        DateTime?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  nextRetryAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  providerConnection   ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Cascade)
+  providerJob          ProviderJob        @relation(fields: [providerJobId], references: [id], onDelete: Cascade)
+
+  @@unique([providerJobId, attempt])
+  @@index([workspaceId, providerId, operation, status])
+  @@index([workspaceId, providerJobId])
+  @@index([workspaceId, status, nextRetryAt])
+  @@index([workspaceId, status, lockExpiresAt])
 }
 
 model SearchProfile {

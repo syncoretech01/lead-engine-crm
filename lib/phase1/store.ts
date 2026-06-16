@@ -235,8 +235,8 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
   const state = input;
   const workspaceId = state.workspaces[0]?.id;
 
-  if ((state as { version: number }).version !== 12) {
-    state.version = 12;
+  if ((state as { version: number }).version !== 14) {
+    state.version = 14;
     changed = true;
   }
 
@@ -259,6 +259,21 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
 
   if (!Array.isArray(state.providerCredentialAudits)) {
     state.providerCredentialAudits = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.providerEncryptedSecrets)) {
+    state.providerEncryptedSecrets = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.providerJobs)) {
+    state.providerJobs = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.providerJobRuns)) {
+    state.providerJobRuns = [];
     changed = true;
   }
 

@@ -286,6 +286,96 @@ export type ProviderCredentialAudit = {
   createdAt: string;
 };
 
+export type ProviderEncryptedSecret = {
+  id: string;
+  workspaceId: string;
+  providerConnectionId: string;
+  providerId: ProviderId;
+  secretRef: string;
+  secretVersion: number;
+  storage: ProviderSecretStorage;
+  algorithm: string;
+  keyId: string;
+  ciphertext: string;
+  iv: string;
+  authTag: string;
+  checksum: string;
+  rotatedFromSecretRef?: string;
+  createdById?: string;
+  createdAt: string;
+};
+
+export type ProviderJobStatus =
+  | "Queued"
+  | "Running"
+  | "Completed"
+  | "Failed"
+  | "Retry scheduled"
+  | "Skipped"
+  | "Cancelled";
+
+export type ProviderJobOperation = ProviderCapability;
+
+export type ProviderJob = {
+  id: string;
+  workspaceId: string;
+  providerConnectionId: string;
+  providerId: ProviderId;
+  operation: ProviderJobOperation;
+  status: ProviderJobStatus;
+  priority: number;
+  idempotencyKey: string;
+  requestHash: string;
+  sourceObjectType?: string;
+  sourceObjectId?: string;
+  inputSummary: Record<string, unknown>;
+  resultSummary?: Record<string, unknown>;
+  recordsRead: number;
+  recordsWritten: number;
+  costCents: number;
+  errorMessage?: string;
+  maxAttempts: number;
+  queuedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  nextRetryAt?: string;
+  createdById?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProviderJobRun = {
+  id: string;
+  workspaceId: string;
+  providerJobId: string;
+  providerConnectionId: string;
+  providerId: ProviderId;
+  operation: ProviderJobOperation;
+  status: ProviderJobStatus;
+  attempt: number;
+  maxAttempts: number;
+  idempotencyKey: string;
+  providerRequestId: string;
+  providerRunId?: string;
+  checkpoint?: Record<string, string | number | boolean | undefined>;
+  requestSummary?: Record<string, unknown>;
+  responseSummary?: Record<string, unknown>;
+  rawResponseRef?: string;
+  recordsRead: number;
+  recordsWritten: number;
+  costCents: number;
+  durationMs?: number;
+  errorMessage?: string;
+  lockedBy?: string;
+  lockedAt?: string;
+  lockExpiresAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  nextRetryAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type RawLead = {
   id: string;
   workspaceId: string;
@@ -1211,12 +1301,15 @@ export type AuditLog = {
 };
 
 export type AppState = {
-  version: 12;
+  version: 14;
   workspaces: Workspace[];
   users: User[];
   workspaceMembers: WorkspaceMember[];
   providerConnections: ProviderConnection[];
   providerCredentialAudits: ProviderCredentialAudit[];
+  providerEncryptedSecrets: ProviderEncryptedSecret[];
+  providerJobs: ProviderJob[];
+  providerJobRuns: ProviderJobRun[];
   searchProfiles: SearchProfile[];
   leadJobs: LeadJob[];
   asyncJobRuns: AsyncJobRun[];

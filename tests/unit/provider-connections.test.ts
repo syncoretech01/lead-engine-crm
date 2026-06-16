@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { resolveSession } from "@/lib/phase1/auth";
+import { resolveProviderSecret } from "@/lib/phase1/provider-secret-vault";
 import {
   disableProviderConnection,
   providerConnectionViewsForWorkspace,
@@ -56,9 +57,24 @@ describe("provider connection management", () => {
       maskedSecretSuffix: "1234"
     });
     expect("secretRef" in view).toBe(false);
-    expect(persisted?.secretRef).toMatch(/^local-secret-ref:\/\/workspace-syncore\/apollo\/v1\//);
+    expect(persisted?.secretRef).toMatch(/^syncore-secret:\/\/workspace-syncore\/apollo\/v1\//);
     expect(persisted?.secretVersion).toBe(1);
     expect(persisted?.scopes).toEqual(["people:read", "companies:read"]);
+    expect(state.providerEncryptedSecrets).toHaveLength(1);
+    expect(state.providerEncryptedSecrets[0]).toMatchObject({
+      workspaceId: "workspace-syncore",
+      providerConnectionId: persisted?.id,
+      providerId: "apollo",
+      secretRef: persisted?.secretRef,
+      secretVersion: 1,
+      storage: "Encrypted database",
+      algorithm: "aes-256-gcm"
+    });
+    expect(state.providerEncryptedSecrets[0].ciphertext).not.toContain(secretValue);
+    expect(resolveProviderSecret(state, persisted?.secretRef ?? "", {
+      workspaceId: "workspace-syncore",
+      providerId: "apollo"
+    })).toBe(secretValue);
     expect(audit).toMatchObject({
       providerId: "apollo",
       action: "Created",
@@ -66,6 +82,39 @@ describe("provider connection management", () => {
     });
     expect(JSON.stringify(state)).not.toContain(secretValue);
     expect(JSON.stringify(audit.redactedMetadata)).not.toContain(secretValue);
+  });
+
+  it("rotates encrypted provider secrets and preserves versioned secret references", () => {
+    const state = createSeedState();
+    const session = resolveSession(state, {
+      userId: "user-nora",
+      workspaceId: "workspace-syncore"
+    });
+
+    saveProviderConnectionConfig(state, session, {
+      providerId: "hunter",
+      enabled: true,
+      secretValue: "hunter-secret-v1"
+    });
+    const firstRef = state.providerConnections.find((connection) => connection.providerId === "hunter")?.secretRef;
+
+    saveProviderConnectionConfig(state, session, {
+      providerId: "hunter",
+      enabled: true,
+      secretValue: "hunter-secret-v2"
+    });
+
+    const persisted = state.providerConnections.find((connection) => connection.providerId === "hunter");
+    expect(persisted?.secretVersion).toBe(2);
+    expect(persisted?.secretRef).not.toBe(firstRef);
+    expect(state.providerEncryptedSecrets).toHaveLength(2);
+    expect(state.providerEncryptedSecrets[1].rotatedFromSecretRef).toBe(firstRef);
+    expect(resolveProviderSecret(state, persisted?.secretRef ?? "", {
+      workspaceId: "workspace-syncore",
+      providerId: "hunter"
+    })).toBe("hunter-secret-v2");
+    expect(JSON.stringify(state)).not.toContain("hunter-secret-v1");
+    expect(JSON.stringify(state)).not.toContain("hunter-secret-v2");
   });
 
   it("tests enabled provider config in mock mode without network access", () => {
@@ -116,6 +165,26 @@ describe("provider connection management", () => {
       providerId: "hunter",
       action: "Tested"
     });
+  });
+
+  it("fails mock connection testing when the encrypted secret record is missing", () => {
+    const state = createSeedState();
+    const session = resolveSession(state, {
+      userId: "user-nora",
+      workspaceId: "workspace-syncore"
+    });
+
+    saveProviderConnectionConfig(state, session, {
+      providerId: "lusha",
+      enabled: true,
+      secretValue: "lusha-secret-4444"
+    });
+    state.providerEncryptedSecrets = [];
+    const result = testProviderConnectionConfig(state, session, "lusha");
+
+    expect(result.status).toBe("Failed");
+    expect(result.message).toBe("Encrypted credential record is missing.");
+    expect(result.connection.status).toBe("Needs attention");
   });
 
   it("disables provider connections and keeps the secret reference server-side only", () => {

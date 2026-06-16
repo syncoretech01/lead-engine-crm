@@ -15,7 +15,7 @@ describe("compliance hardening", () => {
     const emailSteps = state.sequenceSteps.filter((step) => step.workspaceId === workspaceId && step.channel === "Email");
     const calls = state.trackedCalls.filter((call) => call.workspaceId === workspaceId);
 
-    expect(state.version).toBe(12);
+    expect(state.version).toBe(14);
     expect(state.dataSubjectRequests).toEqual([]);
     expect(state.contacts.every((contact) => contact.lawfulBasis && contact.consentStatus && contact.consentSource)).toBe(true);
     expect(emailSteps.every((step) => step.complianceStatus === "Compliant")).toBe(true);

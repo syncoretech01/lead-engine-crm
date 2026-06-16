@@ -29,19 +29,22 @@ This plan defines the selected provider strategy only. It does not add live prov
 - Retries must be idempotent by workspace, provider, provider record ID, and operation.
 - Real provider adapters should be added behind feature flags or disabled-by-default configuration.
 
+## Contract Test Harness
+
+Provider adapter contract helpers live in `lib/providers/contract-testing.ts`. Mock/recorded-ready fixtures live in `tests/fixtures/providers/provider-contracts.json`, and the no-network contract suite lives in `tests/unit/provider-contracts.test.ts`. Add or update fixtures before enabling each live adapter.
+
 ## Initial Rollout Order
 
-1. Credential storage and provider connection testing.
-2. ZeroBounce email verification adapter.
-3. Hunter email finder adapter.
-4. Apollo lead source adapter.
-5. Google Places local source adapter.
-6. Twilio Lookup phone validation adapter.
-7. People Data Labs enrichment fallback adapter.
-8. Lusha fallback contact data adapter.
-9. Smartlead outbound sync adapter.
-10. Amazon SES transactional email adapter.
-11. Apify controlled custom extraction adapter.
+1. ZeroBounce email verification adapter.
+2. Hunter email finder adapter.
+3. Apollo lead source adapter.
+4. Google Places local source adapter.
+5. Twilio Lookup phone validation adapter.
+6. People Data Labs enrichment fallback adapter.
+7. Lusha fallback contact data adapter.
+8. Smartlead outbound sync adapter.
+9. Amazon SES transactional email adapter.
+10. Apify controlled custom extraction adapter.
 
 ## Non-Goals For The Current Stabilization Pass
 

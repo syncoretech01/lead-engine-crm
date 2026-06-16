@@ -143,7 +143,7 @@ Summary:
 | RBAC enforces role permissions. | Partial | `lib/phase1/auth.ts`, cookie/env session resolver, page/API/action gates, filtered app shell, auth tests | Needs production identity provider integration and signed session management. |
 | Workspace isolation is enforced. | Partial | Active session workspace filters pages, query helpers, export routes, action mutations, Prisma workspace-scoped schema, normalized projection sync, normalized contact/account/compliance/CRM/outreach/export read-path tests, scoped normalized export/outreach write tables | Continue normalized write-path cutover for CRM/compliance/reporting actions, then add production tenant/session tests. |
 | Admin dashboard shows lead source, SDR, campaign, deliverability, pipeline, and data quality metrics. | Done | `app/reports/page.tsx`, `lib/phase1/reporting.ts` | Add metric contract tests. |
-| Async jobs are observable with status, retries, failures, and logs. | Partial | `AsyncJobRun`, `JobLog`, `JobIdempotencyRecord`, retry action, and Lead Jobs monitor | Needs real background workers/queue storage and provider execution. |
+| Async jobs are observable with status, retries, failures, and logs. | Partial | `AsyncJobRun`, `JobLog`, `JobIdempotencyRecord`, provider execution job/run records, local worker queue claiming/leases/retries, retry action, and Lead Jobs monitor | Needs production worker process/deployment and real provider execution. |
 | Webhooks are validated and idempotent. | Partial | Signed `/api/webhooks/email` and `/api/webhooks/sms`, HMAC validation, `WebhookEvent` receipts, duplicate suppression tests, scoped normalized email/SMS write tables | Add provider-native signature schemes and production replay-window checks. |
 | Audit logs show who changed what and when. | Done | `AuditLog`, `appendAudit`, compliance/report pages | Add audit event tests. |
 | System can safely retry failed jobs without creating duplicates. | Partial | Retry attempts reuse idempotency keys and CSV imports replay existing jobs | Extend to provider event idempotency and persisted queue locks. |
@@ -153,7 +153,7 @@ Summary:
 1. Continue persistence hardening: contact/account, compliance/reporting, CRM event, outreach event, and export read paths can now prefer normalized Prisma rows; export and outreach event/webhook writes now use scoped normalized table sync. Next cut over CRM/compliance/reporting write paths, then add production migrations and backup/restore checks.
 2. Expand the test baseline with workflow-specific E2E, webhook, auth/RBAC, and persistence migration coverage.
 3. Add production identity provider integration, signed sessions, and expanded route/data permission E2E coverage.
-4. Add real background queue workers, provider adapters, queue locks, rate limits, and resumable extraction execution.
-5. Add first real provider integration lane after credentials are available.
+4. Add real provider adapters, provider rate limits, and resumable extraction execution behind feature flags and contract tests.
+5. Add first real provider integration lane when credentials and production safety checks are ready.
 6. Add provider-native webhook signature compatibility, replay-window enforcement, and real provider webhook fixtures.
 7. Run production legal/privacy review for lawful basis defaults, DSR identity verification, legal holds, and outbound footer language before live sending.

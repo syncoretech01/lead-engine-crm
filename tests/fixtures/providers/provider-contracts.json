@@ -1,0 +1,256 @@
+[
+  {
+    "id": "apollo-discover-companies-mock",
+    "providerId": "apollo",
+    "operation": "discover_companies",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "Apollo company discovery contract placeholder for B2B searches.",
+    "input": {
+      "query": "manufacturing software",
+      "industries": ["Industrial Automation"],
+      "geographies": ["United States"],
+      "limit": 25
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock lead source"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "records": []
+    },
+    "normalizedResultFixture": {
+      "companies": []
+    }
+  },
+  {
+    "id": "google-places-discover-companies-mock",
+    "providerId": "google_places",
+    "operation": "discover_companies",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "Google Places local business discovery contract placeholder.",
+    "input": {
+      "query": "roofing contractors",
+      "geographies": ["Dallas, TX"],
+      "limit": 20
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock lead source"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "places": []
+    },
+    "normalizedResultFixture": {
+      "companies": []
+    }
+  },
+  {
+    "id": "apify-discover-contacts-mock",
+    "providerId": "apify",
+    "operation": "discover_contacts",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "Apify controlled extraction contract placeholder for contact discovery.",
+    "input": {
+      "query": "directory extraction",
+      "titles": ["Founder"],
+      "limit": 10
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock lead source"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "datasetItems": []
+    },
+    "normalizedResultFixture": {
+      "contacts": []
+    }
+  },
+  {
+    "id": "hunter-find-email-mock",
+    "providerId": "hunter",
+    "operation": "find_email",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "Hunter email finder contract placeholder.",
+    "input": {
+      "fullName": "Nora Patel",
+      "domain": "syncore.tech",
+      "companyName": "Syncore"
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock email finder"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "emails": []
+    },
+    "normalizedResultFixture": {
+      "foundEmails": []
+    }
+  },
+  {
+    "id": "zerobounce-verify-email-mock",
+    "providerId": "zerobounce",
+    "operation": "verify_email",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "ZeroBounce email verification contract placeholder.",
+    "input": {
+      "email": "nora@syncore.tech"
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock email verifier"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "status": "not_checked"
+    },
+    "normalizedResultFixture": {
+      "verifiedEmails": []
+    }
+  },
+  {
+    "id": "lusha-find-phone-mock",
+    "providerId": "lusha",
+    "operation": "find_phone",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "Lusha phone fallback contract placeholder.",
+    "input": {
+      "fullName": "Nora Patel",
+      "companyName": "Syncore",
+      "domain": "syncore.tech"
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock phone finder"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "phones": []
+    },
+    "normalizedResultFixture": {
+      "foundPhones": []
+    }
+  },
+  {
+    "id": "people-data-labs-enrich-company-mock",
+    "providerId": "people_data_labs",
+    "operation": "enrich_company",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "People Data Labs company enrichment contract placeholder.",
+    "input": {
+      "name": "Syncore",
+      "domain": "syncore.tech"
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock enrichment provider"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "company": null
+    },
+    "normalizedResultFixture": {
+      "enrichedCompanies": []
+    }
+  },
+  {
+    "id": "twilio-lookup-verify-phone-mock",
+    "providerId": "twilio_lookup",
+    "operation": "verify_phone",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "Twilio Lookup phone validation contract placeholder.",
+    "input": {
+      "phone": "+15550109000",
+      "countryCode": "US"
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock phone lookup"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "valid": null
+    },
+    "normalizedResultFixture": {
+      "verifiedPhones": []
+    }
+  },
+  {
+    "id": "smartlead-send-campaign-mock",
+    "providerId": "smartlead",
+    "operation": "send_campaign",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "Smartlead campaign send contract placeholder.",
+    "input": {
+      "campaignId": "campaign-demo",
+      "recipientEmail": "nora@syncore.tech",
+      "subject": "Intro",
+      "body": "Hello from Syncore"
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock outreach sender"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "messages": []
+    },
+    "normalizedResultFixture": {
+      "sendResults": []
+    }
+  },
+  {
+    "id": "amazon-ses-webhook-mock",
+    "providerId": "amazon_ses",
+    "operation": "process_webhook",
+    "recordedAt": "2026-06-16T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "Amazon SES event webhook contract placeholder.",
+    "input": {
+      "providerEventId": "ses-event-demo",
+      "eventType": "Delivery",
+      "payload": {
+        "eventType": "Delivery"
+      }
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 1,
+      "warningIncludes": "Mock outreach sender"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "eventType": "Delivery"
+    },
+    "normalizedResultFixture": {
+      "webhookEvents": [
+        {
+          "status": "ignored"
+        }
+      ]
+    }
+  }
+]

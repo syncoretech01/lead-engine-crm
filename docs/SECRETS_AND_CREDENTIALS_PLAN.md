@@ -6,16 +6,23 @@ Updated: 2026-06-10
 
 Provider API keys should be stored per workspace and per provider connection. The database should store metadata such as provider ID, status, scopes, last tested time, creator/updater, and encrypted secret references. Raw API keys should never be stored in plaintext.
 
-Implementation status: provider connection metadata, secret-reference fields, masked suffix fields, last-test metadata, credential audit rows, server-only save/update/test/disable services, and an admin Integration Center UI shell now exist. The raw secret encryption/write path is still pending.
+Implementation status: provider connection metadata, encrypted database secret records, secret-reference fields, masked suffix fields, last-test metadata, credential audit rows, server-only save/update/test/disable services, and an admin Integration Center UI shell now exist.
 
 ## Encrypted Secrets
 
-Production should use envelope encryption:
+The current local implementation uses server-side AES-256-GCM encryption before writing provider credentials to the app state or Prisma projection. The encrypted record is stored separately from provider connection metadata and is referenced by a `syncore-secret://...` secret reference.
+
+Production should evolve this into envelope encryption:
 
 - Application-level encryption before database write, or a managed secret store.
 - A KMS-managed master key or equivalent.
 - Secret versioning for rotation.
 - Separate read/write permissions for credential management and provider execution.
+
+Current environment controls:
+
+- `SYNCORE_CREDENTIAL_ENCRYPTION_KEY` supplies the application encryption key material.
+- `SYNCORE_CREDENTIAL_KEY_ID` labels which key protected a stored credential version.
 
 ## Environment Variables
 
@@ -77,4 +84,4 @@ Credential lifecycle events must write audit logs:
 
 Audit records should include actor, workspace, provider, action, timestamp, and redacted metadata only.
 
-Implementation status: dedicated credential audit rows, server-only service helpers, and the Integration Center UI shell are available for provider lifecycle events. The next build step should replace local secret references with encrypted database storage or a managed secret-store integration.
+Implementation status: dedicated credential audit rows, encrypted database credential records, server-only service helpers, provider job/run records, local worker queue support, and the Integration Center UI shell are available for provider lifecycle events. Before production, add managed KMS/secret-store support or rotate away from the local encryption key path.

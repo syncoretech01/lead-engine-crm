@@ -21,8 +21,8 @@ The active compatibility source of truth is still `AppStateSnapshot`. In file mo
 
 - No real provider adapters are connected yet.
 - No production identity provider is wired.
-- No background worker queue is active for extraction, enrichment, verification, or campaign sync.
-- Provider connection metadata, secret-reference fields, credential audit tables, server-only management services, and an admin Integration Center UI shell exist. Raw secret encryption/KMS storage is not implemented yet.
+- Provider job/run records and a local mock worker queue exist for extraction, enrichment, verification, sending, and webhook sync. No real provider network execution is active yet.
+- Provider connection metadata, encrypted database secret records, secret-reference fields, credential audit tables, server-only management services, and an admin Integration Center UI shell exist. Managed KMS/secret-store integration is not implemented yet.
 - No provider-native webhook signature validation exists yet.
 - No production object storage path is active for recordings, exports, or attachments.
 - No production migration, backup, restore, or tenant-isolation test lane exists yet.
@@ -36,11 +36,11 @@ Implemented:
 - Normalized projection sync to core Prisma tables.
 - Normalized read paths for contacts, accounts, CRM events, outreach events, exports, compliance rows, and reporting inputs.
 - Scoped normalized write sync for generated exports, outreach event creation, campaign send simulation, and signed email/SMS webhook processing.
-- Provider connection metadata and credential audit rows are now represented in `AppStateSnapshot`, Prisma tables, normalized projection sync, server-only save/test/disable services, and an admin UI shell.
+- Provider connection metadata, encrypted credential rows, and credential audit rows are now represented in `AppStateSnapshot`, Prisma tables, normalized projection sync, server-only save/test/disable services, and an admin UI shell.
 
 Still needed:
 
-- Direct transactional normalized writes for CRM opportunities, tasks, notes, call logs, compliance requests, retention/reporting actions, and provider execution state.
+- Direct transactional normalized writes for CRM opportunities, tasks, notes, call logs, compliance requests, and retention/reporting actions.
 - Migration path from snapshot-first writes to normalized-table-first writes.
 - PostgreSQL backup/restore checks and production migration workflow.
 
@@ -51,6 +51,8 @@ Current provider behavior is intentionally local:
 - CSV upload stands in for lead ingestion.
 - Local heuristics stand in for email verification and enrichment.
 - Local email/SMS/voice provider records stand in for outbound event capture.
+- Provider execution jobs/runs and the local worker can claim queued work, lease runs, recover expired locks, queue due retries, and complete mock execution without making network calls.
+- Provider adapter contract fixtures and no-network contract tests exist for the selected provider strategy.
 - Local webhook processing tests idempotency and suppression side effects.
 
 Real provider work should start only after the typed provider abstraction, credential model, provider job model, and no-network contract tests are stable.
@@ -69,7 +71,7 @@ Still needed:
 
 - Production authentication and session signing.
 - SSO/OIDC/SAML provider integration.
-- Raw API-key encryption, KMS/secret-store integration, and credential rotation flows.
+- Managed KMS/secret-store integration and production credential rotation operations.
 - Workspace-level provider connection permissions.
 - Credential rotation and audit evidence.
 - Provider-native webhook verification and replay-window checks.
@@ -78,23 +80,19 @@ Still needed:
 
 Current tests cover:
 
-- Unit tests for auth/RBAC, storage driver validation, projection sync, read-path adapters, verification/export rules, compliance, retention, webhooks, job idempotency, enrichment/reporting/AI logic, and workspace isolation.
+- Unit tests for auth/RBAC, storage driver validation, projection sync, read-path adapters, verification/export rules, compliance, retention, webhooks, job idempotency, provider job/worker execution, provider adapter contracts, enrichment/reporting/AI logic, and workspace isolation.
 - Playwright smoke tests across the main app routes and SDR-scoped navigation.
 
 Still needed:
 
-- Provider adapter contract tests with recorded fixtures.
 - Production database migration tests.
-- Background worker and retry-lock tests.
 - Tenant-isolation E2E against Prisma mode.
 - Credential lifecycle and webhook replay-window tests.
 
 ## Immediate Next Build Order
 
-1. Add raw API-key encryption or managed secret-store integration behind the provider connection metadata.
-2. Add provider job/run records for extraction, verification, enrichment, sending, and webhook sync.
-3. Cut over CRM/compliance/reporting write paths to selected normalized transactions.
-4. Add background worker queue support for provider jobs.
-5. Add real provider adapters one at a time behind feature flags and contract tests.
-6. Add production auth and signed session management.
-7. Add production migration, backup/restore, tenant-isolation, and deployment checks.
+1. Cut over CRM/compliance/reporting write paths to selected normalized transactions.
+2. Add managed KMS/secret-store support or rotate away from the local encryption key path before production.
+3. Add real provider adapters one at a time behind feature flags and contract tests.
+4. Add production auth and signed session management.
+5. Add production migration, backup/restore, tenant-isolation, and deployment checks.

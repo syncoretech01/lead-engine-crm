@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { assertPermission } from "@/lib/phase1/auth";
+import { providerSecretHealth, storeEncryptedProviderSecret } from "@/lib/phase1/provider-secret-vault";
 import type { AppState, ProviderConnection, ProviderCredentialAudit, Session } from "@/lib/phase1/types";
 import { providerConfig, providerRegistry } from "@/lib/providers/registry";
 import type { ProviderCapability, ProviderId } from "@/lib/providers/types";
@@ -104,7 +105,16 @@ export function saveProviderConnectionConfig(
   existing.updatedAt = now;
 
   if (secretChanged && input.secretValue) {
-    existing.secretRef = createLocalSecretReference(session.workspace.id, input.providerId, nextSecretVersion);
+    const encryptedSecret = storeEncryptedProviderSecret(state, {
+      workspaceId: session.workspace.id,
+      providerConnectionId: existing.id,
+      providerId: input.providerId,
+      secretVersion: nextSecretVersion,
+      secretValue: input.secretValue,
+      actorUserId: session.user.id,
+      createdAt: now
+    });
+    existing.secretRef = encryptedSecret.secretRef;
     existing.secretStorage = "Encrypted database";
     existing.secretVersion = nextSecretVersion;
     existing.maskedSecretSuffix = maskedSecretSuffix(input.secretValue);
@@ -159,12 +169,15 @@ export function testProviderConnectionConfig(
     if (invalidOperations.length) {
       status = "Failed";
       message = `Unsupported operations: ${invalidOperations.join(", ")}`;
-    } else if (!connection.secretRef && connection.secretStorage !== "Environment") {
-      status = "Failed";
-      message = "Credential secret reference is missing.";
     } else {
-      status = "Passed";
-      message = "Mock connection test passed without network access.";
+      const secretHealth = providerSecretHealth(state, connection);
+      if (!secretHealth.ok) {
+        status = "Failed";
+        message = secretHealth.reason;
+      } else {
+        status = "Passed";
+        message = "Mock connection test passed without network access.";
+      }
     }
   }
 
@@ -342,10 +355,6 @@ function optionalPositiveInt(value: number | undefined, fallback: number | undef
     throw new Error("Provider numeric settings must be positive numbers.");
   }
   return Math.round(value);
-}
-
-function createLocalSecretReference(workspaceId: string, providerId: ProviderId, secretVersion: number) {
-  return `local-secret-ref://${workspaceId}/${providerId}/v${secretVersion}/${randomUUID()}`;
 }
 
 function maskedSecretSuffix(secretValue: string) {
