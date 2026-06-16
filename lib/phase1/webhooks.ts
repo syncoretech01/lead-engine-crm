@@ -1,5 +1,10 @@
 import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { createEmailEvent, createSmsEvent } from "@/lib/phase1/outreach";
+import {
+  assertWorkspaceExists,
+  assertWorkspaceMember,
+  requireWorkspaceScopedRecord
+} from "@/lib/phase1/tenant-isolation";
 import type {
   AppState,
   EmailEventType,
@@ -75,6 +80,9 @@ export function verifyWebhookSignature(body: string, signature: string | null, s
 
 export function processEmailWebhook(state: AppState, payload: EmailWebhookPayload, actor: Session["user"]): ProcessResult {
   validateEmailPayload(payload);
+  assertWorkspaceExists(state, payload.workspaceId);
+  assertWorkspaceMember(state, payload.workspaceId, actor.id);
+  assertWebhookTargets(state, payload.workspaceId, payload);
   const provider: WebhookProvider = "Syncore Mail Local";
   const providerEventId = payload.providerEventId ?? payload.messageId ?? `${payload.contactId}:${payload.eventType}`;
   const idempotencyKey = webhookIdempotencyKey(provider, "email", payload.workspaceId, providerEventId, payload.eventType);
@@ -118,6 +126,10 @@ export function processEmailWebhook(state: AppState, payload: EmailWebhookPayloa
 
 export function processSmsWebhook(state: AppState, payload: SmsWebhookPayload, actor: Session["user"]): ProcessResult {
   validateSmsPayload(payload);
+  assertWorkspaceExists(state, payload.workspaceId);
+  assertWorkspaceMember(state, payload.workspaceId, actor.id);
+  assertWorkspaceMember(state, payload.workspaceId, payload.sdrUserId ?? actor.id);
+  assertWebhookTargets(state, payload.workspaceId, payload);
   const provider: WebhookProvider = "RingCentral Local";
   const providerEventId = payload.providerEventId ?? `${payload.contactId}:${payload.status}:${payload.occurredAt ?? "now"}`;
   const idempotencyKey = webhookIdempotencyKey(provider, "sms", payload.workspaceId, providerEventId, payload.status);
@@ -213,6 +225,42 @@ function validateEmailPayload(payload: EmailWebhookPayload) {
 function validateSmsPayload(payload: SmsWebhookPayload) {
   if (!payload.workspaceId || !payload.contactId || !payload.status) {
     throw new Error("SMS webhook requires workspaceId, contactId, and status.");
+  }
+}
+
+function assertWebhookTargets(
+  state: AppState,
+  workspaceId: string,
+  payload: Pick<EmailWebhookPayload | SmsWebhookPayload, "contactId" | "campaignId" | "sequenceId" | "sequenceStepId">
+) {
+  requireWorkspaceScopedRecord(
+    state.contacts.find((contact) => contact.id === payload.contactId),
+    workspaceId,
+    "Webhook contact"
+  );
+
+  if (payload.campaignId) {
+    requireWorkspaceScopedRecord(
+      state.outreachCampaigns.find((campaign) => campaign.id === payload.campaignId),
+      workspaceId,
+      "Webhook campaign"
+    );
+  }
+
+  if (payload.sequenceId) {
+    requireWorkspaceScopedRecord(
+      state.campaignSequences.find((sequence) => sequence.id === payload.sequenceId),
+      workspaceId,
+      "Webhook sequence"
+    );
+  }
+
+  if (payload.sequenceStepId) {
+    requireWorkspaceScopedRecord(
+      state.sequenceSteps.find((step) => step.id === payload.sequenceStepId),
+      workspaceId,
+      "Webhook sequence step"
+    );
   }
 }
 

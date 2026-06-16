@@ -1,5 +1,6 @@
 "use server";
 
+import { assertPermission } from "@/lib/phase1/auth";
 import { providerJobWriteTables } from "@/lib/phase1/normalized-write-tables";
 import {
   completeProviderJobRun,
@@ -27,28 +28,40 @@ export async function createProviderExecutionJob(input: CreateProviderJobInput) 
 
 export async function startProviderExecutionRun(runId: string) {
   return updateState(
-    (state) => startProviderJobRun(state, runId),
+    (state, session) => {
+      assertPermission(session, "manage_workspace");
+      return startProviderJobRun(state, runId, session.workspace.id);
+    },
     { normalizedTables: providerJobWriteTables }
   );
 }
 
 export async function completeProviderExecutionRun(input: CompleteProviderJobRunInput) {
   return updateState(
-    (state) => completeProviderJobRun(state, input),
+    (state, session) => {
+      assertPermission(session, "manage_workspace");
+      return completeProviderJobRun(state, { ...input, workspaceId: session.workspace.id });
+    },
     { normalizedTables: providerJobWriteTables }
   );
 }
 
 export async function failProviderExecutionRun(input: FailProviderJobRunInput) {
   return updateState(
-    (state) => failProviderJobRun(state, input),
+    (state, session) => {
+      assertPermission(session, "manage_workspace");
+      return failProviderJobRun(state, { ...input, workspaceId: session.workspace.id });
+    },
     { normalizedTables: providerJobWriteTables }
   );
 }
 
 export async function retryProviderExecutionJob(providerJobId: string) {
   return updateState(
-    (state) => retryProviderJobRun(state, providerJobId),
+    (state, session) => {
+      assertPermission(session, "manage_workspace");
+      return retryProviderJobRun(state, providerJobId, session.workspace.id);
+    },
     { normalizedTables: providerJobWriteTables }
   );
 }
@@ -63,10 +76,13 @@ export async function processProviderExecutionQueue(input: Omit<ProviderWorkerCl
   workerId: "syncore-local-worker"
 }) {
   return updateState(
-    (state, session) => processProviderJobQueue(state, {
-      ...input,
-      workspaceId: session.workspace.id
-    }),
+    (state, session) => {
+      assertPermission(session, "manage_workspace");
+      return processProviderJobQueue(state, {
+        ...input,
+        workspaceId: session.workspace.id
+      });
+    },
     { normalizedTables: providerJobWriteTables }
   );
 }

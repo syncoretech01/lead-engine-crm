@@ -79,7 +79,7 @@ export function exportCsvForRecord(state: AppState, exportRecord: ExportRecord) 
 export function rowsForExport(state: AppState, exportRecord: ExportRecord) {
   if (exportRecord.type === "companies") {
     return state.companies
-      .filter((company) => exportRecord.recordIds.includes(company.id))
+      .filter((company) => company.workspaceId === exportRecord.workspaceId && exportRecord.recordIds.includes(company.id))
       .map((company) => ({
         company: company.name,
         domain: company.domain,
@@ -95,9 +95,11 @@ export function rowsForExport(state: AppState, exportRecord: ExportRecord) {
 
   if (exportRecord.type === "sdr_assignments") {
     return state.contacts
-      .filter((contact) => exportRecord.recordIds.includes(contact.id))
+      .filter((contact) => contact.workspaceId === exportRecord.workspaceId && exportRecord.recordIds.includes(contact.id))
       .map((contact) => {
-        const company = state.companies.find((item) => item.id === contact.companyId);
+        const company = state.companies.find(
+          (item) => item.id === contact.companyId && item.workspaceId === exportRecord.workspaceId
+        );
         return {
           owner: contact.owner,
           priority: contact.priority,
@@ -112,10 +114,12 @@ export function rowsForExport(state: AppState, exportRecord: ExportRecord) {
 
   if (exportRecord.type === "phone_leads") {
     return state.contacts
-      .filter((contact) => exportRecord.recordIds.includes(contact.id))
+      .filter((contact) => contact.workspaceId === exportRecord.workspaceId && exportRecord.recordIds.includes(contact.id))
       .map((contact) => {
-        const company = state.companies.find((item) => item.id === contact.companyId);
-        const latestVerification = latestVerificationForContact(state, contact.id);
+        const company = state.companies.find(
+          (item) => item.id === contact.companyId && item.workspaceId === exportRecord.workspaceId
+        );
+        const latestVerification = latestVerificationForContact(state, contact.id, exportRecord.workspaceId);
         return {
           company: company?.name ?? "",
           contact: contact.name,
@@ -132,9 +136,11 @@ export function rowsForExport(state: AppState, exportRecord: ExportRecord) {
   }
 
   return state.contacts
-    .filter((contact) => exportRecord.recordIds.includes(contact.id))
+    .filter((contact) => contact.workspaceId === exportRecord.workspaceId && exportRecord.recordIds.includes(contact.id))
     .map((contact) => {
-      const company = state.companies.find((item) => item.id === contact.companyId);
+      const company = state.companies.find(
+        (item) => item.id === contact.companyId && item.workspaceId === exportRecord.workspaceId
+      );
       return {
         company: company?.name ?? "",
         contact: contact.name,
@@ -176,7 +182,7 @@ export function recordIdsForExport(
   if (type === "phone_leads") {
     return state.contacts
       .filter((contact) => {
-        const latestVerification = latestVerificationForContact(state, contact.id);
+        const latestVerification = latestVerificationForContact(state, contact.id, workspaceId);
         return (
           contact.workspaceId === workspaceId &&
           !contact.isSuppressed &&
@@ -276,6 +282,10 @@ export function findExportRule(
 }
 
 export function exportRuleAllowsContact(state: AppState, contact: Contact, rule: ExportRule) {
+  if (rule.workspaceId !== contact.workspaceId) {
+    return false;
+  }
+
   if (rule.excludeSuppressed && contact.isSuppressed) {
     return false;
   }
@@ -296,7 +306,7 @@ export function exportRuleAllowsContact(state: AppState, contact: Contact, rule:
     return false;
   }
 
-  const latestVerification = latestVerificationForContact(state, contact.id);
+  const latestVerification = latestVerificationForContact(state, contact.id, contact.workspaceId);
 
   if (!rule.includeRoleEmails && latestVerification?.roleEmail) {
     return false;
@@ -309,8 +319,8 @@ export function exportRuleAllowsContact(state: AppState, contact: Contact, rule:
   return true;
 }
 
-function latestVerificationForContact(state: AppState, contactId: string) {
+function latestVerificationForContact(state: AppState, contactId: string, workspaceId: string) {
   return state.verificationResults
-    .filter((result) => result.contactId === contactId)
+    .filter((result) => result.contactId === contactId && result.workspaceId === workspaceId)
     .sort((a, b) => Date.parse(b.verifiedAt) - Date.parse(a.verifiedAt))[0];
 }

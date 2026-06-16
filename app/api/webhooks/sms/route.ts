@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { outreachSmsWriteTables } from "@/lib/phase1/normalized-write-tables";
-import { appendAudit, updateState } from "@/lib/phase1/store";
+import { updateAuthState } from "@/lib/phase1/store";
+import {
+  appendWorkspaceAudit,
+  resolveSignedWebhookWorkspaceId,
+  systemActorForWorkspace
+} from "@/lib/phase1/tenant-isolation";
 import { processSmsWebhook, verifyWebhookSignature } from "@/lib/phase1/webhooks";
 
 export async function POST(request: Request) {
@@ -13,11 +18,15 @@ export async function POST(request: Request) {
 
   try {
     const payload = JSON.parse(body);
-    const result = await updateState(
-      (state, session) => {
-        const processed = processSmsWebhook(state, payload, session.user);
+    const result = await updateAuthState(
+      (state) => {
+        const workspaceId = resolveSignedWebhookWorkspaceId(state, payload);
+        const actor = systemActorForWorkspace(state, workspaceId);
+        const processed = processSmsWebhook(state, payload, actor);
 
-        appendAudit(state, session, {
+        appendWorkspaceAudit(state, {
+          workspaceId,
+          actorUserId: actor.id,
           objectType: "webhook_event",
           objectId: processed.webhookEvent.id,
           action: processed.status === "duplicate" ? "duplicate_sms_webhook" : "processed_sms_webhook",

@@ -114,7 +114,7 @@ export function queueDueProviderRetries(
   });
 
   for (const job of dueJobs) {
-    retryProviderJobRun(state, job.id);
+    retryProviderJobRun(state, job.id, job.workspaceId);
     retried += 1;
   }
 
@@ -124,9 +124,9 @@ export function queueDueProviderRetries(
 export function executeMockProviderJobRun(
   state: AppState,
   runId: string,
-  options: { workerId: string; now?: string } = { workerId: "syncore-local-worker" }
+  options: { workerId: string; workspaceId?: string; now?: string } = { workerId: "syncore-local-worker" }
 ): ProviderWorkerExecutionResult {
-  const run = providerRunById(state, runId);
+  const run = providerRunById(state, runId, options.workspaceId);
   const job = providerJobForRun(state, run);
   if (run.status !== "Running") {
     throw new Error("Provider job run must be claimed before execution.");
@@ -161,6 +161,7 @@ export function executeMockProviderJobRun(
   if (outcome.status === "Failed") {
     failProviderJobRun(state, {
       runId,
+      workspaceId: run.workspaceId,
       errorMessage: outcome.message,
       nextRetryAt: outcome.nextRetryAt
     });
@@ -178,6 +179,7 @@ export function executeMockProviderJobRun(
 
   completeProviderJobRun(state, {
     runId,
+    workspaceId: run.workspaceId,
     recordsRead: outcome.recordsRead,
     recordsWritten: outcome.recordsWritten,
     costCents: outcome.costCents,
@@ -218,6 +220,7 @@ export function processProviderJobQueue(
   for (const run of claimedRuns) {
     const result = executeMockProviderJobRun(state, run.id, {
       workerId: options.workerId,
+      workspaceId: options.workspaceId,
       now: options.now
     });
     results.push(result);
@@ -313,16 +316,18 @@ function skipProviderJobRunForBudget(
 }
 
 function providerJobForRun(state: AppState, run: ProviderJobRun) {
-  const job = state.providerJobs.find((item) => item.id === run.providerJobId);
+  const job = state.providerJobs.find(
+    (item) => item.id === run.providerJobId && item.workspaceId === run.workspaceId
+  );
   if (!job) {
     throw new Error("Provider job not found for run.");
   }
   return job;
 }
 
-function providerRunById(state: AppState, runId: string) {
+function providerRunById(state: AppState, runId: string, workspaceId?: string) {
   const run = state.providerJobRuns.find((item) => item.id === runId);
-  if (!run) {
+  if (!run || (workspaceId && run.workspaceId !== workspaceId)) {
     throw new Error("Provider job run not found.");
   }
   return run;

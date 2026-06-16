@@ -6,6 +6,7 @@ import {
   suppressContact
 } from "@/lib/phase1/compliance";
 import { addActivity, ownerUserIdForName, userNameForId } from "@/lib/phase1/crm";
+import { assertWorkspaceMember, requireWorkspaceScopedRecord, workspaceStoragePath } from "@/lib/phase1/tenant-isolation";
 import type {
   AppState,
   CallDisposition,
@@ -119,6 +120,8 @@ export function createEmailEvent(
   if (!contact) {
     throw new Error("Contact not found.");
   }
+  assertOutreachRelationScope(state, input.workspaceId, input);
+  assertWorkspaceMember(state, input.workspaceId, input.actorUserId);
 
   const now = input.occurredAt ?? new Date().toISOString();
   const provider = emailProvider(state, input.workspaceId);
@@ -180,6 +183,8 @@ export function createSmsEvent(
   if (!contact) {
     throw new Error("Contact not found.");
   }
+  assertOutreachRelationScope(state, input.workspaceId, input);
+  assertWorkspaceMember(state, input.workspaceId, input.sdrUserId);
 
   const now = input.occurredAt ?? new Date().toISOString();
   const provider = phoneProvider(state, input.workspaceId);
@@ -258,6 +263,7 @@ export function createTrackedCall(
   if (!contact) {
     throw new Error("Contact not found.");
   }
+  assertWorkspaceMember(state, input.workspaceId, input.sdrUserId);
 
   const now = new Date().toISOString();
   const recordingRequested = Boolean(input.recordingUrl || input.transcript);
@@ -278,7 +284,9 @@ export function createTrackedCall(
     recordingConsentSource: input.recordingConsentSource ?? (recordingConsent === "Not recorded" ? "No recording captured" : "Manual disclosure"),
     recordingConsentCapturedAt: recordingRequested ? now : undefined,
     recordingUrl: canStoreRecording ? input.recordingUrl : undefined,
-    recordingStoragePath: canStoreRecording && input.recordingUrl ? `recordings/${input.workspaceId}/${contact.id}/${Date.now()}.mp3` : undefined,
+    recordingStoragePath: canStoreRecording && input.recordingUrl
+      ? workspaceStoragePath(input.workspaceId, "recordings", contact.id, `${Date.now()}.mp3`)
+      : undefined,
     transcript: canStoreRecording ? input.transcript : undefined,
     callSummary: input.callSummary,
     nextStep: input.nextStep,
@@ -513,12 +521,14 @@ export function emailEventViews(state: AppState, workspaceId: string) {
   return state.emailEvents
     .filter((event) => event.workspaceId === workspaceId)
     .map((event) => {
-      const contact = state.contacts.find((item) => item.id === event.contactId);
-      const campaign = state.outreachCampaigns.find((item) => item.id === event.campaignId);
+      const contact = state.contacts.find((item) => item.id === event.contactId && item.workspaceId === workspaceId);
+      const campaign = state.outreachCampaigns.find(
+        (item) => item.id === event.campaignId && item.workspaceId === workspaceId
+      );
       return {
         ...event,
         contactName: contact?.name ?? "Unknown contact",
-        companyName: companyName(state, event.companyId),
+        companyName: companyName(state, event.companyId, workspaceId),
         campaignName: campaign?.name ?? "No campaign"
       };
     })
@@ -530,8 +540,8 @@ export function smsEventViews(state: AppState, workspaceId: string) {
     .filter((event) => event.workspaceId === workspaceId)
     .map((event) => ({
       ...event,
-      contactName: state.contacts.find((contact) => contact.id === event.contactId)?.name ?? "Unknown contact",
-      companyName: companyName(state, event.companyId),
+      contactName: state.contacts.find((contact) => contact.id === event.contactId && contact.workspaceId === workspaceId)?.name ?? "Unknown contact",
+      companyName: companyName(state, event.companyId, workspaceId),
       sdrName: userNameForId(state, event.sdrUserId)
     }))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
@@ -542,11 +552,45 @@ export function trackedCallViews(state: AppState, workspaceId: string) {
     .filter((call) => call.workspaceId === workspaceId)
     .map((call) => ({
       ...call,
-      contactName: state.contacts.find((contact) => contact.id === call.contactId)?.name ?? "Unknown contact",
-      companyName: companyName(state, call.companyId),
+      contactName: state.contacts.find((contact) => contact.id === call.contactId && contact.workspaceId === workspaceId)?.name ?? "Unknown contact",
+      companyName: companyName(state, call.companyId, workspaceId),
       sdrName: userNameForId(state, call.sdrUserId)
     }))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+function assertOutreachRelationScope(
+  state: AppState,
+  workspaceId: string,
+  input: {
+    campaignId?: string;
+    sequenceId?: string;
+    sequenceStepId?: string;
+  }
+) {
+  if (input.campaignId) {
+    requireWorkspaceScopedRecord(
+      state.outreachCampaigns.find((campaign) => campaign.id === input.campaignId),
+      workspaceId,
+      "Outreach campaign"
+    );
+  }
+
+  if (input.sequenceId) {
+    requireWorkspaceScopedRecord(
+      state.campaignSequences.find((sequence) => sequence.id === input.sequenceId),
+      workspaceId,
+      "Outreach sequence"
+    );
+  }
+
+  if (input.sequenceStepId) {
+    requireWorkspaceScopedRecord(
+      state.sequenceSteps.find((step) => step.id === input.sequenceStepId),
+      workspaceId,
+      "Outreach sequence step"
+    );
+  }
 }
 
 function defaultOutreachProviders(workspaceId: string, now: string): OutreachProvider[] {
@@ -749,7 +793,9 @@ function seedOutreachEvents(state: AppState, workspaceId: string, now: string) {
   const campaigns = state.outreachCampaigns.filter((campaign) => campaign.workspaceId === workspaceId);
   const contacts = state.sdrAssignments
     .filter((assignment) => assignment.workspaceId === workspaceId)
-    .map((assignment) => state.contacts.find((contact) => contact.id === assignment.contactId))
+    .map((assignment) => state.contacts.find(
+      (contact) => contact.id === assignment.contactId && contact.workspaceId === workspaceId
+    ))
     .filter((contact): contact is NonNullable<typeof contact> => Boolean(contact));
   const actorUserId = ownerUserIdForName(state, "Nora West");
 
@@ -825,7 +871,7 @@ function seedOutreachEvents(state: AppState, workspaceId: string, now: string) {
 }
 
 function applyEmailEventSideEffects(state: AppState, event: EmailEvent, actorUserId: string) {
-  const contact = state.contacts.find((item) => item.id === event.contactId);
+  const contact = state.contacts.find((item) => item.id === event.contactId && item.workspaceId === event.workspaceId);
   const statusByEvent: Partial<Record<EmailEventType, string>> = {
     Opened: "Opened",
     Replied: "Replied",
@@ -840,7 +886,9 @@ function applyEmailEventSideEffects(state: AppState, event: EmailEvent, actorUse
     contact.updatedAt = eventTime(event);
   }
 
-  const assignment = state.sdrAssignments.find((item) => item.contactId === event.contactId);
+  const assignment = state.sdrAssignments.find(
+    (item) => item.contactId === event.contactId && item.workspaceId === event.workspaceId
+  );
   if (assignment && statusByEvent[event.eventType]) {
     assignment.status = statusByEvent[event.eventType] as typeof assignment.status;
     assignment.lastTouchAt = eventTime(event);
@@ -895,7 +943,7 @@ function applyHardSuppression(
     source: string;
   }
 ) {
-  const contact = state.contacts.find((item) => item.id === input.contactId);
+  const contact = state.contacts.find((item) => item.id === input.contactId && item.workspaceId === input.workspaceId);
   const exists = state.suppressionRecords.some(
     (record) =>
       record.workspaceId === input.workspaceId &&
@@ -921,7 +969,9 @@ function applyHardSuppression(
     contact.status = input.type === "Hard bounce" ? "Invalid" : input.type === "SMS opt-out" ? "Unsubscribed" : "Suppressed";
   }
 
-  const assignment = state.sdrAssignments.find((item) => item.contactId === input.contactId);
+  const assignment = state.sdrAssignments.find(
+    (item) => item.contactId === input.contactId && item.workspaceId === input.workspaceId
+  );
   if (assignment) {
     assignment.status = input.type === "Hard bounce" ? "Invalid" : "Suppressed";
     assignment.slaStatus = "Paused";
@@ -929,7 +979,7 @@ function applyHardSuppression(
   }
 
   for (const reminder of state.followUpReminders.filter(
-    (item) => item.contactId === input.contactId && item.status !== "Completed"
+    (item) => item.contactId === input.contactId && item.workspaceId === input.workspaceId && item.status !== "Completed"
   )) {
     reminder.status = "Completed";
     reminder.completedAt = new Date().toISOString();
@@ -938,8 +988,12 @@ function applyHardSuppression(
 
 export function refreshCampaignMetrics(state: AppState, workspaceId: string) {
   for (const campaign of state.outreachCampaigns.filter((item) => item.workspaceId === workspaceId)) {
-    const emailEvents = state.emailEvents.filter((event) => event.campaignId === campaign.id);
-    const smsEvents = state.smsEvents.filter((event) => event.campaignId === campaign.id);
+    const emailEvents = state.emailEvents.filter(
+      (event) => event.campaignId === campaign.id && event.workspaceId === workspaceId
+    );
+    const smsEvents = state.smsEvents.filter(
+      (event) => event.campaignId === campaign.id && event.workspaceId === workspaceId
+    );
     const contacts = campaignContacts(state, campaign);
     campaign.totalLeads = contacts.length;
     campaign.sentCount = emailEvents.filter((event) => event.eventType === "Sent").length +
@@ -952,13 +1006,21 @@ export function refreshCampaignMetrics(state: AppState, workspaceId: string) {
     campaign.unsubscribeCount = emailEvents.filter((event) => event.eventType === "Unsubscribed" || event.eventType === "Spam complaint").length +
       smsEvents.filter((event) => event.optOutFlag).length;
     campaign.meetingsBooked = state.sdrAssignments.filter(
-      (assignment) => contacts.some((contact) => contact.id === assignment.contactId) && assignment.status === "Meeting Booked"
+      (assignment) =>
+        assignment.workspaceId === workspaceId &&
+        contacts.some((contact) => contact.id === assignment.contactId) &&
+        assignment.status === "Meeting Booked"
     ).length;
     campaign.opportunitiesCreated = state.opportunities.filter((opportunity) =>
-      contacts.some((contact) => contact.id === opportunity.contactId)
+      opportunity.workspaceId === workspaceId && contacts.some((contact) => contact.id === opportunity.contactId)
     ).length;
     campaign.revenueWon = state.opportunities
-      .filter((opportunity) => opportunity.stage === "Closed won" && contacts.some((contact) => contact.id === opportunity.contactId))
+      .filter(
+        (opportunity) =>
+          opportunity.workspaceId === workspaceId &&
+          opportunity.stage === "Closed won" &&
+          contacts.some((contact) => contact.id === opportunity.contactId)
+      )
       .reduce((total, opportunity) => total + opportunity.amount, 0);
     campaign.updatedAt = new Date().toISOString();
   }
@@ -1039,8 +1101,8 @@ function migrateLegacyTelephonyProviderLabels(state: AppState, workspaceId: stri
   return changed;
 }
 
-function companyName(state: AppState, companyId: string) {
-  return state.companies.find((company) => company.id === companyId)?.name ?? "Unknown account";
+function companyName(state: AppState, companyId: string, workspaceId?: string) {
+  return state.companies.find((company) => company.id === companyId && (!workspaceId || company.workspaceId === workspaceId))?.name ?? "Unknown account";
 }
 
 function personalize(template: string, contactName: string, company: string) {

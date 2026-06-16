@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { addActivity, ownerUserIdForName, userNameForId } from "@/lib/phase1/crm";
+import { assertWorkspaceMember, requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import type {
   AppState,
   AssignmentMethod,
@@ -104,7 +105,7 @@ export function assignWorkspaceLeads(
       continue;
     }
 
-    const company = state.companies.find((item) => item.id === contact.companyId);
+    const company = state.companies.find((item) => item.id === contact.companyId && item.workspaceId === workspaceId);
     const routing = routeContact(state, workspaceId, contact.id);
     const firstTouchDueAt = firstTouchDueAtForPriority(contact.priority, assignedAt);
     const followUpDueAt = followUpDueAtForStatus(statusForContact(contact.status), assignedAt);
@@ -292,6 +293,7 @@ export function managerDashboardSnapshot(state: AppState, workspaceId: string) {
 export function recordFirstTouch(
   state: AppState,
   input: {
+    workspaceId?: string;
     assignmentId: string;
     actorUserId: string;
     channel: OutreachChannel;
@@ -301,13 +303,18 @@ export function recordFirstTouch(
   }
 ) {
   const now = new Date().toISOString();
-  const assignment = state.sdrAssignments.find((item) => item.id === input.assignmentId);
-
-  if (!assignment) {
-    throw new Error("Assignment not found.");
+  const assignment = requireWorkspaceScopedRecord(
+    state.sdrAssignments.find((item) => item.id === input.assignmentId),
+    input.workspaceId ?? state.sdrAssignments.find((item) => item.id === input.assignmentId)?.workspaceId ?? "",
+    "SDR assignment"
+  );
+  if (input.workspaceId) {
+    assertWorkspaceMember(state, input.workspaceId, input.actorUserId);
   }
 
-  const contact = state.contacts.find((item) => item.id === assignment.contactId);
+  const contact = state.contacts.find(
+    (item) => item.id === assignment.contactId && item.workspaceId === assignment.workspaceId
+  );
   const firstTouch = !assignment.firstTouchedAt;
   assignment.firstTouchedAt = assignment.firstTouchedAt ?? now;
   assignment.lastTouchAt = now;
@@ -324,7 +331,10 @@ export function recordFirstTouch(
   }
 
   for (const reminder of state.followUpReminders.filter(
-    (item) => item.assignmentId === assignment.id && item.status !== "Completed"
+    (item) =>
+      item.workspaceId === assignment.workspaceId &&
+      item.assignmentId === assignment.id &&
+      item.status !== "Completed"
   )) {
     reminder.status = "Completed";
     reminder.completedAt = now;
@@ -354,11 +364,14 @@ export function recordFirstTouch(
   return assignment;
 }
 
-export function completeReminder(state: AppState, reminderId: string, actorUserId: string) {
-  const reminder = state.followUpReminders.find((item) => item.id === reminderId);
-
-  if (!reminder) {
-    throw new Error("Reminder not found.");
+export function completeReminder(state: AppState, reminderId: string, actorUserId: string, workspaceId?: string) {
+  const reminder = requireWorkspaceScopedRecord(
+    state.followUpReminders.find((item) => item.id === reminderId),
+    workspaceId ?? state.followUpReminders.find((item) => item.id === reminderId)?.workspaceId ?? "",
+    "Follow-up reminder"
+  );
+  if (workspaceId) {
+    assertWorkspaceMember(state, workspaceId, actorUserId);
   }
 
   const now = new Date().toISOString();
@@ -366,7 +379,11 @@ export function completeReminder(state: AppState, reminderId: string, actorUserI
   reminder.completedAt = now;
 
   const task = state.tasks.find(
-    (item) => item.contactId === reminder.contactId && item.dueAt === reminder.dueAt && item.status !== "Completed"
+    (item) =>
+      item.workspaceId === reminder.workspaceId &&
+      item.contactId === reminder.contactId &&
+      item.dueAt === reminder.dueAt &&
+      item.status !== "Completed"
   );
 
   if (task) {
@@ -390,6 +407,7 @@ export function completeReminder(state: AppState, reminderId: string, actorUserI
 export function reassignSdrAssignment(
   state: AppState,
   input: {
+    workspaceId?: string;
     assignmentId: string;
     nextSdrId: string;
     actorUserId: string;
@@ -397,10 +415,14 @@ export function reassignSdrAssignment(
     method?: AssignmentMethod;
   }
 ) {
-  const assignment = state.sdrAssignments.find((item) => item.id === input.assignmentId);
-
-  if (!assignment) {
-    throw new Error("Assignment not found.");
+  const assignment = requireWorkspaceScopedRecord(
+    state.sdrAssignments.find((item) => item.id === input.assignmentId),
+    input.workspaceId ?? state.sdrAssignments.find((item) => item.id === input.assignmentId)?.workspaceId ?? "",
+    "SDR assignment"
+  );
+  if (input.workspaceId) {
+    assertWorkspaceMember(state, input.workspaceId, input.actorUserId);
+    assertWorkspaceMember(state, input.workspaceId, input.nextSdrId);
   }
 
   const now = new Date().toISOString();
@@ -414,19 +436,29 @@ export function reassignSdrAssignment(
   assignment.updatedAt = now;
   assignment.slaStatus = calculateSlaStatus(assignment, now);
 
-  const contact = state.contacts.find((item) => item.id === assignment.contactId);
+  const contact = state.contacts.find(
+    (item) => item.id === assignment.contactId && item.workspaceId === assignment.workspaceId
+  );
   if (contact) {
     contact.owner = userNameForId(state, input.nextSdrId);
     contact.updatedAt = now;
   }
 
-  for (const task of state.tasks.filter((item) => item.contactId === assignment.contactId && item.status !== "Completed")) {
+  for (const task of state.tasks.filter(
+    (item) =>
+      item.workspaceId === assignment.workspaceId &&
+      item.contactId === assignment.contactId &&
+      item.status !== "Completed"
+  )) {
     task.ownerUserId = input.nextSdrId;
     task.updatedAt = now;
   }
 
   for (const reminder of state.followUpReminders.filter(
-    (item) => item.assignmentId === assignment.id && item.status !== "Completed"
+    (item) =>
+      item.workspaceId === assignment.workspaceId &&
+      item.assignmentId === assignment.id &&
+      item.status !== "Completed"
   )) {
     reminder.ownerUserId = input.nextSdrId;
   }
@@ -450,6 +482,7 @@ export function applyReassignmentRecommendations(state: AppState, workspaceId: s
 
   for (const recommendation of recommendations) {
     reassignSdrAssignment(state, {
+      workspaceId,
       assignmentId: recommendation.assignmentId,
       nextSdrId: recommendation.recommendedSdrId,
       actorUserId,
@@ -489,10 +522,19 @@ export function assignmentViews(state: AppState, workspaceId: string) {
   return state.sdrAssignments
     .filter((assignment) => assignment.workspaceId === workspaceId)
     .map((assignment) => {
-      const contact = state.contacts.find((item) => item.id === assignment.contactId);
-      const company = state.companies.find((item) => item.id === assignment.companyId);
+      const contact = state.contacts.find(
+        (item) => item.id === assignment.contactId && item.workspaceId === workspaceId
+      );
+      const company = state.companies.find(
+        (item) => item.id === assignment.companyId && item.workspaceId === workspaceId
+      );
       const reminder = state.followUpReminders
-        .filter((item) => item.assignmentId === assignment.id && item.status !== "Completed")
+        .filter(
+          (item) =>
+            item.workspaceId === workspaceId &&
+            item.assignmentId === assignment.id &&
+            item.status !== "Completed"
+        )
         .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt))[0];
 
       return {
@@ -523,8 +565,12 @@ export function reminderViews(state: AppState, workspaceId: string) {
   return state.followUpReminders
     .filter((reminder) => reminder.workspaceId === workspaceId)
     .map((reminder) => {
-      const contact = state.contacts.find((item) => item.id === reminder.contactId);
-      const company = state.companies.find((item) => item.id === reminder.companyId);
+      const contact = state.contacts.find(
+        (item) => item.id === reminder.contactId && item.workspaceId === workspaceId
+      );
+      const company = state.companies.find(
+        (item) => item.id === reminder.companyId && item.workspaceId === workspaceId
+      );
 
       return {
         ...reminder,
@@ -553,7 +599,9 @@ export function sdrWorkloads(state: AppState, workspaceId: string) {
       assigned: owned.length,
       active: active.length,
       p1: active.filter((assignment) => {
-        const contact = state.contacts.find((item) => item.id === assignment.contactId);
+        const contact = state.contacts.find(
+          (item) => item.id === assignment.contactId && item.workspaceId === workspaceId
+        );
         return contact?.priority === "P1";
       }).length,
       overdue: overdue.length,
@@ -716,8 +764,10 @@ function defaultReassignmentRules(workspaceId: string, now: string): Reassignmen
 }
 
 function routeContact(state: AppState, workspaceId: string, contactId: string) {
-  const contact = state.contacts.find((item) => item.id === contactId);
-  const company = contact ? state.companies.find((item) => item.id === contact.companyId) : undefined;
+  const contact = state.contacts.find((item) => item.id === contactId && item.workspaceId === workspaceId);
+  const company = contact
+    ? state.companies.find((item) => item.id === contact.companyId && item.workspaceId === workspaceId)
+    : undefined;
   const existingOwnerId = contact?.owner && contact.owner !== "Unassigned" ? ownerUserIdForName(state, contact.owner) : undefined;
   const territoryTeam = state.sdrTeams.find(
     (team) => team.workspaceId === workspaceId && company?.state && team.territories.includes(company.state)

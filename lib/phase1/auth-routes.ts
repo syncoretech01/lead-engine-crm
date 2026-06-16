@@ -16,3 +16,7 @@ export function isPublicAssetPath(pathname: string) {
     pathname.match(/\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|map)$/i)
   );
 }
+
+export function isSignedWebhookPath(pathname: string) {
+  return pathname === "/api/webhooks/email" || pathname === "/api/webhooks/sms";
+}

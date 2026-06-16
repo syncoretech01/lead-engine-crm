@@ -66,7 +66,7 @@ The selected production direction is documented in `docs/PRODUCTION_ARCHITECTURE
 
 ## Session and RBAC
 
-The app uses first-party production auth with hashed passwords, signed `syncore_auth_session` cookies, server-side session records, workspace membership, and role permissions. Seeded local users can sign in with `Syncore!2026`; the owner/developer account is `nora@syncore.tech`. Pages, API routes, server actions, navigation, and export downloads are scoped to the authenticated workspace and role permissions. See `docs/PHASE_7_PRODUCTION_AUTH.md`.
+The app uses first-party production auth with hashed passwords, signed `syncore_auth_session` cookies, server-side session records, workspace membership, and role permissions. Seeded local users can sign in with `Syncore!2026`; the owner/developer account is `nora@syncore.tech`. Pages, API routes, server actions, navigation, export downloads, provider jobs, signed webhooks, and generated file paths are scoped to the authenticated workspace and role permissions. See `docs/PHASE_7_PRODUCTION_AUTH.md` and `docs/PHASE_8_TENANT_ISOLATION.md`.
 
 ## Async Job Observability
 
@@ -74,7 +74,7 @@ Lead jobs now track structured source runs, provider run IDs, idempotency keys, 
 
 ## Signed Webhooks
 
-Provider webhooks post to `/api/webhooks/email` and `/api/webhooks/sms`. Requests must include `X-Syncore-Signature`, an HMAC-SHA256 signature of the raw JSON body using `SYNCORE_WEBHOOK_SECRET`. Accepted webhook events are stored with provider event IDs and idempotency keys; duplicate webhook deliveries return duplicate status and do not replay suppression or outreach side effects.
+Provider webhooks post to `/api/webhooks/email` and `/api/webhooks/sms`. Requests must include `X-Syncore-Signature`, an HMAC-SHA256 signature of the raw JSON body using `SYNCORE_WEBHOOK_SECRET`, and a signed payload `workspaceId`. Accepted webhook events are stored with provider event IDs and idempotency keys; duplicate webhook deliveries return duplicate status and do not replay suppression or outreach side effects.
 
 ## Test baseline
 

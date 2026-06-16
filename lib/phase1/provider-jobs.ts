@@ -35,6 +35,7 @@ export type CreateProviderJobInput = {
 
 export type CompleteProviderJobRunInput = {
   runId: string;
+  workspaceId?: string;
   recordsRead?: number;
   recordsWritten?: number;
   costCents?: number;
@@ -47,6 +48,7 @@ export type CompleteProviderJobRunInput = {
 
 export type FailProviderJobRunInput = {
   runId: string;
+  workspaceId?: string;
   errorMessage: string;
   nextRetryAt?: string;
   checkpoint?: ProviderJobRun["checkpoint"];
@@ -83,7 +85,7 @@ export function createProviderJob(
   );
 
   if (existing) {
-    const latestRun = latestProviderJobRun(state, existing.id);
+    const latestRun = latestProviderJobRun(state, existing.id, session.workspace.id);
     if (!latestRun) {
       const replayRun = createProviderJobRunRecord(existing, {
         status: "Queued",
@@ -133,9 +135,9 @@ export function createProviderJob(
   return { job, run, replayed: false };
 }
 
-export function startProviderJobRun(state: AppState, runId: string) {
-  const run = providerRunById(state, runId);
-  const job = providerJobById(state, run.providerJobId);
+export function startProviderJobRun(state: AppState, runId: string, workspaceId?: string) {
+  const run = providerRunById(state, runId, workspaceId);
+  const job = providerJobById(state, run.providerJobId, workspaceId);
   const now = new Date().toISOString();
 
   run.status = "Running";
@@ -148,8 +150,8 @@ export function startProviderJobRun(state: AppState, runId: string) {
 }
 
 export function completeProviderJobRun(state: AppState, input: CompleteProviderJobRunInput) {
-  const run = providerRunById(state, input.runId);
-  const job = providerJobById(state, run.providerJobId);
+  const run = providerRunById(state, input.runId, input.workspaceId);
+  const job = providerJobById(state, run.providerJobId, run.workspaceId);
   const completedAt = input.completedAt ?? new Date().toISOString();
 
   run.status = "Completed";
@@ -200,8 +202,8 @@ export function completeProviderJobRun(state: AppState, input: CompleteProviderJ
 }
 
 export function failProviderJobRun(state: AppState, input: FailProviderJobRunInput) {
-  const run = providerRunById(state, input.runId);
-  const job = providerJobById(state, run.providerJobId);
+  const run = providerRunById(state, input.runId, input.workspaceId);
+  const job = providerJobById(state, run.providerJobId, run.workspaceId);
   const now = new Date().toISOString();
   const retryable = Boolean(input.nextRetryAt) && run.attempt < run.maxAttempts;
 
@@ -223,9 +225,9 @@ export function failProviderJobRun(state: AppState, input: FailProviderJobRunInp
   return run;
 }
 
-export function retryProviderJobRun(state: AppState, providerJobId: string) {
-  const job = providerJobById(state, providerJobId);
-  const previous = latestProviderJobRun(state, providerJobId);
+export function retryProviderJobRun(state: AppState, providerJobId: string, workspaceId?: string) {
+  const job = providerJobById(state, providerJobId, workspaceId);
+  const previous = latestProviderJobRun(state, providerJobId, job.workspaceId);
   if (!previous) {
     throw new Error("Provider job has no run to retry.");
   }
@@ -349,25 +351,25 @@ function createProviderJobRunRecord(
   };
 }
 
-function providerJobById(state: AppState, providerJobId: string) {
+function providerJobById(state: AppState, providerJobId: string, workspaceId?: string) {
   const job = state.providerJobs.find((item) => item.id === providerJobId);
-  if (!job) {
+  if (!job || (workspaceId && job.workspaceId !== workspaceId)) {
     throw new Error("Provider job not found.");
   }
   return job;
 }
 
-function providerRunById(state: AppState, runId: string) {
+function providerRunById(state: AppState, runId: string, workspaceId?: string) {
   const run = state.providerJobRuns.find((item) => item.id === runId);
-  if (!run) {
+  if (!run || (workspaceId && run.workspaceId !== workspaceId)) {
     throw new Error("Provider job run not found.");
   }
   return run;
 }
 
-function latestProviderJobRun(state: AppState, providerJobId: string) {
+function latestProviderJobRun(state: AppState, providerJobId: string, workspaceId?: string) {
   return state.providerJobRuns
-    .filter((run) => run.providerJobId === providerJobId)
+    .filter((run) => run.providerJobId === providerJobId && (!workspaceId || run.workspaceId === workspaceId))
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
 }
 

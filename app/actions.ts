@@ -102,6 +102,7 @@ import {
 } from "@/lib/phase1/sdr";
 import { createSeedState } from "@/lib/phase1/seed";
 import { appendAudit, updateState } from "@/lib/phase1/store";
+import { requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
 import type {
   CallLog,
@@ -946,7 +947,7 @@ export async function setCustomFieldValueAction(formData: FormData) {
       });
     }
 
-    const activityTarget = activityTargetForCustomField(state, field.objectType, objectId);
+    const activityTarget = activityTargetForCustomField(state, field.objectType, objectId, session.workspace.id);
     addActivity(state, {
       workspaceId: session.workspace.id,
       companyId: activityTarget.companyId,
@@ -991,6 +992,7 @@ export async function logFirstTouchAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_sdr");
     const assignment = recordFirstTouch(state, {
+      workspaceId: session.workspace.id,
       assignmentId: stringValue(formData.get("assignmentId")),
       actorUserId: session.user.id,
       channel: outreachChannelValue(formData.get("channel")),
@@ -1013,7 +1015,7 @@ export async function logFirstTouchAction(formData: FormData) {
 export async function completeFollowUpReminderAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_sdr");
-    const reminder = completeReminder(state, stringValue(formData.get("id")), session.user.id);
+    const reminder = completeReminder(state, stringValue(formData.get("id")), session.user.id, session.workspace.id);
 
     appendAudit(state, session, {
       objectType: "follow_up_reminder",
@@ -1030,6 +1032,7 @@ export async function reassignSdrAssignmentAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_sdr");
     const assignment = reassignSdrAssignment(state, {
+      workspaceId: session.workspace.id,
       assignmentId: stringValue(formData.get("assignmentId")),
       nextSdrId: stringValue(formData.get("nextSdrId"), session.user.id),
       actorUserId: session.user.id,
@@ -1936,15 +1939,24 @@ function dateValue(value: FormDataEntryValue | null) {
 function activityTargetForCustomField(
   state: Parameters<typeof runWorkspaceVerification>[0],
   objectType: CustomField["objectType"],
-  objectId: string
+  objectId: string,
+  workspaceId: string
 ) {
   if (objectType === "contact") {
-    const contact = state.contacts.find((item) => item.id === objectId);
+    const contact = requireWorkspaceScopedRecord(
+      state.contacts.find((item) => item.id === objectId),
+      workspaceId,
+      "Custom field contact target"
+    );
     return { companyId: contact?.companyId, contactId: contact?.id, opportunityId: undefined };
   }
 
   if (objectType === "opportunity") {
-    const opportunity = state.opportunities.find((item) => item.id === objectId);
+    const opportunity = requireWorkspaceScopedRecord(
+      state.opportunities.find((item) => item.id === objectId),
+      workspaceId,
+      "Custom field opportunity target"
+    );
     return {
       companyId: opportunity?.companyId,
       contactId: opportunity?.contactId,
@@ -1952,7 +1964,12 @@ function activityTargetForCustomField(
     };
   }
 
-  return { companyId: objectId, contactId: undefined, opportunityId: undefined };
+  const company = requireWorkspaceScopedRecord(
+    state.companies.find((item) => item.id === objectId),
+    workspaceId,
+    "Custom field company target"
+  );
+  return { companyId: company.id, contactId: undefined, opportunityId: undefined };
 }
 
 function sdrLeadStatusValue(value: FormDataEntryValue | null): SdrLeadStatus {
