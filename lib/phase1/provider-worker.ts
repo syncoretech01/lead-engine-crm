@@ -3,6 +3,11 @@ import {
   failProviderJobRun,
   retryProviderJobRun
 } from "@/lib/phase1/provider-jobs";
+import {
+  estimatedProviderCostCents,
+  evaluateBudgetStopRules,
+  providerLedgerJobId
+} from "@/lib/phase1/money";
 import type { AppState, ProviderJob, ProviderJobRun, ProviderJobStatus } from "@/lib/phase1/types";
 import { providerConfig } from "@/lib/providers/registry";
 
@@ -131,6 +136,28 @@ export function executeMockProviderJobRun(
   }
 
   const outcome = mockOutcomeFor(job, run, options.now ?? new Date().toISOString());
+  const budget = evaluateBudgetStopRules(state, {
+    workspaceId: run.workspaceId,
+    providerId: run.providerId,
+    leadJobId: job.sourceObjectType === "lead_job" ? job.sourceObjectId : undefined,
+    nextCostCents: outcome.costCents,
+    now: options.now
+  });
+
+  if (!budget.allowed) {
+    skipProviderJobRunForBudget(state, run, budget.stopReason ?? "Provider budget stop rule triggered.", options.now);
+    return {
+      runId,
+      providerJobId: job.id,
+      providerId: run.providerId,
+      operation: run.operation,
+      status: "Skipped",
+      recordsRead: 0,
+      recordsWritten: 0,
+      message: budget.stopReason ?? "Provider budget stop rule triggered."
+    };
+  }
+
   if (outcome.status === "Failed") {
     failProviderJobRun(state, {
       runId,
@@ -245,14 +272,44 @@ function mockOutcomeFor(job: ProviderJob, run: ProviderJobRun, now: string) {
     send_transactional_email: 1
   };
   const recordsWritten = recordsWrittenByOperation[run.operation] ?? 0;
+  const unitsUsed = Math.max(recordsWritten, 1);
 
   return {
     status: "Completed" as const,
     recordsRead: 1,
     recordsWritten,
-    costCents: 0,
+    costCents: estimatedProviderCostCents({
+      provider: run.providerId,
+      operation: run.operation,
+      unitsUsed
+    }),
     message: "Mock provider worker completed without network access."
   };
+}
+
+function skipProviderJobRunForBudget(
+  state: AppState,
+  run: ProviderJobRun,
+  reason: string,
+  now = new Date().toISOString()
+) {
+  const job = providerJobForRun(state, run);
+  run.status = "Skipped";
+  run.errorMessage = reason;
+  run.completedAt = now;
+  run.lockedBy = undefined;
+  run.lockedAt = undefined;
+  run.lockExpiresAt = undefined;
+  run.updatedAt = now;
+  job.status = "Skipped";
+  job.errorMessage = reason;
+  job.resultSummary = {
+    budgetStop: true,
+    reason,
+    jobId: providerLedgerJobId(job)
+  };
+  job.completedAt = now;
+  job.updatedAt = now;
 }
 
 function providerJobForRun(state: AppState, run: ProviderJobRun) {

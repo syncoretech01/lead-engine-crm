@@ -58,7 +58,7 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
           <p className="section-subtitle">Upload external leads, map fields, store raw rows, normalize, dedupe, and create CRM-ready records.</p>
         </div>
       </div>
-      <form onSubmit={handleSubmit} className="panel-body form-grid">
+      <form onSubmit={handleSubmit} className="panel-body form-grid" aria-busy={loading}>
         <div className="field">
           <label htmlFor="file">CSV file</label>
           <input id="file" name="file" type="file" accept=".csv,text/csv" required />
@@ -129,9 +129,18 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
             {loading ? "Importing" : "Import and normalize"}
           </button>
         </div>
-        {error ? <p className="section-subtitle danger-text">{error}</p> : null}
+        {loading ? (
+          <p className="section-subtitle info-text" aria-live="polite">
+            Uploading the file, validating the mapping, and normalizing rows.
+          </p>
+        ) : null}
+        {error ? (
+          <p className="section-subtitle danger-text" aria-live="assertive" role="alert">
+            {error}
+          </p>
+        ) : null}
         {result ? (
-          <p className="section-subtitle success-text">
+          <p className="section-subtitle success-text" aria-live="polite">
             {result.replayed
               ? `Reused job ${result.jobId}; this CSV import was already processed.`
               : `Imported ${result.raw} rows into job ${result.jobId}. Created ${result.companies} companies and ${result.contacts} contacts.`}

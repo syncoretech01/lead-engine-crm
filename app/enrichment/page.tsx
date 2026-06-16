@@ -14,6 +14,7 @@ import {
   applySegmentsAndScoresAction,
   createSegmentRuleAction,
   deleteSegmentRuleAction,
+  overrideLeadPrioritySegmentAction,
   runEnrichmentAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
@@ -21,7 +22,7 @@ import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill } from "@/components/status-pill";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import type { AppState, EnrichmentProvider } from "@/lib/phase1/types";
-import { formatNumber } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,9 @@ export default async function EnrichmentPage() {
   const cacheHits = cache.reduce((total, entry) => total + entry.hits, 0);
   const scoreRows = latestScores(scores);
   const p1Scores = scoreRows.filter((score) => score.priority === "P1").length;
+  const highValueContacts = contacts.filter(
+    (contact) => contact.priority === "P1" || contact.priority === "P2" || contact.score >= 70 || contact.grade === "A" || contact.grade === "B"
+  );
   const lowCoverageContacts = contacts.filter((contact) => (contact.enrichmentCoverage ?? 0) < 50).length;
   const providerRows = providerSummaries(enrichments, cache);
 
@@ -99,6 +103,13 @@ export default async function EnrichmentPage() {
       tone: p1Scores ? "success" as const : "warning" as const
     },
     {
+      label: "High-value queue",
+      value: highValueContacts.length,
+      note: `${formatCents(highValueContacts.length * 2)} est. enrich cap`,
+      icon: Gem,
+      tone: highValueContacts.length ? "success" as const : "warning" as const
+    },
+    {
       label: "Providers",
       value: providerRows.length,
       note: "Local enrichment lanes",
@@ -115,12 +126,10 @@ export default async function EnrichmentPage() {
         copy="Run local enrichment, reuse cache, classify records into segments, and calculate explainable lead scores before export or SDR routing."
         actions={
           <>
-            <form action={runEnrichmentAction}>
-              <button className="button primary" type="submit">
-                <DatabaseZap size={17} aria-hidden="true" />
-                Run enrichment
-              </button>
-            </form>
+            <a href="#enrichment-controls" className="button primary">
+              <DatabaseZap size={17} aria-hidden="true" />
+              Configure run
+            </a>
             <form action={applySegmentsAndScoresAction}>
               <button className="button secondary" type="submit">
                 <RefreshCw size={17} aria-hidden="true" />
@@ -141,6 +150,82 @@ export default async function EnrichmentPage() {
         {lanes.map((lane) => (
           <LaneCard key={lane.label} {...lane} />
         ))}
+      </section>
+
+      <section className="grid two" id="enrichment-controls">
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Enrichment budget controls</h2>
+              <p className="section-subtitle">Run enrichment with a spend cap and optional high-value-only gate.</p>
+            </div>
+            <StatusPill label="Budget gated" tone="success" />
+          </div>
+          <form action={runEnrichmentAction} className="panel-body form-grid">
+            <div className="field">
+              <label htmlFor="enrichmentBudgetDollars">Budget cap</label>
+              <input id="enrichmentBudgetDollars" name="enrichmentBudgetDollars" type="number" min="0" step="0.01" defaultValue="10" />
+            </div>
+            <div className="field">
+              <label htmlFor="highValueOnlyEnrichment">Gate</label>
+              <label className="pill">
+                <input id="highValueOnlyEnrichment" name="highValueOnlyEnrichment" type="checkbox" defaultChecked /> High-value only
+              </label>
+            </div>
+            <div className="field full">
+              <button className="button primary" type="submit">
+                <DatabaseZap size={17} aria-hidden="true" />
+                Run gated enrichment
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Manual priority override</h2>
+              <p className="section-subtitle">Override priority or segment only with a required reason; every change is audited.</p>
+            </div>
+            <StatusPill label="Reason required" tone="warning" />
+          </div>
+          <form action={overrideLeadPrioritySegmentAction} className="panel-body form-grid">
+            <div className="field full">
+              <label htmlFor="contactId">Lead</label>
+              <select id="contactId" name="contactId" required>
+                {contacts.slice(0, 80).map((contact) => (
+                  <option key={contact.id} value={contact.id}>
+                    {contact.name} - {contact.companyId} - {contact.priority}/{contact.segment}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="priorityOverride">Priority</label>
+              <select id="priorityOverride" name="priorityOverride">
+                <option value="">Keep current</option>
+                <option value="P1">P1</option>
+                <option value="P2">P2</option>
+                <option value="P3">P3</option>
+                <option value="P4">P4</option>
+                <option value="S">Suppress priority</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="segmentOverride">Segment</label>
+              <input id="segmentOverride" name="segmentOverride" placeholder="Owner-led local business" />
+            </div>
+            <div className="field full">
+              <label htmlFor="overrideReason">Override reason</label>
+              <textarea id="overrideReason" name="overrideReason" placeholder="Explain why this lead should be reprioritized." required />
+            </div>
+            <div className="field full">
+              <button className="button secondary" type="submit">
+                Save override
+              </button>
+            </div>
+          </form>
+        </div>
       </section>
 
       <section className="grid two enrichment-ops-grid">
@@ -453,4 +538,8 @@ function formatDate(value: string) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function formatCents(value: number) {
+  return formatCurrency(value / 100);
 }

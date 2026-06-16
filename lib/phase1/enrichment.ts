@@ -10,6 +10,7 @@ import type {
   ProviderCacheEntry
 } from "@/lib/phase1/types";
 import { applySegmentsAndScores } from "@/lib/phase1/scoring";
+import { recordProviderUsage } from "@/lib/phase1/money";
 
 const providers: EnrichmentProvider[] = [
   "Syncore Apollo Local",
@@ -17,22 +18,96 @@ const providers: EnrichmentProvider[] = [
   "Syncore Web Signals Local"
 ];
 
-export function runWorkspaceEnrichment(state: AppState, workspaceId: string) {
+type RunWorkspaceEnrichmentOptions = {
+  budgetCents?: number;
+  highValueOnly?: boolean;
+};
+
+const enrichmentUnitCostCents = 2;
+
+export function runWorkspaceEnrichment(
+  state: AppState,
+  workspaceId: string,
+  options: RunWorkspaceEnrichmentOptions = {}
+) {
   let enrichedCompanies = 0;
   let enrichedContacts = 0;
   let cacheHits = 0;
   let cacheWrites = 0;
+  let budgetSpentCents = 0;
+  let skippedForBudget = 0;
+  let skippedForHighValue = 0;
+  const budgetCents = typeof options.budgetCents === "number" ? Math.max(0, Math.round(options.budgetCents)) : undefined;
+
+  const canSpend = () => budgetCents === undefined || budgetSpentCents + enrichmentUnitCostCents <= budgetCents;
+  const spend = () => {
+    budgetSpentCents += enrichmentUnitCostCents;
+  };
 
   for (const company of state.companies.filter((item) => item.workspaceId === workspaceId)) {
+    if (options.highValueOnly && !isHighValueCompany(state, company)) {
+      skippedForHighValue += 1;
+      continue;
+    }
+
+    if (!canSpend()) {
+      skippedForBudget += 1;
+      continue;
+    }
+
     const result = enrichCompany(state, company);
+    spend();
+    recordProviderUsage(state, {
+      workspaceId,
+      provider: "syncore_local_enrichment",
+      operation: "enrich_company",
+      jobId: undefined,
+      unitsUsed: 1,
+      unitCostCents: enrichmentUnitCostCents,
+      totalCostCents: enrichmentUnitCostCents,
+      amountKind: "System-generated",
+      rawProviderMetadata: {
+        targetType: "company",
+        targetId: company.id,
+        highValueOnly: options.highValueOnly ?? false,
+        moneySource: "System-generated"
+      }
+    });
     enrichedCompanies += result.enriched ? 1 : 0;
     cacheHits += result.cacheHits;
     cacheWrites += result.cacheWrites;
   }
 
   for (const contact of state.contacts.filter((item) => item.workspaceId === workspaceId && !item.isSuppressed)) {
+    if (options.highValueOnly && !isHighValueContact(contact)) {
+      skippedForHighValue += 1;
+      continue;
+    }
+
+    if (!canSpend()) {
+      skippedForBudget += 1;
+      continue;
+    }
+
     const company = state.companies.find((item) => item.id === contact.companyId);
     const result = enrichContact(state, contact, company);
+    spend();
+    recordProviderUsage(state, {
+      workspaceId,
+      provider: "syncore_local_enrichment",
+      operation: "enrich_contact",
+      jobId: undefined,
+      unitsUsed: 1,
+      unitCostCents: enrichmentUnitCostCents,
+      totalCostCents: enrichmentUnitCostCents,
+      amountKind: "System-generated",
+      rawProviderMetadata: {
+        targetType: "contact",
+        targetId: contact.id,
+        highValueOnly: options.highValueOnly ?? false,
+        moneySource: "System-generated"
+      }
+    });
     enrichedContacts += result.enriched ? 1 : 0;
     cacheHits += result.cacheHits;
     cacheWrites += result.cacheWrites;
@@ -46,6 +121,11 @@ export function runWorkspaceEnrichment(state: AppState, workspaceId: string) {
     enrichedContacts,
     cacheHits,
     cacheWrites,
+    budgetSpentCents,
+    budgetRemainingCents: budgetCents === undefined ? undefined : Math.max(budgetCents - budgetSpentCents, 0),
+    skippedForBudget,
+    skippedForHighValue,
+    highValueOnly: options.highValueOnly ?? false,
     segmented: scoring.segmented,
     scored: scoring.scored
   };
@@ -392,6 +472,24 @@ function ttlDays(provider: EnrichmentProvider) {
   if (provider === "Syncore Apollo Local") return 60;
   if (provider === "Syncore Hunter Local") return 45;
   return 30;
+}
+
+function isHighValueCompany(state: AppState, company: Company) {
+  if (company.priority === "P1" || company.priority === "P2" || company.score >= 70) {
+    return true;
+  }
+
+  return state.contacts.some((contact) => contact.companyId === company.id && isHighValueContact(contact));
+}
+
+function isHighValueContact(contact: Contact) {
+  return (
+    contact.priority === "P1" ||
+    contact.priority === "P2" ||
+    contact.score >= 70 ||
+    contact.grade === "A" ||
+    contact.grade === "B"
+  );
 }
 
 function hash(input: string) {

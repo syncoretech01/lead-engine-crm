@@ -13,6 +13,7 @@ export function statusTone(label: string): StatusPillProps["tone"] {
   const normalized = label.toLowerCase();
 
   if (
+    normalized.includes("active") ||
     normalized.includes("ready") ||
     normalized.includes("completed") ||
     normalized.includes("closed won") ||
@@ -28,6 +29,7 @@ export function statusTone(label: string): StatusPillProps["tone"] {
   }
 
   if (
+    normalized.includes("mock") ||
     normalized.includes("running") ||
     normalized.includes("open") ||
     normalized.includes("assigned") ||

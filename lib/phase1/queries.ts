@@ -44,6 +44,13 @@ export const sourceHealth = [
     fields: ["local business", "phone", "rating", "place id"]
   },
   {
+    source: "Apify",
+    status: "Mock ready",
+    trust: 72,
+    credits: "run budget cap",
+    fields: ["custom extraction", "niche source", "crawl output"]
+  },
+  {
     source: "CSV Upload",
     status: "Ready",
     trust: 55,
@@ -526,6 +533,18 @@ export function exportTemplates(state: AppState, workspaceId: string) {
       description: "All non-suppressed CRM contacts with verification grade and assignment context.",
       columns: ["company", "contact", "title", "email", "phone", "status", "owner"],
       eligible: recordIdsForExport(state, workspaceId, "contacts", findExportRule(state, workspaceId, "contacts")).length
+    },
+    {
+      id: "phone_leads",
+      name: "Phone-ready leads",
+      description: "Validated phone leads with priority, owner, segment, and source lineage for call-heavy handoff.",
+      columns: ["company", "contact", "title", "phone", "phone_status", "priority", "score", "segment", "owner"],
+      eligible: recordIdsForExport(
+        state,
+        workspaceId,
+        "phone_leads",
+        findExportRule(state, workspaceId, "phone_leads")
+      ).length
     },
     {
       id: "companies",

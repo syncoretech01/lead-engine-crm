@@ -9,6 +9,8 @@ import { detectWorkspaceDuplicates } from "@/lib/phase1/dedupe";
 import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import { defaultExportRules } from "@/lib/phase1/exporting";
 import { ensureJobObservabilityDefaults } from "@/lib/phase1/jobs";
+import { phase4JobDefaults } from "@/lib/phase1/lead-planning";
+import { ensureMoneyLedgerDefaults } from "@/lib/phase1/money";
 import { ensureOutreachDefaults } from "@/lib/phase1/outreach";
 import {
   syncNormalizedProjectionToPrisma,
@@ -235,8 +237,8 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
   const state = input;
   const workspaceId = state.workspaces[0]?.id;
 
-  if ((state as { version: number }).version !== 14) {
-    state.version = 14;
+  if ((state as { version: number }).version !== 15) {
+    state.version = 15;
     changed = true;
   }
 
@@ -274,6 +276,11 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
 
   if (!Array.isArray(state.providerJobRuns)) {
     state.providerJobRuns = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.providerUsageLedger)) {
+    state.providerUsageLedger = [];
     changed = true;
   }
 
@@ -497,9 +504,17 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
     changed = true;
   }
 
-  if (workspaceId && state.exportRules.length === 0) {
-    state.exportRules = defaultExportRules(workspaceId);
-    changed = true;
+  if (workspaceId) {
+    for (const defaultRule of defaultExportRules(workspaceId)) {
+      const exists = state.exportRules.some(
+        (rule) => rule.id === defaultRule.id && rule.workspaceId === workspaceId
+      );
+
+      if (!exists) {
+        state.exportRules.push(defaultRule);
+        changed = true;
+      }
+    }
   }
 
   if (workspaceId && state.segmentRules.length === 0) {
@@ -522,9 +537,32 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
     changed = jobDefaults.changed || changed;
   }
 
+  if (workspaceId) {
+    for (const job of state.leadJobs.filter((item) => item.workspaceId === workspaceId)) {
+      if (
+        job.estimatedRecords === undefined ||
+        job.estimatedCostCents === undefined ||
+        job.estimatedCredits === undefined ||
+        job.budgetCapCents === undefined ||
+        job.budgetStatus === undefined ||
+        !Array.isArray(job.preflightSourceEstimates) ||
+        job.enrichmentBudgetCents === undefined ||
+        job.highValueOnlyEnrichment === undefined
+      ) {
+        Object.assign(job, phase4JobDefaults(job));
+        changed = true;
+      }
+    }
+  }
+
   if (workspaceId && state.enrichmentResults.length === 0 && (state.contacts.length > 0 || state.companies.length > 0)) {
     runWorkspaceEnrichment(state, workspaceId);
     changed = true;
+  }
+
+  if (workspaceId) {
+    const moneyDefaults = ensureMoneyLedgerDefaults(state, workspaceId);
+    changed = moneyDefaults.changed || changed;
   }
 
   if (workspaceId) {

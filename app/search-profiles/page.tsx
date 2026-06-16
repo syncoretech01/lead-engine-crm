@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
-  createLeadJobAction,
   createSearchProfileAction,
   deleteSearchProfileAction,
   duplicateSearchProfileAction
@@ -23,10 +22,11 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
+import { createLeadJobPreflight } from "@/lib/phase1/lead-planning";
 import { sourceHealth } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import type { SearchProfile } from "@/lib/phase1/types";
-import { formatNumber } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
@@ -263,17 +263,10 @@ export default async function SearchProfilesPage() {
                   <td>{formatDate(profile.updatedAt)}</td>
                   <td>
                     <div className="item-card-actions">
-                      <form action={createLeadJobAction}>
-                        <input name="searchProfileId" type="hidden" value={profile.id} />
-                        <input name="name" type="hidden" value={`${profile.name} - Manual run`} />
-                        {profile.sources.map((source) => (
-                          <input key={source} name="sources" type="hidden" value={source} />
-                        ))}
-                        <button className="button primary" type="submit">
-                          <Play size={16} aria-hidden="true" />
-                          Run
-                        </button>
-                      </form>
+                      <Link className="button primary" href="/lead-jobs#create-job">
+                        <Play size={16} aria-hidden="true" />
+                        Plan run
+                      </Link>
                       <form action={duplicateSearchProfileAction}>
                         <input name="id" type="hidden" value={profile.id} />
                         <button className="button secondary" type="submit">
@@ -346,7 +339,7 @@ export default async function SearchProfilesPage() {
           <div className="field full">
             <label>Sources</label>
             <div className="chip-row">
-              {["CSV Upload", "Apollo", "Hunter", "Google Places"].map((source) => (
+              {["CSV Upload", "Apollo", "Hunter", "Google Places", "Apify"].map((source) => (
                 <label className="pill" key={source}>
                   <input name="sources" type="checkbox" value={source} defaultChecked={source === "CSV Upload"} /> {source}
                 </label>
@@ -379,6 +372,12 @@ export default async function SearchProfilesPage() {
 
 
 function ProfileCard({ profile }: { profile: SearchProfile }) {
+  const preflight = createLeadJobPreflight({
+    profile,
+    sources: profile.sources,
+    requestedRecords: profile.estimatedVolume
+  });
+
   return (
     <article className="profile-card card-hover">
       <div className="profile-card-top">
@@ -414,20 +413,17 @@ function ProfileCard({ profile }: { profile: SearchProfile }) {
         <SourceDots sources={profile.sources} />
         <span>{profile.sources.join(", ")}</span>
       </div>
+      <div className="profile-filter-row">
+        <span className="profile-filter-pill strong">{formatCents(preflight.estimatedCostCents)} est.</span>
+        <span className="profile-filter-pill">{formatNumber(preflight.estimatedCredits)} credits</span>
+      </div>
       <div className="profile-card-footer">
         <span>{formatDate(profile.updatedAt)}</span>
         <div className="item-card-actions">
-          <form action={createLeadJobAction}>
-            <input name="searchProfileId" type="hidden" value={profile.id} />
-            <input name="name" type="hidden" value={`${profile.name} - Manual run`} />
-            {profile.sources.map((source) => (
-              <input key={source} name="sources" type="hidden" value={source} />
-            ))}
-            <button className="button primary" type="submit">
-              <Play size={16} aria-hidden="true" />
-              Run
-            </button>
-          </form>
+          <Link className="button primary" href="/lead-jobs#create-job">
+            <Play size={16} aria-hidden="true" />
+            Plan
+          </Link>
           <form action={duplicateSearchProfileAction}>
             <input name="id" type="hidden" value={profile.id} />
             <button className="button secondary" type="submit" title="Copy profile">
@@ -495,6 +491,10 @@ function formatDate(value: string) {
     day: "numeric",
     year: "numeric"
   });
+}
+
+function formatCents(value: number) {
+  return formatCurrency(value / 100);
 }
 
 function sourceColor(source: string) {

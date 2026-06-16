@@ -30,7 +30,13 @@ describe("normalized persistence projection", () => {
     expect(summary.tables.providerEncryptedSecrets).toBe(state.providerEncryptedSecrets.length);
     expect(summary.tables.providerJobs).toBe(state.providerJobs.length);
     expect(summary.tables.providerJobRuns).toBe(state.providerJobRuns.length);
+    expect(summary.tables.providerUsageLedger).toBe(state.providerUsageLedger.length);
     expect(summary.tables.contacts).toBe(state.contacts.length);
+    expect(summary.tables.verificationResults).toBe(state.verificationResults.length);
+    expect(summary.tables.enrichmentResults).toBe(state.enrichmentResults.length);
+    expect(summary.tables.segments).toBe(state.segmentRules.length);
+    expect(summary.tables.recordSegments).toBe(state.recordSegments.length);
+    expect(summary.tables.leadScores).toBe(state.leadScores.length);
     expect(summary.tables.accounts).toBe(state.companies.length);
     expect(summary.tables.crmContacts).toBe(state.contacts.length);
     expect(summary.tables.opportunities).toBe(state.opportunities.length);
@@ -38,9 +44,29 @@ describe("normalized persistence projection", () => {
     expect(summary.tables.tasks).toBe(state.tasks.length);
     expect(summary.tables.notes).toBe(state.notes.length);
     expect(summary.tables.callLogs).toBe(state.callLogs.length);
+    expect(summary.tables.customFields).toBe(state.customFields.length);
+    expect(summary.tables.customFieldValues).toBe(state.customFieldValues.length);
+    expect(summary.tables.sdrTeams).toBe(state.sdrTeams.length);
+    expect(summary.tables.sdrAssignments).toBe(state.sdrAssignments.length);
+    expect(summary.tables.followUpReminders).toBe(state.followUpReminders.length);
+    expect(summary.tables.reassignmentRules).toBe(state.reassignmentRules.length);
     expect(summary.tables.exports).toBe(state.exports.length);
+    expect(summary.tables.outreachProviders).toBe(state.outreachProviders.length);
     expect(summary.tables.emailEvents).toBe(state.emailEvents.length);
     expect(summary.tables.smsEvents).toBe(state.smsEvents.length);
+    expect(summary.tables.reportSnapshots).toBe(state.reportSnapshots.length);
+    expect(summary.tables.retentionPolicies).toBe(state.retentionPolicies.length);
+    expect(summary.tables.retentionRuns).toBe(state.retentionRuns.length);
+    expect(summary.tables.complianceChecklistItems).toBe(state.complianceChecklistItems.length);
+    expect(summary.tables.deliverabilityAlerts).toBe(state.deliverabilityAlerts.length);
+    expect(summary.tables.aiPersonalizations).toBe(state.aiPersonalizations.length);
+    expect(summary.tables.aiReplyClassifications).toBe(state.aiReplyClassifications.length);
+    expect(summary.tables.aiCallSummaries).toBe(state.aiCallSummaries.length);
+    expect(summary.tables.aiLeadScorePredictions).toBe(state.aiLeadScorePredictions.length);
+    expect(summary.tables.aiIcpRecommendations).toBe(state.aiIcpRecommendations.length);
+    expect(summary.tables.aiDeliverabilityRecommendations).toBe(state.aiDeliverabilityRecommendations.length);
+    expect(summary.tables.aiRevenueInsights).toBe(state.aiRevenueInsights.length);
+    expect(summary.tables.aiAutomationRuns).toBe(state.aiAutomationRuns.length);
     expect(summary.tables.rawLeads).toBe(state.rawLeads.length);
     expect(summary.tables.normalizedRecords).toBe(state.normalizedRecords.length);
     expect(contact?.lawfulBasis).toBe(state.contacts[0].lawfulBasis);
@@ -271,17 +297,19 @@ describe("normalized persistence projection", () => {
     });
 
     const result = await syncNormalizedProjectionToPrisma(state, client, {
-      tables: ["providerJobs", "providerJobRuns", "auditLogs"]
+      tables: ["providerJobs", "providerJobRuns", "providerUsageLedger", "auditLogs"]
     });
 
-    expect(result.syncedTables).toEqual(["providerJobs", "providerJobRuns", "auditLogs"]);
+    expect(result.syncedTables).toEqual(["providerJobs", "providerJobRuns", "providerUsageLedger", "auditLogs"]);
     expect(result.skippedTables).toEqual([]);
     expect(touchedDelegates).toEqual(new Set([
       "auditLog.deleteMany",
+      "providerUsageLedger.deleteMany",
       "providerJobRun.deleteMany",
       "providerJob.deleteMany",
       "providerJob.upsert",
       "providerJobRun.upsert",
+      "providerUsageLedger.upsert",
       "auditLog.upsert"
     ]));
   });

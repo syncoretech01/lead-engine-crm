@@ -20,6 +20,8 @@ import { detectWorkspaceDuplicates } from "@/lib/phase1/dedupe";
 import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import { defaultExportRules } from "@/lib/phase1/exporting";
 import { ensureJobObservabilityDefaults } from "@/lib/phase1/jobs";
+import { phase4JobDefaults } from "@/lib/phase1/lead-planning";
+import { ensureMoneyLedgerDefaults } from "@/lib/phase1/money";
 import { ensureOutreachDefaults } from "@/lib/phase1/outreach";
 import { createDefaultProviderConnections } from "@/lib/phase1/provider-connections";
 import { ensureReportingDefaults } from "@/lib/phase1/reporting";
@@ -110,31 +112,33 @@ export function createSeedState(): AppState {
     updatedAt: now
   }));
 
-  const seededJobs: LeadJob[] = leadJobs.map((job) => ({
-    id: job.id,
-    workspaceId,
-    searchProfileId: job.profileId,
-    name: job.name,
-    status: job.status,
-    progress: job.progress,
-    sources: job.sources,
-    raw: job.raw,
-    normalized: job.normalized,
-    duplicates: job.duplicates,
-    suppressed: job.suppressed,
-    verified: job.verified,
-    enriched: job.enriched,
-    exported: job.exported,
-    pushedToCrm: job.pushedToCrm,
-    actualCost: job.actualCost,
-    startedAt: new Date(job.startedAt).toISOString(),
-    completedAt: job.status === "Completed" ? now : undefined,
-    eta: job.eta,
-    errorSummary: job.errorSummary,
-    createdById: "user-nora",
-    createdAt: now,
-    updatedAt: now
-  }));
+  const seededJobs: LeadJob[] = leadJobs.map((job) =>
+    phase4JobDefaults({
+      id: job.id,
+      workspaceId,
+      searchProfileId: job.profileId,
+      name: job.name,
+      status: job.status,
+      progress: job.progress,
+      sources: job.sources,
+      raw: job.raw,
+      normalized: job.normalized,
+      duplicates: job.duplicates,
+      suppressed: job.suppressed,
+      verified: job.verified,
+      enriched: job.enriched,
+      exported: job.exported,
+      pushedToCrm: job.pushedToCrm,
+      actualCost: job.actualCost,
+      startedAt: new Date(job.startedAt).toISOString(),
+      completedAt: job.status === "Completed" ? now : undefined,
+      eta: job.eta,
+      errorSummary: job.errorSummary,
+      createdById: "user-nora",
+      createdAt: now,
+      updatedAt: now
+    })
+  );
 
   const seededCompanies: Company[] = accounts.map((account) => ({
     id: companyIdForAccount(account.id),
@@ -311,7 +315,7 @@ export function createSeedState(): AppState {
   ];
 
   const state: AppState = {
-    version: 14,
+    version: 15,
     workspaces: [workspace],
     users,
     workspaceMembers,
@@ -324,6 +328,7 @@ export function createSeedState(): AppState {
     providerEncryptedSecrets: [],
     providerJobs: [],
     providerJobRuns: [],
+    providerUsageLedger: [],
     searchProfiles: seededProfiles,
     leadJobs: seededJobs,
     asyncJobRuns: [],
@@ -389,6 +394,7 @@ export function createSeedState(): AppState {
   ensureComplianceDefaults(state, workspaceId);
   ensureReportingDefaults(state, workspaceId);
   ensureAiDefaults(state, workspaceId);
+  ensureMoneyLedgerDefaults(state, workspaceId, now);
 
   return state;
 }

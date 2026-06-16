@@ -29,10 +29,36 @@ export default async function IntegrationsPage() {
   const audits = state.providerCredentialAudits
     .filter((audit) => audit.workspaceId === workspaceId)
     .slice(0, 18);
-  const connected = connections.filter((connection) => connection.status === "Connected").length;
+  const active = connections.filter((connection) => connection.status === "Connected").length;
   const enabled = connections.filter((connection) => connection.enabled).length;
   const needsAttention = connections.filter((connection) => connection.status === "Needs attention").length;
   const configured = connections.filter((connection) => connection.hasSecret).length;
+  const providerStateGuide = [
+    {
+      label: "Mock mode",
+      tone: "info" as const,
+      title: "No live calls",
+      copy: "Every adapter stays local in this build. Tests, sends, and webhooks never touch a real provider."
+    },
+    {
+      label: "Not configured",
+      tone: "default" as const,
+      title: "Idle lane",
+      copy: "The provider exists in the selected stack, but no server-side credential has been stored yet."
+    },
+    {
+      label: "Active",
+      tone: "success" as const,
+      title: "Mock-ready",
+      copy: "Enabled, credentialed, and locally testable. This is the final state before a live adapter is introduced."
+    },
+    {
+      label: "Needs attention",
+      tone: "warning" as const,
+      title: "Configuration gap",
+      copy: "A lane is enabled but still missing a valid credential, compatible settings, or a passing local test."
+    }
+  ];
   const stats = [
     {
       label: "Providers",
@@ -58,7 +84,7 @@ export default async function IntegrationsPage() {
     {
       label: "Needs attention",
       value: formatNumber(needsAttention),
-      note: `${formatNumber(connected)} mock connection tests passed.`,
+      note: `${formatNumber(active)} mock-ready lanes passed a local test.`,
       icon: ShieldCheck,
       tone: needsAttention ? "warning" as const : "success" as const
     }
@@ -75,6 +101,18 @@ export default async function IntegrationsPage() {
       <section className="stat-grid" aria-label="Integration metrics">
         {stats.map((stat) => (
           <StatCard key={stat.label} {...stat} />
+        ))}
+      </section>
+
+      <section className="state-guide-grid" aria-label="Provider state guide">
+        {providerStateGuide.map((state) => (
+          <article className="state-guide-card" key={state.label}>
+            <span className="state-guide-label">
+              <StatusPill label={state.label} tone={state.tone} />
+            </span>
+            <strong>{state.title}</strong>
+            <p>{state.copy}</p>
+          </article>
         ))}
       </section>
 
@@ -160,6 +198,8 @@ export default async function IntegrationsPage() {
 }
 
 function ProviderConnectionCard({ connection }: { connection: ProviderConnectionSafeView }) {
+  const stateLabel = connection.status === "Connected" ? "Active" : connection.status;
+
   return (
     <article className="item-card integration-card">
       <div className="item-card-header">
@@ -168,7 +208,7 @@ function ProviderConnectionCard({ connection }: { connection: ProviderConnection
           <span>{connection.categories.map(labelize).join(" / ")}</span>
         </div>
         <div className="chip-row">
-          <StatusPill label={connection.status} tone={statusTone(connection.status)} />
+          <StatusPill label={stateLabel} tone={statusTone(stateLabel)} />
           <StatusPill label={connection.executionMode} tone="info" />
         </div>
       </div>
@@ -180,6 +220,8 @@ function ProviderConnectionCard({ connection }: { connection: ProviderConnection
           </span>
         ))}
       </div>
+
+      <p className="surface-note">{providerStateSummary(connection)}</p>
 
       <form action={saveProviderConnectionAction} className="form-grid compact-form">
         <input name="providerId" type="hidden" value={connection.providerId} />
@@ -193,14 +235,17 @@ function ProviderConnectionCard({ connection }: { connection: ProviderConnection
           />
         </div>
         <div className="field">
-          <label htmlFor={`${connection.id}-secret`}>API key</label>
+          <label htmlFor={`${connection.id}-secret`}>API key / token</label>
           <input
             id={`${connection.id}-secret`}
             name="secretValue"
             type="password"
             autoComplete="off"
-            placeholder={connection.hasSecret ? `Stored ending ${connection.maskedSecretSuffix}` : "Paste key for mock save"}
+            placeholder={connection.hasSecret ? `Stored ending ${connection.maskedSecretSuffix}` : "Paste credential for mock save"}
           />
+          <span className="field-note">
+            Stored server-side only. In this phase the adapter stays in {connection.executionMode} mode with no network access.
+          </span>
         </div>
         <div className="field">
           <label htmlFor={`${connection.id}-scopes`}>Scopes</label>
@@ -291,7 +336,7 @@ function ProviderConnectionCard({ connection }: { connection: ProviderConnection
         </form>
         <span className="pill">
           <CheckCircle2 size={14} aria-hidden="true" />
-          {connection.lastTestStatus}
+          Last test: {connection.lastTestStatus}
         </span>
       </div>
     </article>
@@ -308,4 +353,20 @@ function labelize(value: string) {
 
 function providerName(connections: ProviderConnectionSafeView[], providerId: string) {
   return connections.find((connection) => connection.providerId === providerId)?.displayName ?? providerId;
+}
+
+function providerStateSummary(connection: ProviderConnectionSafeView) {
+  if (connection.status === "Connected") {
+    return "Active in mock mode. The lane is enabled, a credential is stored server-side, and local connection tests can pass without calling the provider.";
+  }
+
+  if (connection.status === "Needs attention") {
+    return "Enabled, but still missing a passing mock test, a stored credential, or compatible operation settings.";
+  }
+
+  if (connection.status === "Disabled" && connection.hasSecret) {
+    return "Credentialed but paused. The lane stays available for future activation while all execution remains blocked.";
+  }
+
+  return "Not configured yet. Store a server-side credential and enable the lane when you are ready to simulate the connection flow.";
 }

@@ -39,13 +39,22 @@ import { detectWorkspaceDuplicates, ignoreDedupeMatch, mergeDedupeMatch } from "
 import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import { createExportRecord } from "@/lib/phase1/exporting";
 import { createTrackedJob, retryFailedJob } from "@/lib/phase1/jobs";
+import { applyLeadOverride, createLeadJobFromPreflight } from "@/lib/phase1/lead-planning";
 import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/phase1/normalization";
 import {
+  aiWriteTables,
+  complianceWriteTables,
+  crmWriteTables,
+  enrichmentWriteTables,
   exportWriteTables,
+  leadGenerationWriteTables,
   outreachCampaignSendWriteTables,
   outreachEmailWriteTables,
+  outreachSetupWriteTables,
   outreachSmsWriteTables,
-  outreachTrackedCallWriteTables
+  outreachTrackedCallWriteTables,
+  reportingWriteTables,
+  sdrWriteTables
 } from "@/lib/phase1/normalized-write-tables";
 import {
   callDispositions,
@@ -159,7 +168,7 @@ export async function createSearchProfileAction(formData: FormData) {
       action: "created",
       newValue: profile
     });
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   revalidatePath("/");
   revalidatePath("/search-profiles");
@@ -193,7 +202,7 @@ export async function duplicateSearchProfileAction(formData: FormData) {
       oldValue: { sourceProfileId: profile.id },
       newValue: duplicate
     });
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   revalidatePath("/search-profiles");
 }
@@ -214,7 +223,7 @@ export async function deleteSearchProfileAction(formData: FormData) {
         action: "deleted"
       });
     }
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   revalidatePath("/");
   revalidatePath("/search-profiles");
@@ -227,29 +236,22 @@ export async function createLeadJobAction(formData: FormData) {
     const profile = state.searchProfiles.find((item) => item.id === profileId && item.workspaceId === session.workspace.id);
     const sources = sourceValues(formData);
     const now = new Date().toISOString();
-    const job: LeadJob = {
-      id: `job-${randomUUID()}`,
-      workspaceId: session.workspace.id,
-      searchProfileId: profile?.id,
+    const budgetCapCents =
+      centsValue(formData.get("budgetCapDollars")) ?? optionalNumberValue(formData.get("budgetCapCents"));
+    const enrichmentBudgetCents =
+      centsValue(formData.get("enrichmentBudgetDollars")) ?? optionalNumberValue(formData.get("enrichmentBudgetCents"));
+    const job: LeadJob = createLeadJobFromPreflight({
+      session,
+      profile,
       name: stringValue(formData.get("name"), profile ? `${profile.name} Job` : "Manual lead job"),
-      status: "Queued",
-      progress: 0,
       sources: sources.length ? sources : profile?.sources ?? ["CSV Upload"],
-      raw: 0,
-      normalized: 0,
-      duplicates: 0,
-      suppressed: 0,
-      verified: 0,
-      enriched: 0,
-      exported: 0,
-      pushedToCrm: 0,
-      actualCost: 0,
-      eta: "Waiting for source data",
-      errorSummary: "CSV import or source connector data required",
-      createdById: session.user.id,
-      createdAt: now,
-      updatedAt: now
-    };
+      requestedRecords: optionalNumberValue(formData.get("requestedRecords")) ?? profile?.estimatedVolume,
+      budgetCapCents,
+      enrichmentBudgetCents,
+      highValueOnlyEnrichment: formData.get("highValueOnlyEnrichment") === "on",
+      budgetConfirmed: formData.get("budgetConfirmed") === "on",
+      now
+    });
 
     createTrackedJob({
       state,
@@ -261,10 +263,10 @@ export async function createLeadJobAction(formData: FormData) {
     appendAudit(state, session, {
       objectType: "lead_job",
       objectId: job.id,
-      action: "queued",
+      action: "queued_with_budget_confirmation",
       newValue: job
     });
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   revalidatePath("/");
   revalidatePath("/lead-jobs");
@@ -282,7 +284,7 @@ export async function retryLeadJobAction(formData: FormData) {
       action: "retry_queued",
       newValue: retry
     });
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   revalidatePath("/lead-jobs");
 }
@@ -323,7 +325,7 @@ export async function runVerificationAction() {
       action: "verification_run",
       newValue: result
     });
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -339,7 +341,7 @@ export async function detectDuplicatesAction() {
       action: "duplicates_detected",
       newValue: result
     });
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -357,7 +359,7 @@ export async function mergeDuplicateAction(formData: FormData) {
         action: "merged"
       });
     }
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -375,7 +377,7 @@ export async function ignoreDuplicateAction(formData: FormData) {
         action: "ignored"
       });
     }
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -411,7 +413,7 @@ export async function addSuppressionAction(formData: FormData) {
       action: "created",
       newValue: { ...record, affectedContacts }
     });
-  });
+  }, { normalizedTables: complianceWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -430,7 +432,7 @@ export async function deleteSuppressionAction(formData: FormData) {
       objectId: id,
       action: "deleted"
     });
-  });
+  }, { normalizedTables: complianceWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -494,10 +496,15 @@ export async function deleteExportRuleAction(formData: FormData) {
   revalidatePath("/exports");
 }
 
-export async function runEnrichmentAction() {
+export async function runEnrichmentAction(formData?: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_enrichment");
-    const result = runWorkspaceEnrichment(state, session.workspace.id);
+    const budgetCents =
+      centsValue(formData?.get("enrichmentBudgetDollars")) ?? optionalNumberValue(formData?.get("enrichmentBudgetCents"));
+    const result = runWorkspaceEnrichment(state, session.workspace.id, {
+      budgetCents,
+      highValueOnly: formData?.get("highValueOnlyEnrichment") === "on"
+    });
 
     appendAudit(state, session, {
       objectType: "enrichment",
@@ -505,7 +512,33 @@ export async function runEnrichmentAction() {
       action: "enrichment_waterfall_run",
       newValue: result
     });
-  });
+  }, { normalizedTables: enrichmentWriteTables });
+
+  revalidatePath("/", "layout");
+}
+
+export async function overrideLeadPrioritySegmentAction(formData: FormData) {
+  await updateState((state, session) => {
+    assertPermission(session, "manage_enrichment");
+    const result = applyLeadOverride({
+      state,
+      workspaceId: session.workspace.id,
+      contactId: stringValue(formData.get("contactId")),
+      priorityOverride: optionalPriority(formData.get("priorityOverride")),
+      segmentOverride: stringValue(formData.get("segmentOverride")) || undefined,
+      reason: stringValue(formData.get("overrideReason")),
+      now: new Date().toISOString()
+    });
+
+    appendAudit(state, session, {
+      objectType: "lead_override",
+      objectId: result.contact.id,
+      action: "manual_priority_segment_override",
+      oldValue: result.before,
+      newValue: result.after,
+      reason: result.reason
+    });
+  }, { normalizedTables: enrichmentWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -521,7 +554,7 @@ export async function applySegmentsAndScoresAction() {
       action: "segments_and_scores_applied",
       newValue: result
     });
-  });
+  }, { normalizedTables: enrichmentWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -557,7 +590,7 @@ export async function createSegmentRuleAction(formData: FormData) {
       action: "created",
       newValue: { rule, scoring }
     });
-  });
+  }, { normalizedTables: enrichmentWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -578,7 +611,7 @@ export async function deleteSegmentRuleAction(formData: FormData) {
       action: "deleted",
       newValue: scoring
     });
-  });
+  }, { normalizedTables: enrichmentWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -637,7 +670,7 @@ export async function createOpportunityAction(formData: FormData) {
       action: "created",
       newValue: opportunity
     });
-  });
+  }, { normalizedTables: crmWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -679,7 +712,7 @@ export async function updateOpportunityStageAction(formData: FormData) {
       oldValue: { stage: oldStage },
       newValue: { stage: nextStage, probability: opportunity.probability }
     });
-  });
+  }, { normalizedTables: crmWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -724,7 +757,7 @@ export async function createTaskAction(formData: FormData) {
       action: "created",
       newValue: task
     });
-  });
+  }, { normalizedTables: crmWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -762,7 +795,7 @@ export async function completeTaskAction(formData: FormData) {
       oldValue: { status: oldStatus },
       newValue: { status: task.status, completedAt: task.completedAt }
     });
-  });
+  }, { normalizedTables: crmWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -802,7 +835,7 @@ export async function createNoteAction(formData: FormData) {
       action: "created",
       newValue: note
     });
-  });
+  }, { normalizedTables: crmWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -845,7 +878,7 @@ export async function createCallLogAction(formData: FormData) {
       action: "created",
       newValue: call
     });
-  });
+  }, { normalizedTables: crmWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -875,7 +908,7 @@ export async function createCustomFieldAction(formData: FormData) {
       action: "created",
       newValue: field
     });
-  });
+  }, { normalizedTables: crmWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -932,7 +965,7 @@ export async function setCustomFieldValueAction(formData: FormData) {
       action: "updated",
       newValue: { customFieldId, value }
     });
-  });
+  }, { normalizedTables: crmWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -949,7 +982,7 @@ export async function runSdrAssignmentAction() {
       action: "assignment_run",
       newValue: { ...result, sla }
     });
-  });
+  }, { normalizedTables: sdrWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -972,7 +1005,7 @@ export async function logFirstTouchAction(formData: FormData) {
       action: "first_touch_logged",
       newValue: assignment
     });
-  });
+  }, { normalizedTables: sdrWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -988,7 +1021,7 @@ export async function completeFollowUpReminderAction(formData: FormData) {
       action: "completed",
       newValue: reminder
     });
-  });
+  }, { normalizedTables: sdrWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1010,7 +1043,7 @@ export async function reassignSdrAssignmentAction(formData: FormData) {
       action: "reassigned",
       newValue: assignment
     });
-  });
+  }, { normalizedTables: sdrWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1026,7 +1059,7 @@ export async function applyReassignmentRulesAction() {
       action: "recommendations_applied",
       newValue: result
     });
-  });
+  }, { normalizedTables: sdrWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1050,7 +1083,7 @@ export async function createReassignmentRuleAction(formData: FormData) {
       action: "created",
       newValue: rule
     });
-  });
+  }, { normalizedTables: sdrWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1068,7 +1101,7 @@ export async function deleteReassignmentRuleAction(formData: FormData) {
       objectId: id,
       action: "deleted"
     });
-  });
+  }, { normalizedTables: sdrWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1095,7 +1128,7 @@ export async function createOutreachCampaignAction(formData: FormData) {
       action: "created",
       newValue: campaign
     });
-  });
+  }, { normalizedTables: outreachSetupWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1127,7 +1160,7 @@ export async function createCampaignSequenceAction(formData: FormData) {
       action: "created",
       newValue: sequence
     });
-  });
+  }, { normalizedTables: outreachSetupWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1167,7 +1200,7 @@ export async function createSequenceStepAction(formData: FormData) {
       action: "created",
       newValue: step
     });
-  });
+  }, { normalizedTables: outreachSetupWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1296,7 +1329,7 @@ export async function updateOutreachProviderStatusAction(formData: FormData) {
       oldValue: { status: oldStatus },
       newValue: { status: provider.status }
     });
-  });
+  }, { normalizedTables: outreachSetupWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1313,7 +1346,7 @@ export async function generateReportSnapshotsAction() {
       newValue: result,
       reason: "Admin reporting snapshot generated"
     });
-  });
+  }, { normalizedTables: reportingWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1332,7 +1365,7 @@ export async function runRetentionPolicyAction(formData: FormData) {
       newValue: run,
       reason: run.summary
     });
-  });
+  }, { normalizedTables: reportingWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1362,7 +1395,7 @@ export async function updateRetentionPolicyAction(formData: FormData) {
       oldValue,
       newValue: policy
     });
-  });
+  }, { normalizedTables: reportingWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1385,7 +1418,7 @@ export async function createDataSubjectRequestAction(formData: FormData) {
       newValue: request,
       reason: request.notes
     });
-  });
+  }, { normalizedTables: complianceWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1408,7 +1441,7 @@ export async function completeDataSubjectRequestAction(formData: FormData) {
       newValue: result,
       reason: result.request.evidence
     });
-  });
+  }, { normalizedTables: complianceWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1475,7 +1508,7 @@ export async function updateContactComplianceAction(formData: FormData) {
         doNotContact: contact.doNotContact
       }
     });
-  });
+  }, { normalizedTables: complianceWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1493,7 +1526,7 @@ export async function resolveDeliverabilityAlertAction(formData: FormData) {
       newValue: alert,
       reason: stringValue(formData.get("reason"), "Reviewed by compliance")
     });
-  });
+  }, { normalizedTables: complianceWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1522,7 +1555,7 @@ export async function updateComplianceChecklistStatusAction(formData: FormData) 
       oldValue,
       newValue: { status: item.status, evidence: item.evidence }
     });
-  });
+  }, { normalizedTables: complianceWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1539,7 +1572,7 @@ export async function runAiAutomationSuiteAction() {
       newValue: run,
       reason: run.summary
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1556,7 +1589,7 @@ export async function generateAiPersonalizationsAction() {
       newValue: run,
       reason: run.summary
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1573,7 +1606,7 @@ export async function classifyAiRepliesAction() {
       newValue: run,
       reason: run.summary
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1590,7 +1623,7 @@ export async function generateAiCallSummariesAction() {
       newValue: run,
       reason: run.summary
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1607,7 +1640,7 @@ export async function generateAiLeadScoresAction() {
       newValue: run,
       reason: run.summary
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1624,7 +1657,7 @@ export async function generateAiIcpRecommendationsAction() {
       newValue: run,
       reason: run.summary
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1642,7 +1675,7 @@ export async function createAiIcpRecommendationAction(formData: FormData) {
       newValue: recommendation,
       reason: "AI ICP builder prompt"
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1659,7 +1692,7 @@ export async function generateAiDeliverabilityRecommendationsAction() {
       newValue: run,
       reason: run.summary
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1676,7 +1709,7 @@ export async function generateAiRevenueInsightsAction() {
       newValue: run,
       reason: run.summary
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1694,7 +1727,7 @@ export async function applyAiLeadScoreAction(formData: FormData) {
       newValue: prediction,
       reason: "AI lead score applied to CRM contact"
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1712,7 +1745,7 @@ export async function applyAiPersonalizationAction(formData: FormData) {
       newValue: personalization,
       reason: "AI personalization stored as CRM activity"
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1730,7 +1763,7 @@ export async function applyAiIcpRecommendationAction(formData: FormData) {
       newValue: result,
       reason: "AI ICP recommendation converted into a Search Profile"
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1749,7 +1782,7 @@ export async function dismissAiRecordAction(formData: FormData) {
       newValue: record,
       reason: "AI recommendation dismissed"
     });
-  });
+  }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
 }
@@ -1817,13 +1850,22 @@ function numberValue(value: FormDataEntryValue | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function optionalNumberValue(value: FormDataEntryValue | null) {
+function optionalNumberValue(value: FormDataEntryValue | null | undefined) {
   if (typeof value !== "string" || !value.trim()) {
     return undefined;
   }
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function centsValue(value: FormDataEntryValue | null | undefined) {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 100)) : undefined;
 }
 
 function providerIdValue(value: FormDataEntryValue | null): ProviderId {
@@ -1837,6 +1879,7 @@ function providerCapabilityValues(formData: FormData): ProviderCapability[] {
 function exportName(type: ExportRecord["type"]) {
   if (type === "companies") return "Companies export";
   if (type === "contacts") return "Contacts export";
+  if (type === "phone_leads") return "Phone-ready leads";
   if (type === "sdr_assignments") return "SDR assignment queue";
   return "Verified email leads";
 }

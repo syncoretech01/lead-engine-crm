@@ -41,22 +41,24 @@ The Prisma schema is in `prisma/schema.prisma`. For PostgreSQL-backed persistenc
 ```bash
 copy .env.example .env
 npm run prisma:generate
-npm run prisma:push
+npm run prisma:migrate:deploy
+npm run db:seed
 npm run dev
 ```
 
-The first Prisma-backed app read creates the `AppStateSnapshot` row. If `.syncore-data/store.json` already exists, that state is used as the initial PostgreSQL snapshot; otherwise the seeded Syncore workspace is created.
+For a one-command PostgreSQL bootstrap, use `npm run db:bootstrap`.
 
-Prisma writes also mirror a normalized projection into core tables for workspace/user membership, search profiles, jobs, raw and normalized leads, companies, contacts, CRM accounts/contacts, opportunities, CRM activities/tasks/notes/call logs, exports, suppressions, outreach campaigns/sequences/steps, email events, SMS events, tracked calls, data subject requests, and audit logs. Contact/account list/detail reads, CRM event reads, outreach event reads, export reads, and compliance/reporting reads can now prefer normalized Prisma rows when Prisma storage is active. Generated exports, manual outreach email/SMS/call events, campaign send simulation, and signed email/SMS webhook processing now request scoped normalized table writes in the same Prisma transaction while preserving the snapshot compatibility layer.
+Prisma writes mirror a normalized projection into tables for workspace/user membership, provider connections/jobs/usage, search profiles, jobs, raw and normalized leads, companies, contacts, verification/enrichment results, segments/scores, CRM accounts/contacts, opportunities, CRM activities/tasks/notes/call logs, SDR assignments/reminders, exports, suppressions, outreach providers/campaigns/sequences/steps, email events, SMS events, tracked calls, reports, retention, compliance, AI automation outputs, and audit logs. Contact/account list/detail reads, CRM event reads, outreach event reads, export reads, and compliance/reporting reads can prefer normalized Prisma rows when Prisma storage is active. Major write paths now request scoped normalized table writes in the same Prisma transaction while preserving the snapshot compatibility layer.
 
 Before using a production database, create the database, set `DATABASE_URL`, then run:
 
 ```bash
+npm run prisma:validate
 npm run prisma:generate
 npm run prisma:migrate:deploy
 ```
 
-For local schema iteration without a migration history yet, use `npm run prisma:push`.
+Production must use `SYNCORE_STORAGE_DRIVER="prisma"`. File storage is blocked in production unless `SYNCORE_ALLOW_FILE_STORAGE_IN_PRODUCTION=true` is explicitly set for an emergency/demo case. See `docs/PHASE_6_DATABASE_CUTOVER.md` for the staging, production, seed, and rollback process.
 
 ## Production architecture direction
 

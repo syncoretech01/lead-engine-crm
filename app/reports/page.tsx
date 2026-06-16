@@ -78,6 +78,20 @@ export default async function ReportsPage() {
       tone: "success" as const
     },
     {
+      label: "Actual lead cost",
+      value: formatCurrency(snapshot.metrics.actualLeadCost),
+      note: `${formatCurrency(snapshot.metrics.estimatedLeadCost)} estimated pipeline.`,
+      icon: PieChart,
+      tone: "info" as const
+    },
+    {
+      label: "Cost per SDR-ready",
+      value: formatCurrency(snapshot.metrics.costPerSdrReadyLead),
+      note: `${formatCurrency(snapshot.metrics.costPerValidPhone)} per valid phone.`,
+      icon: BarChart3,
+      tone: "info" as const
+    },
+    {
       label: "Deliverability alerts",
       value: formatNumber(snapshot.metrics.openDeliverabilityAlerts),
       note: `Bounce ${formatRate(snapshot.metrics.bounceRate)}, spam ${formatRate(snapshot.metrics.spamComplaintRate)}.`,

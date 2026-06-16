@@ -2,8 +2,8 @@ import Link from "next/link";
 import {
   Activity,
   BadgeCheck,
+  Calculator,
   CircleDollarSign,
-  Database,
   Play,
   RefreshCw,
   ShieldCheck,
@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { jobObservabilitySnapshot } from "@/lib/phase1/jobs";
+import { createLeadJobPreflight } from "@/lib/phase1/lead-planning";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard } from "@/components/ui-metrics";
@@ -39,6 +40,15 @@ export default async function LeadJobsPage() {
   const queuedJobs = leadJobs.filter((job) => job.status === "Queued");
   const runningJobs = leadJobs.filter((job) => job.status === "Running");
   const exportReady = leadJobs.reduce((total, job) => total + job.exported + job.pushedToCrm, 0);
+  const estimatedPipelineCostCents = leadJobs.reduce((total, job) => total + (job.estimatedCostCents ?? 0), 0);
+  const preflightRows = searchProfiles.map((profile) => ({
+    profile,
+    preflight: createLeadJobPreflight({
+      profile,
+      sources: profile.sources,
+      requestedRecords: profile.estimatedVolume
+    })
+  }));
 
   const stats = [
     {
@@ -65,7 +75,7 @@ export default async function LeadJobsPage() {
     {
       label: "Spend tracked",
       value: formatCurrencyCompact(totalCost),
-      note: "Local provider cost simulation",
+      note: `${formatCents(estimatedPipelineCostCents)} estimated pipeline`,
       icon: CircleDollarSign,
       tone: "info" as const
     }
@@ -137,6 +147,51 @@ export default async function LeadJobsPage() {
       <section className="panel">
         <div className="panel-header">
           <div className="panel-title-wrap">
+            <h2 className="section-title">Preflight estimates</h2>
+            <p className="section-subtitle">Preview projected leads, acquisition cost, credits, enrichment budget, and budget cap before launch.</p>
+          </div>
+          <Calculator size={20} aria-hidden="true" />
+        </div>
+        <div className="panel-body profile-card-grid">
+          {preflightRows.map(({ profile, preflight }) => (
+            <article className="profile-card" key={profile.id}>
+              <div className="profile-card-top">
+                <div className="profile-glyph">
+                  <Calculator size={18} aria-hidden="true" />
+                </div>
+                <StatusPill label={preflight.budgetStatus} tone={preflight.budgetStatus === "Within budget" ? "success" : "warning"} />
+              </div>
+              <div className="profile-card-copy">
+                <h2 className="card-title">{profile.name}</h2>
+                <p>{formatNumber(preflight.estimatedRecords)} projected leads across {preflight.sources.length} sources.</p>
+              </div>
+              <div className="profile-filter-row">
+                <span className="profile-filter-pill strong">{formatCents(preflight.estimatedCostCents)} total</span>
+                <span className="profile-filter-pill">{formatNumber(preflight.estimatedCredits)} credits</span>
+                <span className="profile-filter-pill">{formatCents(preflight.budgetCapCents)} cap</span>
+              </div>
+              <div className="stage-list">
+                {preflight.sourceEstimates.map((estimate) => (
+                  <div className="stage-row" key={`${profile.id}-${estimate.source}`}>
+                    <div className="stage-meta">
+                      <strong>{estimate.source}</strong>
+                      <span>{formatNumber(estimate.estimatedRecords)} leads</span>
+                    </div>
+                    <p className="section-subtitle">
+                      {formatCents(estimate.estimatedCostCents)} estimated, {estimate.confidence}% confidence
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+          {preflightRows.length === 0 ? <p className="section-subtitle">Create a search profile to preview source costs.</p> : null}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
             <h2 className="section-title">Job monitor</h2>
             <p className="section-subtitle">Source-aware job status with recovery, quality, cost, and CRM sync counts.</p>
           </div>
@@ -180,6 +235,7 @@ export default async function LeadJobsPage() {
                   <td>
                     <div className="job-data-stack">
                       <strong>{formatNumber(job.raw)} raw</strong>
+                      <span>{formatNumber(job.estimatedRecords ?? 0)} estimated</span>
                       <span>{formatNumber(job.normalized)} normalized</span>
                       <span>{formatNumber(job.enriched)} enriched</span>
                     </div>
@@ -197,7 +253,13 @@ export default async function LeadJobsPage() {
                       <span>{formatNumber(job.exported)} exported</span>
                     </div>
                   </td>
-                  <td>{formatCurrency(job.actualCost)}</td>
+                  <td>
+                    <div className="entity">
+                      <strong>{formatCurrency(job.actualCost)} {job.actualCostSource ?? "Actual"}</strong>
+                      <span>{formatCents(job.estimatedCostCents ?? 0)} {job.estimatedCostSource ?? "Estimated"}</span>
+                      <span>{formatCents(job.budgetCapCents ?? 0)} {job.budgetCapSource ?? "Manual"} cap</span>
+                    </div>
+                  </td>
                   <td>
                     <div className="job-recovery-cell">
                       <strong>{observability.failedRuns ? `${observability.failedRuns} need review` : "Healthy"}</strong>
@@ -310,14 +372,37 @@ export default async function LeadJobsPage() {
               ))}
             </select>
           </div>
+          <div className="field">
+            <label htmlFor="requestedRecords">Requested records</label>
+            <input id="requestedRecords" name="requestedRecords" type="number" min="1" defaultValue="250" />
+          </div>
+          <div className="field">
+            <label htmlFor="budgetCapDollars">Budget cap</label>
+            <input id="budgetCapDollars" name="budgetCapDollars" type="number" min="0" step="0.01" defaultValue="30" />
+          </div>
+          <div className="field">
+            <label htmlFor="enrichmentBudgetDollars">Enrichment budget</label>
+            <input id="enrichmentBudgetDollars" name="enrichmentBudgetDollars" type="number" min="0" step="0.01" defaultValue="5" />
+          </div>
           <div className="field full">
             <label>Sources</label>
             <div className="chip-row">
-              {["CSV Upload", "Apollo", "Hunter", "Google Places"].map((source) => (
+              {["CSV Upload", "Apollo", "Hunter", "Google Places", "Apify"].map((source) => (
                 <label className="pill" key={source}>
                   <input name="sources" type="checkbox" value={source} defaultChecked={source === "CSV Upload"} /> {source}
                 </label>
               ))}
+            </div>
+          </div>
+          <div className="field full">
+            <label>Budget controls</label>
+            <div className="chip-row">
+              <label className="pill">
+                <input name="highValueOnlyEnrichment" type="checkbox" defaultChecked /> High-value enrichment only
+              </label>
+              <label className="pill">
+                <input name="budgetConfirmed" type="checkbox" required /> Confirm budget before queueing
+              </label>
             </div>
           </div>
           <div className="field full">
@@ -386,6 +471,10 @@ function formatCurrencyCompact(value: number) {
     currency: "USD",
     maximumFractionDigits: 0
   }).format(value);
+}
+
+function formatCents(value: number) {
+  return formatCurrency(value / 100);
 }
 
 function sourceColor(source: string) {

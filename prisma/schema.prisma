@@ -106,6 +106,7 @@ model Workspace {
   providerEncryptedSecrets ProviderEncryptedSecret[]
   providerJobs        ProviderJob[]
   providerJobRuns     ProviderJobRun[]
+  providerUsageLedger ProviderUsageLedger[]
   searchProfiles      SearchProfile[]
   leadJobs            LeadJob[]
   rawLeads            RawLead[]
@@ -371,6 +372,29 @@ model ProviderJobRun {
   @@index([workspaceId, providerJobId])
   @@index([workspaceId, status, nextRetryAt])
   @@index([workspaceId, status, lockExpiresAt])
+}
+
+model ProviderUsageLedger {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  provider            String
+  operation           String
+  jobId               String?
+  providerJobId       String?
+  providerJobRunId    String?
+  unitsUsed           Int       @default(0)
+  unitCostCents       Int       @default(0)
+  totalCostCents      Int       @default(0)
+  currency            String    @default("USD")
+  amountKind          String
+  rawProviderMetadata Json
+  createdAt           DateTime  @default(now())
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, provider, operation, createdAt])
+  @@index([workspaceId, jobId])
+  @@index([workspaceId, providerJobId])
+  @@index([workspaceId, providerJobRunId])
 }
 
 model SearchProfile {

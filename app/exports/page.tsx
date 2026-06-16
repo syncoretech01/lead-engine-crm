@@ -1,4 +1,4 @@
-import { BadgeCheck, Download, FileText, Mail, Phone, ShieldCheck, SlidersHorizontal, Users } from "lucide-react";
+import { BadgeCheck, Download, FileText, Mail, Phone, ShieldCheck, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createExportAction, createExportRuleAction, deleteExportRuleAction } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
@@ -22,7 +22,6 @@ export default async function ExportsPage() {
   const blockedTotal = exportHistory.reduce((total, exportItem) => total + (exportItem.blockedCount ?? 0), 0);
   const readyExports = exportHistory.filter((exportItem) => exportItem.status === "Ready").length;
   const generatedRecords = exportHistory.reduce((total, exportItem) => total + exportItem.recordCount, 0);
-  const strictRules = rules.filter((rule) => rule.excludeSuppressed && !rule.includeCatchAll && !rule.includeRoleEmails).length;
 
   const stats = [
     {
@@ -64,11 +63,11 @@ export default async function ExportsPage() {
       tone: "info" as const
     },
     {
-      label: "Strict rules",
-      value: strictRules,
-      note: "Suppression-safe gates",
-      icon: ShieldCheck,
-      tone: strictRules ? "success" as const : "warning" as const
+      label: "Phone-ready",
+      value: templates.find((template) => template.id === "phone_leads")?.eligible ?? 0,
+      note: "Validated call rows",
+      icon: Phone,
+      tone: "success" as const
     },
     {
       label: "Email-ready",
@@ -230,6 +229,7 @@ export default async function ExportsPage() {
             <label htmlFor="exportType">Export type</label>
             <select id="exportType" name="exportType">
               <option value="verified_email_leads">Verified email leads</option>
+              <option value="phone_leads">Phone-ready leads</option>
               <option value="contacts">Contacts</option>
               <option value="sdr_assignments">SDR assignments</option>
             </select>
@@ -404,6 +404,7 @@ function GateCard({
 
 function templateIcon(type: ExportRecord["type"]) {
   if (type === "verified_email_leads") return <Mail size={18} aria-hidden="true" />;
+  if (type === "phone_leads") return <Phone size={18} aria-hidden="true" />;
   if (type === "sdr_assignments") return <Users size={18} aria-hidden="true" />;
   if (type === "contacts") return <Phone size={18} aria-hidden="true" />;
   return <FileText size={18} aria-hidden="true" />;

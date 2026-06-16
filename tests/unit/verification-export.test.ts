@@ -43,4 +43,31 @@ describe("verification and export gates", () => {
     const blocked = state.contacts.filter((contact) => contact.grade === "D" || contact.grade === "S" || contact.isSuppressed);
     expect(blocked.some((contact) => exportedIds.includes(contact.id))).toBe(false);
   });
+
+  it("exports phone-ready leads only when phone verification is valid", () => {
+    const state = createSeedState();
+    const workspaceId = state.workspaces[0].id;
+    runWorkspaceVerification(state, workspaceId);
+    const eligible = state.contacts.find((contact) => {
+      const latest = latestVerificationForContact(state, contact.id);
+      return !contact.isSuppressed && Boolean(contact.phone) && latest.phoneStatus === "Valid";
+    });
+
+    expect(eligible).toBeDefined();
+    if (!eligible) return;
+
+    eligible.status = "Ready for SDR";
+    eligible.score = Math.max(eligible.score, 70);
+
+    const rule = findExportRule(state, workspaceId, "phone_leads");
+    const exportedIds = recordIdsForExport(state, workspaceId, "phone_leads", rule);
+
+    expect(exportedIds).toContain(eligible.id);
+    for (const contact of state.contacts.filter((item) => exportedIds.includes(item.id))) {
+      const latest = latestVerificationForContact(state, contact.id);
+      expect(contact.isSuppressed).toBe(false);
+      expect(contact.phone).toBeTruthy();
+      expect(latest.phoneStatus).toBe("Valid");
+    }
+  });
 });

@@ -18,6 +18,18 @@ export const exportColumns: Record<ExportRecord["type"], string[]> = {
     "owner"
   ],
   verified_email_leads: ["company", "contact", "title", "email", "grade", "score", "segment", "owner"],
+  phone_leads: [
+    "company",
+    "contact",
+    "title",
+    "phone",
+    "phone_status",
+    "priority",
+    "score",
+    "segment",
+    "owner",
+    "source_lineage"
+  ],
   sdr_assignments: ["owner", "priority", "company", "contact", "channel", "due_date", "next_task"]
 };
 
@@ -98,6 +110,27 @@ export function rowsForExport(state: AppState, exportRecord: ExportRecord) {
       });
   }
 
+  if (exportRecord.type === "phone_leads") {
+    return state.contacts
+      .filter((contact) => exportRecord.recordIds.includes(contact.id))
+      .map((contact) => {
+        const company = state.companies.find((item) => item.id === contact.companyId);
+        const latestVerification = latestVerificationForContact(state, contact.id);
+        return {
+          company: company?.name ?? "",
+          contact: contact.name,
+          title: contact.title,
+          phone: contact.phone,
+          phone_status: latestVerification?.phoneStatus ?? "Missing",
+          priority: contact.priority,
+          score: contact.score,
+          segment: contact.segment,
+          owner: contact.owner,
+          source_lineage: contact.sourceLineage.join(" | ")
+        };
+      });
+  }
+
   return state.contacts
     .filter((contact) => exportRecord.recordIds.includes(contact.id))
     .map((contact) => {
@@ -140,6 +173,21 @@ export function recordIdsForExport(
       .map((contact) => contact.id);
   }
 
+  if (type === "phone_leads") {
+    return state.contacts
+      .filter((contact) => {
+        const latestVerification = latestVerificationForContact(state, contact.id);
+        return (
+          contact.workspaceId === workspaceId &&
+          !contact.isSuppressed &&
+          Boolean(contact.phone) &&
+          latestVerification?.phoneStatus === "Valid" &&
+          (!rule || exportRuleAllowsContact(state, contact, rule))
+        );
+      })
+      .map((contact) => contact.id);
+  }
+
   return state.contacts
     .filter(
       (contact) =>
@@ -178,6 +226,21 @@ export function defaultExportRules(workspaceId: string, now = new Date().toISOSt
       includeRoleEmails: true,
       includeCatchAll: true,
       requirePhone: false,
+      excludeSuppressed: true,
+      createdAt: now,
+      updatedAt: now
+    },
+    {
+      id: "rule-phone-leads-ready",
+      workspaceId,
+      name: "Phone-ready leads export",
+      exportType: "phone_leads",
+      allowedGrades: ["A", "B", "C"],
+      allowedStatuses: ["Ready for SDR", "Needs enrichment", "Exported"],
+      minScore: 50,
+      includeRoleEmails: true,
+      includeCatchAll: true,
+      requirePhone: true,
       excludeSuppressed: true,
       createdAt: now,
       updatedAt: now
@@ -233,9 +296,7 @@ export function exportRuleAllowsContact(state: AppState, contact: Contact, rule:
     return false;
   }
 
-  const latestVerification = state.verificationResults
-    .filter((result) => result.contactId === contact.id)
-    .sort((a, b) => Date.parse(b.verifiedAt) - Date.parse(a.verifiedAt))[0];
+  const latestVerification = latestVerificationForContact(state, contact.id);
 
   if (!rule.includeRoleEmails && latestVerification?.roleEmail) {
     return false;
@@ -246,4 +307,10 @@ export function exportRuleAllowsContact(state: AppState, contact: Contact, rule:
   }
 
   return true;
+}
+
+function latestVerificationForContact(state: AppState, contactId: string) {
+  return state.verificationResults
+    .filter((result) => result.contactId === contactId)
+    .sort((a, b) => Date.parse(b.verifiedAt) - Date.parse(a.verifiedAt))[0];
 }

@@ -1,5 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { assertPermission } from "@/lib/phase1/auth";
+import {
+  providerLedgerJobId,
+  recordProviderUsage,
+  syncLeadJobActualCostsFromLedger,
+  unitCostFromTotal
+} from "@/lib/phase1/money";
 import type {
   AppState,
   ProviderConnection,
@@ -169,6 +175,27 @@ export function completeProviderJobRun(state: AppState, input: CompleteProviderJ
   job.errorMessage = undefined;
   job.completedAt = completedAt;
   job.updatedAt = completedAt;
+  recordProviderUsage(state, {
+    workspaceId: run.workspaceId,
+    provider: run.providerId,
+    operation: run.operation,
+    jobId: providerLedgerJobId(job),
+    providerJobId: job.id,
+    providerJobRunId: run.id,
+    unitsUsed: run.recordsWritten || run.recordsRead || 1,
+    unitCostCents: unitCostFromTotal(run.costCents, run.recordsWritten || run.recordsRead || 1),
+    totalCostCents: run.costCents,
+    amountKind: "Actual",
+    rawProviderMetadata: {
+      providerRunId: run.providerRunId,
+      rawResponseRef: run.rawResponseRef,
+      recordsRead: run.recordsRead,
+      recordsWritten: run.recordsWritten,
+      moneySource: "Actual"
+    },
+    createdAt: completedAt
+  });
+  syncLeadJobActualCostsFromLedger(state, run.workspaceId);
   return run;
 }
 

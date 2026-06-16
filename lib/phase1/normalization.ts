@@ -220,6 +220,8 @@ export function normalizeImportedRows({
   leadJob.exported = 0;
   leadJob.pushedToCrm = contactsCreated;
   leadJob.actualCost = 0;
+  leadJob.actualCostCents = 0;
+  leadJob.actualCostSource = "Actual";
   leadJob.eta = "Done";
   leadJob.errorSummary = "No open failures";
   leadJob.completedAt = now;

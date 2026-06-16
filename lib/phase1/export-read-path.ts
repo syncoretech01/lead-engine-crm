@@ -125,6 +125,7 @@ function exportTypeValue(value: string): ExportRecord["type"] {
     value === "companies" ||
     value === "contacts" ||
     value === "verified_email_leads" ||
+    value === "phone_leads" ||
     value === "sdr_assignments"
   ) {
     return value;

@@ -23,6 +23,20 @@ describe("enrichment, reporting, and AI automation", () => {
     });
   });
 
+  it("respects enrichment budget caps and high-value-only gating", () => {
+    const state = createSeedState();
+    const workspaceId = state.workspaces[0].id;
+
+    const result = runWorkspaceEnrichment(state, workspaceId, {
+      budgetCents: 4,
+      highValueOnly: true
+    });
+
+    expect(result.budgetSpentCents).toBeLessThanOrEqual(4);
+    expect(result.highValueOnly).toBe(true);
+    expect(result.skippedForBudget + result.skippedForHighValue).toBeGreaterThan(0);
+  });
+
   it("builds admin reporting metrics across source, SDR, campaign, deliverability, and pipeline", () => {
     const state = createSeedState();
     const workspaceId = state.workspaces[0].id;

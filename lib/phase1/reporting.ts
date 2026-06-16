@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolveSequenceComplianceStatus, suppressContact } from "@/lib/phase1/compliance";
 import { isOpenOpportunityStage, userNameForId } from "@/lib/phase1/crm";
+import { centsToDollars, workspaceCostMetrics } from "@/lib/phase1/money";
 import { campaignViews, refreshCampaignMetrics } from "@/lib/phase1/outreach";
 import type {
   AppState,
@@ -124,7 +125,8 @@ export function reportingDashboardSnapshot(state: AppState, workspaceId: string)
   const wonRevenue = opportunities
     .filter((opportunity) => opportunity.stage === "Closed won")
     .reduce((total, opportunity) => total + opportunity.amount, 0);
-  const totalLeadCost = leadJobs.reduce((total, job) => total + job.actualCost, 0);
+  const costMetrics = workspaceCostMetrics(state, workspaceId);
+  const totalLeadCost = centsToDollars(costMetrics.actualCostCents);
   const sentEmails = emailEvents.filter((event) => event.eventType === "Sent").length;
   const bouncedEmails = emailEvents.filter((event) => event.eventType === "Bounced").length;
   const spamComplaints = emailEvents.filter((event) => event.eventType === "Spam complaint").length;
@@ -151,8 +153,13 @@ export function reportingDashboardSnapshot(state: AppState, workspaceId: string)
     bounceRate: percent(bouncedEmails, sentEmails),
     spamComplaintRate: percent(spamComplaints, sentEmails),
     unsubscribeRate: percent(unsubscribes, sentEmails),
-    costPerVerifiedLead: verifiedContacts.length ? Math.round(totalLeadCost / verifiedContacts.length) : 0,
-    costPerOpportunity: opportunities.length ? Math.round(totalLeadCost / opportunities.length) : 0,
+    actualLeadCost: totalLeadCost,
+    estimatedLeadCost: centsToDollars(costMetrics.estimatedCostCents),
+    projectedLeadCost: centsToDollars(costMetrics.projectedCostCents),
+    costPerVerifiedLead: centsToDollars(costMetrics.costPerVerifiedEmailCents),
+    costPerValidPhone: centsToDollars(costMetrics.costPerValidPhoneCents),
+    costPerSdrReadyLead: centsToDollars(costMetrics.costPerSdrReadyLeadCents),
+    costPerOpportunity: centsToDollars(costMetrics.costPerOpportunityCents),
     complianceWarnings: complianceStatusCounts.Warning + complianceStatusCounts.Fail,
     openDataSubjectRequests: dataSubjectRequests.filter((request) => request.status !== "Completed" && request.status !== "Rejected").length,
     openDeliverabilityAlerts: deliverabilityOpenAlerts.length,
@@ -551,7 +558,10 @@ function sourcePerformanceRows(
     const sourceJobs = leadJobs.filter((job) =>
       job.sources.some((jobSource) => source.toLowerCase().includes(jobSource.toLowerCase()) || jobSource.toLowerCase().includes(source.toLowerCase()))
     );
-    const cost = sourceJobs.reduce((total, job) => total + job.actualCost, 0);
+    const cost = sourceJobs.reduce(
+      (total, job) => total + centsToDollars(job.actualCostCents ?? Math.round(job.actualCost * 100)),
+      0
+    );
     const verified = sourceContacts.filter((contact) => contact.grade === "A" || contact.grade === "B" || contact.grade === "C").length;
     const revenue = sourceOpportunities
       .filter((opportunity) => opportunity.stage === "Closed won")
@@ -778,6 +788,8 @@ function metricsForCategory(category: ReportCategory, dashboard: ReturnType<type
       metric("Sources", dashboard.sourcePerformance.length),
       metric("Best source verified", dashboard.sourcePerformance[0]?.verified ?? 0),
       metric("Cost per verified lead", m.costPerVerifiedLead, "currency"),
+      metric("Cost per valid phone", m.costPerValidPhone, "currency"),
+      metric("Cost per SDR-ready lead", m.costPerSdrReadyLead, "currency"),
       metric("Cost per opportunity", m.costPerOpportunity, "currency")
     ],
     "SDR Performance": [

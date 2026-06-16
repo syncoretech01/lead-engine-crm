@@ -29,6 +29,8 @@ export type JobStatus = "Draft" | "Queued" | "Running" | "Paused" | "Completed" 
 export type ProcessingStatus = "Pending" | "Normalized" | "Failed" | "Suppressed";
 export type LeadGrade = "A" | "B" | "C" | "D" | "S";
 export type Priority = "P1" | "P2" | "P3" | "P4" | "S";
+export type MoneySource = "Actual" | "Estimated" | "Manual" | "Demo" | "System-generated" | "Projected";
+export type MoneyCurrency = "USD";
 export type LeadStatus =
   | "New"
   | "Assigned"
@@ -164,6 +166,16 @@ export type LeadJob = {
   status: JobStatus;
   progress: number;
   sources: string[];
+  estimatedRecords?: number;
+  estimatedCostCents?: number;
+  estimatedCredits?: number;
+  budgetCapCents?: number;
+  budgetStatus?: "Draft estimate" | "Within budget" | "Over budget" | "Confirmed";
+  budgetConfirmedAt?: string;
+  budgetConfirmedById?: string;
+  preflightSourceEstimates?: LeadSourceEstimate[];
+  enrichmentBudgetCents?: number;
+  highValueOnlyEnrichment?: boolean;
   raw: number;
   normalized: number;
   duplicates: number;
@@ -173,6 +185,10 @@ export type LeadJob = {
   exported: number;
   pushedToCrm: number;
   actualCost: number;
+  actualCostCents?: number;
+  estimatedCostSource?: MoneySource;
+  actualCostSource?: MoneySource;
+  budgetCapSource?: MoneySource;
   startedAt?: string;
   completedAt?: string;
   eta: string;
@@ -180,6 +196,15 @@ export type LeadJob = {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type LeadSourceEstimate = {
+  source: string;
+  estimatedRecords: number;
+  estimatedCostCents: number;
+  estimatedCredits: number;
+  unitCostCents: number;
+  confidence: number;
 };
 
 export type JobRunStatus = "Queued" | "Running" | "Completed" | "Failed" | "Retry scheduled" | "Skipped";
@@ -376,6 +401,23 @@ export type ProviderJobRun = {
   updatedAt: string;
 };
 
+export type ProviderUsageLedger = {
+  id: string;
+  workspaceId: string;
+  provider: string;
+  operation: string;
+  jobId?: string;
+  providerJobId?: string;
+  providerJobRunId?: string;
+  unitsUsed: number;
+  unitCostCents: number;
+  totalCostCents: number;
+  currency: MoneyCurrency;
+  amountKind: MoneySource;
+  rawProviderMetadata: Record<string, unknown>;
+  createdAt: string;
+};
+
 export type RawLead = {
   id: string;
   workspaceId: string;
@@ -502,7 +544,7 @@ export type ExportRecord = {
   leadJobId?: string;
   exportRuleId?: string;
   name: string;
-  type: "companies" | "contacts" | "verified_email_leads" | "sdr_assignments";
+  type: "companies" | "contacts" | "verified_email_leads" | "phone_leads" | "sdr_assignments";
   columns: string[];
   recordIds: string[];
   recordCount: number;
@@ -1301,7 +1343,7 @@ export type AuditLog = {
 };
 
 export type AppState = {
-  version: 14;
+  version: 15;
   workspaces: Workspace[];
   users: User[];
   workspaceMembers: WorkspaceMember[];
@@ -1310,6 +1352,7 @@ export type AppState = {
   providerEncryptedSecrets: ProviderEncryptedSecret[];
   providerJobs: ProviderJob[];
   providerJobRuns: ProviderJobRun[];
+  providerUsageLedger: ProviderUsageLedger[];
   searchProfiles: SearchProfile[];
   leadJobs: LeadJob[];
   asyncJobRuns: AsyncJobRun[];
