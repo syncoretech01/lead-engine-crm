@@ -66,7 +66,7 @@ The selected production direction is documented in `docs/PRODUCTION_ARCHITECTURE
 
 ## Session and RBAC
 
-The app resolves the active workspace session from `syncore_user_id` and `syncore_workspace_id` cookies. If those cookies are absent, it uses `SYNCORE_SESSION_USER_ID` and `SYNCORE_SESSION_WORKSPACE_ID`, then falls back to the seeded admin user/workspace. Pages, API routes, server actions, navigation, and export downloads are scoped to the resolved workspace and role permissions.
+The app uses first-party production auth with hashed passwords, signed `syncore_auth_session` cookies, server-side session records, workspace membership, and role permissions. Seeded local users can sign in with `Syncore!2026`; the owner/developer account is `nora@syncore.tech`. Pages, API routes, server actions, navigation, and export downloads are scoped to the authenticated workspace and role permissions. See `docs/PHASE_7_PRODUCTION_AUTH.md`.
 
 ## Async Job Observability
 

@@ -13,6 +13,7 @@ import type {
   Workspace,
   WorkspaceMember
 } from "@/lib/phase1/types";
+import { createSeedAuthAccounts, ensureAuthDefaults } from "@/lib/phase1/auth-service";
 import { ensureAiDefaults } from "@/lib/phase1/ai";
 import { defaultContactCompliance, ensureComplianceDefaults } from "@/lib/phase1/compliance";
 import { ensureCrmDefaults } from "@/lib/phase1/crm";
@@ -319,6 +320,10 @@ export function createSeedState(): AppState {
     workspaces: [workspace],
     users,
     workspaceMembers,
+    authAccounts: createSeedAuthAccounts(users, now),
+    authSessions: [],
+    userInvites: [],
+    passwordResetTokens: [],
     providerConnections: createDefaultProviderConnections({
       workspaceId,
       now,
@@ -395,6 +400,7 @@ export function createSeedState(): AppState {
   ensureReportingDefaults(state, workspaceId);
   ensureAiDefaults(state, workspaceId);
   ensureMoneyLedgerDefaults(state, workspaceId, now);
+  ensureAuthDefaults(state, now);
 
   return state;
 }

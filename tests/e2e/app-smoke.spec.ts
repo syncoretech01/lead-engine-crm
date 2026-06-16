@@ -16,6 +16,7 @@ const routes = [
   ["/outreach/campaigns", "Outreach campaigns"],
   ["/outreach/events", "Outreach event tracking"],
   ["/integrations", "Integration Center"],
+  ["/access", "User access"],
   ["/reports", "Admin reports"],
   ["/reports/compliance", "Compliance workflows"],
   ["/automation", "AI automation"],
@@ -26,12 +27,14 @@ const routes = [
 test.describe("Syncore app smoke coverage", () => {
   for (const [path, heading] of routes) {
     test(`renders ${heading}`, async ({ page }) => {
+      await loginAs(page, "nora@syncore.tech");
       await page.goto(path, { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
     });
   }
 
   test("navigates through core modules from the shell", async ({ page }) => {
+    await loginAs(page, "nora@syncore.tech");
     await page.goto("/", { waitUntil: "domcontentloaded" });
     const primaryNav = page.getByLabel("Primary navigation");
 
@@ -55,13 +58,8 @@ test.describe("Syncore app smoke coverage", () => {
     await expect(page.getByRole("heading", { name: "Integration Center", level: 1 })).toBeVisible();
   });
 
-  test("scopes navigation and page access for an SDR session", async ({ page, context, baseURL }) => {
-    const url = baseURL ?? "http://localhost:3001";
-    await context.addCookies([
-      { name: "syncore_user_id", value: "user-ari", url },
-      { name: "syncore_workspace_id", value: "workspace-syncore", url }
-    ]);
-
+  test("scopes navigation and page access for an SDR session", async ({ page }) => {
+    await loginAs(page, "ari@syncore.tech");
     await page.goto("/sdr/queue", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "SDR queue", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Leads$/i })).toHaveCount(0);
@@ -89,13 +87,8 @@ test.describe("Syncore app smoke coverage", () => {
     await expect(page.getByRole("heading", { name: "CRM workspace", level: 1 })).toBeVisible();
   });
 
-  test("scopes navigation and page access for a Lead Generation operator", async ({ page, context, baseURL }) => {
-    const url = baseURL ?? "http://localhost:3001";
-    await context.addCookies([
-      { name: "syncore_user_id", value: "user-leo", url },
-      { name: "syncore_workspace_id", value: "workspace-syncore", url }
-    ]);
-
+  test("scopes navigation and page access for a Lead Generation operator", async ({ page }) => {
+    await loginAs(page, "leo@syncore.tech");
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "Lead command center", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: /^CRM$/i })).toHaveCount(0);
@@ -113,13 +106,8 @@ test.describe("Syncore app smoke coverage", () => {
     await expect(page.getByRole("heading", { name: "Lead command center", level: 1 })).toBeVisible();
   });
 
-  test("scopes navigation and page access for a manager session", async ({ page, context, baseURL }) => {
-    const url = baseURL ?? "http://localhost:3001";
-    await context.addCookies([
-      { name: "syncore_user_id", value: "user-mina", url },
-      { name: "syncore_workspace_id", value: "workspace-syncore", url }
-    ]);
-
+  test("scopes navigation and page access for a manager session", async ({ page }) => {
+    await loginAs(page, "mina@syncore.tech");
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "Lead command center", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Leads$/i })).toBeVisible();
@@ -138,3 +126,11 @@ test.describe("Syncore app smoke coverage", () => {
     await expect(page.getByRole("heading", { name: "Lead command center", level: 1 })).toBeVisible();
   });
 });
+
+async function loginAs(page: import("@playwright/test").Page, email: string) {
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("Syncore!2026");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"));
+}

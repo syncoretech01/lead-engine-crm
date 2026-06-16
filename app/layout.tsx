@@ -7,8 +7,10 @@ import "@fontsource/poppins/400.css";
 import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
 import "./globals.css";
+import { headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { syncoreBrand } from "@/lib/brand";
+import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
 import { getSession } from "@/lib/phase1/store";
 
 export const metadata: Metadata = {
@@ -24,6 +26,17 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headerStore = await headers();
+  const pathname = headerStore.get("x-syncore-pathname") ?? "";
+
+  if (isPublicAuthPath(pathname)) {
+    return (
+      <html lang="en">
+        <body>{children}</body>
+      </html>
+    );
+  }
+
   const session = await getSession();
 
   return (

@@ -3,6 +3,13 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { ensureAiDefaults } from "@/lib/phase1/ai";
+import {
+  authSessionCookieName,
+  isProductionBuildPhase,
+  legacyDemoSessionCookieNames,
+  verifySignedAuthSessionCookie
+} from "@/lib/phase1/auth-security";
+import { ensureAuthDefaults, resolveAuthenticatedSessionSelection } from "@/lib/phase1/auth-service";
 import { ensureComplianceDefaults } from "@/lib/phase1/compliance";
 import { ensureCrmDefaults } from "@/lib/phase1/crm";
 import { detectWorkspaceDuplicates } from "@/lib/phase1/dedupe";
@@ -37,8 +44,8 @@ type UpdateStateOptions = {
 };
 
 export const sessionCookieNames = {
-  userId: "syncore_user_id",
-  workspaceId: "syncore_workspace_id"
+  userId: legacyDemoSessionCookieNames.userId,
+  workspaceId: legacyDemoSessionCookieNames.workspaceId
 } as const;
 
 export async function readState(): Promise<AppState> {
@@ -83,6 +90,29 @@ export async function updateState<T>(
   return result;
 }
 
+export async function updateAuthState<T>(
+  mutator: (state: AppState) => T,
+  options: UpdateStateOptions = {}
+): Promise<T> {
+  if (resolveStorageDriver() === "prisma") {
+    const client = await getPrismaClient();
+    return client.$transaction(
+      async (tx) => {
+        const state = await readStateFromPrisma(tx);
+        const result = mutator(state);
+        await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
+        return result;
+      },
+      { maxWait: 5_000, timeout: 20_000 }
+    );
+  }
+
+  const state = readStateFromFile();
+  const result = mutator(state);
+  writeStateToFile(state);
+  return result;
+}
+
 async function getPrismaClient() {
   const prismaModule = await import("@/lib/prisma");
   return prismaModule.prisma;
@@ -103,7 +133,15 @@ export function appendAudit(
 }
 
 export async function getSession(state?: AppState) {
-  return resolveCurrentSession(state ?? (await readState()));
+  try {
+    return await resolveCurrentSession(state ?? (await readState()));
+  } catch (error) {
+    if (isAuthRequiredError(error)) {
+      const { redirect } = await import("next/navigation");
+      redirect("/login");
+    }
+    throw error;
+  }
 }
 
 export async function getWorkspaceContext(permission?: Permission) {
@@ -127,27 +165,52 @@ export async function resetStore() {
 }
 
 async function resolveCurrentSession(state: AppState) {
-  const selection = await readSessionSelection();
+  const selection = await readSessionSelection(state);
   return resolveSession(state, selection);
 }
 
-async function readSessionSelection(): Promise<SessionSelection> {
-  const envSelection: SessionSelection = {
-    userId: process.env.SYNCORE_SESSION_USER_ID,
-    workspaceId: process.env.SYNCORE_SESSION_WORKSPACE_ID
-  };
-
+async function readSessionSelection(state: AppState): Promise<SessionSelection> {
   try {
     const { cookies } = await import("next/headers");
     const cookieStore = await cookies();
+    const authCookie = cookieStore.get(authSessionCookieName)?.value;
+    const payload = verifySignedAuthSessionCookie(authCookie);
+    if (payload) {
+      return resolveAuthenticatedSessionSelection(state, payload);
+    }
 
-    return {
-      userId: cookieStore.get(sessionCookieNames.userId)?.value ?? envSelection.userId,
-      workspaceId: cookieStore.get(sessionCookieNames.workspaceId)?.value ?? envSelection.workspaceId
-    };
+    if (allowLegacyDemoSession()) {
+      return {
+        userId: cookieStore.get(sessionCookieNames.userId)?.value,
+        workspaceId: cookieStore.get(sessionCookieNames.workspaceId)?.value
+      };
+    }
   } catch {
-    return envSelection;
+    if (isProductionBuildPhase()) {
+      return {};
+    }
   }
+
+  if (isProductionBuildPhase()) {
+    return {};
+  }
+
+  if (allowLegacyDemoSession()) {
+    return {
+      userId: process.env.SYNCORE_SESSION_USER_ID,
+      workspaceId: process.env.SYNCORE_SESSION_WORKSPACE_ID
+    };
+  }
+
+  throw new Error("Authentication required.");
+}
+
+function allowLegacyDemoSession() {
+  return process.env.SYNCORE_ALLOW_DEMO_SESSION === "true";
+}
+
+function isAuthRequiredError(error: unknown) {
+  return error instanceof Error && /Authentication required/i.test(error.message);
 }
 
 function readStateFromFile(): AppState {
@@ -256,6 +319,32 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
           actorUserId: state.users[0]?.id
         })
       : [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.authAccounts)) {
+    state.authAccounts = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.authSessions)) {
+    state.authSessions = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.userInvites)) {
+    state.userInvites = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.passwordResetTokens)) {
+    state.passwordResetTokens = [];
+    changed = true;
+  }
+
+  const authAccountCount = state.authAccounts.length;
+  ensureAuthDefaults(state);
+  if (state.authAccounts.length !== authAccountCount) {
     changed = true;
   }
 

@@ -118,7 +118,7 @@ export default async function CompliancePage() {
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Workspace members</h2>
-              <p className="section-subtitle">Demo auth context and workspace RBAC permissions.</p>
+              <p className="section-subtitle">Workspace RBAC permissions and production auth context.</p>
             </div>
             <KeyRound size={20} aria-hidden="true" />
           </div>

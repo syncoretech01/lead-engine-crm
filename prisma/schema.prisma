@@ -100,6 +100,8 @@ model Workspace {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   members             WorkspaceMember[]
+  authSessions        AuthSession[]
+  userInvites         UserInvite[]
   integrations        Integration[]
   providerConnections ProviderConnection[]
   providerCredentialAudits ProviderCredentialAudit[]
@@ -187,6 +189,10 @@ model User {
   createdAiIcpRecommendations AiIcpRecommendation[] @relation("AiIcpRecommendationCreator")
   aiAutomationRuns AiAutomationRun[] @relation("AiAutomationRunActor")
   auditLogs   AuditLog[]
+  authAccount AuthAccount?
+  authSessions AuthSession[]
+  sentUserInvites UserInvite[] @relation("UserInviteSender")
+  passwordResetTokens PasswordResetToken[]
 }
 
 model WorkspaceMember {
@@ -200,6 +206,77 @@ model WorkspaceMember {
 
   @@unique([workspaceId, userId])
   @@index([workspaceId, role])
+}
+
+model AuthAccount {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  email            String    @unique
+  passwordHash     String
+  status           String
+  emailVerifiedAt  DateTime?
+  passwordUpdatedAt DateTime?
+  lastLoginAt      DateTime?
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  mfaEnabled       Boolean   @default(false)
+  superadmin       Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([superadmin])
+}
+
+model AuthSession {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  ipAddress   String?
+  userAgent   String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([workspaceId, expiresAt])
+  @@index([revokedAt])
+}
+
+model UserInvite {
+  id          String        @id @default(cuid())
+  workspaceId String
+  email       String
+  role        WorkspaceRole
+  tokenHash   String        @unique
+  invitedById String
+  status      String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy   User          @relation("UserInviteSender", fields: [invitedById], references: [id])
+
+  @@index([workspaceId, email])
+  @@index([workspaceId, status])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([usedAt])
 }
 
 model Integration {

@@ -3,6 +3,7 @@ import type { AppState, Permission, Session, WorkspaceRole } from "@/lib/phase1/
 export type SessionSelection = {
   userId?: string;
   workspaceId?: string;
+  authSessionId?: string;
 };
 
 const permissionsByRole: Record<WorkspaceRole, Permission[]> = {
@@ -81,7 +82,9 @@ export function resolveSession(state: AppState, selection: SessionSelection): Se
     user,
     workspace,
     role,
-    permissions: permissionsByRole[role]
+    permissions: permissionsByRole[role],
+    authSessionId: selection.authSessionId,
+    superadmin: state.authAccounts?.find((account) => account.userId === user.id)?.superadmin ?? false
   };
 }
 

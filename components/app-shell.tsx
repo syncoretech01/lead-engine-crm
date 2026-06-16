@@ -22,6 +22,8 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  LogOut,
+  UserCog,
   Users
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -35,6 +37,7 @@ import {
 } from "@/lib/phase1/auth";
 import { StatusPill } from "@/components/status-pill";
 import { cn } from "@/lib/utils";
+import { logoutAction } from "@/app/auth/actions";
 
 type WorkspaceViewId = "lead-generation" | "crm" | "developer";
 
@@ -103,6 +106,7 @@ const workspaceViews = [
     requiredPermission: "manage_workspace",
     items: [
       { href: "/integrations", label: "Integration Center", icon: PlugZap, permission: "manage_workspace" },
+      { href: "/access", label: "User Access", icon: UserCog, permission: "manage_workspace" },
       { href: "/reports", label: "Admin Reports", icon: BarChart3, permission: "view_reports" },
       { href: "/reports/compliance", label: "Compliance Workflows", icon: ClipboardList, permission: "manage_compliance" },
       { href: "/automation", label: "AI Automation", icon: Sparkles, permission: "manage_ai_automation" },
@@ -219,6 +223,11 @@ export function AppShell({ children, session }: AppShellProps) {
             <button className="icon-button" aria-label="Notifications">
               <Bell size={18} aria-hidden="true" />
             </button>
+            <form action={logoutAction}>
+              <button className="icon-button" type="submit" aria-label="Sign out">
+                <LogOut size={18} aria-hidden="true" />
+              </button>
+            </form>
             <Link href={primaryAction.href} className="button secondary">
               {primaryAction.label}
             </Link>

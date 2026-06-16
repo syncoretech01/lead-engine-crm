@@ -14,6 +14,10 @@ export type ProjectionTableName =
   | "workspaces"
   | "users"
   | "workspaceMembers"
+  | "authAccounts"
+  | "authSessions"
+  | "userInvites"
+  | "passwordResetTokens"
   | "providerConnections"
   | "providerCredentialAudits"
   | "providerEncryptedSecrets"
@@ -84,6 +88,10 @@ const projectionTables: ProjectionTableName[] = [
   "workspaces",
   "users",
   "workspaceMembers",
+  "authAccounts",
+  "authSessions",
+  "userInvites",
+  "passwordResetTokens",
   "providerConnections",
   "providerCredentialAudits",
   "providerEncryptedSecrets",
@@ -144,6 +152,10 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "workspaces", delegate: "workspace", workspaceScoped: false },
   { table: "users", delegate: "user", workspaceScoped: false },
   { table: "workspaceMembers", delegate: "workspaceMember", workspaceScoped: true },
+  { table: "authAccounts", delegate: "authAccount", workspaceScoped: false },
+  { table: "authSessions", delegate: "authSession", workspaceScoped: true },
+  { table: "userInvites", delegate: "userInvite", workspaceScoped: true },
+  { table: "passwordResetTokens", delegate: "passwordResetToken", workspaceScoped: false },
   { table: "providerConnections", delegate: "providerConnection", workspaceScoped: true },
   { table: "providerCredentialAudits", delegate: "providerCredentialAudit", workspaceScoped: true },
   { table: "providerEncryptedSecrets", delegate: "providerEncryptedSecret", workspaceScoped: true },
@@ -230,6 +242,65 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       role: workspaceRoleValue(member.role),
       createdAt: state.workspaces.find((workspace) => workspace.id === member.workspaceId)?.createdAt ?? new Date(0).toISOString()
     }))),
+    authAccounts: sortRows(state.authAccounts.map((account) => ({
+      id: account.id,
+      userId: account.userId,
+      email: account.email,
+      passwordHash: account.passwordHash,
+      status: account.status,
+      emailVerifiedAt: account.emailVerifiedAt,
+      passwordUpdatedAt: account.passwordUpdatedAt,
+      lastLoginAt: account.lastLoginAt,
+      failedLoginCount: account.failedLoginCount,
+      lockedUntil: account.lockedUntil,
+      mfaEnabled: account.mfaEnabled,
+      superadmin: account.superadmin,
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt
+    }))),
+    authSessions: sortRows(state.authSessions
+      .filter((session) =>
+        state.users.some((user) => user.id === session.userId) &&
+        state.workspaces.some((workspace) => workspace.id === session.workspaceId)
+      )
+      .map((session) => ({
+        id: session.id,
+        workspaceId: session.workspaceId,
+        userId: session.userId,
+        expiresAt: session.expiresAt,
+        revokedAt: session.revokedAt,
+        createdAt: session.createdAt,
+        lastSeenAt: session.lastSeenAt,
+        ipAddress: session.ipAddress,
+        userAgent: session.userAgent
+      }))),
+    userInvites: sortRows(state.userInvites
+      .filter((invite) =>
+        state.workspaces.some((workspace) => workspace.id === invite.workspaceId) &&
+        state.users.some((user) => user.id === invite.invitedById)
+      )
+      .map((invite) => ({
+        id: invite.id,
+        workspaceId: invite.workspaceId,
+        email: invite.email,
+        role: workspaceRoleValue(invite.role),
+        tokenHash: invite.tokenHash,
+        invitedById: invite.invitedById,
+        status: invite.status,
+        expiresAt: invite.expiresAt,
+        acceptedAt: invite.acceptedAt,
+        createdAt: invite.createdAt
+      }))),
+    passwordResetTokens: sortRows(state.passwordResetTokens
+      .filter((token) => state.users.some((user) => user.id === token.userId))
+      .map((token) => ({
+        id: token.id,
+        userId: token.userId,
+        tokenHash: token.tokenHash,
+        expiresAt: token.expiresAt,
+        usedAt: token.usedAt,
+        createdAt: token.createdAt
+      }))),
     providerConnections: sortRows(state.providerConnections.map((connection) => ({
       id: connection.id,
       workspaceId: connection.workspaceId,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createNormalizedPersistenceProjection } from "@/lib/phase1/persistence-projection";
 import {
   aiWriteTables,
+  authWriteTables,
   complianceWriteTables,
   crmWriteTables,
   enrichmentWriteTables,
@@ -21,6 +22,7 @@ import { createSeedState } from "@/lib/phase1/seed";
 
 const scopedWriteTableGroups = {
   aiWriteTables,
+  authWriteTables,
   complianceWriteTables,
   crmWriteTables,
   enrichmentWriteTables,
@@ -92,6 +94,14 @@ describe("normalized write table scopes", () => {
       "providerJobs",
       "providerJobRuns",
       "providerUsageLedger"
+    ]));
+    expect(authWriteTables).toEqual(expect.arrayContaining([
+      "users",
+      "workspaceMembers",
+      "authAccounts",
+      "authSessions",
+      "userInvites",
+      "passwordResetTokens"
     ]));
   });
 });

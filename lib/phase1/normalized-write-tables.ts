@@ -2,6 +2,16 @@ import type { ProjectionTableName } from "@/lib/phase1/persistence-projection";
 
 export const exportWriteTables = ["exports", "auditLogs"] satisfies ProjectionTableName[];
 
+export const authWriteTables = [
+  "users",
+  "workspaceMembers",
+  "authAccounts",
+  "authSessions",
+  "userInvites",
+  "passwordResetTokens",
+  "auditLogs"
+] satisfies ProjectionTableName[];
+
 export const leadGenerationWriteTables = [
   "searchProfiles",
   "leadJobs",

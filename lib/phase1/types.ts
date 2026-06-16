@@ -136,6 +136,62 @@ export type Session = {
   workspace: Workspace;
   role: WorkspaceRole;
   permissions: Permission[];
+  authSessionId?: string;
+  superadmin?: boolean;
+};
+
+export type AuthAccountStatus = "Active" | "Invited" | "Disabled";
+export type UserInviteStatus = "Pending" | "Accepted" | "Expired" | "Revoked";
+
+export type AuthAccount = {
+  id: string;
+  userId: string;
+  email: string;
+  passwordHash: string;
+  status: AuthAccountStatus;
+  emailVerifiedAt?: string;
+  passwordUpdatedAt?: string;
+  lastLoginAt?: string;
+  failedLoginCount: number;
+  lockedUntil?: string;
+  mfaEnabled: boolean;
+  superadmin: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AuthSessionRecord = {
+  id: string;
+  userId: string;
+  workspaceId: string;
+  expiresAt: string;
+  revokedAt?: string;
+  createdAt: string;
+  lastSeenAt: string;
+  ipAddress?: string;
+  userAgent?: string;
+};
+
+export type UserInvite = {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: WorkspaceRole;
+  tokenHash: string;
+  invitedById: string;
+  status: UserInviteStatus;
+  expiresAt: string;
+  acceptedAt?: string;
+  createdAt: string;
+};
+
+export type PasswordResetToken = {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: string;
+  usedAt?: string;
+  createdAt: string;
 };
 
 export type SearchProfile = {
@@ -1347,6 +1403,10 @@ export type AppState = {
   workspaces: Workspace[];
   users: User[];
   workspaceMembers: WorkspaceMember[];
+  authAccounts: AuthAccount[];
+  authSessions: AuthSessionRecord[];
+  userInvites: UserInvite[];
+  passwordResetTokens: PasswordResetToken[];
   providerConnections: ProviderConnection[];
   providerCredentialAudits: ProviderCredentialAudit[];
   providerEncryptedSecrets: ProviderEncryptedSecret[];

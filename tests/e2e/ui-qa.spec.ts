@@ -16,6 +16,7 @@ const routes = [
   ["/outreach/campaigns", "Outreach campaigns"],
   ["/outreach/events", "Outreach event tracking"],
   ["/integrations", "Integration Center"],
+  ["/access", "User access"],
   ["/reports", "Admin reports"],
   ["/reports/compliance", "Compliance workflows"],
   ["/automation", "AI automation"],
@@ -34,6 +35,7 @@ test.describe("responsive route coverage", () => {
     for (const [path, heading] of routes) {
       test(`${viewport.name}: ${heading}`, async ({ page }, testInfo) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await loginAs(page, "nora@syncore.tech");
         await page.goto(path, { waitUntil: "domcontentloaded" });
         await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
         await expectNoPageOverflow(page);
@@ -48,9 +50,9 @@ test.describe("responsive route coverage", () => {
 });
 
 test.describe("role-scoped responsive navigation", () => {
-  test("mobile SDR session stays inside CRM routes", async ({ page, context, baseURL }, testInfo) => {
+  test("mobile SDR session stays inside CRM routes", async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await context.addCookies(roleCookies("user-ari", baseURL));
+    await loginAs(page, "ari@syncore.tech");
 
     await page.goto("/sdr/queue", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "SDR queue", level: 1 })).toBeVisible();
@@ -67,9 +69,9 @@ test.describe("role-scoped responsive navigation", () => {
     });
   });
 
-  test("mobile lead generation session stays inside lead engine routes", async ({ page, context, baseURL }, testInfo) => {
+  test("mobile lead generation session stays inside lead engine routes", async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await context.addCookies(roleCookies("user-leo", baseURL));
+    await loginAs(page, "leo@syncore.tech");
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "Lead command center", level: 1 })).toBeVisible();
@@ -86,9 +88,9 @@ test.describe("role-scoped responsive navigation", () => {
     });
   });
 
-  test("mobile manager session keeps lead generation and CRM, but not developer routes", async ({ page, context, baseURL }, testInfo) => {
+  test("mobile manager session keeps lead generation and CRM, but not developer routes", async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await context.addCookies(roleCookies("user-mina", baseURL));
+    await loginAs(page, "mina@syncore.tech");
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("link", { name: /^Leads$/i })).toBeVisible();
@@ -108,6 +110,7 @@ test.describe("role-scoped responsive navigation", () => {
 
 test("integration center explains mock, not configured, active, and attention states", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1024 });
+  await loginAs(page, "nora@syncore.tech");
   await page.goto("/integrations", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Integration Center", level: 1 })).toBeVisible();
@@ -137,12 +140,12 @@ async function expectNoPageOverflow(page: Page) {
   expect(metrics.bodyScrollWidth - metrics.documentClientWidth).toBeLessThanOrEqual(8);
 }
 
-function roleCookies(userId: string, baseURL?: string) {
-  const url = baseURL ?? "http://localhost:3001";
-  return [
-    { name: "syncore_user_id", value: userId, url },
-    { name: "syncore_workspace_id", value: "workspace-syncore", url }
-  ];
+async function loginAs(page: Page, email: string) {
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("Syncore!2026");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 
 function slug(path: string) {
