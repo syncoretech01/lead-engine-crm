@@ -1,5 +1,3 @@
-export const authSessionCookieName = "syncore_auth_session";
-
 export function isPublicAuthPath(pathname: string) {
   return (
     pathname === "/login" ||

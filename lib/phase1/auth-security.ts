@@ -6,7 +6,7 @@ import {
   timingSafeEqual
 } from "node:crypto";
 
-export { authSessionCookieName } from "@/lib/phase1/auth-routes";
+export const authSessionCookieName = "syncore_auth_session";
 export const legacyDemoSessionCookieNames = {
   userId: "syncore_user_id",
   workspaceId: "syncore_workspace_id"
