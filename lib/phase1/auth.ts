@@ -110,6 +110,15 @@ export function canUseDeveloperWorkspace(session: Session) {
   return session.permissions.includes("manage_workspace");
 }
 
+/**
+ * Individual-contributor SDRs see only the records assigned to them. Managers,
+ * admins, and other roles retain the full workspace view. Record-level scoping
+ * is applied in the CRM read paths (see ownedCrmRecordScope).
+ */
+export function restrictsToOwnedRecords(session: Session) {
+  return session.role === "SDR";
+}
+
 export function defaultWorkspacePath(session: Session) {
   if (canUseLeadGenerationWorkspace(session)) return "/";
   if (canUseCrmWorkspace(session)) return "/crm";

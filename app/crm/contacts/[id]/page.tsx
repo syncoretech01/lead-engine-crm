@@ -41,7 +41,8 @@ import {
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
 import { consentStatuses, lawfulBases } from "@/lib/phase1/compliance";
-import { contactDetailReadModelForWorkspace } from "@/lib/phase1/queries";
+import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -70,6 +71,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const contact = readModel.contact;
 
   if (!contact) {
+    notFound();
+  }
+
+  if (restrictsToOwnedRecords(session) && !ownedCrmRecordScope(readState, session).contactIds.has(contact.id)) {
     notFound();
   }
 

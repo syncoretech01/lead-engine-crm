@@ -38,7 +38,8 @@ import {
   crmEventReadRowsForWorkspace,
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
-import { accountDetailReadModelForWorkspace } from "@/lib/phase1/queries";
+import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { accountDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -60,7 +61,7 @@ const activityIcons: Record<ActivityType, typeof NotebookPen> = {
 
 export default async function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { state, workspaceId } = await getWorkspaceContext("manage_crm");
+  const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
   const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
   const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
   const readModel = await accountDetailReadModelForWorkspace(readState, workspaceId, id);
@@ -68,6 +69,10 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   const company = readModel.company;
 
   if (!account || !company) {
+    notFound();
+  }
+
+  if (restrictsToOwnedRecords(session) && !ownedCrmRecordScope(readState, session).companyIds.has(company.id)) {
     notFound();
   }
 

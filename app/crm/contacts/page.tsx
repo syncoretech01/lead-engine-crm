@@ -16,7 +16,8 @@ import {
   crmEventReadRowsForWorkspace,
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
-import { contactViewsForWorkspace } from "@/lib/phase1/queries";
+import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { contactViewsForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
@@ -24,10 +25,12 @@ import { StatCard, LaneCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function ContactsPage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_crm");
+  const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
   const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
   const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
-  const contacts = await contactViewsForWorkspace(readState, workspaceId);
+  const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
+  const allContacts = await contactViewsForWorkspace(readState, workspaceId);
+  const contacts = ownedScope ? allContacts.filter((contact) => ownedScope.contactIds.has(contact.id)) : allContacts;
   const verified = contacts.filter((contact) => contact.grade === "A" || contact.grade === "B");
   const callReady = contacts.filter((contact) => Boolean(contact.phone) && !contact.isSuppressed);
   const needsAttention = contacts.filter(
