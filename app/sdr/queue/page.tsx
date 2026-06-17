@@ -33,6 +33,7 @@ const touchStatuses = sdrLeadStatuses.filter((status) =>
 export default async function SdrQueuePage() {
   const { state, session, workspaceId } = await getWorkspaceContext("manage_sdr");
   const ownerFilter = session.role === "SDR" ? session.user.id : undefined;
+  const canRunAssignment = session.permissions.includes("manage_sdr_team");
   const snapshot = sdrQueueSnapshot(state, workspaceId, ownerFilter);
   const activeAssignments = snapshot.assignments.filter((assignment) => activeStatus(assignment.status));
   const priorityQueue = [...activeAssignments]
@@ -118,12 +119,14 @@ export default async function SdrQueuePage() {
         copy="A focused work queue for first touches, follow-ups, overdue leads, and quick outcome logging. Managers can run routing and review team health from here."
         actions={
           <>
-            <form action={runSdrAssignmentAction}>
-              <button className="button secondary" type="submit">
-                <RefreshCw size={17} aria-hidden="true" />
-                Run assignment
-              </button>
-            </form>
+            {canRunAssignment ? (
+              <form action={runSdrAssignmentAction}>
+                <button className="button secondary" type="submit">
+                  <RefreshCw size={17} aria-hidden="true" />
+                  Run assignment
+                </button>
+              </form>
+            ) : null}
             <Link href={session.role === "SDR" ? "/crm" : "/sdr/manager"} className="button primary">
               <Users size={17} aria-hidden="true" />
               {session.role === "SDR" ? "CRM workspace" : "Manager dashboard"}

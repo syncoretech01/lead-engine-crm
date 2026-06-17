@@ -32,7 +32,7 @@ import { StatCard, LaneCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function SdrManagerPage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_sdr");
+  const { state, workspaceId } = await getWorkspaceContext("manage_sdr_team");
   const snapshot = managerDashboardSnapshot(state, workspaceId);
   const users = sdrUsers(state, workspaceId);
   const teams = state.sdrTeams.filter((team) => team.workspaceId === workspaceId);

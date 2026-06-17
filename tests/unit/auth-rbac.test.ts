@@ -33,6 +33,23 @@ describe("auth and RBAC session resolution", () => {
     expect(session.permissions).not.toContain("manage_profiles");
   });
 
+  it("scopes SDR visibility via view_records and withholds team management", () => {
+    const state = createSeedState();
+    const sdr = resolveSession(state, { userId: "user-ari", workspaceId: "workspace-syncore" });
+    const manager = resolveSession(state, { userId: "user-mina", workspaceId: "workspace-syncore" });
+
+    expect(sdr.permissions).toContain("view_records");
+    expect(sdr.permissions).not.toContain("view_all_records");
+    expect(sdr.permissions).not.toContain("manage_sdr_team");
+
+    expect(sdr.permissions).toContain("send_direct_outreach");
+    expect(sdr.permissions).not.toContain("manage_outreach");
+
+    expect(manager.permissions).toContain("view_all_records");
+    expect(manager.permissions).toContain("manage_sdr_team");
+    expect(manager.permissions).toContain("manage_outreach");
+  });
+
   it("rejects users who are not members of the selected workspace", () => {
     const state = createSeedState();
     state.workspaces.push({

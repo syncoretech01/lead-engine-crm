@@ -35,7 +35,6 @@ import {
   canUseLeadGenerationWorkspace,
   workspaceRoleLabel
 } from "@/lib/phase1/auth";
-import { StatusPill } from "@/components/status-pill";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/app/auth/actions";
 
@@ -69,7 +68,7 @@ const workspaceViews = [
     description: "Profiles, jobs, staging, quality, enrichment, and exports.",
     canAccess: canUseLeadGenerationWorkspace,
     items: [
-      { href: "/", label: "Lead Dashboard", icon: LayoutDashboard, permission: "view_all_records" },
+      { href: "/", label: "Lead Dashboard", icon: LayoutDashboard, permission: "view_records" },
       { href: "/search-profiles", label: "Search Profiles", icon: Target, permission: "manage_profiles" },
       { href: "/lead-jobs", label: "Lead Jobs", icon: Database, permission: "run_jobs" },
       { href: "/staging", label: "Data Staging", icon: Search, permission: "import_csv" },
@@ -86,14 +85,14 @@ const workspaceViews = [
     description: "Accounts, contacts, opportunities, SDR work, and outreach.",
     canAccess: canUseCrmWorkspace,
     items: [
-      { href: "/crm", label: "CRM Dashboard", icon: LayoutDashboard, permission: "view_all_records", exact: true },
-      { href: "/crm/accounts", label: "Accounts", icon: Building2, permission: "view_all_records" },
-      { href: "/crm/contacts", label: "Contacts", icon: Users, permission: "view_all_records" },
-      { href: "/crm/opportunities", label: "Opportunities", icon: CircleDollarSign, permission: "view_all_records" },
+      { href: "/crm", label: "CRM Dashboard", icon: LayoutDashboard, permission: "view_records", exact: true },
+      { href: "/crm/accounts", label: "Accounts", icon: Building2, permission: "view_records" },
+      { href: "/crm/contacts", label: "Contacts", icon: Users, permission: "view_records" },
+      { href: "/crm/opportunities", label: "Opportunities", icon: CircleDollarSign, permission: "view_records" },
       { href: "/sdr/queue", label: "SDR Queue", icon: ClipboardList, permission: "manage_sdr" },
-      { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr" },
+      { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr_team" },
       { href: "/outreach/campaigns", label: "Campaigns", icon: Megaphone, permission: "manage_outreach" },
-      { href: "/outreach/events", label: "Outreach Events", icon: Bell, permission: "manage_outreach" }
+      { href: "/outreach/events", label: "Outreach Events", icon: Bell, permission: "send_direct_outreach" }
     ]
   },
   {
@@ -153,7 +152,6 @@ export function AppShell({ children, session }: AppShellProps) {
               className="brand-wordmark"
               priority
             />
-            <span className="brand-subtitle">{syncoreBrand.productName}</span>
           </span>
         </Link>
 
@@ -168,11 +166,6 @@ export function AppShell({ children, session }: AppShellProps) {
               {view.shortLabel}
             </Link>
           ))}
-        </div>
-
-        <div className="sidebar-section">
-          <span className="sidebar-section-label">{activeView.label}</span>
-          <span className="sidebar-section-copy">{activeView.description}</span>
         </div>
 
         <nav className="nav-list">
@@ -190,19 +183,9 @@ export function AppShell({ children, session }: AppShellProps) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="mode-card">
-            <span className="mode-label">Current view</span>
-            <strong>{activeView.label}</strong>
-            <span>{session.permissions.includes("manage_workspace") ? "Developer access enabled" : "Role scoped"}</span>
-          </div>
           <div className="workspace-card">
-            <div className="workspace-row">
-              <strong>{session.workspace.market}</strong>
-              <StatusPill label={session.workspace.health} tone="success" />
-            </div>
-            <span className="metric-note">
-              {session.user.name} - {workspaceRoleLabel(session.role)}
-            </span>
+            <strong>{session.user.name}</strong>
+            <span className="metric-note">{workspaceRoleLabel(session.role)}</span>
           </div>
           {canAccessDeveloperView ? (
             <Link href="/compliance" className="button subtle">
