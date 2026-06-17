@@ -35,7 +35,6 @@ import {
   canUseLeadGenerationWorkspace,
   workspaceRoleLabel
 } from "@/lib/phase1/auth";
-import { StatusPill } from "@/components/status-pill";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/app/auth/actions";
 
@@ -153,7 +152,6 @@ export function AppShell({ children, session }: AppShellProps) {
               className="brand-wordmark"
               priority
             />
-            <span className="brand-subtitle">{syncoreBrand.productName}</span>
           </span>
         </Link>
 
@@ -168,11 +166,6 @@ export function AppShell({ children, session }: AppShellProps) {
               {view.shortLabel}
             </Link>
           ))}
-        </div>
-
-        <div className="sidebar-section">
-          <span className="sidebar-section-label">{activeView.label}</span>
-          <span className="sidebar-section-copy">{activeView.description}</span>
         </div>
 
         <nav className="nav-list">
@@ -190,19 +183,9 @@ export function AppShell({ children, session }: AppShellProps) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="mode-card">
-            <span className="mode-label">Current view</span>
-            <strong>{activeView.label}</strong>
-            <span>{session.permissions.includes("manage_workspace") ? "Developer access enabled" : "Role scoped"}</span>
-          </div>
           <div className="workspace-card">
-            <div className="workspace-row">
-              <strong>{session.workspace.market}</strong>
-              <StatusPill label={session.workspace.health} tone="success" />
-            </div>
-            <span className="metric-note">
-              {session.user.name} - {workspaceRoleLabel(session.role)}
-            </span>
+            <strong>{session.user.name}</strong>
+            <span className="metric-note">{workspaceRoleLabel(session.role)}</span>
           </div>
           {canAccessDeveloperView ? (
             <Link href="/compliance" className="button subtle">

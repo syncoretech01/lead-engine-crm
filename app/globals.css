@@ -339,7 +339,7 @@ button {
   display: block;
   width: 124px;
   height: auto;
-  margin-bottom: 3px;
+  margin-bottom: 0;
   object-fit: contain;
 }
 
@@ -369,8 +369,7 @@ button {
 }
 
 .view-switcher {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 3px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-sm);
@@ -380,6 +379,7 @@ button {
 
 .view-tab {
   display: inline-flex;
+  flex: 1;
   min-height: 32px;
   align-items: center;
   justify-content: center;
@@ -2494,7 +2494,7 @@ tbody tr:hover {
   }
 
   .view-switcher {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 
   .view-tab {
@@ -2566,7 +2566,7 @@ tbody tr:hover {
   }
 
   .view-switcher {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    flex-direction: row;
   }
 
   .lead-action-grid {
