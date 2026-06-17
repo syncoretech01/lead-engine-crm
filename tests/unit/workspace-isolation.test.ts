@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveSession } from "@/lib/phase1/auth";
+import { resolveWorkspaceCrmTargets } from "@/lib/phase1/crm";
 import { exportCsvForRecord, rowsForExport } from "@/lib/phase1/exporting";
 import { createProviderJob, providerJobSnapshot, startProviderJobRun } from "@/lib/phase1/provider-jobs";
 import { saveProviderConnectionConfig } from "@/lib/phase1/provider-connections";
@@ -164,6 +165,28 @@ describe("workspace-scoped query helpers", () => {
     expect(path.startsWith("workspaces/workspace-syncore/")).toBe(true);
     expect(path).not.toContain("../");
     expect(path).not.toContain("..\\");
+  });
+
+  it("drops cross-workspace contact and company references when resolving CRM targets", () => {
+    const state = createSeedState();
+    const workspaceId = state.workspaces[0].id;
+    const { otherContact, otherCompany } = addSecondWorkspace(state);
+    const ownContact = state.contacts.find((contact) => contact.workspaceId === workspaceId);
+
+    if (!ownContact) {
+      throw new Error("Expected a seeded contact in the active workspace.");
+    }
+
+    const crossTenant = resolveWorkspaceCrmTargets(state, workspaceId, {
+      contactId: otherContact.id,
+      companyId: otherCompany.id
+    });
+    expect(crossTenant.contact).toBeUndefined();
+    expect(crossTenant.companyId).toBeUndefined();
+
+    const sameTenant = resolveWorkspaceCrmTargets(state, workspaceId, { contactId: ownContact.id });
+    expect(sameTenant.contact?.id).toBe(ownContact.id);
+    expect(sameTenant.companyId).toBe(ownContact.companyId);
   });
 });
 

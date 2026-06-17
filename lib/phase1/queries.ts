@@ -16,7 +16,8 @@ import type {
   LeadGrade,
   LeadStatus,
   OpportunityStage,
-  Priority
+  Priority,
+  Session
 } from "@/lib/phase1/types";
 import { assignmentViews, sdrWorkloads } from "@/lib/phase1/sdr";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -505,6 +506,53 @@ export function opportunityViews(state: AppState, workspaceId = state.workspaces
       lastActivityAt: latestActivity?.createdAt
     };
   });
+}
+
+/**
+ * The set of contact and company ids a session "owns" for CRM scoping. An SDR
+ * owns a record when it is assigned to them (SdrAssignment), when they are the
+ * named owner of the lead-gen contact, or when they own an opportunity tied to
+ * it. Callers apply this only when restrictsToOwnedRecords(session) is true.
+ */
+export function ownedCrmRecordScope(state: AppState, session: Session) {
+  const workspaceId = session.workspace.id;
+  const userId = session.user.id;
+  const userName = session.user.name;
+  const contactIds = new Set<string>();
+  const companyIds = new Set<string>();
+
+  for (const assignment of state.sdrAssignments) {
+    if (assignment.workspaceId === workspaceId && assignment.assignedSdrId === userId) {
+      if (assignment.contactId) {
+        contactIds.add(assignment.contactId);
+      }
+      if (assignment.companyId) {
+        companyIds.add(assignment.companyId);
+      }
+    }
+  }
+
+  for (const contact of state.contacts) {
+    if (contact.workspaceId === workspaceId && contact.owner === userName) {
+      contactIds.add(contact.id);
+      if (contact.companyId) {
+        companyIds.add(contact.companyId);
+      }
+    }
+  }
+
+  for (const opportunity of state.opportunities) {
+    if (opportunity.workspaceId === workspaceId && opportunity.ownerUserId === userId) {
+      if (opportunity.contactId) {
+        contactIds.add(opportunity.contactId);
+      }
+      if (opportunity.companyId) {
+        companyIds.add(opportunity.companyId);
+      }
+    }
+  }
+
+  return { contactIds, companyIds };
 }
 
 export function exportTemplates(state: AppState, workspaceId: string) {

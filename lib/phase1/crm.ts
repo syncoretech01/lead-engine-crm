@@ -5,6 +5,7 @@ import type {
   AppState,
   CallLog,
   Company,
+  Contact,
   CrmTask,
   CustomField,
   CustomFieldValue,
@@ -52,6 +53,27 @@ export function ownerUserIdForName(state: AppState, owner?: string) {
 
 export function userNameForId(state: AppState, userId?: string) {
   return state.users.find((user) => user.id === userId)?.name ?? "Syncore user";
+}
+
+/**
+ * Resolve the contact/company a CRM mutation should attach to, scoped to the
+ * active workspace. A contact or company id from another workspace resolves to
+ * undefined so cross-tenant references can never be stored. The company id
+ * falls back to the resolved contact's own (same-workspace) company.
+ */
+export function resolveWorkspaceCrmTargets(
+  state: AppState,
+  workspaceId: string,
+  input: { contactId?: string; companyId?: string }
+): { contact?: Contact; companyId?: string } {
+  const contact = input.contactId
+    ? state.contacts.find((item) => item.id === input.contactId && item.workspaceId === workspaceId)
+    : undefined;
+  const company = input.companyId
+    ? state.companies.find((item) => item.id === input.companyId && item.workspaceId === workspaceId)
+    : undefined;
+
+  return { contact, companyId: company?.id ?? contact?.companyId };
 }
 
 export function addActivity(

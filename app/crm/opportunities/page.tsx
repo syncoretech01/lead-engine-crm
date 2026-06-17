@@ -23,7 +23,8 @@ import {
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
 import { customFieldValuesForObject, opportunityStages, userNameForId } from "@/lib/phase1/crm";
-import { opportunityViews } from "@/lib/phase1/queries";
+import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { opportunityViews, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
@@ -31,10 +32,13 @@ import { StatCard, LaneCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function OpportunitiesPage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_crm");
+  const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
   const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
   const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
-  const opportunities = opportunityViews(readState, workspaceId);
+  const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
+  const opportunities = ownedScope
+    ? opportunityViews(readState, workspaceId).filter((opportunity) => opportunity.ownerUserId === session.user.id)
+    : opportunityViews(readState, workspaceId);
   const openOpportunities = opportunities.filter((opportunity) => !isClosedStage(opportunity.stage));
   const openPipeline = openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
   const weightedForecast = openOpportunities.reduce(
@@ -288,7 +292,7 @@ export default async function OpportunitiesPage() {
               <label htmlFor="companyId">Account</label>
               <select id="companyId" name="companyId" required>
                 {state.companies
-                  .filter((company) => company.workspaceId === workspaceId)
+                  .filter((company) => company.workspaceId === workspaceId && (!ownedScope || ownedScope.companyIds.has(company.id)))
                   .map((company) => (
                     <option key={company.id} value={company.id}>
                       {company.name}
@@ -301,7 +305,7 @@ export default async function OpportunitiesPage() {
               <select id="contactId" name="contactId" defaultValue="">
                 <option value="">No primary contact</option>
                 {state.contacts
-                  .filter((contact) => contact.workspaceId === workspaceId)
+                  .filter((contact) => contact.workspaceId === workspaceId && (!ownedScope || ownedScope.contactIds.has(contact.id)))
                   .map((contact) => (
                     <option key={contact.id} value={contact.id}>
                       {contact.name}

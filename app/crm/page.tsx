@@ -19,7 +19,8 @@ import {
   crmEventReadRowsForWorkspace,
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
-import { accountViewsForWorkspace, contactViewsForWorkspace, opportunityViews } from "@/lib/phase1/queries";
+import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { accountViewsForWorkspace, contactViewsForWorkspace, opportunityViews, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { sdrQueueSnapshot } from "@/lib/phase1/sdr";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import type { Opportunity } from "@/lib/phase1/types";
@@ -32,11 +33,16 @@ export default async function CrmDashboardPage() {
   const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
   const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
   const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
-  const [accounts, contacts] = await Promise.all([
+  const [allAccounts, allContacts] = await Promise.all([
     accountViewsForWorkspace(readState, workspaceId),
     contactViewsForWorkspace(readState, workspaceId)
   ]);
-  const opportunities = opportunityViews(readState, workspaceId);
+  const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
+  const accounts = ownedScope ? allAccounts.filter((account) => ownedScope.companyIds.has(account.id)) : allAccounts;
+  const contacts = ownedScope ? allContacts.filter((contact) => ownedScope.contactIds.has(contact.id)) : allContacts;
+  const opportunities = ownedScope
+    ? opportunityViews(readState, workspaceId).filter((opportunity) => opportunity.ownerUserId === session.user.id)
+    : opportunityViews(readState, workspaceId);
   const openOpportunities = opportunities.filter((opportunity) => !isClosedStage(opportunity.stage));
   const ownerFilter = session.role === "SDR" ? session.user.id : undefined;
   const canManageSdr = session.permissions.includes("manage_sdr");

@@ -1,6 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { defaultWorkspacePath } from "@/lib/phase1/auth";
@@ -22,12 +22,19 @@ import {
 } from "@/lib/phase1/auth-security";
 import { authWriteTables } from "@/lib/phase1/normalized-write-tables";
 import { getSession, updateAuthState, updateState } from "@/lib/phase1/store";
+import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
 import type { WorkspaceRole } from "@/lib/phase1/types";
 
 export async function loginAction(formData: FormData) {
   const email = stringValue(formData.get("email"));
   const password = stringValue(formData.get("password"));
   const next = safeNextPath(stringValue(formData.get("next")));
+
+  const rate = await enforceAuthRateLimit("login", { limit: 10, windowMs: 5 * 60 * 1000 });
+  if (!rate.allowed) {
+    redirect(`/login?error=${encodeURIComponent(rateLimitMessage(rate))}&next=${encodeURIComponent(next)}`);
+  }
+
   let result;
 
   try {
@@ -88,6 +95,12 @@ export async function acceptInviteAction(formData: FormData) {
   const token = stringValue(formData.get("token"));
   const name = stringValue(formData.get("name"));
   const password = stringValue(formData.get("password"));
+
+  const rate = await enforceAuthRateLimit("accept-invite", { limit: 10, windowMs: 15 * 60 * 1000 });
+  if (!rate.allowed) {
+    redirect(`/invite/${encodeURIComponent(token)}?error=${encodeURIComponent(rateLimitMessage(rate))}`);
+  }
+
   let result;
 
   try {
@@ -106,6 +119,12 @@ export async function acceptInviteAction(formData: FormData) {
 
 export async function requestPasswordResetAction(formData: FormData) {
   const email = stringValue(formData.get("email"));
+
+  const rate = await enforceAuthRateLimit("reset-request", { limit: 5, windowMs: 15 * 60 * 1000 });
+  if (!rate.allowed) {
+    redirect(`/reset-password?error=${encodeURIComponent(rateLimitMessage(rate))}`);
+  }
+
   let resetUrl = "";
   await updateAuthState((state) => {
     resetUrl = createPasswordResetToken(state, email)?.url ?? "";
@@ -118,6 +137,11 @@ export async function requestPasswordResetAction(formData: FormData) {
 export async function resetPasswordAction(formData: FormData) {
   const token = stringValue(formData.get("token"));
   const password = stringValue(formData.get("password"));
+
+  const rate = await enforceAuthRateLimit("reset-confirm", { limit: 10, windowMs: 15 * 60 * 1000 });
+  if (!rate.allowed) {
+    redirect(`/reset-password/${encodeURIComponent(token)}?error=${encodeURIComponent(rateLimitMessage(rate))}`);
+  }
 
   try {
     await updateAuthState(
@@ -182,4 +206,18 @@ function safeNextPath(value: string) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
+}
+
+async function enforceAuthRateLimit(scope: string, options: { limit: number; windowMs: number }) {
+  if (!rateLimitingEnabled()) {
+    return { allowed: true, remaining: options.limit, retryAfterMs: 0 };
+  }
+
+  const headerStore = await headers();
+  return checkRateLimit(`${scope}:${clientIpFromHeaders(headerStore)}`, options);
+}
+
+function rateLimitMessage(result: { retryAfterMs: number }) {
+  const seconds = Math.max(1, Math.ceil(result.retryAfterMs / 1000));
+  return `Too many attempts. Please try again in ${seconds}s.`;
 }
