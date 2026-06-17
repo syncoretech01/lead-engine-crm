@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { assertPermission } from "@/lib/phase1/auth";
+import { assertPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import {
   completeDataSubjectRequest,
   consentStatuses,
@@ -101,11 +101,14 @@ import {
   refreshSlaStatuses,
   sdrLeadStatuses
 } from "@/lib/phase1/sdr";
+import { ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { createSeedState } from "@/lib/phase1/seed";
 import { appendAudit, updateState } from "@/lib/phase1/store";
 import { requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
 import type {
+  AppState,
+  Session,
   CallLog,
   CallDisposition,
   CrmTask,
@@ -980,7 +983,7 @@ export async function setCustomFieldValueAction(formData: FormData) {
 
 export async function runSdrAssignmentAction() {
   await updateState((state, session) => {
-    assertPermission(session, "manage_sdr");
+    assertPermission(session, "manage_sdr_team");
     const result = assignWorkspaceLeads(state, session.workspace.id, session.user.id);
     const sla = refreshSlaStatuses(state, session.workspace.id);
 
@@ -1037,7 +1040,7 @@ export async function completeFollowUpReminderAction(formData: FormData) {
 
 export async function reassignSdrAssignmentAction(formData: FormData) {
   await updateState((state, session) => {
-    assertPermission(session, "manage_sdr");
+    assertPermission(session, "manage_sdr_team");
     const assignment = reassignSdrAssignment(state, {
       workspaceId: session.workspace.id,
       assignmentId: stringValue(formData.get("assignmentId")),
@@ -1060,7 +1063,7 @@ export async function reassignSdrAssignmentAction(formData: FormData) {
 
 export async function applyReassignmentRulesAction() {
   await updateState((state, session) => {
-    assertPermission(session, "manage_sdr");
+    assertPermission(session, "manage_sdr_team");
     const result = applyReassignmentRecommendations(state, session.workspace.id, session.user.id);
 
     appendAudit(state, session, {
@@ -1076,7 +1079,7 @@ export async function applyReassignmentRulesAction() {
 
 export async function createReassignmentRuleAction(formData: FormData) {
   await updateState((state, session) => {
-    assertPermission(session, "manage_sdr");
+    assertPermission(session, "manage_sdr_team");
     const rule = createReassignmentRule({
       workspaceId: session.workspace.id,
       name: stringValue(formData.get("name"), "Custom reassignment rule"),
@@ -1100,7 +1103,7 @@ export async function createReassignmentRuleAction(formData: FormData) {
 
 export async function deleteReassignmentRuleAction(formData: FormData) {
   await updateState((state, session) => {
-    assertPermission(session, "manage_sdr");
+    assertPermission(session, "manage_sdr_team");
     const id = stringValue(formData.get("id"));
     state.reassignmentRules = state.reassignmentRules.filter(
       (rule) => !(rule.id === id && rule.workspaceId === session.workspace.id)
@@ -1232,12 +1235,20 @@ export async function simulateCampaignSendAction(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
+function assertAssignedContactForOutreach(state: AppState, session: Session, contactId: string) {
+  if (restrictsToOwnedRecords(session) && !ownedCrmRecordScope(state, session).contactIds.has(contactId)) {
+    throw new Error("You can only send or log outreach for contacts assigned to you.");
+  }
+}
+
 export async function recordEmailEventAction(formData: FormData) {
   await updateState((state, session) => {
-    assertPermission(session, "manage_outreach");
+    assertPermission(session, "send_direct_outreach");
+    const contactId = stringValue(formData.get("contactId"));
+    assertAssignedContactForOutreach(state, session, contactId);
     const event = createEmailEvent(state, {
       workspaceId: session.workspace.id,
-      contactId: stringValue(formData.get("contactId")),
+      contactId,
       campaignId: stringValue(formData.get("campaignId")) || undefined,
       sequenceId: stringValue(formData.get("sequenceId")) || undefined,
       sequenceStepId: stringValue(formData.get("sequenceStepId")) || undefined,
@@ -1262,10 +1273,12 @@ export async function recordEmailEventAction(formData: FormData) {
 
 export async function recordSmsEventAction(formData: FormData) {
   await updateState((state, session) => {
-    assertPermission(session, "manage_outreach");
+    assertPermission(session, "send_direct_outreach");
+    const contactId = stringValue(formData.get("contactId"));
+    assertAssignedContactForOutreach(state, session, contactId);
     const event = createSmsEvent(state, {
       workspaceId: session.workspace.id,
-      contactId: stringValue(formData.get("contactId")),
+      contactId,
       campaignId: stringValue(formData.get("campaignId")) || undefined,
       sequenceId: stringValue(formData.get("sequenceId")) || undefined,
       sequenceStepId: stringValue(formData.get("sequenceStepId")) || undefined,
@@ -1288,10 +1301,12 @@ export async function recordSmsEventAction(formData: FormData) {
 
 export async function recordTrackedCallAction(formData: FormData) {
   await updateState((state, session) => {
-    assertPermission(session, "manage_outreach");
+    assertPermission(session, "send_direct_outreach");
+    const contactId = stringValue(formData.get("contactId"));
+    assertAssignedContactForOutreach(state, session, contactId);
     const call = createTrackedCall(state, {
       workspaceId: session.workspace.id,
-      contactId: stringValue(formData.get("contactId")),
+      contactId,
       sdrUserId: stringValue(formData.get("sdrUserId"), session.user.id),
       direction: stringValue(formData.get("direction"), "Outbound") === "Inbound" ? "Inbound" : "Outbound",
       callStatus: trackedCallStatusValue(formData.get("callStatus")),

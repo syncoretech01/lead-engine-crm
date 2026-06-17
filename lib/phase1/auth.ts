@@ -13,9 +13,12 @@ const permissionsByRole: Record<WorkspaceRole, Permission[]> = {
     "run_jobs",
     "import_csv",
     "view_all_records",
+    "view_records",
     "manage_crm",
     "manage_sdr",
+    "manage_sdr_team",
     "manage_outreach",
+    "send_direct_outreach",
     "export_csv",
     "manage_export_rules",
     "manage_enrichment",
@@ -26,28 +29,32 @@ const permissionsByRole: Record<WorkspaceRole, Permission[]> = {
   ],
   Manager: [
     "view_all_records",
+    "view_records",
     "manage_profiles",
     "run_jobs",
     "import_csv",
     "manage_crm",
     "manage_sdr",
+    "manage_sdr_team",
     "manage_outreach",
+    "send_direct_outreach",
     "export_csv",
     "manage_export_rules",
     "manage_enrichment"
   ],
-  SDR: ["view_all_records", "manage_crm", "manage_sdr", "manage_outreach"],
+  SDR: ["view_records", "manage_crm", "manage_sdr", "send_direct_outreach"],
   "Data Operator": [
     "manage_profiles",
     "run_jobs",
     "import_csv",
     "view_all_records",
+    "view_records",
     "export_csv",
     "manage_export_rules",
     "manage_enrichment"
   ],
-  Viewer: ["view_all_records", "view_reports"],
-  "Compliance Admin": ["view_all_records", "export_csv", "manage_compliance", "view_reports", "manage_retention"]
+  Viewer: ["view_all_records", "view_records", "view_reports"],
+  "Compliance Admin": ["view_all_records", "view_records", "export_csv", "manage_compliance", "view_reports", "manage_retention"]
 };
 
 export function getDemoSession(state: AppState): Session {
@@ -111,12 +118,13 @@ export function canUseDeveloperWorkspace(session: Session) {
 }
 
 /**
- * Individual-contributor SDRs see only the records assigned to them. Managers,
- * admins, and other roles retain the full workspace view. Record-level scoping
+ * Roles that can view CRM records but lack the "view all" grant (i.e. SDRs) are
+ * scoped to the records assigned to them. Roles with view_all_records (managers,
+ * admins, data operators, etc.) keep the full workspace view. Row-level scoping
  * is applied in the CRM read paths (see ownedCrmRecordScope).
  */
 export function restrictsToOwnedRecords(session: Session) {
-  return session.role === "SDR";
+  return session.permissions.includes("view_records") && !session.permissions.includes("view_all_records");
 }
 
 export function defaultWorkspacePath(session: Session) {

@@ -38,7 +38,7 @@ type SegmentSummary = {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("view_all_records");
+  const { state, session, workspaceId } = await getWorkspaceContext("view_records");
   if (!canUseLeadGenerationWorkspace(session)) {
     const fallbackPath = defaultWorkspacePath(session);
     if (fallbackPath !== "/") {

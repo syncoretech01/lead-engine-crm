@@ -68,7 +68,7 @@ const workspaceViews = [
     description: "Profiles, jobs, staging, quality, enrichment, and exports.",
     canAccess: canUseLeadGenerationWorkspace,
     items: [
-      { href: "/", label: "Lead Dashboard", icon: LayoutDashboard, permission: "view_all_records" },
+      { href: "/", label: "Lead Dashboard", icon: LayoutDashboard, permission: "view_records" },
       { href: "/search-profiles", label: "Search Profiles", icon: Target, permission: "manage_profiles" },
       { href: "/lead-jobs", label: "Lead Jobs", icon: Database, permission: "run_jobs" },
       { href: "/staging", label: "Data Staging", icon: Search, permission: "import_csv" },
@@ -85,14 +85,14 @@ const workspaceViews = [
     description: "Accounts, contacts, opportunities, SDR work, and outreach.",
     canAccess: canUseCrmWorkspace,
     items: [
-      { href: "/crm", label: "CRM Dashboard", icon: LayoutDashboard, permission: "view_all_records", exact: true },
-      { href: "/crm/accounts", label: "Accounts", icon: Building2, permission: "view_all_records" },
-      { href: "/crm/contacts", label: "Contacts", icon: Users, permission: "view_all_records" },
-      { href: "/crm/opportunities", label: "Opportunities", icon: CircleDollarSign, permission: "view_all_records" },
+      { href: "/crm", label: "CRM Dashboard", icon: LayoutDashboard, permission: "view_records", exact: true },
+      { href: "/crm/accounts", label: "Accounts", icon: Building2, permission: "view_records" },
+      { href: "/crm/contacts", label: "Contacts", icon: Users, permission: "view_records" },
+      { href: "/crm/opportunities", label: "Opportunities", icon: CircleDollarSign, permission: "view_records" },
       { href: "/sdr/queue", label: "SDR Queue", icon: ClipboardList, permission: "manage_sdr" },
-      { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr" },
+      { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr_team" },
       { href: "/outreach/campaigns", label: "Campaigns", icon: Megaphone, permission: "manage_outreach" },
-      { href: "/outreach/events", label: "Outreach Events", icon: Bell, permission: "manage_outreach" }
+      { href: "/outreach/events", label: "Outreach Events", icon: Bell, permission: "send_direct_outreach" }
     ]
   },
   {

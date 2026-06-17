@@ -27,6 +27,8 @@ import {
   outreachEventReadRowsForWorkspace,
   stateWithOutreachEventReadRows
 } from "@/lib/phase1/outreach-read-path";
+import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { recordingConsentStatuses } from "@/lib/phase1/compliance";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
@@ -46,10 +48,21 @@ type EventRow = {
 };
 
 export default async function OutreachEventsPage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_outreach");
+  const { state, session, workspaceId } = await getWorkspaceContext("send_direct_outreach");
   const outreachRows = await outreachEventReadRowsForWorkspace(state, workspaceId);
   const readState = stateWithOutreachEventReadRows(state, workspaceId, outreachRows);
-  const snapshot = outreachDashboardSnapshot(readState, workspaceId);
+  const canManageOutreach = session.permissions.includes("manage_outreach");
+  const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
+  const scopedState = ownedScope
+    ? {
+        ...readState,
+        emailEvents: readState.emailEvents.filter((event) => (event.contactId ? ownedScope.contactIds.has(event.contactId) : false)),
+        smsEvents: readState.smsEvents.filter((event) => (event.contactId ? ownedScope.contactIds.has(event.contactId) : false)),
+        trackedCalls: readState.trackedCalls.filter((call) => (call.contactId ? ownedScope.contactIds.has(call.contactId) : false)),
+        webhookEvents: []
+      }
+    : readState;
+  const snapshot = outreachDashboardSnapshot(scopedState, workspaceId);
   const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId);
   const campaigns = state.outreachCampaigns.filter((campaign) => campaign.workspaceId === workspaceId);
   const sequences = state.campaignSequences.filter((sequence) => sequence.workspaceId === workspaceId);
@@ -369,6 +382,7 @@ export default async function OutreachEventsPage() {
         </div>
       </section>
 
+      {canManageOutreach ? (
       <section className="panel">
         <div className="panel-header">
           <div className="panel-title-wrap">
@@ -414,7 +428,9 @@ export default async function OutreachEventsPage() {
           </table>
         </div>
       </section>
+      ) : null}
 
+      {canManageOutreach ? (
       <section className="grid" id="manual-event-capture">
         <div className="panel">
           <div className="panel-header">
@@ -669,6 +685,7 @@ export default async function OutreachEventsPage() {
           </form>
         </div>
       </section>
+      ) : null}
     </>
   );
 }

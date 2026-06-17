@@ -22,6 +22,8 @@ import {
   createNoteAction,
   createOpportunityAction,
   createTaskAction,
+  recordEmailEventAction,
+  recordSmsEventAction,
   setCustomFieldValueAction,
   updateContactComplianceAction,
   updateOpportunityStageAction
@@ -41,6 +43,7 @@ import {
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
 import { consentStatuses, lawfulBases } from "@/lib/phase1/compliance";
+import { emailEventTypes, smsEventStatuses } from "@/lib/phase1/outreach";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
@@ -109,6 +112,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     .slice(0, 6);
   const totalOpportunityValue = opportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
   const canManageCompliance = session.permissions.includes("manage_compliance");
+  const canSendDirectOutreach = session.permissions.includes("send_direct_outreach");
 
   const metrics = [
     {
@@ -516,6 +520,83 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           </div>
         </div>
       </section>
+
+      {canSendDirectOutreach ? (
+        <section className="grid two">
+          <div className="panel" id="send-direct-email">
+            <div className="panel-header">
+              <div className="panel-title-wrap">
+                <h2 className="section-title">Send 1:1 email</h2>
+                <p className="section-subtitle">Send an individual email to this assigned contact and log it on the timeline.</p>
+              </div>
+              <Mail size={20} aria-hidden="true" />
+            </div>
+            <form action={recordEmailEventAction} className="panel-body form-grid">
+              <input name="contactId" type="hidden" value={contact.id} />
+              <div className="field">
+                <label htmlFor="direct-email-subject">Subject</label>
+                <input id="direct-email-subject" name="subject" placeholder="Quick question" />
+              </div>
+              <div className="field">
+                <label htmlFor="direct-email-body">Body</label>
+                <textarea id="direct-email-body" name="bodySnapshot" placeholder="Write the message" />
+              </div>
+              <div className="field">
+                <label htmlFor="direct-email-type">Status</label>
+                <select id="direct-email-type" name="eventType" defaultValue="Sent">
+                  {emailEventTypes.map((eventType) => (
+                    <option key={eventType} value={eventType}>
+                      {eventType}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label aria-hidden="true">&nbsp;</label>
+                <button className="button primary" type="submit">
+                  <Mail size={16} aria-hidden="true" />
+                  Send email
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="panel" id="send-direct-sms">
+            <div className="panel-header">
+              <div className="panel-title-wrap">
+                <h2 className="section-title">Send 1:1 SMS</h2>
+                <p className="section-subtitle">Send an individual SMS to this assigned contact and log it on the timeline.</p>
+              </div>
+              <Phone size={20} aria-hidden="true" />
+            </div>
+            <form action={recordSmsEventAction} className="panel-body form-grid">
+              <input name="contactId" type="hidden" value={contact.id} />
+              <input name="direction" type="hidden" value="Outbound" />
+              <div className="field">
+                <label htmlFor="direct-sms-body">Message</label>
+                <textarea id="direct-sms-body" name="body" placeholder="Keep it short" />
+              </div>
+              <div className="field">
+                <label htmlFor="direct-sms-status">Status</label>
+                <select id="direct-sms-status" name="status" defaultValue="Delivered">
+                  {smsEventStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label aria-hidden="true">&nbsp;</label>
+                <button className="button primary" type="submit">
+                  <Phone size={16} aria-hidden="true" />
+                  Send SMS
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid two">
         <div className="panel" id="contact-compliance">
