@@ -7,11 +7,31 @@ import {
   randomUUID,
   timingSafeEqual
 } from "node:crypto";
+import { isProductionBuildPhase } from "@/lib/phase1/auth-security";
 import type { AppState, ProviderConnection, ProviderEncryptedSecret } from "@/lib/phase1/types";
 import type { ProviderId } from "@/lib/providers/types";
 
 const algorithm = "aes-256-gcm";
 const localDevelopmentKey = "syncore-local-development-credential-key";
+
+type CredentialKeyEnv = {
+  NODE_ENV?: string;
+  SYNCORE_CREDENTIAL_ENCRYPTION_KEY?: string;
+  NEXT_PHASE?: string;
+  npm_lifecycle_event?: string;
+};
+
+export function resolveCredentialKeyMaterial(env: CredentialKeyEnv = process.env as CredentialKeyEnv) {
+  const key = env.SYNCORE_CREDENTIAL_ENCRYPTION_KEY?.trim();
+  if (key) {
+    return key;
+  }
+  if (env.NODE_ENV === "production" && !isProductionBuildPhase(env)) {
+    throw new Error("SYNCORE_CREDENTIAL_ENCRYPTION_KEY is required in production.");
+  }
+
+  return localDevelopmentKey;
+}
 
 export type StoreProviderSecretInput = {
   workspaceId: string;
@@ -164,9 +184,7 @@ function decryptProviderSecret(secret: ProviderEncryptedSecret) {
 }
 
 function credentialEncryptionKey() {
-  return createHash("sha256")
-    .update(process.env.SYNCORE_CREDENTIAL_ENCRYPTION_KEY ?? localDevelopmentKey)
-    .digest();
+  return createHash("sha256").update(resolveCredentialKeyMaterial()).digest();
 }
 
 function credentialKeyId() {

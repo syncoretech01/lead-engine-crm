@@ -31,6 +31,7 @@ import {
   addActivity,
   callOutcomes,
   opportunityStages,
+  resolveWorkspaceCrmTargets,
   stageProbability,
   taskPriorities
 } from "@/lib/phase1/crm";
@@ -721,9 +722,11 @@ export async function updateOpportunityStageAction(formData: FormData) {
 export async function createTaskAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_crm");
-    const contactId = stringValue(formData.get("contactId")) || undefined;
-    const contact = contactId ? state.contacts.find((item) => item.id === contactId) : undefined;
-    const companyId = stringValue(formData.get("companyId")) || contact?.companyId;
+    const { contact, companyId } = resolveWorkspaceCrmTargets(state, session.workspace.id, {
+      contactId: stringValue(formData.get("contactId")) || undefined,
+      companyId: stringValue(formData.get("companyId")) || undefined
+    });
+    const contactId = contact?.id;
     const now = new Date().toISOString();
     const task: CrmTask = {
       id: `task-${randomUUID()}`,
@@ -804,9 +807,11 @@ export async function completeTaskAction(formData: FormData) {
 export async function createNoteAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_crm");
-    const contactId = stringValue(formData.get("contactId")) || undefined;
-    const contact = contactId ? state.contacts.find((item) => item.id === contactId) : undefined;
-    const companyId = stringValue(formData.get("companyId")) || contact?.companyId;
+    const { contact, companyId } = resolveWorkspaceCrmTargets(state, session.workspace.id, {
+      contactId: stringValue(formData.get("contactId")) || undefined,
+      companyId: stringValue(formData.get("companyId")) || undefined
+    });
+    const contactId = contact?.id;
     const now = new Date().toISOString();
     const note = {
       id: `note-${randomUUID()}`,
@@ -844,9 +849,11 @@ export async function createNoteAction(formData: FormData) {
 export async function createCallLogAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_crm");
-    const contactId = stringValue(formData.get("contactId")) || undefined;
-    const contact = contactId ? state.contacts.find((item) => item.id === contactId) : undefined;
-    const companyId = stringValue(formData.get("companyId")) || contact?.companyId;
+    const { contact, companyId } = resolveWorkspaceCrmTargets(state, session.workspace.id, {
+      contactId: stringValue(formData.get("contactId")) || undefined,
+      companyId: stringValue(formData.get("companyId")) || undefined
+    });
+    const contactId = contact?.id;
     const durationMinutes = Math.max(0, numberValue(formData.get("durationMinutes")));
     const call: CallLog = {
       id: `call-${randomUUID()}`,
