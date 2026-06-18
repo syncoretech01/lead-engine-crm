@@ -8,8 +8,9 @@ import {
   evaluateBudgetStopRules,
   providerLedgerJobId
 } from "@/lib/phase1/money";
-import type { AppState, ProviderJob, ProviderJobRun, ProviderJobStatus } from "@/lib/phase1/types";
+import type { AppState, ProviderConnection, ProviderJob, ProviderJobRun, ProviderJobStatus } from "@/lib/phase1/types";
 import { providerConfig } from "@/lib/providers/registry";
+import { resolveProviderExecutionMode } from "@/lib/providers/live-adapters";
 
 const defaultLeaseMs = 60_000;
 const defaultBatchSize = 5;
@@ -38,6 +39,7 @@ export type ProviderWorkerTickResult = {
   claimed: number;
   completed: number;
   failed: number;
+  deferred: number;
   retried: number;
   recovered: number;
   results: ProviderWorkerExecutionResult[];
@@ -210,14 +212,34 @@ export function processProviderJobQueue(
   state: AppState,
   options: ProviderWorkerClaimOptions
 ): ProviderWorkerTickResult {
+  const now = options.now ?? new Date().toISOString();
   const recovered = recoverExpiredProviderJobRunLocks(state, options);
   const retried = queueDueProviderRetries(state, options);
   const claimedRuns = claimProviderJobRuns(state, options);
   const results: ProviderWorkerExecutionResult[] = [];
   let completed = 0;
   let failed = 0;
+  let deferred = 0;
 
   for (const run of claimedRuns) {
+    const connection = providerConnectionForRun(state, run);
+    const limitPerMinute = connection?.rateLimitPerMinute ?? 0;
+
+    if (limitPerMinute > 0 && providerCallsInWindow(state, run, Date.parse(now)) >= limitPerMinute) {
+      releaseProviderJobRunToQueue(state, run, now);
+      deferred += 1;
+      results.push(deferredResult(state, run, `Rate limit of ${limitPerMinute}/min reached; deferred.`));
+      continue;
+    }
+
+    // Live runs are executed out-of-band by the live executor, never mock-run here.
+    if (resolveProviderExecutionMode(connection?.executionMode) === "live") {
+      releaseProviderJobRunToQueue(state, run, now);
+      deferred += 1;
+      results.push(deferredResult(state, run, "Live execution deferred to the provider live executor."));
+      continue;
+    }
+
     const result = executeMockProviderJobRun(state, run.id, {
       workerId: options.workerId,
       workspaceId: options.workspaceId,
@@ -233,6 +255,7 @@ export function processProviderJobQueue(
     claimed: claimedRuns.length,
     completed,
     failed,
+    deferred,
     retried,
     recovered,
     results
@@ -323,6 +346,51 @@ function providerJobForRun(state: AppState, run: ProviderJobRun) {
     throw new Error("Provider job not found for run.");
   }
   return job;
+}
+
+function providerConnectionForRun(state: AppState, run: ProviderJobRun): ProviderConnection | undefined {
+  return state.providerConnections.find(
+    (connection) => connection.workspaceId === run.workspaceId && connection.providerId === run.providerId
+  );
+}
+
+// Counts provider calls that actually executed for this workspace+provider in
+// the trailing window (claimed-but-not-executed and deferred runs are excluded).
+function providerCallsInWindow(state: AppState, run: ProviderJobRun, nowMs: number, windowMs = 60_000) {
+  return state.providerJobRuns.filter(
+    (item) =>
+      item.id !== run.id &&
+      item.workspaceId === run.workspaceId &&
+      item.providerId === run.providerId &&
+      (item.status === "Completed" || item.status === "Failed" || item.status === "Retry scheduled") &&
+      nowMs - Date.parse(item.updatedAt) < windowMs
+  ).length;
+}
+
+function releaseProviderJobRunToQueue(state: AppState, run: ProviderJobRun, now: string) {
+  const job = providerJobForRun(state, run);
+  run.status = "Queued";
+  run.startedAt = undefined;
+  run.lockedBy = undefined;
+  run.lockedAt = undefined;
+  run.lockExpiresAt = undefined;
+  run.updatedAt = now;
+  job.status = "Queued";
+  job.updatedAt = now;
+}
+
+function deferredResult(state: AppState, run: ProviderJobRun, message: string): ProviderWorkerExecutionResult {
+  const job = providerJobForRun(state, run);
+  return {
+    runId: run.id,
+    providerJobId: job.id,
+    providerId: run.providerId,
+    operation: run.operation,
+    status: "Queued",
+    recordsRead: 0,
+    recordsWritten: 0,
+    message
+  };
 }
 
 function providerRunById(state: AppState, runId: string, workspaceId?: string) {

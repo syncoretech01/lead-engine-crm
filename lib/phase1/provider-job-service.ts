@@ -17,6 +17,11 @@ import {
   processProviderJobQueue,
   type ProviderWorkerClaimOptions
 } from "@/lib/phase1/provider-worker";
+import {
+  applyLiveProviderRunOutcome,
+  invokeLiveProviderAdapter,
+  planLiveProviderRun
+} from "@/lib/phase1/provider-live-execution";
 import { getSession, readState, updateState } from "@/lib/phase1/store";
 
 export async function createProviderExecutionJob(input: CreateProviderJobInput) {
@@ -82,6 +87,36 @@ export async function processProviderExecutionQueue(input: Omit<ProviderWorkerCl
         ...input,
         workspaceId: session.workspace.id
       });
+    },
+    { normalizedTables: providerJobWriteTables }
+  );
+}
+
+/**
+ * Out-of-band live execution for a single run: claim + budget gate (sync), call
+ * the live adapter (async, outside any transaction), then record the outcome
+ * (sync). The async network call deliberately runs between two updateState
+ * calls so a DB transaction is never held open across provider I/O.
+ */
+export async function executeLiveProviderExecutionRun(runId: string, workerId = "syncore-live-worker") {
+  const plan = await updateState(
+    (state, session) => {
+      assertPermission(session, "manage_workspace");
+      return planLiveProviderRun(state, runId, { workerId, workspaceId: session.workspace.id });
+    },
+    { normalizedTables: providerJobWriteTables }
+  );
+
+  if (!plan.ok) {
+    return plan.result;
+  }
+
+  const outcome = await invokeLiveProviderAdapter(plan.plan);
+
+  return updateState(
+    (state, session) => {
+      assertPermission(session, "manage_workspace");
+      return applyLiveProviderRunOutcome(state, runId, outcome, { workspaceId: session.workspace.id });
     },
     { normalizedTables: providerJobWriteTables }
   );
