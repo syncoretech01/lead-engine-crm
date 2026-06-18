@@ -46,16 +46,20 @@ describe("live provider execution", () => {
     const state = createSeedState();
     const session = adminSession(state);
     configureZeroBounce(state, session, { executionMode: "live" });
+    let receivedCredential: string | undefined;
     registerLiveProviderAdapter({
       id: "zerobounce",
       operations: {
-        verify_email: async (_input, context) => ({
-          status: "ok",
-          data: [
-            { email: "a@b.com", status: "valid", grade: "A", reasonCodes: [], checkedAt: "2026-01-01T00:00:00.000Z" }
-          ],
-          meta: { providerId: "zerobounce", requestId: context.requestId }
-        })
+        verify_email: async (_input, context) => {
+          receivedCredential = context.credential?.secret;
+          return {
+            status: "ok",
+            data: [
+              { email: "a@b.com", status: "valid", grade: "A", reasonCodes: [], checkedAt: "2026-01-01T00:00:00.000Z" }
+            ],
+            meta: { providerId: "zerobounce", requestId: context.requestId }
+          };
+        }
       }
     });
 
@@ -68,9 +72,12 @@ describe("live provider execution", () => {
     const plan = planLiveProviderRun(state, run.id, { workerId: "live-worker", workspaceId: session.workspace.id });
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
+    // The decrypted vault secret rides the plan context into the adapter.
+    expect(plan.plan.context.credential).toEqual({ source: "vault", secret: "zb-secret", keyId: expect.any(String) });
 
     const outcome = await invokeLiveProviderAdapter(plan.plan);
     expect(outcome.kind).toBe("result");
+    expect(receivedCredential).toBe("zb-secret");
 
     const result = applyLiveProviderRunOutcome(state, run.id, outcome, { workspaceId: session.workspace.id });
     expect(result.status).toBe("Completed");
@@ -100,6 +107,24 @@ describe("live provider execution", () => {
 
     const result = applyLiveProviderRunOutcome(state, run.id, outcome, { workspaceId: session.workspace.id });
     expect(result.status).toBe("Failed");
+    expect(run.status).toBe("Failed");
+  });
+
+  it("fails a live run whose connection has no credential", () => {
+    const state = createSeedState();
+    const session = adminSession(state);
+    configureZeroBounce(state, session, { executionMode: "live", secretRef: undefined, secretStorage: "Not configured" });
+
+    const { run } = createProviderJob(state, session, {
+      providerId: "zerobounce",
+      operation: "verify_email",
+      inputSummary: { email: "k@l.com" }
+    });
+
+    const plan = planLiveProviderRun(state, run.id, { workerId: "live-worker", workspaceId: session.workspace.id });
+    expect(plan.ok).toBe(false);
+    if (plan.ok) return;
+    expect(plan.result.status).toBe("Failed");
     expect(run.status).toBe("Failed");
   });
 

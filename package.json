@@ -15,6 +15,7 @@
     "db:seed": "tsx scripts/seed-prisma.ts",
     "db:provision": "tsx scripts/provision-workspace.ts",
     "generate-secrets": "tsx scripts/generate-secrets.ts",
+    "worker:provider": "tsx scripts/run-provider-worker.ts",
     "db:migrate:status": "prisma migrate status",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
