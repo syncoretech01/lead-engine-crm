@@ -36,7 +36,7 @@ import { runWorkspaceVerification } from "@/lib/phase1/verification";
 
 const dataDir = path.join(process.cwd(), ".syncore-data");
 const dataFile = path.join(dataDir, "store.json");
-const stateSnapshotId = "syncore-primary-state";
+export const stateSnapshotId = "syncore-primary-state";
 
 type PrismaStoreClient = PrismaClient | Prisma.TransactionClient;
 type UpdateStateOptions = {
@@ -162,6 +162,22 @@ export async function getDeveloperWorkspaceContext() {
 
 export async function resetStore() {
   await writeState(createSeedState());
+}
+
+/**
+ * Whether persisted application state already exists for the active storage
+ * driver. Used by the provisioning script to avoid overwriting a live
+ * workspace. Unlike `readState`, this never seeds initial state as a side
+ * effect of being called.
+ */
+export async function persistedStateExists(): Promise<boolean> {
+  if (resolveStorageDriver() === "prisma") {
+    const client = await getPrismaClient();
+    const snapshot = await client.appStateSnapshot.findUnique({ where: { id: stateSnapshotId } });
+    return Boolean(snapshot);
+  }
+
+  return existsSync(dataFile);
 }
 
 async function resolveCurrentSession(state: AppState) {

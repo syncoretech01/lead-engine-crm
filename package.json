@@ -13,6 +13,8 @@
     "typecheck": "tsc --noEmit",
     "db:bootstrap": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run db:seed",
     "db:seed": "tsx scripts/seed-prisma.ts",
+    "db:provision": "tsx scripts/provision-workspace.ts",
+    "generate-secrets": "tsx scripts/generate-secrets.ts",
     "db:migrate:status": "prisma migrate status",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",

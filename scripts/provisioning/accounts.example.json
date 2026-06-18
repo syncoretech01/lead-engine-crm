@@ -1,0 +1,15 @@
+{
+  "workspace": {
+    "name": "Acme Outbound",
+    "market": "US outbound workspace",
+    "seats": 6
+  },
+  "accounts": [
+    { "name": "Owner Name", "email": "owner@yourcompany.com", "role": "Admin", "superadmin": true },
+    { "name": "Sales Manager", "email": "manager@yourcompany.com", "role": "Manager" },
+    { "name": "SDR One", "email": "sdr1@yourcompany.com", "role": "SDR" },
+    { "name": "SDR Two", "email": "sdr2@yourcompany.com", "role": "SDR" },
+    { "name": "SDR Three", "email": "sdr3@yourcompany.com", "role": "SDR" },
+    { "name": "SDR Four", "email": "sdr4@yourcompany.com", "role": "SDR" }
+  ]
+}

@@ -10,6 +10,9 @@ playwright-report
 .env
 .env.local
 .env.*.local
+# Real provisioning config holds team PII — keep it out of git (example is committed).
+scripts/provisioning/accounts.json
+scripts/provisioning/*.local.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
