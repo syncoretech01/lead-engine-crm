@@ -348,7 +348,7 @@ function providerJobForRun(state: AppState, run: ProviderJobRun) {
   return job;
 }
 
-function providerConnectionForRun(state: AppState, run: ProviderJobRun): ProviderConnection | undefined {
+export function providerConnectionForRun(state: AppState, run: ProviderJobRun): ProviderConnection | undefined {
   return state.providerConnections.find(
     (connection) => connection.workspaceId === run.workspaceId && connection.providerId === run.providerId
   );
@@ -356,7 +356,7 @@ function providerConnectionForRun(state: AppState, run: ProviderJobRun): Provide
 
 // Counts provider calls that actually executed for this workspace+provider in
 // the trailing window (claimed-but-not-executed and deferred runs are excluded).
-function providerCallsInWindow(state: AppState, run: ProviderJobRun, nowMs: number, windowMs = 60_000) {
+export function providerCallsInWindow(state: AppState, run: ProviderJobRun, nowMs: number, windowMs = 60_000) {
   return state.providerJobRuns.filter(
     (item) =>
       item.id !== run.id &&

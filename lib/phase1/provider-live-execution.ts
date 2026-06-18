@@ -1,9 +1,10 @@
 import { estimatedProviderCostCents, evaluateBudgetStopRules } from "@/lib/phase1/money";
 import { completeProviderJobRun, failProviderJobRun } from "@/lib/phase1/provider-jobs";
-import type { AppState, ProviderJob, ProviderJobRun } from "@/lib/phase1/types";
+import { resolveProviderSecret } from "@/lib/phase1/provider-secret-vault";
+import type { AppState, ProviderConnection, ProviderJob, ProviderJobRun } from "@/lib/phase1/types";
 import { getLiveProviderOperation } from "@/lib/providers/live-adapters";
 import { providerConfig } from "@/lib/providers/registry";
-import type { ProviderId, ProviderRequestContext, ProviderResult } from "@/lib/providers/types";
+import type { ProviderCredential, ProviderId, ProviderRequestContext, ProviderResult } from "@/lib/providers/types";
 import type { ProviderWorkerExecutionResult } from "@/lib/phase1/provider-worker";
 
 const defaultRetryDelayMs = 60_000;
@@ -25,6 +26,72 @@ export type LiveAdapterOutcome =
   | { kind: "missing-adapter"; message: string }
   | { kind: "error"; message: string }
   | { kind: "result"; result: ProviderResult<unknown> };
+
+export type LiveCredentialResult =
+  | { ok: true; credential: ProviderCredential }
+  | { ok: false; reason: string };
+
+/**
+ * Resolve the credential a live adapter needs to authenticate, from the
+ * provider connection's configured storage. Runs in the sync plan phase (it
+ * needs `state` for the vault) so the decrypted secret can ride the request
+ * context into the stateless invoke phase.
+ */
+export function resolveLiveProviderCredential(
+  state: AppState,
+  connection: ProviderConnection | undefined,
+  env: Record<string, string | undefined> = process.env
+): LiveCredentialResult {
+  if (!connection) {
+    return { ok: false, reason: "No provider connection is configured for live execution." };
+  }
+  if (!connection.enabled) {
+    return { ok: false, reason: "Provider connection is disabled." };
+  }
+
+  if (connection.secretStorage === "Encrypted database") {
+    if (!connection.secretRef) {
+      return { ok: false, reason: "Provider connection has no stored credential." };
+    }
+    try {
+      const secret = resolveProviderSecret(state, connection.secretRef, {
+        workspaceId: connection.workspaceId,
+        providerId: connection.providerId
+      });
+      const record = state.providerEncryptedSecrets.find((item) => item.secretRef === connection.secretRef);
+      return { ok: true, credential: { source: "vault", secret, keyId: record?.keyId } };
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error ? error.message : "Could not decrypt provider credential." };
+    }
+  }
+
+  if (connection.secretStorage === "Environment") {
+    const envVars = providerConfig(connection.providerId).envVars;
+    if (envVars.length === 0) {
+      return { ok: false, reason: "Provider has no environment credential configured." };
+    }
+    const values: Record<string, string> = {};
+    const missing: string[] = [];
+    for (const name of envVars) {
+      const value = env[name]?.trim();
+      if (value) values[name] = value;
+      else missing.push(name);
+    }
+    if (missing.length > 0) {
+      return { ok: false, reason: `Missing environment credential(s): ${missing.join(", ")}.` };
+    }
+    const secret = envVars.length === 1 ? values[envVars[0]] : JSON.stringify(values);
+    return { ok: true, credential: { source: "environment", secret } };
+  }
+
+  return { ok: false, reason: `Unsupported credential storage "${connection.secretStorage}" for live execution.` };
+}
+
+function providerConnectionFor(state: AppState, workspaceId: string, providerId: ProviderId) {
+  return state.providerConnections.find(
+    (connection) => connection.workspaceId === workspaceId && connection.providerId === providerId
+  );
+}
 
 /**
  * Phase 1 (sync, inside updateState): claim the run for live execution and
@@ -73,6 +140,16 @@ export function planLiveProviderRun(
     return { ok: false, result: executionResult(run, job, "Skipped", reason) };
   }
 
+  // A live run cannot proceed without a credential — treat a missing or
+  // undecryptable secret as a terminal misconfiguration (no retry), so it
+  // surfaces immediately rather than failing opaquely at the network call.
+  const connection = providerConnectionFor(state, run.workspaceId, run.providerId);
+  const credentialResult = resolveLiveProviderCredential(state, connection);
+  if (!credentialResult.ok) {
+    failProviderJobRun(state, { runId: run.id, workspaceId: run.workspaceId, errorMessage: credentialResult.reason });
+    return { ok: false, result: executionResult(run, job, "Failed", credentialResult.reason) };
+  }
+
   return {
     ok: true,
     plan: {
@@ -86,7 +163,8 @@ export function planLiveProviderRun(
         providerId: run.providerId,
         executionMode: "live",
         requestId: run.providerRequestId,
-        actorUserId: job.createdById
+        actorUserId: job.createdById,
+        credential: credentialResult.credential
       }
     }
   };

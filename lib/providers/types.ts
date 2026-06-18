@@ -23,12 +23,25 @@ export type ProviderCategory =
 
 export type ProviderExecutionMode = "mock" | "live";
 
+/**
+ * Credential delivered to a live adapter at call time. Resolved during the
+ * (sync, state-bound) plan phase and carried on the request context into the
+ * (async, stateless) invoke phase — the secret never touches persisted state.
+ * For multi-field providers, `secret` is a JSON string by convention.
+ */
+export type ProviderCredential = {
+  source: "vault" | "environment";
+  secret: string;
+  keyId?: string;
+};
+
 export type ProviderRequestContext = {
   workspaceId: string;
   providerId: ProviderId;
   executionMode: ProviderExecutionMode;
   requestId?: string;
   actorUserId?: string;
+  credential?: ProviderCredential;
 };
 
 export type ProviderCapability =
