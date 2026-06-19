@@ -20,11 +20,26 @@ type ImportResult = {
   contacts: number;
 };
 
+type CustomColumn = { column: string; fieldName: string };
+
 export function CsvImportForm({ profiles }: CsvImportFormProps) {
   const router = useRouter();
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
+
+  function addCustomColumn() {
+    setCustomColumns((columns) => [...columns, { column: "", fieldName: "" }]);
+  }
+
+  function updateCustomColumn(index: number, key: keyof CustomColumn, value: string) {
+    setCustomColumns((columns) => columns.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
+  }
+
+  function removeCustomColumn(index: number) {
+    setCustomColumns((columns) => columns.filter((_, i) => i !== index));
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,6 +62,7 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
 
     setResult(payload);
     event.currentTarget.reset();
+    setCustomColumns([]);
     router.refresh();
   }
 
@@ -125,6 +141,40 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
         <div className="field">
           <label htmlFor="industry">Industry column</label>
           <input id="industry" name="industry" defaultValue="industry" />
+        </div>
+        <div className="field full">
+          <label>Custom columns</label>
+          <p className="field-note">
+            Map any extra CSV column to a named custom field on the contact. Each becomes (or reuses) a contact custom field that shows on the contact record.
+          </p>
+          {customColumns.length > 0 ? (
+            <div className="custom-columns">
+              {customColumns.map((row, index) => (
+                <div className="custom-column-row" key={index}>
+                  <input
+                    name="customColumnName"
+                    placeholder="CSV column (e.g. linkedin_url)"
+                    value={row.column}
+                    onChange={(event) => updateCustomColumn(index, "column", event.target.value)}
+                    aria-label={`Custom column ${index + 1} CSV header`}
+                  />
+                  <input
+                    name="customColumnField"
+                    placeholder="Field name (e.g. LinkedIn URL)"
+                    value={row.fieldName}
+                    onChange={(event) => updateCustomColumn(index, "fieldName", event.target.value)}
+                    aria-label={`Custom column ${index + 1} field name`}
+                  />
+                  <button type="button" className="button subtle" onClick={() => removeCustomColumn(index)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <button type="button" className="button subtle" onClick={addCustomColumn}>
+            + Add custom column
+          </button>
         </div>
         <div className="field">
           <label aria-hidden="true">&nbsp;</label>

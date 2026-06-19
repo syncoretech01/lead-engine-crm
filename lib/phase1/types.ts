@@ -1485,6 +1485,7 @@ export type CsvImportMapping = {
   industry?: string;
   source?: string;
   sourceUrl?: string;
+  customColumns?: Array<{ column: string; fieldName: string }>;
 };
 
 export type CsvImportResult = {
