@@ -54,7 +54,8 @@ export async function POST(request: Request) {
       country: stringValue(formData.get("country")),
       industry: stringValue(formData.get("industry")),
       source: stringValue(formData.get("sourceColumn")),
-      sourceUrl: stringValue(formData.get("sourceUrl"))
+      sourceUrl: stringValue(formData.get("sourceUrl")),
+      customColumns: parseCustomColumns(formData)
     };
     const requestHash = csvImportRequestHash({
       csvText,
@@ -231,4 +232,22 @@ function stringValue(value: FormDataEntryValue | null, fallback = "") {
   }
 
   return value.trim() || fallback;
+}
+
+// Pairs of (CSV column header, custom field name) submitted as parallel
+// repeated form fields. Only pairs with both halves filled are kept.
+function parseCustomColumns(formData: FormData) {
+  const columns = formData.getAll("customColumnName");
+  const fields = formData.getAll("customColumnField");
+  const pairs: Array<{ column: string; fieldName: string }> = [];
+
+  for (let i = 0; i < columns.length; i += 1) {
+    const column = stringValue(columns[i] ?? null);
+    const fieldName = stringValue(fields[i] ?? null);
+    if (column && fieldName) {
+      pairs.push({ column, fieldName });
+    }
+  }
+
+  return pairs;
 }

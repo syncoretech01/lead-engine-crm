@@ -2099,6 +2099,22 @@ tbody tr:hover {
   grid-column: 1 / -1;
 }
 
+.custom-columns {
+  display: grid;
+  gap: 10px;
+}
+
+.custom-column-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.field.full > .button.subtle {
+  justify-self: start;
+}
+
 .field label {
   color: var(--fg1);
   font-family: var(--font-display);

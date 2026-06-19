@@ -4,6 +4,7 @@ import type {
   AppState,
   Company,
   Contact,
+  CustomField,
   CsvImportMapping,
   LeadGrade,
   LeadJob,
@@ -180,6 +181,15 @@ export function normalizeImportedRows({
       rawLead.processingStatus = "Normalized";
     }
 
+    // Custom columns → contact custom fields (the field is created on first use
+    // and reused thereafter, so the value shows on the contact record).
+    for (const custom of mapping.customColumns ?? []) {
+      const value = readMapped(payload, custom.column, []);
+      if (!value) continue;
+      const field = ensureContactCustomField(state, workspaceId, custom.fieldName, now);
+      setContactCustomFieldValue(state, workspaceId, field.id, contact.id, value, now);
+    }
+
     const normalizedRecord: NormalizedRecord = {
       id: `norm-${randomUUID()}`,
       workspaceId,
@@ -242,6 +252,62 @@ export function normalizeImportedRows({
     companies: companiesCreated,
     contacts: contactsCreated
   };
+}
+
+function ensureContactCustomField(
+  state: AppState,
+  workspaceId: string,
+  fieldName: string,
+  now: string
+): CustomField {
+  const name = fieldName.trim();
+  const existing = state.customFields.find(
+    (field) =>
+      field.workspaceId === workspaceId &&
+      field.objectType === "contact" &&
+      field.name.toLowerCase() === name.toLowerCase()
+  );
+  if (existing) {
+    return existing;
+  }
+
+  const field: CustomField = {
+    id: `field-${randomUUID()}`,
+    workspaceId,
+    objectType: "contact",
+    name,
+    fieldType: "text",
+    createdAt: now
+  };
+  state.customFields.push(field);
+  return field;
+}
+
+function setContactCustomFieldValue(
+  state: AppState,
+  workspaceId: string,
+  customFieldId: string,
+  objectId: string,
+  value: string,
+  now: string
+) {
+  const existing = state.customFieldValues.find(
+    (item) => item.workspaceId === workspaceId && item.customFieldId === customFieldId && item.objectId === objectId
+  );
+  if (existing) {
+    existing.value = value;
+    existing.updatedAt = now;
+    return;
+  }
+
+  state.customFieldValues.push({
+    id: `cfv-${randomUUID()}`,
+    workspaceId,
+    customFieldId,
+    objectId,
+    value,
+    updatedAt: now
+  });
 }
 
 function readMapped(payload: Record<string, string>, preferred: string | undefined, fallbacks: string[]) {
