@@ -1483,6 +1483,7 @@ export type CsvImportMapping = {
   state?: string;
   country?: string;
   industry?: string;
+  source?: string;
   sourceUrl?: string;
 };
 

@@ -36,6 +36,13 @@ export function normalizeImportedRows({
 
   for (const rawLead of rawLeads) {
     const payload = rawLead.sourcePayload;
+    // Per-row lead source: prefer the mapped CSV column (or common header names),
+    // falling back to the import-wide source label already on the raw lead. This
+    // flows into company/contact sourceLineage and the normalized record below.
+    const mappedSource = readMapped(payload, mapping.source, ["source", "lead source", "channel"]);
+    if (mappedSource) {
+      rawLead.source = mappedSource;
+    }
     const companyName = readMapped(payload, mapping.companyName, [
       "company",
       "company name",
