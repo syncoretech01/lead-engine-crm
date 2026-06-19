@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       state: stringValue(formData.get("state")),
       country: stringValue(formData.get("country")),
       industry: stringValue(formData.get("industry")),
+      source: stringValue(formData.get("sourceColumn")),
       sourceUrl: stringValue(formData.get("sourceUrl"))
     };
     const requestHash = csvImportRequestHash({

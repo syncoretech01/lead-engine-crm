@@ -68,8 +68,12 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
           <input id="jobName" name="jobName" placeholder="June imported lead list" required />
         </div>
         <div className="field">
-          <label htmlFor="source">Source label</label>
+          <label htmlFor="source">Source label (fallback)</label>
           <input id="source" name="source" defaultValue="CSV Upload" required />
+        </div>
+        <div className="field">
+          <label htmlFor="sourceColumn">Source column</label>
+          <input id="sourceColumn" name="sourceColumn" placeholder="lead_source" />
         </div>
         <div className="field">
           <label htmlFor="searchProfileId">Search profile</label>
