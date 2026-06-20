@@ -235,6 +235,8 @@ export type LeadJob = {
   preflightSourceEstimates?: LeadSourceEstimate[];
   enrichmentBudgetCents?: number;
   highValueOnlyEnrichment?: boolean;
+  waterfallTemplateId?: string;
+  waterfallOverride?: WaterfallOverride;
   raw: number;
   normalized: number;
   duplicates: number;
@@ -347,6 +349,8 @@ export type ProviderConnection = {
   maskedSecretSuffix?: string;
   rateLimitPerMinute?: number;
   dailyBudgetCents?: number;
+  costPerUnitCents?: number;
+  supportedCountries?: string[];
   waterfallOrder: number;
   lastTestStatus: ProviderConnectionTestStatus;
   lastTestedAt?: string;
@@ -441,6 +445,10 @@ export type ProviderJobRun = {
   idempotencyKey: string;
   providerRequestId: string;
   providerRunId?: string;
+  waterfallTemplateId?: string;
+  waterfallStepId?: string;
+  leadTargetType?: "contact" | "company";
+  leadTargetId?: string;
   checkpoint?: Record<string, string | number | boolean | undefined>;
   requestSummary?: Record<string, unknown>;
   responseSummary?: Record<string, unknown>;
@@ -1401,8 +1409,145 @@ export type AuditLog = {
   createdAt: string;
 };
 
+// --- Campaign-specific provider waterfalls (see docs/CAMPAIGN_WATERFALLS.md) ---
+
+export type WaterfallStage =
+  | "source"
+  | "discover_contacts"
+  | "find_email"
+  | "find_phone"
+  | "enrich"
+  | "verify_email"
+  | "verify_phone"
+  | "suppression_check";
+
+export type WaterfallCampaignType =
+  | "hunter_phone_only"
+  | "local_business"
+  | "email_first_call_later"
+  | "phone_heavy_cold_calling"
+  | "linkedin_sales_navigator"
+  | "company_first_abm"
+  | "email_only_low_cost"
+  | "high_value_premium"
+  | "eu_compliance"
+  | "reenrichment";
+
+/** Storable, UI-editable predicate evaluated against a lead's live field state. */
+export type WaterfallCondition =
+  | { field: string; op: "exists" | "isMissing" }
+  | { field: string; op: "equals" | "notEquals"; value: string }
+  | { field: string; op: "in" | "notIn"; value: string[] }
+  | { field: string; op: "gte" | "lte"; value: number }
+  | { all: WaterfallCondition[] }
+  | { any: WaterfallCondition[] }
+  | { not: WaterfallCondition };
+
+export type WaterfallQualityGate = {
+  minConfidence?: number;
+  acceptStatus?: string[];
+  rejectStatus?: string[];
+  allowCatchAll?: boolean;
+  phoneTypeIn?: string[];
+  allowCompanyMain?: boolean;
+  rejectVoipForSms?: boolean;
+};
+
+export type WaterfallStep = {
+  id: string;
+  order: number;
+  stage: WaterfallStage;
+  capability: ProviderCapability;
+  providerIds: string[];
+  runIf?: WaterfallCondition;
+  stopIf?: WaterfallCondition;
+  qualityGate?: WaterfallQualityGate;
+  costCapCents?: number;
+  highValueOnly?: boolean;
+  allowCompanyMainPhone?: boolean;
+  optional?: boolean;
+};
+
+export type WaterfallTemplate = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  campaignType: WaterfallCampaignType;
+  description?: string;
+  status: "Draft" | "Active" | "Archived";
+  isDefault: boolean;
+  country?: string;
+  outreachChannel: "email" | "phone" | "both";
+  requiredFields: string[];
+  personas?: string[];
+  allowGenericEmail?: boolean;
+  maxCostPerLeadCents?: number;
+  maxCostPerCampaignCents?: number;
+  highValueScoreThreshold?: number;
+  steps: WaterfallStep[];
+  createdById?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Per-lead-job overrides merged onto the selected template at run time. */
+export type WaterfallOverride = {
+  steps?: WaterfallStep[];
+  maxCostPerLeadCents?: number;
+  maxCostPerCampaignCents?: number;
+  highValueScoreThreshold?: number;
+};
+
+export type FieldProvenanceStatus =
+  | "unverified"
+  | "valid"
+  | "risky"
+  | "catch_all"
+  | "invalid"
+  | "unknown";
+
+export type PhoneLineType = "mobile" | "direct_dial" | "company_main" | "landline" | "voip" | "unknown";
+
+export type FieldSource = {
+  id: string;
+  workspaceId: string;
+  targetType: "contact" | "company";
+  targetId: string;
+  field: string;
+  value: string;
+  providerId: string;
+  capability: ProviderCapability;
+  sourcePlatform?: string;
+  confidence: number;
+  validationStatus: FieldProvenanceStatus;
+  phoneType?: PhoneLineType;
+  costCents: number;
+  cacheHit: boolean;
+  providerJobRunId?: string;
+  enrichmentDate: string;
+  lastVerifiedDate?: string;
+  expiresAt?: string;
+};
+
+export type ProviderMetricDaily = {
+  id: string;
+  workspaceId: string;
+  providerId: string;
+  capability: ProviderCapability;
+  date: string;
+  attempts: number;
+  hits: number;
+  valid: number;
+  failures: number;
+  mobileCount: number;
+  companyMainCount: number;
+  wrongNumber: number;
+  bounces: number;
+  costCents: number;
+};
+
 export type AppState = {
-  version: 15;
+  version: 16;
   workspaces: Workspace[];
   users: User[];
   workspaceMembers: WorkspaceMember[];
@@ -1469,6 +1614,9 @@ export type AppState = {
   suppressionRecords: SuppressionRecord[];
   exports: ExportRecord[];
   auditLogs: AuditLog[];
+  waterfallTemplates: WaterfallTemplate[];
+  fieldSources: FieldSource[];
+  providerMetricsDaily: ProviderMetricDaily[];
 };
 
 export type CsvImportMapping = {

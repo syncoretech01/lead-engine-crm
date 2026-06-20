@@ -104,6 +104,132 @@ export const providerRegistry: ProviderConfig[] = [
     envVars: ["AWS_SES_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
     enabledByDefault: false,
     executionMode: "mock"
+  },
+  {
+    id: "leadmagic",
+    name: "LeadMagic",
+    categories: ["email_finder", "phone_lookup", "enrichment"],
+    capabilities: ["find_email", "find_phone", "enrich_contact"],
+    envVars: ["LEADMAGIC_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "prospeo",
+    name: "Prospeo",
+    categories: ["email_finder", "phone_lookup"],
+    capabilities: ["find_email", "find_phone"],
+    envVars: ["PROSPEO_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "findymail",
+    name: "Findymail",
+    categories: ["email_finder"],
+    capabilities: ["find_email"],
+    envVars: ["FINDYMAIL_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "contactout",
+    name: "ContactOut",
+    categories: ["email_finder", "phone_lookup", "enrichment"],
+    capabilities: ["find_email", "find_phone", "enrich_contact"],
+    envVars: ["CONTACTOUT_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "lead411",
+    name: "Lead411",
+    categories: ["lead_source", "phone_lookup", "email_finder"],
+    capabilities: ["discover_contacts", "find_phone", "find_email"],
+    envVars: ["LEAD411_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "bettercontact",
+    name: "BetterContact",
+    categories: ["email_finder", "phone_lookup"],
+    capabilities: ["find_email", "find_phone"],
+    envVars: ["BETTERCONTACT_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "fullenrich",
+    name: "FullEnrich",
+    categories: ["enrichment", "email_finder", "phone_lookup"],
+    capabilities: ["find_email", "find_phone", "enrich_contact", "discover_contacts"],
+    envVars: ["FULLENRICH_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "bouncer",
+    name: "Bouncer",
+    categories: ["email_verification"],
+    capabilities: ["verify_email"],
+    envVars: ["BOUNCER_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "millionverifier",
+    name: "MillionVerifier",
+    categories: ["email_verification"],
+    capabilities: ["verify_email"],
+    envVars: ["MILLIONVERIFIER_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "kaspr",
+    name: "Kaspr",
+    categories: ["phone_lookup", "email_finder"],
+    capabilities: ["find_phone", "find_email"],
+    envVars: ["KASPR_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "apify_maps",
+    name: "Apify Google Maps",
+    categories: ["lead_source"],
+    capabilities: ["discover_companies"],
+    envVars: ["APIFY_TOKEN"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "apify_harvest",
+    name: "Apify HarvestAPI (LinkedIn)",
+    categories: ["lead_source", "enrichment"],
+    capabilities: ["discover_contacts", "enrich_contact"],
+    envVars: ["APIFY_TOKEN"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "website_scrape",
+    name: "Website Scrape",
+    categories: ["enrichment", "email_finder"],
+    capabilities: ["enrich_company", "find_email"],
+    envVars: [],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "dnc",
+    name: "DNC / Suppression Check",
+    categories: ["phone_lookup"],
+    capabilities: ["verify_phone"],
+    envVars: [],
+    enabledByDefault: false,
+    executionMode: "mock"
   }
 ];
 

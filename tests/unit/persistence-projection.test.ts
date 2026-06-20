@@ -92,7 +92,7 @@ describe("normalized persistence projection", () => {
     const projection = createNormalizedPersistenceProjection(state);
     const connection = projection.providerConnections.find((row) => row.providerId === "apollo");
 
-    expect(projection.providerConnections).toHaveLength(11);
+    expect(projection.providerConnections).toHaveLength(25);
     expect(connection).toMatchObject({
       displayName: "Apollo",
       status: "Not configured",

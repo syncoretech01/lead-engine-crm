@@ -11,6 +11,7 @@ import { createDefaultProviderConnections } from "@/lib/phase1/provider-connecti
 import { ensureReportingDefaults } from "@/lib/phase1/reporting";
 import { defaultSegmentRules } from "@/lib/phase1/scoring";
 import { ensureSdrDefaults } from "@/lib/phase1/sdr";
+import { ensureWaterfallDefaults } from "@/lib/phase1/waterfall-templates";
 import type {
   AppState,
   AuthAccount,
@@ -20,7 +21,7 @@ import type {
   WorkspaceRole
 } from "@/lib/phase1/types";
 
-const stateVersion = 15;
+const stateVersion = 16;
 
 /**
  * One real account to create at go-live. The plaintext password never reaches
@@ -205,7 +206,10 @@ export function createProvisionedState(input: CreateProvisionedStateInput): AppS
         reason: `Provisioned ${input.accounts.length} scoped account(s) for go-live.`,
         createdAt: now
       }
-    ]
+    ],
+    waterfallTemplates: [],
+    fieldSources: [],
+    providerMetricsDaily: []
   };
 
   // Structural defaults only — no data-processing passes (verification, dedupe,
@@ -218,6 +222,7 @@ export function createProvisionedState(input: CreateProvisionedStateInput): AppS
   ensureReportingDefaults(state, workspaceId);
   ensureAiDefaults(state, workspaceId);
   ensureMoneyLedgerDefaults(state, workspaceId, now);
+  ensureWaterfallDefaults(state, workspaceId, now);
   ensureAuthDefaults(state, now);
 
   return state;

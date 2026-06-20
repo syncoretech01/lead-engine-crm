@@ -29,6 +29,7 @@ import { ensureReportingDefaults } from "@/lib/phase1/reporting";
 import { createSeedState } from "@/lib/phase1/seed";
 import { defaultSegmentRules } from "@/lib/phase1/scoring";
 import { ensureSdrDefaults } from "@/lib/phase1/sdr";
+import { ensureWaterfallDefaults } from "@/lib/phase1/waterfall-templates";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import type { AppState, AuditLog, Permission, Session } from "@/lib/phase1/types";
 import { defaultWorkspacePath, hasPermission, resolveSession, type SessionSelection } from "@/lib/phase1/auth";
@@ -316,8 +317,23 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
   const state = input;
   const workspaceId = state.workspaces[0]?.id;
 
-  if ((state as { version: number }).version !== 15) {
-    state.version = 15;
+  if ((state as { version: number }).version !== 16) {
+    state.version = 16;
+    changed = true;
+  }
+
+  if (!Array.isArray(state.waterfallTemplates)) {
+    state.waterfallTemplates = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.fieldSources)) {
+    state.fieldSources = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.providerMetricsDaily)) {
+    state.providerMetricsDaily = [];
     changed = true;
   }
 
@@ -683,6 +699,8 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
     changed = reportingDefaults.changed || changed;
     const aiDefaults = ensureAiDefaults(state, workspaceId);
     changed = aiDefaults.changed || changed;
+    const waterfallDefaults = ensureWaterfallDefaults(state, workspaceId);
+    changed = waterfallDefaults.changed || changed;
   }
 
   return { state, changed };
