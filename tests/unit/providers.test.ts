@@ -37,7 +37,21 @@ describe("provider registry", () => {
       "twilio_lookup",
       "ringcentral",
       "smartlead",
-      "amazon_ses"
+      "amazon_ses",
+      "leadmagic",
+      "prospeo",
+      "findymail",
+      "contactout",
+      "lead411",
+      "bettercontact",
+      "fullenrich",
+      "bouncer",
+      "millionverifier",
+      "kaspr",
+      "apify_maps",
+      "apify_harvest",
+      "website_scrape",
+      "dnc"
     ]);
   });
 
@@ -58,7 +72,10 @@ describe("provider registry", () => {
     expect(providersByCategory("lead_source").map((provider) => provider.id)).toEqual([
       "apollo",
       "google_places",
-      "apify"
+      "apify",
+      "lead411",
+      "apify_maps",
+      "apify_harvest"
     ]);
   });
 

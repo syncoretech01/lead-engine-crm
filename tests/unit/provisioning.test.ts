@@ -15,7 +15,7 @@ describe("createProvisionedState", () => {
   it("builds a clean workspace with the real team and no demo data", () => {
     const state = createProvisionedState({ workspace: { name: "Acme Outbound" }, accounts: team() });
 
-    expect(state.version).toBe(15);
+    expect(state.version).toBe(16);
     expect(state.workspaces).toHaveLength(1);
     expect(state.workspaces[0].name).toBe("Acme Outbound");
     expect(state.workspaces[0].id).toBe("workspace-acme-outbound");

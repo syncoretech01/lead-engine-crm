@@ -29,6 +29,7 @@ import { ensureReportingDefaults } from "@/lib/phase1/reporting";
 import { defaultSegmentRules } from "@/lib/phase1/scoring";
 import { ensureSdrDefaults } from "@/lib/phase1/sdr";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
+import { ensureWaterfallDefaults } from "@/lib/phase1/waterfall-templates";
 import {
   accounts,
   contacts,
@@ -316,7 +317,7 @@ export function createSeedState(): AppState {
   ];
 
   const state: AppState = {
-    version: 15,
+    version: 16,
     workspaces: [workspace],
     users,
     workspaceMembers,
@@ -386,7 +387,10 @@ export function createSeedState(): AppState {
     aiAutomationRuns: [],
     suppressionRecords,
     exports,
-    auditLogs
+    auditLogs,
+    waterfallTemplates: [],
+    fieldSources: [],
+    providerMetricsDaily: []
   };
 
   runWorkspaceVerification(state, workspaceId);
@@ -400,6 +404,7 @@ export function createSeedState(): AppState {
   ensureReportingDefaults(state, workspaceId);
   ensureAiDefaults(state, workspaceId);
   ensureMoneyLedgerDefaults(state, workspaceId, now);
+  ensureWaterfallDefaults(state, workspaceId, now);
   ensureAuthDefaults(state, now);
 
   return state;

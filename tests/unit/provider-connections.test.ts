@@ -16,7 +16,7 @@ describe("provider connection management", () => {
     const workspaceId = state.workspaces[0].id;
     const views = providerConnectionViewsForWorkspace(state, workspaceId);
 
-    expect(views).toHaveLength(11);
+    expect(views).toHaveLength(25);
     expect(views[0]).toMatchObject({
       providerId: "apollo",
       status: "Not configured",
