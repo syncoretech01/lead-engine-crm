@@ -176,6 +176,24 @@ export function defaultWaterfallTemplates(workspaceId: string, now = new Date().
   ];
 }
 
+/** Renumber steps to a contiguous 1..n `order` after add/remove/reorder. */
+export function normalizeStepOrders(steps: WaterfallStep[]): WaterfallStep[] {
+  return [...steps]
+    .sort((a, b) => a.order - b.order)
+    .map((step, index) => ({ ...step, order: index + 1 }));
+}
+
+/** Move a step up or down one slot and renumber. Pure; returns a new array. */
+export function reorderTemplateStep(steps: WaterfallStep[], stepId: string, direction: "up" | "down"): WaterfallStep[] {
+  const sorted = [...steps].sort((a, b) => a.order - b.order);
+  const index = sorted.findIndex((step) => step.id === stepId);
+  if (index === -1) return normalizeStepOrders(steps);
+  const swapWith = direction === "up" ? index - 1 : index + 1;
+  if (swapWith < 0 || swapWith >= sorted.length) return normalizeStepOrders(steps);
+  [sorted[index], sorted[swapWith]] = [sorted[swapWith], sorted[index]];
+  return sorted.map((step, position) => ({ ...step, order: position + 1 }));
+}
+
 export function waterfallTemplatesForWorkspace(state: AppState, workspaceId: string): WaterfallTemplate[] {
   return state.waterfallTemplates
     .filter((template) => template.workspaceId === workspaceId)

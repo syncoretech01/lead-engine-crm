@@ -4,8 +4,79 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { assertPermission } from "@/lib/phase1/auth";
 import { appendAudit, updateState } from "@/lib/phase1/store";
-import { defaultWaterfallTemplates } from "@/lib/phase1/waterfall-templates";
-import type { WaterfallTemplate } from "@/lib/phase1/types";
+import { defaultWaterfallTemplates, normalizeStepOrders, reorderTemplateStep } from "@/lib/phase1/waterfall-templates";
+import type { AppState, Session, WaterfallStage, WaterfallStep, WaterfallTemplate } from "@/lib/phase1/types";
+import type { ProviderCapability } from "@/lib/providers/types";
+
+const waterfallStages: WaterfallStage[] = [
+  "source",
+  "discover_contacts",
+  "find_email",
+  "find_phone",
+  "enrich",
+  "verify_email",
+  "verify_phone",
+  "suppression_check"
+];
+
+const providerCapabilities: ProviderCapability[] = [
+  "discover_companies",
+  "discover_contacts",
+  "find_email",
+  "verify_email",
+  "find_phone",
+  "verify_phone",
+  "enrich_company",
+  "enrich_contact",
+  "send_campaign",
+  "process_webhook",
+  "send_transactional_email"
+];
+
+/** Find a workspace template that the caller may edit (defaults are read-only). */
+function findEditableTemplate(state: AppState, session: Session, templateId: string): WaterfallTemplate {
+  assertPermission(session, "manage_waterfalls");
+  const template = state.waterfallTemplates.find(
+    (item) => item.id === templateId && item.workspaceId === session.workspace.id
+  );
+  if (!template) {
+    throw new Error("Waterfall template not found.");
+  }
+  if (template.isDefault) {
+    throw new Error("Default templates are read-only. Clone it first to edit.");
+  }
+  return template;
+}
+
+function optionalInt(value: FormDataEntryValue | null): number | undefined {
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : undefined;
+}
+
+function parseProviderIds(value: FormDataEntryValue | null): string[] {
+  if (typeof value !== "string") return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function asStage(value: FormDataEntryValue | null): WaterfallStage {
+  const stage = typeof value === "string" ? value : "";
+  if (!waterfallStages.includes(stage as WaterfallStage)) {
+    throw new Error(`Invalid stage "${stage}".`);
+  }
+  return stage as WaterfallStage;
+}
+
+function asCapability(value: FormDataEntryValue | null): ProviderCapability {
+  const capability = typeof value === "string" ? value : "";
+  if (!providerCapabilities.includes(capability as ProviderCapability)) {
+    throw new Error(`Invalid capability "${capability}".`);
+  }
+  return capability as ProviderCapability;
+}
 
 function requireString(value: FormDataEntryValue | null, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -117,4 +188,85 @@ export async function restoreDefaultWaterfallTemplatesAction() {
   });
 
   revalidatePath("/waterfalls");
+}
+
+/** Edit a custom template's name, budget caps, and high-value threshold. */
+export async function updateWaterfallTemplateMetaAction(formData: FormData) {
+  const templateId = requireString(formData.get("templateId"), "templateId");
+  await updateState((state, session) => {
+    const template = findEditableTemplate(state, session, templateId);
+    const name = typeof formData.get("name") === "string" ? String(formData.get("name")).trim() : "";
+    if (name) template.name = name;
+    template.maxCostPerLeadCents = optionalInt(formData.get("maxCostPerLeadCents"));
+    template.maxCostPerCampaignCents = optionalInt(formData.get("maxCostPerCampaignCents"));
+    template.highValueScoreThreshold = optionalInt(formData.get("highValueScoreThreshold"));
+    template.updatedAt = new Date().toISOString();
+    appendAudit(state, session, { objectType: "waterfall_template", objectId: template.id, action: "meta_updated" });
+  });
+  revalidatePath(`/waterfalls/${templateId}`);
+  revalidatePath("/waterfalls");
+}
+
+export async function addWaterfallStepAction(formData: FormData) {
+  const templateId = requireString(formData.get("templateId"), "templateId");
+  await updateState((state, session) => {
+    const template = findEditableTemplate(state, session, templateId);
+    const stage = asStage(formData.get("stage"));
+    const capability = asCapability(formData.get("capability"));
+    const nextOrder = template.steps.reduce((max, step) => Math.max(max, step.order), 0) + 1;
+    const newStep: WaterfallStep = {
+      id: `${template.id}-s${randomUUID()}`,
+      order: nextOrder,
+      stage,
+      capability,
+      providerIds: parseProviderIds(formData.get("providerIds"))
+    };
+    template.steps = normalizeStepOrders([...template.steps, newStep]);
+    template.updatedAt = new Date().toISOString();
+    appendAudit(state, session, { objectType: "waterfall_template", objectId: template.id, action: "step_added", newValue: { stage, capability } });
+  });
+  revalidatePath(`/waterfalls/${templateId}`);
+}
+
+export async function updateWaterfallStepAction(formData: FormData) {
+  const templateId = requireString(formData.get("templateId"), "templateId");
+  const stepId = requireString(formData.get("stepId"), "stepId");
+  await updateState((state, session) => {
+    const template = findEditableTemplate(state, session, templateId);
+    const step = template.steps.find((item) => item.id === stepId);
+    if (!step) throw new Error("Waterfall step not found.");
+    step.stage = asStage(formData.get("stage"));
+    step.capability = asCapability(formData.get("capability"));
+    step.providerIds = parseProviderIds(formData.get("providerIds"));
+    step.costCapCents = optionalInt(formData.get("costCapCents"));
+    step.highValueOnly = formData.get("highValueOnly") != null;
+    step.allowCompanyMainPhone = formData.get("allowCompanyMainPhone") != null;
+    template.updatedAt = new Date().toISOString();
+    appendAudit(state, session, { objectType: "waterfall_template", objectId: template.id, action: "step_updated", newValue: { stepId } });
+  });
+  revalidatePath(`/waterfalls/${templateId}`);
+}
+
+export async function removeWaterfallStepAction(formData: FormData) {
+  const templateId = requireString(formData.get("templateId"), "templateId");
+  const stepId = requireString(formData.get("stepId"), "stepId");
+  await updateState((state, session) => {
+    const template = findEditableTemplate(state, session, templateId);
+    template.steps = normalizeStepOrders(template.steps.filter((item) => item.id !== stepId));
+    template.updatedAt = new Date().toISOString();
+    appendAudit(state, session, { objectType: "waterfall_template", objectId: template.id, action: "step_removed", newValue: { stepId } });
+  });
+  revalidatePath(`/waterfalls/${templateId}`);
+}
+
+export async function moveWaterfallStepAction(formData: FormData) {
+  const templateId = requireString(formData.get("templateId"), "templateId");
+  const stepId = requireString(formData.get("stepId"), "stepId");
+  const direction = formData.get("direction") === "down" ? "down" : "up";
+  await updateState((state, session) => {
+    const template = findEditableTemplate(state, session, templateId);
+    template.steps = reorderTemplateStep(template.steps, stepId, direction);
+    template.updatedAt = new Date().toISOString();
+  });
+  revalidatePath(`/waterfalls/${templateId}`);
 }
