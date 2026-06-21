@@ -3,14 +3,34 @@ import { resolveSession } from "@/lib/phase1/auth";
 import { resolveProviderSecret } from "@/lib/phase1/provider-secret-vault";
 import {
   disableProviderConnection,
+  ensureProviderConnectionsForRegistry,
   providerConnectionViewsForWorkspace,
   saveProviderConnectionConfig,
   testProviderConnectionConfig
 } from "@/lib/phase1/provider-connections";
 import { createSeedState } from "@/lib/phase1/seed";
+import { supportedProviders } from "@/lib/providers";
 import type { ProviderCapability } from "@/lib/providers/types";
 
 describe("provider connection management", () => {
+  it("backfills missing registry provider connections for an existing workspace", () => {
+    const state = createSeedState();
+    const workspaceId = state.workspaces[0].id;
+    // Simulate a workspace created before new providers were added: keep only the first 5.
+    const kept = state.providerConnections.filter((connection) => connection.workspaceId === workspaceId).slice(0, 5);
+    state.providerConnections = kept;
+
+    const result = ensureProviderConnectionsForRegistry(state, workspaceId);
+    const after = state.providerConnections.filter((connection) => connection.workspaceId === workspaceId);
+
+    expect(result.changed).toBe(true);
+    expect(after).toHaveLength(supportedProviders().length);
+    // every registry provider now has exactly one connection
+    expect(new Set(after.map((connection) => connection.providerId)).size).toBe(supportedProviders().length);
+    // idempotent
+    expect(ensureProviderConnectionsForRegistry(state, workspaceId).changed).toBe(false);
+  });
+
   it("lists safe provider connection views without secret references", () => {
     const state = createSeedState();
     const workspaceId = state.workspaces[0].id;

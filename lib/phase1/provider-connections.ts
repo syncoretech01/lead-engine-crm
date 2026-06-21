@@ -64,6 +64,39 @@ export function createDefaultProviderConnections({
   }));
 }
 
+/**
+ * Backfill provider connections for any registry provider that doesn't yet have
+ * one in this workspace. Fresh workspaces already get all of them via
+ * createDefaultProviderConnections; this catches workspaces created before new
+ * providers were added to the registry, so they appear in the Integration
+ * Center. Idempotent — only adds what's missing.
+ */
+export function ensureProviderConnectionsForRegistry(
+  state: AppState,
+  workspaceId: string,
+  now = new Date().toISOString(),
+  actorUserId?: string
+) {
+  if (!Array.isArray(state.providerConnections)) {
+    state.providerConnections = [];
+  }
+  const existing = new Set(
+    state.providerConnections
+      .filter((connection) => connection.workspaceId === workspaceId)
+      .map((connection) => connection.providerId)
+  );
+
+  let added = 0;
+  for (const connection of createDefaultProviderConnections({ workspaceId, now, actorUserId })) {
+    if (!existing.has(connection.providerId)) {
+      state.providerConnections.push(connection);
+      added += 1;
+    }
+  }
+
+  return { changed: added > 0, added };
+}
+
 export function providerConnectionViewsForWorkspace(state: AppState, workspaceId: string): ProviderConnectionSafeView[] {
   return state.providerConnections
     .filter((connection) => connection.workspaceId === workspaceId)
