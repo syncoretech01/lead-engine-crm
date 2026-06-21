@@ -50,6 +50,14 @@ describe("auth and RBAC session resolution", () => {
     expect(manager.permissions).toContain("manage_outreach");
   });
 
+  it("scopes manage_waterfalls to Admin and Manager only", () => {
+    expect(rolePermissions("Admin")).toContain("manage_waterfalls");
+    expect(rolePermissions("Manager")).toContain("manage_waterfalls");
+    expect(rolePermissions("SDR")).not.toContain("manage_waterfalls");
+    expect(rolePermissions("Data Operator")).not.toContain("manage_waterfalls");
+    expect(rolePermissions("Viewer")).not.toContain("manage_waterfalls");
+  });
+
   it("rejects users who are not members of the selected workspace", () => {
     const state = createSeedState();
     state.workspaces.push({
