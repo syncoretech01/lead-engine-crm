@@ -3,7 +3,9 @@ import { runWaterfallForLead, type WaterfallExecutor } from "@/lib/phase1/waterf
 import {
   defaultWaterfallTemplates,
   ensureWaterfallDefaults,
-  mergeWaterfallOverride
+  mergeWaterfallOverride,
+  normalizeStepOrders,
+  reorderTemplateStep
 } from "@/lib/phase1/waterfall-templates";
 import { createSeedState } from "@/lib/phase1/seed";
 import type { ProviderConnection, WaterfallTemplate } from "@/lib/phase1/types";
@@ -139,6 +141,29 @@ describe("ensureWaterfallDefaults + defaults", () => {
       expect(new Set(ids).size).toBe(ids.length);
       expect(template.steps.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("reorderTemplateStep / normalizeStepOrders", () => {
+  const steps = defaultWaterfallTemplates("ws")[0].steps;
+
+  it("moves a step up and renumbers contiguously", () => {
+    const second = steps[1];
+    const moved = reorderTemplateStep(steps, second.id, "up");
+    expect(moved[0].id).toBe(second.id);
+    expect(moved.map((step) => step.order)).toEqual(moved.map((_, i) => i + 1));
+  });
+
+  it("is a no-op at the boundaries (but still normalizes)", () => {
+    const first = steps[0];
+    const moved = reorderTemplateStep(steps, first.id, "up");
+    expect(moved[0].id).toBe(first.id);
+    expect(moved.map((step) => step.order)).toEqual(steps.map((_, i) => i + 1));
+  });
+
+  it("normalizeStepOrders compacts gaps", () => {
+    const gapped = steps.map((step, i) => ({ ...step, order: (i + 1) * 10 }));
+    expect(normalizeStepOrders(gapped).map((step) => step.order)).toEqual(gapped.map((_, i) => i + 1));
   });
 });
 

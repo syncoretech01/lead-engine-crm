@@ -1,4 +1,5 @@
-import { Copy, Layers, ListOrdered, Workflow } from "lucide-react";
+import Link from "next/link";
+import { Copy, Layers, ListOrdered, Pencil, Workflow } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { StatCard } from "@/components/ui-metrics";
@@ -114,6 +115,10 @@ function WaterfallTemplateCard({ template }: { template: WaterfallTemplate }) {
       </ol>
 
       <div className="item-card-actions">
+        <Link className="button subtle" href={`/waterfalls/${template.id}`}>
+          <Pencil size={16} aria-hidden="true" />
+          {template.isDefault ? "View" : "Edit"}
+        </Link>
         <form action={cloneWaterfallTemplateAction} className="inline-form">
           <input name="templateId" type="hidden" value={template.id} />
           <input name="name" placeholder={`${template.name} (copy)`} aria-label="Clone name" />
