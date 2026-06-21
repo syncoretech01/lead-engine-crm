@@ -1,4 +1,5 @@
 import { getLiveProviderOperation } from "@/lib/providers/live-adapters";
+import { ensureLiveProviderAdaptersRegistered } from "@/lib/providers/register-live-adapters";
 import type { WaterfallLeadState } from "@/lib/phase1/waterfall-conditions";
 import type { WaterfallProviderOutcome } from "@/lib/phase1/waterfall-engine";
 import type { WaterfallExecutor } from "@/lib/phase1/waterfall-runner";
@@ -118,6 +119,7 @@ export function createWaterfallExecutor(input: {
   liveProviderIds: Set<string>;
   credentials?: Record<string, ProviderCredential>;
 }): WaterfallExecutor {
+  ensureLiveProviderAdaptersRegistered();
   return async (dispatch, leadState) => {
     if (!input.liveProviderIds.has(dispatch.providerId)) {
       return { found: false };

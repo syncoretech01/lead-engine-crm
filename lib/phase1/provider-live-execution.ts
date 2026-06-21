@@ -3,6 +3,7 @@ import { completeProviderJobRun, failProviderJobRun } from "@/lib/phase1/provide
 import { resolveProviderSecret } from "@/lib/phase1/provider-secret-vault";
 import type { AppState, ProviderConnection, ProviderJob, ProviderJobRun } from "@/lib/phase1/types";
 import { getLiveProviderOperation } from "@/lib/providers/live-adapters";
+import { ensureLiveProviderAdaptersRegistered } from "@/lib/providers/register-live-adapters";
 import { providerConfig } from "@/lib/providers/registry";
 import type { ProviderCredential, ProviderId, ProviderRequestContext, ProviderResult } from "@/lib/providers/types";
 import type { ProviderWorkerExecutionResult } from "@/lib/phase1/provider-worker";
@@ -176,6 +177,7 @@ export function planLiveProviderRun(
  * transaction.
  */
 export async function invokeLiveProviderAdapter(plan: LiveProviderRunPlan): Promise<LiveAdapterOutcome> {
+  ensureLiveProviderAdaptersRegistered();
   const handler = getLiveProviderOperation(plan.providerId, plan.operation);
   if (!handler) {
     return {
