@@ -6,6 +6,9 @@ import type { FieldProvenanceStatus, PhoneLineType, WaterfallCondition } from "@
  * same values for company-centric campaigns (e.g. local business).
  */
 export type WaterfallLeadState = {
+  /** Identity fields — not used in conditions, but passed to provider adapters as input. */
+  fullName?: string;
+  companyName?: string;
   email?: string;
   emailValidationStatus?: FieldProvenanceStatus;
   phone?: string;
