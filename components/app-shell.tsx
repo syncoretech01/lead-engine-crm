@@ -24,7 +24,8 @@ import {
   Target,
   LogOut,
   UserCog,
-  Users
+  Users,
+  Workflow
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { syncoreBrand } from "@/lib/brand";
@@ -74,6 +75,7 @@ const workspaceViews = [
       { href: "/staging", label: "Data Staging", icon: Search, permission: "import_csv" },
       { href: "/data-quality", label: "Data Quality", icon: GitMerge, permission: "run_jobs" },
       { href: "/enrichment", label: "Enrichment", icon: Gem, permission: "manage_enrichment" },
+      { href: "/waterfalls", label: "Waterfalls", icon: Workflow, permission: "manage_waterfalls" },
       { href: "/exports", label: "Exports", icon: Download, permission: "export_csv" }
     ]
   },

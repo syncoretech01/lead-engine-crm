@@ -20,6 +20,7 @@ export type Permission =
   | "manage_sdr_team"
   | "manage_outreach"
   | "send_direct_outreach"
+  | "manage_waterfalls"
   | "export_csv"
   | "manage_export_rules"
   | "manage_enrichment"
