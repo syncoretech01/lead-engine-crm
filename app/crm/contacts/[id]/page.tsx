@@ -47,6 +47,8 @@ import { emailEventTypes, smsEventStatuses } from "@/lib/phase1/outreach";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
+import { runWaterfallEnrichmentAction } from "@/lib/phase1/waterfall-enrichment-service";
+import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
@@ -113,6 +115,13 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const totalOpportunityValue = opportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
   const canManageCompliance = session.permissions.includes("manage_compliance");
   const canSendDirectOutreach = session.permissions.includes("send_direct_outreach");
+  const canManageWaterfalls = session.permissions.includes("manage_waterfalls");
+  const activeWaterfallTemplates = waterfallTemplatesForWorkspace(state, workspaceId).filter(
+    (template) => template.status === "Active"
+  );
+  const contactFieldSources = state.fieldSources
+    .filter((source) => source.targetType === "contact" && source.targetId === contact.id)
+    .sort((a, b) => Date.parse(b.enrichmentDate) - Date.parse(a.enrichmentDate));
 
   const metrics = [
     {
@@ -664,6 +673,69 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               ))}
             </div>
           )}
+        </div>
+
+        <div className="panel" id="contact-field-provenance">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Field provenance</h2>
+              <p className="section-subtitle">Where each enriched field came from — provider, confidence, validation, and cost.</p>
+            </div>
+            <StatusPill label={`${contactFieldSources.length} sources`} tone="info" />
+          </div>
+          <div className="panel-body stage-list">
+            {contactFieldSources.length ? (
+              contactFieldSources.map((source) => (
+                <div className="stage-row" key={source.id}>
+                  <div className="stage-meta">
+                    <strong>
+                      {source.field}: {source.value || "—"}
+                    </strong>
+                    <div className="chip-row">
+                      <span className="pill">via {source.providerId}</span>
+                      <StatusPill label={source.validationStatus} tone={statusTone(source.validationStatus)} />
+                      {source.phoneType ? <span className="pill">{source.phoneType}</span> : null}
+                      <span className="pill">conf {source.confidence}</span>
+                      {source.cacheHit ? <span className="pill">cache</span> : null}
+                      <span className="pill">${(source.costCents / 100).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <span className="field-note">
+                    {new Date(source.enrichmentDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="surface-note">
+                No enrichment provenance yet. Run a waterfall (below) — each accepted field records its source, confidence, validation, and cost here.
+              </p>
+            )}
+          </div>
+          {canManageWaterfalls && activeWaterfallTemplates.length ? (
+            <form action={runWaterfallEnrichmentAction} className="panel-body form-grid compact-form">
+              <input name="contactIds" type="hidden" value={contact.id} />
+              <div className="field">
+                <label htmlFor="waterfall-template">Run enrichment waterfall</label>
+                <select id="waterfall-template" name="templateId" defaultValue={activeWaterfallTemplates[0].id}>
+                  {activeWaterfallTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="field-note">
+                  Runs the selected template on this contact. With providers in mock mode no calls are made; live providers populate provenance above.
+                </span>
+              </div>
+              <div className="field">
+                <label aria-hidden="true">&nbsp;</label>
+                <button className="button primary" type="submit">
+                  <Sparkles size={16} aria-hidden="true" />
+                  Run waterfall
+                </button>
+              </div>
+            </form>
+          ) : null}
         </div>
 
         <div className="panel" id="contact-custom-fields">
