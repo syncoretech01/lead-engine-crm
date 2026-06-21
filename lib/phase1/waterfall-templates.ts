@@ -34,6 +34,8 @@ export function buildContactLeadState(state: AppState, contact: Contact): Waterf
   const phoneSource = sourcesFor("phone");
 
   return {
+    fullName: contact.name || undefined,
+    companyName: company?.name || undefined,
     email: contact.email || undefined,
     emailValidationStatus: emailSource?.validationStatus,
     phone: contact.phone || undefined,

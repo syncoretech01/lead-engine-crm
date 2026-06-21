@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { recordProviderUsage } from "@/lib/phase1/money";
 import {
   passesQualityGate,
   planNextWaterfallStep,
@@ -6,7 +7,7 @@ import {
   type WaterfallProviderOutcome
 } from "@/lib/phase1/waterfall-engine";
 import type { WaterfallLeadState } from "@/lib/phase1/waterfall-conditions";
-import type { FieldSource, ProviderConnection, WaterfallStep, WaterfallTemplate } from "@/lib/phase1/types";
+import type { AppState, FieldSource, ProviderConnection, WaterfallStep, WaterfallTemplate } from "@/lib/phase1/types";
 
 /**
  * Executes one provider dispatch and returns the normalized outcome. In
@@ -14,7 +15,10 @@ import type { FieldSource, ProviderConnection, WaterfallStep, WaterfallTemplate 
  * in tests a fake executor stands in. This is the only async/side-effecting
  * seam — the planner and gate around it stay pure.
  */
-export type WaterfallExecutor = (dispatch: Extract<WaterfallPlan, { kind: "dispatch" }>) => Promise<WaterfallProviderOutcome>;
+export type WaterfallExecutor = (
+  dispatch: Extract<WaterfallPlan, { kind: "dispatch" }>,
+  leadState: WaterfallLeadState
+) => Promise<WaterfallProviderOutcome>;
 
 export type WaterfallRunResult = {
   fieldSources: FieldSource[];
@@ -64,7 +68,7 @@ export async function runWaterfallForLead(input: {
     costCents += plan.estimatedCostCents; // a dispatched call costs whether or not it's accepted
 
     const step = input.template.steps.find((item) => item.id === plan.stepId);
-    const outcome = await input.executor(plan);
+    const outcome = await input.executor(plan, state);
 
     if (passesQualityGate(outcome, step?.qualityGate)) {
       applyOutcomeToState(state, plan, outcome);
@@ -91,6 +95,51 @@ export async function runWaterfallForLead(input: {
   }
 
   return { fieldSources, attempts, accepted, costCents, reason: "Reached max iterations.", finalState: state };
+}
+
+export type WaterfallContactResult = { contactId: string; result: WaterfallRunResult };
+
+/**
+ * Persist a batch of waterfall runs into state (sync — runs inside updateState):
+ * append every FieldSource, apply accepted email/phone to the contact, and book
+ * cost to the usage ledger. Returns a summary for the caller/audit.
+ */
+export function applyWaterfallResults(
+  state: AppState,
+  workspaceId: string,
+  contactResults: WaterfallContactResult[],
+  now = new Date().toISOString()
+) {
+  let fieldsWritten = 0;
+  let costCents = 0;
+
+  for (const { contactId, result } of contactResults) {
+    for (const fieldSource of result.fieldSources) {
+      state.fieldSources.push(fieldSource);
+      fieldsWritten += 1;
+      if (fieldSource.costCents > 0) {
+        recordProviderUsage(state, {
+          workspaceId,
+          provider: fieldSource.providerId,
+          operation: fieldSource.capability,
+          unitsUsed: 1,
+          totalCostCents: fieldSource.costCents,
+          amountKind: "Actual",
+          createdAt: now
+        });
+      }
+    }
+
+    const contact = state.contacts.find((item) => item.id === contactId && item.workspaceId === workspaceId);
+    if (contact) {
+      if (result.finalState.email) contact.email = result.finalState.email;
+      if (result.finalState.phone) contact.phone = result.finalState.phone;
+      contact.updatedAt = now;
+    }
+    costCents += result.costCents;
+  }
+
+  return { contactsProcessed: contactResults.length, fieldsWritten, costCents };
 }
 
 function fieldForStage(stage: WaterfallStep["stage"]): "email" | "phone" | "contact" | undefined {
