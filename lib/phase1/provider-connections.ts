@@ -97,6 +97,22 @@ export function ensureProviderConnectionsForRegistry(
   return { changed: added > 0, added };
 }
 
+/**
+ * Drop connections for providers that are no longer in the registry (e.g. a
+ * provider was removed). Keeps the Integration Center in sync with the registry
+ * for existing workspaces. Idempotent.
+ */
+export function pruneProviderConnectionsNotInRegistry(state: AppState) {
+  if (!Array.isArray(state.providerConnections)) {
+    return { changed: false, removed: 0 };
+  }
+  const validIds = new Set<string>(providerRegistry.map((provider) => provider.id));
+  const before = state.providerConnections.length;
+  state.providerConnections = state.providerConnections.filter((connection) => validIds.has(connection.providerId));
+  const removed = before - state.providerConnections.length;
+  return { changed: removed > 0, removed };
+}
+
 export function providerConnectionViewsForWorkspace(state: AppState, workspaceId: string): ProviderConnectionSafeView[] {
   return state.providerConnections
     .filter((connection) => connection.workspaceId === workspaceId)

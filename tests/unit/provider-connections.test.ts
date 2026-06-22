@@ -54,7 +54,7 @@ describe("provider connection management", () => {
     const workspaceId = state.workspaces[0].id;
     const views = providerConnectionViewsForWorkspace(state, workspaceId);
 
-    expect(views).toHaveLength(25);
+    expect(views).toHaveLength(20);
     expect(views[0]).toMatchObject({
       providerId: "apollo",
       status: "Not configured",
@@ -213,12 +213,12 @@ describe("provider connection management", () => {
     });
 
     saveProviderConnectionConfig(state, session, {
-      providerId: "lusha",
+      providerId: "leadmagic",
       enabled: true,
-      secretValue: "lusha-secret-4444"
+      secretValue: "leadmagic-secret-4444"
     });
     state.providerEncryptedSecrets = [];
-    const result = testProviderConnectionConfig(state, session, "lusha");
+    const result = testProviderConnectionConfig(state, session, "leadmagic");
 
     expect(result.status).toBe("Failed");
     expect(result.message).toBe("Encrypted credential record is missing.");
