@@ -32,8 +32,6 @@ describe("provider registry", () => {
       "apify",
       "hunter",
       "zerobounce",
-      "lusha",
-      "people_data_labs",
       "twilio_lookup",
       "ringcentral",
       "smartlead",
@@ -43,11 +41,8 @@ describe("provider registry", () => {
       "findymail",
       "contactout",
       "lead411",
-      "bettercontact",
-      "fullenrich",
       "bouncer",
       "millionverifier",
-      "kaspr",
       "apify_maps",
       "apify_harvest",
       "website_scrape",
@@ -62,8 +57,7 @@ describe("provider registry", () => {
     expect(providerSupportsCategory("hunter", "email_finder")).toBe(true);
     expect(providerSupportsCategory("hunter", "email_verification")).toBe(true);
     expect(providerSupportsCategory("zerobounce", "email_verification")).toBe(true);
-    expect(providerSupportsCategory("lusha", "phone_lookup")).toBe(true);
-    expect(providerSupportsCategory("people_data_labs", "enrichment")).toBe(true);
+    expect(providerSupportsCategory("millionverifier", "email_verification")).toBe(true);
     expect(providerSupportsCategory("twilio_lookup", "phone_lookup")).toBe(true);
     expect(providerSupportsCategory("ringcentral", "telephony_sms")).toBe(true);
     expect(providerSupportsCategory("ringcentral", "outreach_sender")).toBe(true);
@@ -100,7 +94,7 @@ describe("provider registry", () => {
     const emailFinder = createMockEmailFinderProvider("hunter");
     const emailVerifier = createMockEmailVerificationProvider("zerobounce");
     const phoneLookup = createMockPhoneLookupProvider("twilio_lookup");
-    const enrichment = createMockEnrichmentProvider("people_data_labs");
+    const enrichment = createMockEnrichmentProvider("website_scrape");
     const sender = createMockOutreachSenderProvider("smartlead");
     const telephonySender = createMockOutreachSenderProvider("ringcentral");
 

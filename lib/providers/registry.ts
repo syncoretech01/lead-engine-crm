@@ -47,24 +47,6 @@ export const providerRegistry: ProviderConfig[] = [
     executionMode: "mock"
   },
   {
-    id: "lusha",
-    name: "Lusha",
-    categories: ["email_finder", "phone_lookup", "enrichment"],
-    capabilities: ["find_email", "find_phone", "enrich_contact"],
-    envVars: ["LUSHA_API_KEY"],
-    enabledByDefault: false,
-    executionMode: "mock"
-  },
-  {
-    id: "people_data_labs",
-    name: "People Data Labs",
-    categories: ["enrichment"],
-    capabilities: ["enrich_company", "enrich_contact"],
-    envVars: ["PEOPLE_DATA_LABS_API_KEY"],
-    enabledByDefault: false,
-    executionMode: "mock"
-  },
-  {
     id: "twilio_lookup",
     name: "Twilio Lookup",
     categories: ["phone_lookup"],
@@ -151,24 +133,6 @@ export const providerRegistry: ProviderConfig[] = [
     executionMode: "mock"
   },
   {
-    id: "bettercontact",
-    name: "BetterContact",
-    categories: ["email_finder", "phone_lookup"],
-    capabilities: ["find_email", "find_phone"],
-    envVars: ["BETTERCONTACT_API_KEY"],
-    enabledByDefault: false,
-    executionMode: "mock"
-  },
-  {
-    id: "fullenrich",
-    name: "FullEnrich",
-    categories: ["enrichment", "email_finder", "phone_lookup"],
-    capabilities: ["find_email", "find_phone", "enrich_contact", "discover_contacts"],
-    envVars: ["FULLENRICH_API_KEY"],
-    enabledByDefault: false,
-    executionMode: "mock"
-  },
-  {
     id: "bouncer",
     name: "Bouncer",
     categories: ["email_verification"],
@@ -183,15 +147,6 @@ export const providerRegistry: ProviderConfig[] = [
     categories: ["email_verification"],
     capabilities: ["verify_email"],
     envVars: ["MILLIONVERIFIER_API_KEY"],
-    enabledByDefault: false,
-    executionMode: "mock"
-  },
-  {
-    id: "kaspr",
-    name: "Kaspr",
-    categories: ["phone_lookup", "email_finder"],
-    capabilities: ["find_phone", "find_email"],
-    envVars: ["KASPR_API_KEY"],
     enabledByDefault: false,
     executionMode: "mock"
   },

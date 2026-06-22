@@ -124,55 +124,6 @@
     }
   },
   {
-    "id": "lusha-find-phone-mock",
-    "providerId": "lusha",
-    "operation": "find_phone",
-    "recordedAt": "2026-06-16T00:00:00.000Z",
-    "mode": "mock-fixture",
-    "description": "Lusha phone fallback contract placeholder.",
-    "input": {
-      "fullName": "Nora Patel",
-      "companyName": "Syncore",
-      "domain": "syncore.tech"
-    },
-    "expected": {
-      "status": "skipped",
-      "dataLength": 0,
-      "warningIncludes": "Mock phone finder"
-    },
-    "providerResponseFixture": {
-      "source": "mock",
-      "phones": []
-    },
-    "normalizedResultFixture": {
-      "foundPhones": []
-    }
-  },
-  {
-    "id": "people-data-labs-enrich-company-mock",
-    "providerId": "people_data_labs",
-    "operation": "enrich_company",
-    "recordedAt": "2026-06-16T00:00:00.000Z",
-    "mode": "mock-fixture",
-    "description": "People Data Labs company enrichment contract placeholder.",
-    "input": {
-      "name": "Syncore",
-      "domain": "syncore.tech"
-    },
-    "expected": {
-      "status": "skipped",
-      "dataLength": 0,
-      "warningIncludes": "Mock enrichment provider"
-    },
-    "providerResponseFixture": {
-      "source": "mock",
-      "company": null
-    },
-    "normalizedResultFixture": {
-      "enrichedCompanies": []
-    }
-  },
-  {
     "id": "twilio-lookup-verify-phone-mock",
     "providerId": "twilio_lookup",
     "operation": "verify_phone",
@@ -335,26 +286,6 @@
     "expected": { "status": "skipped", "dataLength": 0 }
   },
   {
-    "id": "bettercontact-find-email-mock",
-    "providerId": "bettercontact",
-    "operation": "find_email",
-    "recordedAt": "2026-06-20T00:00:00.000Z",
-    "mode": "mock-fixture",
-    "description": "BetterContact email waterfall contract placeholder.",
-    "input": { "fullName": "Jane Doe", "domain": "northstar.test" },
-    "expected": { "status": "skipped", "dataLength": 0 }
-  },
-  {
-    "id": "fullenrich-find-phone-mock",
-    "providerId": "fullenrich",
-    "operation": "find_phone",
-    "recordedAt": "2026-06-20T00:00:00.000Z",
-    "mode": "mock-fixture",
-    "description": "FullEnrich phone fallback contract placeholder.",
-    "input": { "fullName": "Jane Doe", "companyName": "Northstar Tools" },
-    "expected": { "status": "skipped", "dataLength": 0 }
-  },
-  {
     "id": "bouncer-verify-email-mock",
     "providerId": "bouncer",
     "operation": "verify_email",
@@ -372,16 +303,6 @@
     "mode": "mock-fixture",
     "description": "MillionVerifier email verification contract placeholder.",
     "input": { "email": "owner@northstar.test" },
-    "expected": { "status": "skipped", "dataLength": 0 }
-  },
-  {
-    "id": "kaspr-find-phone-mock",
-    "providerId": "kaspr",
-    "operation": "find_phone",
-    "recordedAt": "2026-06-20T00:00:00.000Z",
-    "mode": "mock-fixture",
-    "description": "Kaspr phone lookup contract placeholder.",
-    "input": { "fullName": "Jane Doe", "companyName": "Northstar Tools" },
     "expected": { "status": "skipped", "dataLength": 0 }
   },
   {

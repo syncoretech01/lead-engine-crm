@@ -24,7 +24,11 @@ import {
   type ProjectionTableName,
   type SyncNormalizedProjectionOptions
 } from "@/lib/phase1/persistence-projection";
-import { createDefaultProviderConnections, ensureProviderConnectionsForRegistry } from "@/lib/phase1/provider-connections";
+import {
+  createDefaultProviderConnections,
+  ensureProviderConnectionsForRegistry,
+  pruneProviderConnectionsNotInRegistry
+} from "@/lib/phase1/provider-connections";
 import { ensureReportingDefaults } from "@/lib/phase1/reporting";
 import { createSeedState } from "@/lib/phase1/seed";
 import { defaultSegmentRules } from "@/lib/phase1/scoring";
@@ -703,6 +707,8 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
     changed = waterfallDefaults.changed || changed;
     const providerConnectionDefaults = ensureProviderConnectionsForRegistry(state, workspaceId);
     changed = providerConnectionDefaults.changed || changed;
+    const prunedConnections = pruneProviderConnectionsNotInRegistry(state);
+    changed = prunedConnections.changed || changed;
   }
 
   return { state, changed };
