@@ -6,6 +6,7 @@ import {
   ensureProviderConnectionsForRegistry,
   providerConnectionViewsForWorkspace,
   saveProviderConnectionConfig,
+  setProviderExecutionMode,
   testProviderConnectionConfig
 } from "@/lib/phase1/provider-connections";
 import { createSeedState } from "@/lib/phase1/seed";
@@ -29,6 +30,23 @@ describe("provider connection management", () => {
     expect(new Set(after.map((connection) => connection.providerId)).size).toBe(supportedProviders().length);
     // idempotent
     expect(ensureProviderConnectionsForRegistry(state, workspaceId).changed).toBe(false);
+  });
+
+  it("toggles execution mode to live and keeps it across config saves", () => {
+    const state = createSeedState();
+    const session = resolveSession(state, {});
+
+    const live = setProviderExecutionMode(state, session, "hunter", "live");
+    expect(live.executionMode).toBe("live");
+
+    // Saving credentials/config must not silently revert a live connection to mock.
+    saveProviderConnectionConfig(state, session, { providerId: "hunter", enabled: true, secretValue: "k" });
+    const connection = state.providerConnections.find(
+      (item) => item.providerId === "hunter" && item.workspaceId === session.workspace.id
+    );
+    expect(connection?.executionMode).toBe("live");
+
+    expect(setProviderExecutionMode(state, session, "hunter", "mock").executionMode).toBe("mock");
   });
 
   it("lists safe provider connection views without secret references", () => {

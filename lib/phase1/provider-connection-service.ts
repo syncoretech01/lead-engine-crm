@@ -6,13 +6,14 @@ import {
   disableProviderConnection,
   providerConnectionViewsForWorkspace,
   saveProviderConnectionConfig,
+  setProviderExecutionMode,
   testProviderConnectionConfig,
   type ProviderConnectionSafeView,
   type ProviderConnectionTestResult,
   type SaveProviderConnectionInput
 } from "@/lib/phase1/provider-connections";
 import { getSession, readState, updateState } from "@/lib/phase1/store";
-import type { ProviderId } from "@/lib/providers/types";
+import type { ProviderExecutionMode, ProviderId } from "@/lib/providers/types";
 
 export async function listProviderConnectionViews(): Promise<ProviderConnectionSafeView[]> {
   const state = await readState();
@@ -31,6 +32,16 @@ export async function saveProviderConnection(input: SaveProviderConnectionInput)
 export async function testProviderConnection(providerId: ProviderId): Promise<ProviderConnectionTestResult> {
   return updateState(
     (state, session) => testProviderConnectionConfig(state, session, providerId),
+    { normalizedTables: providerConnectionWriteTables }
+  );
+}
+
+export async function setProviderConnectionExecutionMode(
+  providerId: ProviderId,
+  executionMode: ProviderExecutionMode
+): Promise<ProviderConnectionSafeView> {
+  return updateState(
+    (state, session) => setProviderExecutionMode(state, session, providerId, executionMode),
     { normalizedTables: providerConnectionWriteTables }
   );
 }

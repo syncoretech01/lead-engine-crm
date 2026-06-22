@@ -3,7 +3,7 @@ import { assertPermission } from "@/lib/phase1/auth";
 import { providerSecretHealth, storeEncryptedProviderSecret } from "@/lib/phase1/provider-secret-vault";
 import type { AppState, ProviderConnection, ProviderCredentialAudit, Session } from "@/lib/phase1/types";
 import { providerConfig, providerRegistry } from "@/lib/providers/registry";
-import type { ProviderCapability, ProviderId } from "@/lib/providers/types";
+import type { ProviderCapability, ProviderExecutionMode, ProviderId } from "@/lib/providers/types";
 
 type DefaultProviderConnectionOptions = {
   workspaceId: string;
@@ -125,7 +125,8 @@ export function saveProviderConnectionConfig(
 
   existing.displayName = provider.name;
   existing.enabled = enabled;
-  existing.executionMode = provider.executionMode;
+  // executionMode is set at creation and changed only via setProviderExecutionMode,
+  // so saving credentials/config never silently reverts a live connection to mock.
   existing.categories = [...provider.categories];
   existing.capabilities = [...provider.capabilities];
   existing.scopes = scopes;
@@ -306,6 +307,37 @@ export function createProviderCredentialAudit(input: {
 
 export function providerConnectionId(workspaceId: string, providerId: string) {
   return `provider-connection-${workspaceId}-${providerId}`;
+}
+
+/**
+ * Switch a provider connection between mock and live execution. Live runs still
+ * also require SYNCORE_ENABLE_LIVE_PROVIDERS to be on (the master kill-switch);
+ * this sets the per-connection preference.
+ */
+export function setProviderExecutionMode(
+  state: AppState,
+  session: Session,
+  providerId: ProviderId,
+  executionMode: ProviderExecutionMode
+): ProviderConnectionSafeView {
+  assertPermission(session, "manage_workspace");
+  const now = new Date().toISOString();
+  const connection = ensureProviderConnection(state, session.workspace.id, providerId, now, session.user.id);
+  const previousExecutionMode = connection.executionMode;
+  connection.executionMode = executionMode;
+  connection.updatedById = session.user.id;
+  connection.updatedAt = now;
+  appendProviderCredentialAudit(state, {
+    workspaceId: session.workspace.id,
+    providerConnectionId: connection.id,
+    providerId: connection.providerId,
+    actorUserId: session.user.id,
+    action: "Updated",
+    secretVersion: connection.secretVersion,
+    createdAt: now,
+    redactedMetadata: { executionMode, previousExecutionMode }
+  });
+  return safeProviderConnectionView(connection);
 }
 
 function ensureProviderConnection(

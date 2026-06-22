@@ -85,6 +85,7 @@ import {
 import {
   disableProviderConnectionForWorkspace,
   saveProviderConnection,
+  setProviderConnectionExecutionMode,
   testProviderConnection
 } from "@/lib/phase1/provider-connection-service";
 import { applySegmentsAndScores, createSegmentRuleFromForm } from "@/lib/phase1/scoring";
@@ -1830,6 +1831,12 @@ export async function saveProviderConnectionAction(formData: FormData) {
 
 export async function testProviderConnectionAction(formData: FormData) {
   await testProviderConnection(providerIdValue(formData.get("providerId")));
+  revalidatePath("/integrations");
+}
+
+export async function setProviderExecutionModeAction(formData: FormData) {
+  const executionMode = stringValue(formData.get("executionMode")) === "live" ? "live" : "mock";
+  await setProviderConnectionExecutionMode(providerIdValue(formData.get("providerId")), executionMode);
   revalidatePath("/integrations");
 }
 
