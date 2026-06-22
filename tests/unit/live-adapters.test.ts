@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { millionVerifierVerifyEmail } from "@/lib/providers/adapters/millionverifier";
 import { hunterFindEmail, hunterVerifyEmail } from "@/lib/providers/adapters/hunter";
 import { apolloFindEmail } from "@/lib/providers/adapters/apollo";
+import { apifyHarvestDiscoverContacts, apifyMapsDiscoverCompanies } from "@/lib/providers/adapters/apify";
 import { getLiveProviderOperation, resetLiveProviderAdapters } from "@/lib/providers/live-adapters";
 import {
   ensureLiveProviderAdaptersRegistered,
@@ -9,7 +10,7 @@ import {
 } from "@/lib/providers/register-live-adapters";
 import type { ProviderRequestContext } from "@/lib/providers/types";
 
-function stubFetch(body: Record<string, unknown>, ok = true, status = 200) {
+function stubFetch(body: unknown, ok = true, status = 200) {
   const fn = vi.fn(async () => ({ ok, status, json: async () => body }));
   vi.stubGlobal("fetch", fn);
   return fn;
@@ -93,6 +94,36 @@ describe("Apollo adapter", () => {
   });
 });
 
+describe("Apify adapters", () => {
+  it("maps Google Maps places to discovered companies", async () => {
+    stubFetch([
+      { title: "Joe's Auto", website: "https://www.joesauto.com/", phone: "+15551112222", city: "Dallas", state: "TX", countryCode: "US", placeId: "p1", categoryName: "Auto repair" }
+    ]);
+    const result = await apifyMapsDiscoverCompanies({ query: "auto repair", geographies: ["Dallas, TX"], limit: 10 }, ctx("token"));
+    expect(result.status).toBe("ok");
+    expect(result.data[0]).toMatchObject({ providerCompanyId: "p1", name: "Joe's Auto", domain: "joesauto.com", phone: "+15551112222", city: "Dallas", country: "US", industry: "Auto repair" });
+  });
+
+  it("errors (no call) without an Apify token", async () => {
+    const spy = stubFetch([]);
+    expect((await apifyMapsDiscoverCompanies({ query: "x" }, ctx(undefined))).status).toBe("error");
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("maps LinkedIn profiles to discovered contacts", async () => {
+    stubFetch([
+      { name: "Jane Doe", headline: "VP Sales", companyName: "Acme", linkedinUrl: "https://linkedin.com/in/janedoe", publicIdentifier: "janedoe", location: "Austin, TX" }
+    ]);
+    const result = await apifyHarvestDiscoverContacts({ titles: ["VP Sales"], geographies: ["United States"] }, ctx("token"));
+    expect(result.data[0]).toMatchObject({ providerContactId: "janedoe", fullName: "Jane Doe", title: "VP Sales", companyName: "Acme", linkedinUrl: "https://linkedin.com/in/janedoe" });
+  });
+
+  it("returns empty when LinkedIn search yields nothing", async () => {
+    stubFetch([]);
+    expect((await apifyHarvestDiscoverContacts({ query: "nobody" }, ctx("token"))).status).toBe("empty");
+  });
+});
+
 describe("ensureLiveProviderAdaptersRegistered", () => {
   it("registers the data-provider operations", () => {
     resetLiveProviderAdapters();
@@ -105,5 +136,7 @@ describe("ensureLiveProviderAdaptersRegistered", () => {
     expect(typeof getLiveProviderOperation("hunter", "find_email")).toBe("function");
     expect(typeof getLiveProviderOperation("hunter", "verify_email")).toBe("function");
     expect(typeof getLiveProviderOperation("apollo", "find_email")).toBe("function");
+    expect(typeof getLiveProviderOperation("apify_maps", "discover_companies")).toBe("function");
+    expect(typeof getLiveProviderOperation("apify_harvest", "discover_contacts")).toBe("function");
   });
 });

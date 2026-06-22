@@ -1,3 +1,4 @@
+import { apifyHarvestDiscoverContacts, apifyMapsDiscoverCompanies } from "@/lib/providers/adapters/apify";
 import { apolloFindEmail } from "@/lib/providers/adapters/apollo";
 import { hunterFindEmail, hunterVerifyEmail } from "@/lib/providers/adapters/hunter";
 import { millionVerifierVerifyEmail } from "@/lib/providers/adapters/millionverifier";
@@ -12,8 +13,8 @@ let registered = false;
  * is harmless on its own — an adapter only performs a network call when its
  * connection is in live mode and SYNCORE_ENABLE_LIVE_PROVIDERS is on.
  *
- * Apify (custom extraction) and the senders (RingCentral, Amazon SES) are not
- * registered here yet — see docs/PROVIDER_INTEGRATION_PLAN.md.
+ * The senders (RingCentral, Amazon SES) are not registered here yet — they send
+ * and need webhooks + compliance sign-off (see docs/PROVIDER_INTEGRATION_PLAN.md).
  */
 export function ensureLiveProviderAdaptersRegistered(): void {
   if (registered) return;
@@ -21,6 +22,8 @@ export function ensureLiveProviderAdaptersRegistered(): void {
   registerLiveProviderAdapter({ id: "millionverifier", operations: { verify_email: millionVerifierVerifyEmail } });
   registerLiveProviderAdapter({ id: "hunter", operations: { find_email: hunterFindEmail, verify_email: hunterVerifyEmail } });
   registerLiveProviderAdapter({ id: "apollo", operations: { find_email: apolloFindEmail } });
+  registerLiveProviderAdapter({ id: "apify_maps", operations: { discover_companies: apifyMapsDiscoverCompanies } });
+  registerLiveProviderAdapter({ id: "apify_harvest", operations: { discover_contacts: apifyHarvestDiscoverContacts } });
 }
 
 /** Test-only: reset the one-time guard so a cleared registry can re-register. */

@@ -11,6 +11,7 @@ import {
 import {
   disableProviderConnectionAction,
   saveProviderConnectionAction,
+  setProviderExecutionModeAction,
   testProviderConnectionAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
@@ -324,6 +325,14 @@ function ProviderConnectionCard({ connection }: { connection: ProviderConnection
           <button className="button secondary" type="submit">
             <TestTube2 size={17} aria-hidden="true" />
             Test
+          </button>
+        </form>
+        <form action={setProviderExecutionModeAction}>
+          <input name="providerId" type="hidden" value={connection.providerId} />
+          <input name="executionMode" type="hidden" value={connection.executionMode === "live" ? "mock" : "live"} />
+          <button className="button subtle" type="submit">
+            <Zap size={17} aria-hidden="true" />
+            {connection.executionMode === "live" ? "Set to mock" : "Set live"}
           </button>
         </form>
         <form action={disableProviderConnectionAction}>
