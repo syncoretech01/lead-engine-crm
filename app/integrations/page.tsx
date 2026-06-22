@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { providerConnectionViewsForWorkspace } from "@/lib/phase1/provider-connections";
 import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
+import { liveProviderExecutionEnabled } from "@/lib/providers/live-adapters";
 import type { ProviderConnectionSafeView } from "@/lib/phase1/provider-connections";
 import { formatNumber } from "@/lib/utils";
 import { StatCard } from "@/components/ui-metrics";
@@ -27,6 +28,7 @@ export const dynamic = "force-dynamic";
 export default async function IntegrationsPage() {
   const { state, session, workspaceId } = await getDeveloperWorkspaceContext();
   const connections = providerConnectionViewsForWorkspace(state, workspaceId);
+  const liveFlag = liveProviderExecutionEnabled();
   const audits = state.providerCredentialAudits
     .filter((audit) => audit.workspaceId === workspaceId)
     .slice(0, 18);
@@ -39,7 +41,7 @@ export default async function IntegrationsPage() {
       label: "Mock mode",
       tone: "info" as const,
       title: "No live calls",
-      copy: "Every adapter stays local in this build. Tests, sends, and webhooks never touch a real provider."
+      copy: "A lane in mock mode simulates results locally — no provider call, spend, or webhook. Live calls need the global live flag plus a connection set to live."
     },
     {
       label: "Not configured",
@@ -50,8 +52,8 @@ export default async function IntegrationsPage() {
     {
       label: "Active",
       tone: "success" as const,
-      title: "Mock-ready",
-      copy: "Enabled, credentialed, and locally testable. This is the final state before a live adapter is introduced."
+      title: "Enabled + credentialed",
+      copy: "Enabled and credentialed. Set the lane to live (with the global live flag on) to make real provider calls; otherwise it runs as mock."
     },
     {
       label: "Needs attention",
@@ -99,6 +101,18 @@ export default async function IntegrationsPage() {
         copy="Provider connection controls for lead sources, verification, enrichment, outreach, and transactional email. Configuration runs through server-only actions with redacted credential state."
       />
 
+      <section className="chip-row live-execution-banner" aria-label="Live execution status">
+        <StatusPill
+          label={liveFlag ? "Live provider calls: ON" : "Live provider calls: OFF"}
+          tone={liveFlag ? "success" : "info"}
+        />
+        <span className="surface-note">
+          {liveFlag
+            ? "SYNCORE_ENABLE_LIVE_PROVIDERS is on — connections set to live with a stored credential make real provider calls."
+            : "SYNCORE_ENABLE_LIVE_PROVIDERS is off — every lane runs in mock mode regardless of its per-connection mode."}
+        </span>
+      </section>
+
       <section className="stat-grid" aria-label="Integration metrics">
         {stats.map((stat) => (
           <StatCard key={stat.label} {...stat} />
@@ -119,7 +133,7 @@ export default async function IntegrationsPage() {
 
       <section className="grid two integrations-grid">
         {connections.map((connection) => (
-          <ProviderConnectionCard key={connection.id} connection={connection} />
+          <ProviderConnectionCard key={connection.id} connection={connection} liveFlag={liveFlag} />
         ))}
       </section>
 
@@ -198,8 +212,9 @@ export default async function IntegrationsPage() {
   );
 }
 
-function ProviderConnectionCard({ connection }: { connection: ProviderConnectionSafeView }) {
+function ProviderConnectionCard({ connection, liveFlag }: { connection: ProviderConnectionSafeView; liveFlag: boolean }) {
   const stateLabel = connection.status === "Connected" ? "Active" : connection.status;
+  const effectiveLive = liveFlag && connection.executionMode === "live";
 
   return (
     <article className="item-card integration-card">
@@ -222,7 +237,7 @@ function ProviderConnectionCard({ connection }: { connection: ProviderConnection
         ))}
       </div>
 
-      <p className="surface-note">{providerStateSummary(connection)}</p>
+      <p className="surface-note">{providerStateSummary(connection, liveFlag)}</p>
 
       <form action={saveProviderConnectionAction} className="form-grid compact-form">
         <input name="providerId" type="hidden" value={connection.providerId} />
@@ -245,7 +260,10 @@ function ProviderConnectionCard({ connection }: { connection: ProviderConnection
             placeholder={connection.hasSecret ? `Stored ending ${connection.maskedSecretSuffix}` : "Paste credential for mock save"}
           />
           <span className="field-note">
-            Stored server-side only. In this phase the adapter stays in {connection.executionMode} mode with no network access.
+            Stored server-side only.{" "}
+            {effectiveLive
+              ? "This lane is live — real provider calls are enabled."
+              : "Runs are simulated (no provider calls) in the current configuration."}
           </span>
         </div>
         <div className="field">
@@ -364,13 +382,18 @@ function providerName(connections: ProviderConnectionSafeView[], providerId: str
   return connections.find((connection) => connection.providerId === providerId)?.displayName ?? providerId;
 }
 
-function providerStateSummary(connection: ProviderConnectionSafeView) {
+function providerStateSummary(connection: ProviderConnectionSafeView, liveFlag: boolean) {
   if (connection.status === "Connected") {
-    return "Active in mock mode. The lane is enabled, a credential is stored server-side, and local connection tests can pass without calling the provider.";
+    if (connection.executionMode === "live") {
+      return liveFlag
+        ? "Live. The lane is enabled, a credential is stored server-side, and the global live flag is on — real provider calls run for this lane."
+        : "Live mode is selected, but the global SYNCORE_ENABLE_LIVE_PROVIDERS flag is off — runs stay simulated (no provider calls) until it is enabled.";
+    }
+    return "Active in mock mode. The lane is enabled and a credential is stored server-side; runs are simulated and never call the provider.";
   }
 
   if (connection.status === "Needs attention") {
-    return "Enabled, but still missing a passing mock test, a stored credential, or compatible operation settings.";
+    return "Enabled, but still missing a passing test, a stored credential, or compatible operation settings.";
   }
 
   if (connection.status === "Disabled" && connection.hasSecret) {

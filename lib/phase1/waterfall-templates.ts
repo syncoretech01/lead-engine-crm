@@ -93,9 +93,8 @@ export function defaultWaterfallTemplates(workspaceId: string, now = new Date().
       [
         { order: 1, stage: "find_phone", capability: "find_phone", providerIds: ["leadmagic", "prospeo"], runIf: phoneMissing },
         { order: 2, stage: "find_phone", capability: "find_phone", providerIds: ["contactout"], runIf: { all: [phoneMissing, { field: "linkedinUrl", op: "exists" }] } },
-        { order: 3, stage: "find_phone", capability: "find_phone", providerIds: ["bettercontact", "fullenrich", "apollo"], runIf: phoneMissing },
-        { order: 4, stage: "find_phone", capability: "find_phone", providerIds: ["lusha"], highValueOnly: true, runIf: phoneMissing },
-        { order: 5, stage: "verify_phone", capability: "verify_phone", providerIds: ["twilio_lookup"], qualityGate: { phoneTypeIn: ["mobile", "direct_dial"], rejectVoipForSms: true, minConfidence: 70 }, stopIf: validPhone }
+        { order: 3, stage: "find_phone", capability: "find_phone", providerIds: ["apollo"], runIf: phoneMissing },
+        { order: 4, stage: "verify_phone", capability: "verify_phone", providerIds: ["twilio_lookup"], qualityGate: { phoneTypeIn: ["mobile", "direct_dial"], rejectVoipForSms: true, minConfidence: 70 }, stopIf: validPhone }
       ],
       { maxCostPerLeadCents: 80, highValueScoreThreshold: 80 }
     ),
@@ -125,7 +124,7 @@ export function defaultWaterfallTemplates(workspaceId: string, now = new Date().
         { order: 1, stage: "find_email", capability: "find_email", providerIds: ["hunter", "leadmagic", "prospeo"], runIf: emailMissing },
         { order: 2, stage: "find_email", capability: "find_email", providerIds: ["findymail"], runIf: { all: [emailMissing, { field: "linkedinUrl", op: "exists" }] } },
         { order: 3, stage: "verify_email", capability: "verify_email", providerIds: ["bouncer", "millionverifier"], qualityGate: { acceptStatus: ["valid"], allowCatchAll: false, minConfidence: 80 }, stopIf: validEmail },
-        { order: 4, stage: "find_phone", capability: "find_phone", providerIds: ["leadmagic", "prospeo", "contactout", "bettercontact", "fullenrich"], runIf: { all: [phoneMissing, { any: [{ field: "engagement", op: "in", value: ["opened", "clicked", "replied", "booked"] }, { field: "leadScore", op: "gte", value: 70 }] }] } },
+        { order: 4, stage: "find_phone", capability: "find_phone", providerIds: ["leadmagic", "prospeo", "contactout"], runIf: { all: [phoneMissing, { any: [{ field: "engagement", op: "in", value: ["opened", "clicked", "replied", "booked"] }, { field: "leadScore", op: "gte", value: 70 }] }] } },
         { order: 5, stage: "verify_phone", capability: "verify_phone", providerIds: ["twilio_lookup"], qualityGate: { phoneTypeIn: ["mobile", "direct_dial"], rejectVoipForSms: true }, stopIf: validPhone }
       ],
       { maxCostPerLeadCents: 60 }
@@ -138,9 +137,8 @@ export function defaultWaterfallTemplates(workspaceId: string, now = new Date().
       ["phone:validated"],
       [
         { order: 1, stage: "suppression_check", capability: "verify_phone", providerIds: ["dnc"], runIf: { field: "country", op: "equals", value: "US" } },
-        { order: 2, stage: "find_phone", capability: "find_phone", providerIds: ["lead411", "leadmagic", "prospeo", "bettercontact", "fullenrich", "apollo"], runIf: phoneMissing },
-        { order: 3, stage: "find_phone", capability: "find_phone", providerIds: ["lusha"], highValueOnly: true, runIf: phoneMissing },
-        { order: 4, stage: "verify_phone", capability: "verify_phone", providerIds: ["twilio_lookup"], qualityGate: { phoneTypeIn: ["mobile", "direct_dial"], allowCompanyMain: false, rejectVoipForSms: true, rejectStatus: ["invalid", "unknown", "risky"], minConfidence: 75 }, stopIf: validPhone }
+        { order: 2, stage: "find_phone", capability: "find_phone", providerIds: ["lead411", "leadmagic", "prospeo", "apollo"], runIf: phoneMissing },
+        { order: 3, stage: "verify_phone", capability: "verify_phone", providerIds: ["twilio_lookup"], qualityGate: { phoneTypeIn: ["mobile", "direct_dial"], allowCompanyMain: false, rejectVoipForSms: true, rejectStatus: ["invalid", "unknown", "risky"], minConfidence: 75 }, stopIf: validPhone }
       ],
       { country: "US", maxCostPerLeadCents: 120, highValueScoreThreshold: 75 }
     ),
@@ -153,10 +151,9 @@ export function defaultWaterfallTemplates(workspaceId: string, now = new Date().
       [
         { order: 1, stage: "enrich", capability: "enrich_contact", providerIds: ["apify_harvest"], runIf: { field: "linkedinUrl", op: "exists" } },
         { order: 2, stage: "find_email", capability: "find_email", providerIds: ["findymail", "leadmagic", "prospeo", "contactout"], runIf: emailMissing },
-        { order: 3, stage: "find_email", capability: "find_email", providerIds: ["bettercontact"], runIf: emailMissing },
-        { order: 4, stage: "verify_email", capability: "verify_email", providerIds: ["bouncer"], qualityGate: { acceptStatus: ["valid"], minConfidence: 80 }, stopIf: validEmail },
-        { order: 5, stage: "find_phone", capability: "find_phone", providerIds: ["leadmagic", "prospeo", "contactout"], runIf: phoneMissing },
-        { order: 6, stage: "verify_phone", capability: "verify_phone", providerIds: ["twilio_lookup"], qualityGate: { phoneTypeIn: ["mobile", "direct_dial"] } }
+        { order: 3, stage: "verify_email", capability: "verify_email", providerIds: ["bouncer"], qualityGate: { acceptStatus: ["valid"], minConfidence: 80 }, stopIf: validEmail },
+        { order: 4, stage: "find_phone", capability: "find_phone", providerIds: ["leadmagic", "prospeo", "contactout"], runIf: phoneMissing },
+        { order: 5, stage: "verify_phone", capability: "verify_phone", providerIds: ["twilio_lookup"], qualityGate: { phoneTypeIn: ["mobile", "direct_dial"] } }
       ]
     ),
     base(
@@ -169,9 +166,8 @@ export function defaultWaterfallTemplates(workspaceId: string, now = new Date().
         { order: 1, stage: "source", capability: "discover_companies", providerIds: ["apify_maps", "apollo"] },
         { order: 2, stage: "enrich", capability: "enrich_company", providerIds: ["website_scrape", "apollo"], runIf: { field: "domain", op: "exists" } },
         { order: 3, stage: "discover_contacts", capability: "discover_contacts", providerIds: ["lead411", "apollo", "leadmagic", "prospeo", "contactout"], stopIf: { field: "contactsFound", op: "gte", value: 3 } },
-        { order: 4, stage: "discover_contacts", capability: "discover_contacts", providerIds: ["fullenrich"], highValueOnly: true, stopIf: { field: "contactsFound", op: "gte", value: 3 } },
-        { order: 5, stage: "verify_email", capability: "verify_email", providerIds: ["bouncer", "millionverifier"], qualityGate: { acceptStatus: ["valid"] } },
-        { order: 6, stage: "verify_phone", capability: "verify_phone", providerIds: ["twilio_lookup"], qualityGate: { allowCompanyMain: true }, allowCompanyMainPhone: true }
+        { order: 4, stage: "verify_email", capability: "verify_email", providerIds: ["bouncer", "millionverifier"], qualityGate: { acceptStatus: ["valid"] } },
+        { order: 5, stage: "verify_phone", capability: "verify_phone", providerIds: ["twilio_lookup"], qualityGate: { allowCompanyMain: true }, allowCompanyMainPhone: true }
       ],
       { personas: ["owner", "ceo", "general_manager", "operations_manager", "marketing_manager", "sales_manager", "procurement_manager"] }
     )
