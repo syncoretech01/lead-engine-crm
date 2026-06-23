@@ -103,7 +103,10 @@ export async function createUserInviteAction(formData: FormData) {
   }
 
   revalidatePath("/access");
-  redirect(`/access?invite=${encodeURIComponent(inviteUrl)}`);
+  // Never surface the invite link in production — it's emailed to the invitee.
+  redirect(
+    process.env.NODE_ENV === "production" ? "/access?invited=1" : `/access?invite=${encodeURIComponent(inviteUrl)}`
+  );
 }
 
 export async function acceptInviteAction(formData: FormData) {
@@ -155,7 +158,11 @@ export async function requestPasswordResetAction(formData: FormData) {
     }
   }
 
-  const query = resetUrl ? `?sent=1&reset=${encodeURIComponent(resetUrl)}` : "?sent=1";
+  // Never surface the reset link in production — it's emailed to the account
+  // owner. Showing it on-page would let anyone request a reset for a known email
+  // and read the link (account takeover). Locally it stays as a dev convenience.
+  const showLink = resetUrl && process.env.NODE_ENV !== "production";
+  const query = showLink ? `?sent=1&reset=${encodeURIComponent(resetUrl)}` : "?sent=1";
   redirect(`/reset-password${query}`);
 }
 

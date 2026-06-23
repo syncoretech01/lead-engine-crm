@@ -12,7 +12,7 @@ import type { WorkspaceRole } from "@/lib/phase1/types";
 export const dynamic = "force-dynamic";
 
 type AccessPageProps = {
-  searchParams?: Promise<{ invite?: string }>;
+  searchParams?: Promise<{ invite?: string; invited?: string }>;
 };
 
 const roles: WorkspaceRole[] = ["Admin", "Manager", "SDR", "Data Operator", "Viewer", "Compliance Admin"];
@@ -53,6 +53,14 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
           ) : undefined
         }
       />
+
+      {params?.invited && !params?.invite ? (
+        <section className="panel">
+          <div className="panel-body">
+            <p className="surface-note">Invite created and emailed to the user — it&apos;s listed under pending invites below.</p>
+          </div>
+        </section>
+      ) : null}
 
       {params?.invite ? (
         <section className="panel">
