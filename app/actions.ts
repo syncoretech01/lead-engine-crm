@@ -43,6 +43,7 @@ import { detectWorkspaceDuplicates, ignoreDedupeMatch, mergeDedupeMatch } from "
 import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import { createExportRecord } from "@/lib/phase1/exporting";
 import { createTrackedJob, retryFailedJob } from "@/lib/phase1/jobs";
+import { partitionLeadsForAssignment } from "@/lib/phase1/lead-gate";
 import { applyLeadOverride, createLeadJobFromPreflight } from "@/lib/phase1/lead-planning";
 import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/phase1/normalization";
 import {
@@ -1817,6 +1818,42 @@ export async function approveBuildListEnrichmentAction(formData: FormData) {
   }
 
   revalidatePath("/build-list");
+}
+
+/**
+ * Build List — step 5: quality-gate, then fairly assign. Only ready leads (graded,
+ * not suppressed, with the profile's required fields) are eligible; the rest are
+ * held back. Reuses the capacity-weighted assignWorkspaceLeads with an
+ * eligibility filter so low-quality leads never reach SDR queues.
+ */
+export async function assignBuildListLeadsAction() {
+  await updateState((state, session) => {
+    assertPermission(session, "manage_sdr_team");
+    const profile = state.searchProfiles
+      .filter((item) => item.workspaceId === session.workspace.id)
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
+    const contacts = state.contacts.filter((contact) => contact.workspaceId === session.workspace.id);
+    const { ready, held } = partitionLeadsForAssignment({ contacts, requiredFields: profile?.requiredFields });
+    const eligibleContactIds = new Set(ready.map((contact) => contact.id));
+    const result = assignWorkspaceLeads(
+      state,
+      session.workspace.id,
+      session.user.id,
+      new Date().toISOString(),
+      { eligibleContactIds }
+    );
+    const sla = refreshSlaStatuses(state, session.workspace.id);
+
+    appendAudit(state, session, {
+      objectType: "sdr_assignment",
+      objectId: session.workspace.id,
+      action: "assignment_run",
+      newValue: { ...result, held: held.length, sla, gated: true }
+    });
+  }, { normalizedTables: sdrWriteTables });
+
+  revalidatePath("/build-list");
+  revalidatePath("/", "layout");
 }
 
 export async function generateAiDeliverabilityRecommendationsAction() {

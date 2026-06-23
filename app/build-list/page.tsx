@@ -4,25 +4,31 @@ import {
   BadgeCheck,
   Database,
   DollarSign,
+  GitMerge,
   ListChecks,
   Play,
   ShieldCheck,
   Sparkles,
   Target,
+  UserCheck,
   Wand2,
   Workflow
 } from "lucide-react";
 import {
   approveBuildListEnrichmentAction,
+  assignBuildListLeadsAction,
   confirmLeadListIcpAction,
   createLeadJobAction,
+  detectDuplicatesAction,
   draftLeadListIcpAction,
   runVerificationAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { llmEnabled } from "@/lib/llm/openai-client";
+import { partitionLeadsForAssignment } from "@/lib/phase1/lead-gate";
 import { createLeadJobPreflight } from "@/lib/phase1/lead-planning";
+import { sdrWorkloads } from "@/lib/phase1/sdr";
 import { leadSourceOptions, recommendSourcesForIcp } from "@/lib/phase1/source-recommender";
 import { pickWaterfallTemplateForProfile } from "@/lib/phase1/waterfall-recommender";
 import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
@@ -117,6 +123,14 @@ export default async function BuildListPage({
     : null;
   const enrichTemplate = enrichChoice ? templates.find((template) => template.id === enrichChoice.templateId) : undefined;
   const canEnrich = session.permissions.includes("manage_waterfalls");
+
+  const allContacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId);
+  const openDuplicates = state.dedupeMatches.filter(
+    (match) => match.workspaceId === workspaceId && match.status === "Open"
+  ).length;
+  const gate = partitionLeadsForAssignment({ contacts: allContacts, requiredFields: selectedProfile?.requiredFields });
+  const workloads = sdrWorkloads(state, workspaceId);
+  const canAssign = session.permissions.includes("manage_sdr_team");
 
   return (
     <>
@@ -409,6 +423,97 @@ export default async function BuildListPage({
           </p>
         </section>
       ) : null}
+
+      <section className="panel">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
+            <h2 className="section-title">Finalize &amp; assign</h2>
+            <p className="section-subtitle">
+              Clear duplicates, hold low-quality leads, then fairly distribute the rest to SDRs.
+            </p>
+          </div>
+          <UserCheck size={18} aria-hidden="true" />
+        </div>
+
+        <div className="chip-row">
+          <StatusPill
+            label={openDuplicates ? `${formatNumber(openDuplicates)} open duplicates` : "No open duplicates"}
+            tone={openDuplicates ? "warning" : "success"}
+          />
+          <span className="pill">{formatNumber(gate.ready.length)} ready</span>
+          <span className="pill">{formatNumber(gate.held.length)} held</span>
+          {gate.reasons.map((entry) => (
+            <span className="pill" key={entry.reason}>
+              {entry.reason}: {formatNumber(entry.count)}
+            </span>
+          ))}
+        </div>
+
+        <div className="item-card-actions">
+          <form action={detectDuplicatesAction}>
+            <button className="button secondary" type="submit">
+              <GitMerge size={17} aria-hidden="true" />
+              Check duplicates
+            </button>
+          </form>
+          {openDuplicates ? (
+            <Link href="/data-quality" className="button subtle">
+              Resolve in Data Quality
+            </Link>
+          ) : null}
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SDR</th>
+                <th>Active</th>
+                <th>P1</th>
+                <th>Assigned</th>
+              </tr>
+            </thead>
+            <tbody>
+              {workloads.length ? (
+                workloads.map((workload) => (
+                  <tr key={workload.userId}>
+                    <td>{workload.name}</td>
+                    <td>{formatNumber(workload.active)}</td>
+                    <td>{formatNumber(workload.p1)}</td>
+                    <td>{formatNumber(workload.assigned)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="empty-state">
+                      <UserCheck size={24} aria-hidden="true" />
+                      <span>No SDRs in this workspace yet.</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {canAssign ? (
+          gate.ready.length > 0 ? (
+            <form action={assignBuildListLeadsAction} className="form-grid">
+              <div className="field integration-actions">
+                <button className="button primary" type="submit">
+                  <UserCheck size={17} aria-hidden="true" />
+                  Assign {formatNumber(gate.ready.length)} ready leads to SDRs
+                </button>
+              </div>
+            </form>
+          ) : (
+            <p className="surface-note">No ready leads to assign yet — verify and enrich first.</p>
+          )
+        ) : (
+          <p className="surface-note">Lead assignment is limited to Admins and Managers.</p>
+        )}
+      </section>
 
       <section className="panel">
         <div className="panel-header">
