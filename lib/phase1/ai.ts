@@ -21,6 +21,7 @@ import type {
   Priority,
   SearchProfile
 } from "@/lib/phase1/types";
+import type { IcpDraft } from "@/lib/llm/icp-schema";
 
 export const aiAutomationKinds: AiAutomationKind[] = [
   "Personalization",
@@ -402,10 +403,11 @@ export function createIcpRecommendationFromPrompt(
   state: AppState,
   workspaceId: string,
   actorUserId: string,
-  prompt: string
+  prompt: string,
+  draft?: IcpDraft
 ) {
   const now = new Date().toISOString();
-  const parsed = parsePromptForIcp(prompt);
+  const parsed = draft ?? parsePromptForIcp(prompt);
   const recommendation: AiIcpRecommendation = {
     id: `ai-icp-${randomUUID()}`,
     workspaceId,
@@ -436,6 +438,34 @@ export function createIcpRecommendationFromPrompt(
     summary: "Generated an ICP recommendation from prompt.",
     runById: actorUserId
   });
+  return recommendation;
+}
+
+/**
+ * Patch an existing ICP recommendation with user edits (from the Build List
+ * review card) before it is applied to a SearchProfile. Only provided, non-empty
+ * fields change; everything else stays as drafted.
+ */
+export function updateIcpRecommendation(
+  state: AppState,
+  workspaceId: string,
+  recommendationId: string,
+  patch: { name?: string; industries?: string[]; titles?: string[]; geographies?: string[]; segments?: string[] }
+) {
+  const recommendation = state.aiIcpRecommendations.find(
+    (record) => record.id === recommendationId && record.workspaceId === workspaceId
+  );
+
+  if (!recommendation) {
+    throw new Error("AI ICP recommendation not found.");
+  }
+
+  if (patch.name?.trim()) recommendation.name = patch.name.trim();
+  if (patch.industries?.length) recommendation.industries = patch.industries;
+  if (patch.titles?.length) recommendation.titles = patch.titles;
+  if (patch.geographies?.length) recommendation.geographies = patch.geographies;
+  if (patch.segments?.length) recommendation.segments = patch.segments;
+  recommendation.updatedAt = new Date().toISOString();
   return recommendation;
 }
 
@@ -835,7 +865,7 @@ function icpRecommendationFromSignals(input: {
   } satisfies AiIcpRecommendation;
 }
 
-function parsePromptForIcp(prompt: string) {
+export function parsePromptForIcp(prompt: string): IcpDraft {
   const normalized = prompt.toLowerCase();
   const industries = termsFromPrompt(prompt, ["automotive", "dealer", "retail", "ecommerce", "saas", "software", "architecture", "healthcare", "manufacturing"]);
   const titles = termsFromPrompt(prompt, ["owner", "founder", "ceo", "cmo", "marketing", "revops", "sales", "operations", "director"]);

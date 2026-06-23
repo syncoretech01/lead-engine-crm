@@ -25,8 +25,11 @@ import {
   generateAiLeadScores,
   generateAiPersonalizations,
   generateAiRevenueInsights,
-  runAiAutomationSuite
+  parsePromptForIcp,
+  runAiAutomationSuite,
+  updateIcpRecommendation
 } from "@/lib/phase1/ai";
+import { resolveIcpDraft } from "@/lib/llm/icp-drafter";
 import {
   addActivity,
   callOutcomes,
@@ -104,7 +107,7 @@ import {
 } from "@/lib/phase1/sdr";
 import { ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { createSeedState } from "@/lib/phase1/seed";
-import { appendAudit, updateState } from "@/lib/phase1/store";
+import { appendAudit, getSession, readState, updateState } from "@/lib/phase1/store";
 import { requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
 import type {
@@ -1704,6 +1707,84 @@ export async function createAiIcpRecommendationAction(formData: FormData) {
   }, { normalizedTables: aiWriteTables });
 
   revalidatePath("/", "layout");
+}
+
+/**
+ * Build List — step 1: draft an ICP from a free-text description. The model call
+ * runs out-of-band (authorize -> async LLM -> persist) so no DB transaction is
+ * held across network I/O; it falls back to the deterministic parser when the
+ * LLM is disabled or errors. Gated by manage_profiles so lead-gen Managers and
+ * Data Operators can use it (not just Admins).
+ */
+export async function draftLeadListIcpAction(formData: FormData) {
+  const prompt = stringValue(formData.get("prompt"), "Find high-fit B2B accounts similar to our best customers.");
+
+  // Phase A — authorize before any LLM spend.
+  const state = await readState();
+  const session = await getSession(state);
+  assertPermission(session, "manage_profiles");
+
+  // Phase B — async: resolve the ICP draft (model when enabled, else keyword parser).
+  const { draft } = await resolveIcpDraft(prompt, () => parsePromptForIcp(prompt));
+
+  // Phase C — persist.
+  await updateState((freshState, freshSession) => {
+    assertPermission(freshSession, "manage_profiles");
+    const recommendation = createIcpRecommendationFromPrompt(
+      freshState,
+      freshSession.workspace.id,
+      freshSession.user.id,
+      prompt,
+      draft
+    );
+
+    appendAudit(freshState, freshSession, {
+      objectType: "ai_icp_recommendation",
+      objectId: recommendation.id,
+      action: "created_from_prompt",
+      newValue: recommendation,
+      reason: "Build List ICP prompt"
+    });
+  }, { normalizedTables: aiWriteTables });
+
+  revalidatePath("/build-list");
+}
+
+/**
+ * Build List — step 2: apply user edits to the drafted ICP and create a real
+ * SearchProfile from it. Gated by manage_profiles.
+ */
+export async function confirmLeadListIcpAction(formData: FormData) {
+  await updateState((state, session) => {
+    assertPermission(session, "manage_profiles");
+    const recommendationId = stringValue(formData.get("recommendationId"));
+
+    const industries = stringValue(formData.get("industries"));
+    const titles = stringValue(formData.get("titles"));
+    const geographies = stringValue(formData.get("geographies"));
+    const segments = stringValue(formData.get("segments"));
+
+    updateIcpRecommendation(state, session.workspace.id, recommendationId, {
+      name: stringValue(formData.get("name")) || undefined,
+      industries: industries ? splitList(industries) : undefined,
+      titles: titles ? splitList(titles) : undefined,
+      geographies: geographies ? splitList(geographies) : undefined,
+      segments: segments ? splitList(segments) : undefined
+    });
+
+    const result = applyAiIcpRecommendation(state, session.workspace.id, recommendationId, session.user.id);
+
+    appendAudit(state, session, {
+      objectType: "ai_icp_recommendation",
+      objectId: result.recommendation.id,
+      action: "applied_to_search_profile",
+      newValue: result,
+      reason: "Build List ICP confirmed into a Search Profile"
+    });
+  }, { normalizedTables: aiWriteTables });
+
+  revalidatePath("/build-list");
+  revalidatePath("/search-profiles");
 }
 
 export async function generateAiDeliverabilityRecommendationsAction() {
