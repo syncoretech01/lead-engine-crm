@@ -28,6 +28,7 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1075.0",
     "@fontsource/manrope": "^5.2.8",
     "@fontsource/poppins": "^5.2.7",
     "@prisma/client": "^6.19.3",
