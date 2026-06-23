@@ -129,7 +129,7 @@ export default async function BuildListPage() {
   const anyActive = stages.some((stage) => stage.status === "active");
   const progressPct = ((doneCount + (anyActive ? 0.5 : 0)) / stages.length) * 100;
   const stepLabel = `Step ${Math.min(doneCount + (anyActive ? 1 : 0), stages.length)} of ${stages.length}`;
-  const currentStage = stages.find((stage) => stage.status === "active");
+  const currentStage = stages.find((stage) => stage.status !== "done");
 
   return (
     <>

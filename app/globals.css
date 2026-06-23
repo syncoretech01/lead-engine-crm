@@ -2925,12 +2925,15 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding: 18px 20px;
 }
 
 .build-stage-head {
   display: flex;
   align-items: center;
   gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .build-stage-head .panel-title-wrap {
