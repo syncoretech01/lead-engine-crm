@@ -1,13 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type {
-  AppState,
-  Contact,
-  LeadJob,
-  LeadSourceEstimate,
-  Priority,
-  SearchProfile,
-  Session
-} from "@/lib/phase1/types";
+import { estimateLeadJobCost } from "@/lib/phase1/lead-cost";
+import type { AppState, Contact, LeadJob, Priority, SearchProfile, Session } from "@/lib/phase1/types";
 
 type LeadJobPreflightInput = {
   profile?: SearchProfile;
@@ -19,56 +12,20 @@ type LeadJobPreflightInput = {
   highValueOnlyEnrichment?: boolean;
 };
 
-type SourceCostProfile = {
-  unitCostCents: number;
-  creditsPerRecord: number;
-  confidence: number;
-  volumeShare: number;
-};
-
-const sourceCostProfiles: Record<string, SourceCostProfile> = {
-  "CSV Upload": { unitCostCents: 0, creditsPerRecord: 0, confidence: 94, volumeShare: 0.9 },
-  Apollo: { unitCostCents: 8, creditsPerRecord: 1, confidence: 86, volumeShare: 1 },
-  Hunter: { unitCostCents: 3, creditsPerRecord: 1, confidence: 80, volumeShare: 0.72 },
-  "Google Places": { unitCostCents: 4, creditsPerRecord: 1, confidence: 82, volumeShare: 0.82 },
-  Apify: { unitCostCents: 6, creditsPerRecord: 1, confidence: 72, volumeShare: 0.55 }
-};
-
-const fallbackCostProfile: SourceCostProfile = {
-  unitCostCents: 5,
-  creditsPerRecord: 1,
-  confidence: 70,
-  volumeShare: 0.65
-};
-
 export function createLeadJobPreflight(input: LeadJobPreflightInput) {
   const sources = normalizedSources(input.sources, input.profile?.sources);
-  const requestedRecords = Math.max(
-    0,
-    Math.round(input.requestedRecords ?? input.profile?.estimatedVolume ?? 0)
-  );
-  const baselineRecords = requestedRecords || 100;
-  const estimates = sources.map((source) => estimateSource(source, baselineRecords, sources.length));
-  const estimatedRecords = estimates.reduce((total, estimate) => total + estimate.estimatedRecords, 0);
-  const estimatedCostCents = estimates.reduce((total, estimate) => total + estimate.estimatedCostCents, 0);
-  const estimatedCredits = estimates.reduce((total, estimate) => total + estimate.estimatedCredits, 0);
-  const enrichmentBudgetCents = Math.max(0, Math.round(input.enrichmentBudgetCents ?? Math.round(estimatedRecords * 2)));
-  const totalEstimatedCostCents = estimatedCostCents + enrichmentBudgetCents;
-  const budgetCapCents = Math.max(0, Math.round(input.budgetCapCents ?? Math.ceil(totalEstimatedCostCents * 1.15)));
+  const requestedRecords = input.requestedRecords ?? input.profile?.estimatedVolume ?? 0;
+  const cost = estimateLeadJobCost({
+    sources,
+    requestedRecords,
+    budgetCapCents: input.budgetCapCents,
+    enrichmentBudgetCents: input.enrichmentBudgetCents
+  });
 
   return {
     jobName: input.name || (input.profile ? `${input.profile.name} Job` : "Manual lead job"),
-    sources,
-    requestedRecords: baselineRecords,
-    estimatedRecords,
-    estimatedCostCents: totalEstimatedCostCents,
-    estimatedAcquisitionCostCents: estimatedCostCents,
-    estimatedCredits,
-    budgetCapCents,
-    enrichmentBudgetCents,
     highValueOnlyEnrichment: input.highValueOnlyEnrichment ?? false,
-    budgetStatus: budgetCapCents >= totalEstimatedCostCents ? "Within budget" as const : "Over budget" as const,
-    sourceEstimates: estimates
+    ...cost
   };
 }
 
@@ -202,22 +159,6 @@ export function phase4JobDefaults(job: LeadJob): LeadJob {
     highValueOnlyEnrichment: job.highValueOnlyEnrichment ?? false,
     actualCostCents: job.actualCostCents ?? Math.round(job.actualCost * 100),
     actualCostSource: job.actualCostSource ?? "Demo"
-  };
-}
-
-function estimateSource(source: string, requestedRecords: number, sourceCount: number): LeadSourceEstimate {
-  const profile = sourceCostProfiles[source] ?? fallbackCostProfile;
-  const weightedRecords = requestedRecords * profile.volumeShare / Math.max(sourceCount, 1);
-  const estimatedRecords = Math.max(1, Math.round(weightedRecords));
-  const estimatedCostCents = estimatedRecords * profile.unitCostCents;
-
-  return {
-    source,
-    estimatedRecords,
-    estimatedCostCents,
-    estimatedCredits: Math.ceil(estimatedRecords * profile.creditsPerRecord),
-    unitCostCents: profile.unitCostCents,
-    confidence: profile.confidence
   };
 }
 
