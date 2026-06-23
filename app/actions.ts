@@ -110,6 +110,7 @@ import { createSeedState } from "@/lib/phase1/seed";
 import { appendAudit, getSession, readState, updateState } from "@/lib/phase1/store";
 import { requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
+import { enrichContactsWithWaterfall } from "@/lib/phase1/waterfall-enrichment-service";
 import type {
   AppState,
   Session,
@@ -1785,6 +1786,37 @@ export async function confirmLeadListIcpAction(formData: FormData) {
 
   revalidatePath("/build-list");
   revalidatePath("/search-profiles");
+}
+
+/**
+ * Build List — step 4: run the recommended waterfall over the workspace's
+ * contacts that still need an email or phone. enrichContactsWithWaterfall does
+ * its own read/authorize(manage_waterfalls)/async/persist; this just selects the
+ * targets. Real enrichment values require live providers (mock otherwise).
+ */
+export async function approveBuildListEnrichmentAction(formData: FormData) {
+  const templateId = stringValue(formData.get("templateId"));
+  if (!templateId) {
+    throw new Error("A waterfall template is required.");
+  }
+
+  const state = await readState();
+  const session = await getSession(state);
+  assertPermission(session, "manage_waterfalls");
+
+  const contactIds = state.contacts
+    .filter(
+      (contact) =>
+        contact.workspaceId === session.workspace.id && !contact.isSuppressed && (!contact.phone || !contact.email)
+    )
+    .slice(0, 200)
+    .map((contact) => contact.id);
+
+  if (contactIds.length > 0) {
+    await enrichContactsWithWaterfall({ templateId, contactIds });
+  }
+
+  revalidatePath("/build-list");
 }
 
 export async function generateAiDeliverabilityRecommendationsAction() {

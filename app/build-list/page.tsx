@@ -1,11 +1,31 @@
 import Link from "next/link";
-import { ArrowRight, Database, DollarSign, ListChecks, Play, Sparkles, Target, Wand2 } from "lucide-react";
-import { confirmLeadListIcpAction, createLeadJobAction, draftLeadListIcpAction } from "@/app/actions";
+import {
+  ArrowRight,
+  BadgeCheck,
+  Database,
+  DollarSign,
+  ListChecks,
+  Play,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Wand2,
+  Workflow
+} from "lucide-react";
+import {
+  approveBuildListEnrichmentAction,
+  confirmLeadListIcpAction,
+  createLeadJobAction,
+  draftLeadListIcpAction,
+  runVerificationAction
+} from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { llmEnabled } from "@/lib/llm/openai-client";
 import { createLeadJobPreflight } from "@/lib/phase1/lead-planning";
 import { leadSourceOptions, recommendSourcesForIcp } from "@/lib/phase1/source-recommender";
+import { pickWaterfallTemplateForProfile } from "@/lib/phase1/waterfall-recommender";
+import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { StatCard } from "@/components/ui-metrics";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -24,7 +44,7 @@ export default async function BuildListPage({
 }: {
   searchParams?: Promise<BuildListSearchParams>;
 }) {
-  const { state, workspaceId } = await getWorkspaceContext("manage_profiles");
+  const { state, session, workspaceId } = await getWorkspaceContext("manage_profiles");
   const params = (await searchParams) ?? {};
   const aiOn = llmEnabled();
 
@@ -78,6 +98,25 @@ export default async function BuildListPage({
       budgetDollars: Math.round(preflight.budgetCapCents / 100)
     };
   }
+
+  const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId && !contact.isSuppressed);
+  const gradeCounts = (["A", "B", "C", "D", "S"] as const).map((grade) => ({
+    grade,
+    count: contacts.filter((contact) => contact.grade === grade).length
+  }));
+  const needsEnrichment = contacts.filter((contact) => !contact.phone || !contact.email);
+
+  const templates = waterfallTemplatesForWorkspace(state, workspaceId);
+  const enrichChoice = selectedProfile
+    ? pickWaterfallTemplateForProfile({
+        industries: selectedProfile.industries,
+        titles: selectedProfile.titles,
+        segments: selectedProfile.segmentRules,
+        templates
+      })
+    : null;
+  const enrichTemplate = enrichChoice ? templates.find((template) => template.id === enrichChoice.templateId) : undefined;
+  const canEnrich = session.permissions.includes("manage_waterfalls");
 
   return (
     <>
@@ -293,6 +332,87 @@ export default async function BuildListPage({
       <section className="panel">
         <div className="panel-header">
           <div className="panel-title-wrap">
+            <h2 className="section-title">Verify emails</h2>
+            <p className="section-subtitle">
+              Grade contacts (A–S) before enrichment so you only enrich and assign clean records.
+            </p>
+          </div>
+          <ShieldCheck size={18} aria-hidden="true" />
+        </div>
+        <div className="chip-row">
+          {gradeCounts.map(({ grade, count }) => (
+            <span className="pill" key={grade}>
+              Grade {grade}: {formatNumber(count)}
+            </span>
+          ))}
+          <span className="pill">Total: {formatNumber(contacts.length)}</span>
+        </div>
+        <form action={runVerificationAction} className="form-grid">
+          <div className="field integration-actions">
+            <button className="button secondary" type="submit">
+              <BadgeCheck size={17} aria-hidden="true" />
+              Run email verification
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {enrichTemplate && enrichChoice ? (
+        <section className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Enrichment plan</h2>
+              <p className="section-subtitle">
+                Best-fit waterfall for this ICP — approve to fill missing emails and phones via the provider waterfall.
+              </p>
+            </div>
+            <Workflow size={18} aria-hidden="true" />
+          </div>
+          <div className="chip-row">
+            <StatusPill label={enrichTemplate.name} tone="info" />
+            <span className="pill">{formatNumber(needsEnrichment.length)} need enrichment</span>
+            <span className="pill">
+              {enrichTemplate.maxCostPerLeadCents
+                ? `Max ${formatCents(enrichTemplate.maxCostPerLeadCents * needsEnrichment.length)}`
+                : "Metered per provider"}
+            </span>
+          </div>
+          <p className="surface-note">{enrichChoice.rationale}</p>
+          <div className="chip-row">
+            {enrichTemplate.steps.map((step) => (
+              <span className="pill" key={step.id}>
+                {step.order} · {labelize(step.stage)}
+                {step.providerIds.length ? ` · ${step.providerIds.join(", ")}` : ""}
+              </span>
+            ))}
+          </div>
+          {canEnrich ? (
+            needsEnrichment.length > 0 ? (
+              <form action={approveBuildListEnrichmentAction} className="form-grid">
+                <input type="hidden" name="templateId" value={enrichTemplate.id} />
+                <div className="field integration-actions">
+                  <button className="button primary" type="submit">
+                    <Workflow size={17} aria-hidden="true" />
+                    Approve &amp; enrich ({formatNumber(needsEnrichment.length)})
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="surface-note">No contacts are missing an email or phone — nothing to enrich.</p>
+            )
+          ) : (
+            <p className="surface-note">Enrichment runs are limited to Admins and Managers.</p>
+          )}
+          <p className="surface-note">
+            Enrichment uses your live providers when SYNCORE_ENABLE_LIVE_PROVIDERS is on; otherwise it runs in mock mode
+            with no values written.
+          </p>
+        </section>
+      ) : null}
+
+      <section className="panel">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
             <h2 className="section-title">Recent runs</h2>
             <p className="section-subtitle">
               Queued runs wait for source data — extraction runs via the provider worker (with live providers on) or a CSV import in Data Staging.
@@ -354,6 +474,13 @@ export default async function BuildListPage({
 
 function formatCents(value: number) {
   return formatCurrency(value / 100);
+}
+
+function labelize(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function strParam(value: string | string[] | undefined): string {
