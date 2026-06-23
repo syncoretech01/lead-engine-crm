@@ -87,7 +87,8 @@ export function assignWorkspaceLeads(
   state: AppState,
   workspaceId: string,
   assignedById: string,
-  assignedAt = new Date().toISOString()
+  assignedAt = new Date().toISOString(),
+  options?: { eligibleContactIds?: Set<string> }
 ) {
   let created = 0;
   const existingContactIds = new Set(
@@ -102,6 +103,10 @@ export function assignWorkspaceLeads(
     }
 
     if (contact.isSuppressed || contact.priority === "S") {
+      continue;
+    }
+
+    if (options?.eligibleContactIds && !options.eligibleContactIds.has(contact.id)) {
       continue;
     }
 
