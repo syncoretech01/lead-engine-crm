@@ -6,6 +6,7 @@ import type {
   WaterfallStep,
   WaterfallTemplate
 } from "@/lib/phase1/types";
+import { providerRegistry } from "@/lib/providers/registry";
 
 /**
  * Merge a lead-job's inline override onto its selected template at run time
@@ -190,6 +191,40 @@ export function reorderTemplateStep(steps: WaterfallStep[], stepId: string, dire
   if (swapWith < 0 || swapWith >= sorted.length) return normalizeStepOrders(steps);
   [sorted[index], sorted[swapWith]] = [sorted[swapWith], sorted[index]];
   return sorted.map((step, position) => ({ ...step, order: position + 1 }));
+}
+
+/**
+ * Remove provider ids that are no longer in the registry from every template's
+ * steps. A step whose only providers were removed is dropped and the remaining
+ * steps renumbered. Cleans up workspaces seeded before a provider was removed
+ * (the refs were inert, but they shouldn't show in the UI). Idempotent.
+ */
+export function pruneWaterfallTemplateProviders(state: AppState) {
+  if (!Array.isArray(state.waterfallTemplates)) {
+    return { changed: false };
+  }
+  const validIds = new Set<string>(providerRegistry.map((provider) => provider.id));
+  let changed = false;
+
+  for (const template of state.waterfallTemplates) {
+    const keptSteps: WaterfallStep[] = [];
+    for (const step of template.steps) {
+      const filtered = step.providerIds.filter((id) => validIds.has(id));
+      if (step.providerIds.length > 0 && filtered.length === 0) {
+        changed = true;
+        continue;
+      }
+      if (filtered.length !== step.providerIds.length) {
+        changed = true;
+        keptSteps.push({ ...step, providerIds: filtered });
+      } else {
+        keptSteps.push(step);
+      }
+    }
+    template.steps = keptSteps.length === template.steps.length ? keptSteps : normalizeStepOrders(keptSteps);
+  }
+
+  return { changed };
 }
 
 export function waterfallTemplatesForWorkspace(state: AppState, workspaceId: string): WaterfallTemplate[] {

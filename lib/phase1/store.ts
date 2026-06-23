@@ -33,7 +33,7 @@ import { ensureReportingDefaults } from "@/lib/phase1/reporting";
 import { createSeedState } from "@/lib/phase1/seed";
 import { defaultSegmentRules } from "@/lib/phase1/scoring";
 import { ensureSdrDefaults } from "@/lib/phase1/sdr";
-import { ensureWaterfallDefaults } from "@/lib/phase1/waterfall-templates";
+import { ensureWaterfallDefaults, pruneWaterfallTemplateProviders } from "@/lib/phase1/waterfall-templates";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import type { AppState, AuditLog, Permission, Session } from "@/lib/phase1/types";
 import { defaultWorkspacePath, hasPermission, resolveSession, type SessionSelection } from "@/lib/phase1/auth";
@@ -705,6 +705,8 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
     changed = aiDefaults.changed || changed;
     const waterfallDefaults = ensureWaterfallDefaults(state, workspaceId);
     changed = waterfallDefaults.changed || changed;
+    const prunedTemplates = pruneWaterfallTemplateProviders(state);
+    changed = prunedTemplates.changed || changed;
     const providerConnectionDefaults = ensureProviderConnectionsForRegistry(state, workspaceId);
     changed = providerConnectionDefaults.changed || changed;
     const prunedConnections = pruneProviderConnectionsNotInRegistry(state);
