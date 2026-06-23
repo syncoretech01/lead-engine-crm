@@ -70,6 +70,7 @@ const workspaceViews = [
     canAccess: canUseLeadGenerationWorkspace,
     items: [
       { href: "/", label: "Lead Dashboard", icon: LayoutDashboard, permission: "view_records" },
+      { href: "/build-list", label: "Build a Lead List", icon: Sparkles, permission: "manage_profiles" },
       { href: "/search-profiles", label: "Search Profiles", icon: Target, permission: "manage_profiles" },
       { href: "/lead-jobs", label: "Lead Jobs", icon: Database, permission: "run_jobs" },
       { href: "/staging", label: "Data Staging", icon: Search, permission: "import_csv" },
