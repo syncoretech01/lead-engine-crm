@@ -21,6 +21,7 @@ import {
   expiredAuthCookieOptions
 } from "@/lib/phase1/auth-security";
 import { authWriteTables } from "@/lib/phase1/normalized-write-tables";
+import { inviteEmail, passwordResetEmail, sendTransactionalEmail } from "@/lib/phase1/transactional-email-service";
 import { getSession, updateAuthState, updateState } from "@/lib/phase1/store";
 import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
 import type { WorkspaceRole } from "@/lib/phase1/types";
@@ -78,14 +79,28 @@ export async function switchWorkspaceAction(formData: FormData) {
 }
 
 export async function createUserInviteAction(formData: FormData) {
+  const email = stringValue(formData.get("email"));
   let inviteUrl = "";
+  let workspaceId = "";
+  let workspaceName = "";
   await updateState((state, session) => {
     const invite = createUserInvite(state, session, {
-      email: stringValue(formData.get("email")),
+      email,
       role: roleValue(formData.get("role"))
     });
     inviteUrl = invite.url;
+    workspaceId = session.workspace.id;
+    workspaceName = session.workspace.name;
   }, { normalizedTables: authWriteTables });
+
+  // Out-of-band: email the invite link via SES when configured live; otherwise
+  // a no-op and the link is still shown on /access. A send failure never blocks
+  // invite creation.
+  try {
+    await sendTransactionalEmail({ workspaceId, email: inviteEmail({ to: email, url: inviteUrl, workspaceName }) });
+  } catch {
+    // invite was created; the link remains available on the page
+  }
 
   revalidatePath("/access");
   redirect(`/access?invite=${encodeURIComponent(inviteUrl)}`);
@@ -129,6 +144,16 @@ export async function requestPasswordResetAction(formData: FormData) {
   await updateAuthState((state) => {
     resetUrl = createPasswordResetToken(state, email)?.url ?? "";
   }, { normalizedTables: authWriteTables });
+
+  // Out-of-band: email the reset link via SES when configured live; otherwise a
+  // no-op and the link is still shown. A send failure never blocks the flow.
+  if (resetUrl) {
+    try {
+      await sendTransactionalEmail({ email: passwordResetEmail({ to: email, url: resetUrl }) });
+    } catch {
+      // token was created; the link remains available
+    }
+  }
 
   const query = resetUrl ? `?sent=1&reset=${encodeURIComponent(resetUrl)}` : "?sent=1";
   redirect(`/reset-password${query}`);
