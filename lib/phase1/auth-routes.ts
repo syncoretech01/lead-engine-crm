@@ -18,5 +18,9 @@ export function isPublicAssetPath(pathname: string) {
 }
 
 export function isSignedWebhookPath(pathname: string) {
-  return pathname === "/api/webhooks/email" || pathname === "/api/webhooks/sms";
+  return (
+    pathname === "/api/webhooks/email" ||
+    pathname === "/api/webhooks/sms" ||
+    pathname === "/api/webhooks/ses"
+  );
 }
