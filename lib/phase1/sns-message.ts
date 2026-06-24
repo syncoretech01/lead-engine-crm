@@ -1,4 +1,4 @@
-import { createVerify } from "node:crypto";
+import { createVerify, X509Certificate } from "node:crypto";
 
 /**
  * Minimal Amazon SNS message signature verification (no SDK dependency). Used by
@@ -79,10 +79,12 @@ export async function verifySnsMessage(message: SnsMessage): Promise<boolean> {
 
   const algorithm = message.SignatureVersion === "2" ? "RSA-SHA256" : "RSA-SHA1";
   try {
+    // Modern Node won't verify against a raw certificate — extract its public key.
+    const publicKey = new X509Certificate(certificate).publicKey;
     const verifier = createVerify(algorithm);
     verifier.update(signingString, "utf8");
     verifier.end();
-    return verifier.verify(certificate, message.Signature, "base64");
+    return verifier.verify(publicKey, message.Signature, "base64");
   } catch {
     return false;
   }
