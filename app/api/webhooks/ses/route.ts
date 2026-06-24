@@ -39,15 +39,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  if (!(await verifySnsMessage(message))) {
-    return NextResponse.json({ error: "Invalid SNS signature." }, { status: 401 });
+  // Subscription confirmation is authorized by the SNS-issued token embedded in
+  // SubscribeURL (which only SNS knows), so it is confirmed by visiting that URL
+  // after validating its host is genuine AWS SNS — it does not require the message
+  // signature. The bounce/complaint notifications below DO require it.
+  if (message.Type === "SubscriptionConfirmation" || message.Type === "UnsubscribeConfirmation") {
+    if (!message.SubscribeURL || !isValidSnsUrl(message.SubscribeURL)) {
+      return NextResponse.json({ error: "Invalid or missing SubscribeURL." }, { status: 400 });
+    }
+    const confirmation = await fetch(message.SubscribeURL).catch(() => null);
+    if (confirmation?.ok) {
+      return NextResponse.json({ status: "subscription-confirmed" });
+    }
+    return NextResponse.json({ error: "Could not reach SubscribeURL." }, { status: 502 });
   }
 
-  if (message.Type === "SubscriptionConfirmation") {
-    if (message.SubscribeURL && isValidSnsUrl(message.SubscribeURL)) {
-      await fetch(message.SubscribeURL).catch(() => undefined);
-    }
-    return NextResponse.json({ status: "subscription-confirmed" });
+  // A forged bounce/complaint could suppress an arbitrary contact, so notifications
+  // must pass full SNS signature verification.
+  if (!(await verifySnsMessage(message))) {
+    return NextResponse.json({ error: "Invalid SNS signature." }, { status: 401 });
   }
 
   if (message.Type !== "Notification") {
