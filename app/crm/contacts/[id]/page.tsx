@@ -47,7 +47,8 @@ import { consentStatuses, lawfulBases } from "@/lib/phase1/compliance";
 import { smsEventStatuses } from "@/lib/phase1/outreach";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastContactDetailModel } from "@/lib/phase1/crm-detail-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { runWaterfallEnrichmentAction } from "@/lib/phase1/waterfall-enrichment-service";
 import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
@@ -70,17 +71,44 @@ const activityIcons: Record<ActivityType, typeof NotebookPen> = {
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
-  const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
-  const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
-  const readModel = await contactDetailReadModelForWorkspace(readState, workspaceId, id);
+  const sessionContext = await getWorkspaceSessionContext("manage_crm");
+  const fastModel = await readFastContactDetailModel(sessionContext.session, sessionContext.workspaceId, id);
+  let state = fastModel?.state;
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
+  let readState = fastModel?.state;
+  let readModel = fastModel?.readModel;
+  const fastReadCheckedVisibility = Boolean(fastModel);
+
+  if (fastModel && !fastModel.visible) {
+    notFound();
+  }
+
+  if (!fastModel) {
+    const context = await getWorkspaceContext("manage_crm");
+    state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+    const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
+    readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
+    readModel = await contactDetailReadModelForWorkspace(readState, workspaceId, id);
+  }
+
+  if (!state || !readState || !readModel) {
+    notFound();
+  }
+
   const contact = readModel.contact;
 
   if (!contact) {
     notFound();
   }
 
-  if (restrictsToOwnedRecords(session) && !ownedCrmRecordScope(readState, session).contactIds.has(contact.id)) {
+  if (
+    !fastReadCheckedVisibility &&
+    restrictsToOwnedRecords(session) &&
+    !ownedCrmRecordScope(readState, session).contactIds.has(contact.id)
+  ) {
     notFound();
   }
 

@@ -30,7 +30,8 @@ import {
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { recordingConsentStatuses } from "@/lib/phase1/compliance";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastOutreachDashboardModel } from "@/lib/phase1/outreach-dashboard-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
@@ -48,25 +49,48 @@ type EventRow = {
 };
 
 export default async function OutreachEventsPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("send_direct_outreach");
-  const outreachRows = await outreachEventReadRowsForWorkspace(state, workspaceId);
-  const readState = stateWithOutreachEventReadRows(state, workspaceId, outreachRows);
+  const sessionContext = await getWorkspaceSessionContext("send_direct_outreach");
+  const fastModel = await readFastOutreachDashboardModel(sessionContext.session, sessionContext.workspaceId, {
+    scopedToOwnedRecords: true
+  });
+  let state = fastModel?.state;
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
+  let snapshot = fastModel?.snapshot;
+  let contacts = state?.contacts.filter((contact) => contact.workspaceId === workspaceId);
+  let campaigns = state?.outreachCampaigns.filter((campaign) => campaign.workspaceId === workspaceId);
+  let sequences = fastModel?.sequences;
+  let steps = fastModel?.steps;
+
+  if (!fastModel) {
+    const context = await getWorkspaceContext("send_direct_outreach");
+    state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+    const outreachRows = await outreachEventReadRowsForWorkspace(state, workspaceId);
+    const readState = stateWithOutreachEventReadRows(state, workspaceId, outreachRows);
+    const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
+    const scopedState = ownedScope
+      ? {
+          ...readState,
+          emailEvents: readState.emailEvents.filter((event) => (event.contactId ? ownedScope.contactIds.has(event.contactId) : false)),
+          smsEvents: readState.smsEvents.filter((event) => (event.contactId ? ownedScope.contactIds.has(event.contactId) : false)),
+          trackedCalls: readState.trackedCalls.filter((call) => (call.contactId ? ownedScope.contactIds.has(call.contactId) : false)),
+          webhookEvents: []
+        }
+      : readState;
+    snapshot = outreachDashboardSnapshot(scopedState, workspaceId);
+    contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId);
+    campaigns = state.outreachCampaigns.filter((campaign) => campaign.workspaceId === workspaceId);
+    sequences = state.campaignSequences.filter((sequence) => sequence.workspaceId === workspaceId);
+    steps = state.sequenceSteps.filter((step) => step.workspaceId === workspaceId);
+  }
+
+  if (!state || !snapshot || !contacts || !campaigns || !sequences || !steps) {
+    throw new Error("Unable to load outreach events.");
+  }
+
   const canManageOutreach = session.permissions.includes("manage_outreach");
-  const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
-  const scopedState = ownedScope
-    ? {
-        ...readState,
-        emailEvents: readState.emailEvents.filter((event) => (event.contactId ? ownedScope.contactIds.has(event.contactId) : false)),
-        smsEvents: readState.smsEvents.filter((event) => (event.contactId ? ownedScope.contactIds.has(event.contactId) : false)),
-        trackedCalls: readState.trackedCalls.filter((call) => (call.contactId ? ownedScope.contactIds.has(call.contactId) : false)),
-        webhookEvents: []
-      }
-    : readState;
-  const snapshot = outreachDashboardSnapshot(scopedState, workspaceId);
-  const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId);
-  const campaigns = state.outreachCampaigns.filter((campaign) => campaign.workspaceId === workspaceId);
-  const sequences = state.campaignSequences.filter((sequence) => sequence.workspaceId === workspaceId);
-  const steps = state.sequenceSteps.filter((step) => step.workspaceId === workspaceId);
 
   const emailReplies = snapshot.emailEvents.filter((event) => event.eventType === "Replied");
   const smsReplies = snapshot.smsEvents.filter((event) => event.status === "Replied");

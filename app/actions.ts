@@ -697,7 +697,7 @@ export async function createOpportunityAction(formData: FormData) {
     });
   }, { normalizedTables: crmWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateCrmPages(crmDetailPathsFromForm(formData));
 }
 
 export async function updateOpportunityStageAction(formData: FormData) {
@@ -739,7 +739,7 @@ export async function updateOpportunityStageAction(formData: FormData) {
     });
   }, { normalizedTables: crmWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateCrmPages();
 }
 
 export async function createTaskAction(formData: FormData) {
@@ -786,7 +786,7 @@ export async function createTaskAction(formData: FormData) {
     });
   }, { normalizedTables: crmWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateCrmPages(crmDetailPathsFromForm(formData));
 }
 
 export async function completeTaskAction(formData: FormData) {
@@ -824,7 +824,7 @@ export async function completeTaskAction(formData: FormData) {
     });
   }, { normalizedTables: crmWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateCrmPages();
 }
 
 export async function createNoteAction(formData: FormData) {
@@ -866,7 +866,7 @@ export async function createNoteAction(formData: FormData) {
     });
   }, { normalizedTables: crmWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateCrmPages(crmDetailPathsFromForm(formData));
 }
 
 export async function createCallLogAction(formData: FormData) {
@@ -911,7 +911,7 @@ export async function createCallLogAction(formData: FormData) {
     });
   }, { normalizedTables: crmWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateCrmPages(crmDetailPathsFromForm(formData));
 }
 
 export async function createCustomFieldAction(formData: FormData) {
@@ -941,7 +941,7 @@ export async function createCustomFieldAction(formData: FormData) {
     });
   }, { normalizedTables: crmWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateCrmPages();
 }
 
 export async function setCustomFieldValueAction(formData: FormData) {
@@ -998,7 +998,7 @@ export async function setCustomFieldValueAction(formData: FormData) {
     });
   }, { normalizedTables: crmWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateCrmPages([`/crm/contacts/${stringValue(formData.get("objectId"))}`, `/crm/accounts/${stringValue(formData.get("objectId"))}`]);
 }
 
 export async function runSdrAssignmentAction() {
@@ -1015,7 +1015,7 @@ export async function runSdrAssignmentAction() {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateSdrPages();
 }
 
 export async function logFirstTouchAction(formData: FormData) {
@@ -1039,7 +1039,7 @@ export async function logFirstTouchAction(formData: FormData) {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateSdrPages();
 }
 
 export async function completeFollowUpReminderAction(formData: FormData) {
@@ -1055,7 +1055,7 @@ export async function completeFollowUpReminderAction(formData: FormData) {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateSdrPages();
 }
 
 export async function reassignSdrAssignmentAction(formData: FormData) {
@@ -1078,7 +1078,7 @@ export async function reassignSdrAssignmentAction(formData: FormData) {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateSdrPages();
 }
 
 export async function applyReassignmentRulesAction() {
@@ -1094,7 +1094,7 @@ export async function applyReassignmentRulesAction() {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateSdrPages();
 }
 
 export async function createReassignmentRuleAction(formData: FormData) {
@@ -1118,7 +1118,7 @@ export async function createReassignmentRuleAction(formData: FormData) {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateSdrPages();
 }
 
 export async function deleteReassignmentRuleAction(formData: FormData) {
@@ -1136,7 +1136,7 @@ export async function deleteReassignmentRuleAction(formData: FormData) {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateSdrPages();
 }
 
 export async function createOutreachCampaignAction(formData: FormData) {
@@ -1163,7 +1163,7 @@ export async function createOutreachCampaignAction(formData: FormData) {
     });
   }, { normalizedTables: outreachSetupWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateOutreachPages();
 }
 
 export async function createCampaignSequenceAction(formData: FormData) {
@@ -1195,7 +1195,7 @@ export async function createCampaignSequenceAction(formData: FormData) {
     });
   }, { normalizedTables: outreachSetupWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateOutreachPages();
 }
 
 export async function createSequenceStepAction(formData: FormData) {
@@ -1235,7 +1235,7 @@ export async function createSequenceStepAction(formData: FormData) {
     });
   }, { normalizedTables: outreachSetupWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateOutreachPages();
 }
 
 export async function sendCampaignAction(formData: FormData) {
@@ -1262,7 +1262,7 @@ export async function sendCampaignAction(formData: FormData) {
       });
     }, { normalizedTables: outreachCampaignSendWriteTables });
 
-    revalidatePath("/", "layout");
+    revalidateOutreachPages();
     return;
   }
 
@@ -1288,7 +1288,7 @@ export async function sendCampaignAction(formData: FormData) {
     });
   }, { normalizedTables: outreachCampaignSendWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateOutreachPages();
 }
 
 export { sendCampaignAction as simulateCampaignSendAction };
@@ -1314,7 +1314,7 @@ export async function scoreAndAssignByCampaignAction(formData: FormData) {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateSdrPages(["/outreach/campaigns", "/outreach/events"]);
 }
 
 export async function assignLeadsNowAction() {
@@ -1343,7 +1343,7 @@ export async function assignLeadsNowAction() {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateSdrPages();
   revalidatePath("/build-list");
 }
 
@@ -1380,7 +1380,7 @@ export async function recordEmailEventAction(formData: FormData) {
     });
   }, { normalizedTables: outreachEmailWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateOutreachPages(crmDetailPathsFromForm(formData));
 }
 
 export async function sendDirectEmailAction(formData: FormData) {
@@ -1433,9 +1433,7 @@ export async function sendDirectEmailAction(formData: FormData) {
     });
   }, { normalizedTables: outreachEmailWriteTables });
 
-  revalidatePath("/", "layout");
-  revalidatePath(`/crm/contacts/${contactId}`);
-  revalidatePath("/outreach/events");
+  revalidateOutreachPages([`/crm/contacts/${contactId}`]);
 }
 
 export async function sendAssignedBulkEmailAction(formData: FormData) {
@@ -1504,9 +1502,7 @@ export async function sendAssignedBulkEmailAction(formData: FormData) {
     });
   }, { normalizedTables: outreachEmailWriteTables });
 
-  revalidatePath("/", "layout");
-  revalidatePath("/sdr/queue");
-  revalidatePath("/outreach/events");
+  revalidateOutreachPages();
 }
 
 export async function recordSmsEventAction(formData: FormData) {
@@ -1534,7 +1530,7 @@ export async function recordSmsEventAction(formData: FormData) {
     });
   }, { normalizedTables: outreachSmsWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateOutreachPages(crmDetailPathsFromForm(formData));
 }
 
 export async function recordTrackedCallAction(formData: FormData) {
@@ -1566,7 +1562,7 @@ export async function recordTrackedCallAction(formData: FormData) {
     });
   }, { normalizedTables: outreachTrackedCallWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateOutreachPages(crmDetailPathsFromForm(formData));
 }
 
 export async function updateOutreachProviderStatusAction(formData: FormData) {
@@ -1594,7 +1590,7 @@ export async function updateOutreachProviderStatusAction(formData: FormData) {
     });
   }, { normalizedTables: outreachSetupWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateOutreachPages();
 }
 
 export async function generateReportSnapshotsAction() {
@@ -1710,9 +1706,9 @@ export async function completeDataSubjectRequestAction(formData: FormData) {
 }
 
 export async function updateContactComplianceAction(formData: FormData) {
+  const contactId = stringValue(formData.get("contactId"));
   await updateState((state, session) => {
     assertPermission(session, "manage_compliance");
-    const contactId = stringValue(formData.get("contactId"));
     const contact = state.contacts.find((item) => item.id === contactId && item.workspaceId === session.workspace.id);
 
     if (!contact) {
@@ -1773,7 +1769,7 @@ export async function updateContactComplianceAction(formData: FormData) {
     });
   }, { normalizedTables: complianceWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateCrmPages([`/crm/contacts/${contactId}`]);
 }
 
 export async function resolveDeliverabilityAlertAction(formData: FormData) {
@@ -2296,6 +2292,40 @@ function bulkEmailAudienceValue(value: FormDataEntryValue | null): BulkEmailAudi
     return audience;
   }
   return "all_assigned";
+}
+
+function revalidateCrmPages(paths: string[] = []) {
+  revalidatePath("/crm");
+  revalidatePath("/crm/accounts");
+  revalidatePath("/crm/accounts/[id]", "page");
+  revalidatePath("/crm/contacts");
+  revalidatePath("/crm/contacts/[id]", "page");
+  revalidatePath("/crm/opportunities");
+  for (const path of paths) {
+    if (path) revalidatePath(path);
+  }
+}
+
+function revalidateSdrPages(paths: string[] = []) {
+  revalidatePath("/sdr/queue");
+  revalidatePath("/sdr/manager");
+  revalidateCrmPages(paths);
+}
+
+function revalidateOutreachPages(paths: string[] = []) {
+  revalidatePath("/outreach/campaigns");
+  revalidatePath("/outreach/events");
+  revalidatePath("/sdr/queue");
+  for (const path of paths) {
+    if (path) revalidatePath(path);
+  }
+}
+
+function crmDetailPathsFromForm(formData: FormData) {
+  return [
+    stringValue(formData.get("contactId")) ? `/crm/contacts/${stringValue(formData.get("contactId"))}` : "",
+    stringValue(formData.get("companyId")) ? `/crm/accounts/${stringValue(formData.get("companyId"))}` : ""
+  ].filter(Boolean);
 }
 
 function exportName(type: ExportRecord["type"]) {

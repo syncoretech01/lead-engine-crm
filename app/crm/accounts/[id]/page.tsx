@@ -40,7 +40,8 @@ import {
 } from "@/lib/phase1/crm-event-read-path";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { accountDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastAccountDetailModel } from "@/lib/phase1/crm-detail-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
@@ -61,10 +62,33 @@ const activityIcons: Record<ActivityType, typeof NotebookPen> = {
 
 export default async function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
-  const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
-  const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
-  const readModel = await accountDetailReadModelForWorkspace(readState, workspaceId, id);
+  const sessionContext = await getWorkspaceSessionContext("manage_crm");
+  const fastModel = await readFastAccountDetailModel(sessionContext.session, sessionContext.workspaceId, id);
+  let state = fastModel?.state;
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
+  let readState = fastModel?.state;
+  let readModel = fastModel?.readModel;
+  const fastReadCheckedVisibility = Boolean(fastModel);
+
+  if (fastModel && !fastModel.visible) {
+    notFound();
+  }
+
+  if (!fastModel) {
+    const context = await getWorkspaceContext("manage_crm");
+    state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+    const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
+    readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
+    readModel = await accountDetailReadModelForWorkspace(readState, workspaceId, id);
+  }
+
+  if (!state || !readState || !readModel) {
+    notFound();
+  }
+
   const account = readModel.account;
   const company = readModel.company;
 
@@ -72,7 +96,11 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
     notFound();
   }
 
-  if (restrictsToOwnedRecords(session) && !ownedCrmRecordScope(readState, session).companyIds.has(company.id)) {
+  if (
+    !fastReadCheckedVisibility &&
+    restrictsToOwnedRecords(session) &&
+    !ownedCrmRecordScope(readState, session).companyIds.has(company.id)
+  ) {
     notFound();
   }
 

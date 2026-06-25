@@ -35,19 +35,39 @@ import {
   stateWithOutreachEventReadRows
 } from "@/lib/phase1/outreach-read-path";
 import { defaultPhysicalAddress } from "@/lib/phase1/compliance";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastOutreachDashboardModel } from "@/lib/phase1/outreach-dashboard-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
 export default async function OutreachCampaignsPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_outreach");
-  const outreachRows = await outreachEventReadRowsForWorkspace(state, workspaceId);
-  const readState = stateWithOutreachEventReadRows(state, workspaceId, outreachRows);
-  const snapshot = outreachDashboardSnapshot(readState, workspaceId);
-  const sequences = state.campaignSequences.filter((sequence) => sequence.workspaceId === workspaceId);
-  const steps = state.sequenceSteps.filter((step) => step.workspaceId === workspaceId);
+  const sessionContext = await getWorkspaceSessionContext("manage_outreach");
+  const fastModel = await readFastOutreachDashboardModel(sessionContext.session, sessionContext.workspaceId);
+  let state = fastModel?.state;
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
+  let snapshot = fastModel?.snapshot;
+  let sequences = fastModel?.sequences;
+  let steps = fastModel?.steps;
+
+  if (!fastModel) {
+    const context = await getWorkspaceContext("manage_outreach");
+    state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+    const outreachRows = await outreachEventReadRowsForWorkspace(state, workspaceId);
+    const readState = stateWithOutreachEventReadRows(state, workspaceId, outreachRows);
+    snapshot = outreachDashboardSnapshot(readState, workspaceId);
+    sequences = state.campaignSequences.filter((sequence) => sequence.workspaceId === workspaceId);
+    steps = state.sequenceSteps.filter((step) => step.workspaceId === workspaceId);
+  }
+
+  if (!state || !snapshot || !sequences || !steps) {
+    throw new Error("Unable to load outreach campaigns.");
+  }
+
   const sentToday = snapshot.providers.reduce((total, provider) => total + provider.sentToday, 0);
   const dailyLimit = snapshot.providers.reduce((total, provider) => total + provider.dailyLimit, 0);
   const emailProviders = snapshot.providers.filter((provider) => provider.kind === "Email");

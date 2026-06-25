@@ -24,7 +24,8 @@ import {
   reassignmentTriggers,
   sdrUsers
 } from "@/lib/phase1/sdr";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastSdrManagerModel } from "@/lib/phase1/sdr-manager-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { AppState } from "@/lib/phase1/types";
 import { formatNumber, formatPercent } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
@@ -32,10 +33,27 @@ import { StatCard, LaneCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function SdrManagerPage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_sdr_team");
-  const snapshot = managerDashboardSnapshot(state, workspaceId);
-  const users = sdrUsers(state, workspaceId);
-  const teams = state.sdrTeams.filter((team) => team.workspaceId === workspaceId);
+  const sessionContext = await getWorkspaceSessionContext("manage_sdr_team");
+  const fastModel = await readFastSdrManagerModel(sessionContext.session, sessionContext.workspaceId);
+  let state = fastModel?.state;
+  let workspaceId = sessionContext.workspaceId;
+  let snapshot = fastModel?.snapshot;
+  let users = fastModel?.users;
+  let teams = fastModel?.teams;
+
+  if (!fastModel) {
+    const context = await getWorkspaceContext("manage_sdr_team");
+    state = context.state;
+    workspaceId = context.workspaceId;
+    snapshot = managerDashboardSnapshot(state, workspaceId);
+    users = sdrUsers(state, workspaceId);
+    teams = state.sdrTeams.filter((team) => team.workspaceId === workspaceId);
+  }
+
+  if (!state || !snapshot || !users || !teams) {
+    throw new Error("Unable to load SDR manager dashboard.");
+  }
+
   const activeTeams = teams.filter((team) => team.active);
   const maxActiveLoad = Math.max(...snapshot.workloads.map((workload) => workload.active), 1);
   const riskCount = snapshot.workloads.filter((workload) => workload.overdue > 0 || workload.p1 > 2).length;
