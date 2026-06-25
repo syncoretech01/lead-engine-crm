@@ -22,7 +22,12 @@ import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot, sdrUsers } from "@/lib/phase1/sdr";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import {
+  readFastSdrQueueModel,
+  type SdrQueueAssignmentReadRow,
+  type SdrQueueReadModel
+} from "@/lib/phase1/sdr-queue-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
@@ -33,10 +38,27 @@ const touchStatuses = sdrLeadStatuses.filter((status) =>
 );
 
 export default async function SdrQueuePage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_sdr");
-  const ownerFilter = session.role === "SDR" ? session.user.id : undefined;
+  const sessionContext = await getWorkspaceSessionContext("manage_sdr");
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
+  let snapshot: QueueSnapshot;
+  let bulkOwnerUsers: Array<{ id: string; name: string; email: string; createdAt: string }> = [];
+  let fallbackState: Awaited<ReturnType<typeof getWorkspaceContext>>["state"] | undefined;
+  const fastModel = await readFastSdrQueueModel(session, workspaceId);
+
+  if (fastModel) {
+    snapshot = fastModel.snapshot;
+    bulkOwnerUsers = fastModel.bulkOwnerUsers;
+  } else {
+    const context = await getWorkspaceContext("manage_sdr");
+    fallbackState = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+    snapshot = sdrQueueSnapshot(fallbackState, workspaceId, session.role === "SDR" ? session.user.id : undefined);
+    bulkOwnerUsers = sdrUsers(fallbackState, workspaceId);
+  }
+
   const canRunAssignment = session.permissions.includes("manage_sdr_team");
-  const snapshot = sdrQueueSnapshot(state, workspaceId, ownerFilter);
   const activeAssignments = snapshot.assignments.filter((assignment) => activeStatus(assignment.status));
   const priorityQueue = [...activeAssignments]
     .sort((a, b) => queueWeight(a) - queueWeight(b))
@@ -51,10 +73,9 @@ export default async function SdrQueuePage() {
   const pageTitle = session.role === "SDR" ? "My SDR queue" : "SDR queue";
   const recentlyReplied = snapshot.queueViews.find((view) => view.name === "Recently Replied")?.count ?? 0;
   const bulkRequestId = `sdr-bulk-${session.user.id}-${randomUUID()}`;
-  const bulkOwnerUsers = sdrUsers(state, workspaceId);
   const canSelectBulkOwner = session.role !== "SDR";
-  const bulkEligibleAssignments = activeAssignments.filter((assignment) => {
-    const contact = state.contacts.find((item) => item.id === assignment.contactId && item.workspaceId === workspaceId);
+  const bulkEligibleAssignments = fastModel ? activeAssignments.filter(isFastEmailEligible) : activeAssignments.filter((assignment) => {
+    const contact = fallbackState?.contacts.find((item) => item.id === assignment.contactId && item.workspaceId === workspaceId);
     return Boolean(contact && !directEmailBlockReason(contact));
   });
 
@@ -464,8 +485,12 @@ export default async function SdrQueuePage() {
   );
 }
 
-type AssignmentView = ReturnType<typeof sdrQueueSnapshot>["assignments"][number];
+type QueueSnapshot = ReturnType<typeof sdrQueueSnapshot> | SdrQueueReadModel["snapshot"];
+type AssignmentView = QueueSnapshot["assignments"][number];
 
+function isFastEmailEligible(assignment: AssignmentView): assignment is SdrQueueAssignmentReadRow {
+  return "emailEligible" in assignment && assignment.emailEligible;
+}
 
 function activeStatus(status: string) {
   return !["Won", "Lost", "Disqualified", "Invalid", "Unsubscribed", "Suppressed"].includes(status);

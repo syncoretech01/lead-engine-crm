@@ -12,31 +12,40 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
-import {
-  crmEventReadRowsForWorkspace,
-  stateWithCrmEventReadRows
-} from "@/lib/phase1/crm-event-read-path";
+import { readFastCrmContactsModel, type CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactViewsForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
 export default async function ContactsPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
-  const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
-  const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
-  const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
-  const allContacts = await contactViewsForWorkspace(readState, workspaceId);
-  const contacts = ownedScope ? allContacts.filter((contact) => ownedScope.contactIds.has(contact.id)) : allContacts;
+  const sessionContext = await getWorkspaceSessionContext("manage_crm");
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
+  let contacts: ContactView[];
+  let openTasks = 0;
+  const fastModel = await readFastCrmContactsModel(session, workspaceId);
+
+  if (fastModel) {
+    contacts = fastModel.contacts;
+    openTasks = fastModel.openTaskCount;
+  } else {
+    const { state, session: fallbackSession, workspaceId: fallbackWorkspaceId } = await getWorkspaceContext("manage_crm");
+    session = fallbackSession;
+    workspaceId = fallbackWorkspaceId;
+    const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(state, session) : null;
+    const allContacts = await contactViewsForWorkspace(state, workspaceId);
+    contacts = ownedScope ? allContacts.filter((contact) => ownedScope.contactIds.has(contact.id)) : allContacts;
+    openTasks = state.tasks.filter((task) => task.workspaceId === workspaceId && task.status !== "Completed").length;
+  }
   const verified = contacts.filter((contact) => contact.grade === "A" || contact.grade === "B");
   const callReady = contacts.filter((contact) => Boolean(contact.phone) && !contact.isSuppressed);
   const needsAttention = contacts.filter(
     (contact) => contact.isSuppressed || contact.grade === "C" || contact.grade === "D" || contact.openTasks > 0
   );
-  const openTasks = readState.tasks.filter((task) => task.workspaceId === workspaceId && task.status !== "Completed").length;
   const priorityContacts = [...contacts]
     .sort((a, b) => b.openTasks - a.openTasks || priorityWeight(a.priority) - priorityWeight(b.priority) || b.score - a.score)
     .slice(0, 8);
@@ -330,7 +339,7 @@ export default async function ContactsPage() {
   );
 }
 
-type ContactView = Awaited<ReturnType<typeof contactViewsForWorkspace>>[number];
+type ContactView = CrmContactListRow;
 
 
 function ReadinessRow({

@@ -37,8 +37,14 @@ import { ensureSdrDefaults } from "@/lib/phase1/sdr";
 import { ensureWaterfallDefaults, pruneWaterfallTemplateProviders } from "@/lib/phase1/waterfall-templates";
 import { timeAsync, timeSync } from "@/lib/phase1/performance";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import type { AppState, AuditLog, Permission, Session } from "@/lib/phase1/types";
-import { defaultWorkspacePath, hasPermission, resolveSession, type SessionSelection } from "@/lib/phase1/auth";
+import type { AppState, AuditLog, Permission, Session, WorkspaceRole } from "@/lib/phase1/types";
+import {
+  defaultWorkspacePath,
+  hasPermission,
+  resolveSession,
+  rolePermissions,
+  type SessionSelection
+} from "@/lib/phase1/auth";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
 
 const dataDir = path.join(process.cwd(), ".syncore-data");
@@ -157,6 +163,11 @@ export async function getSession(state?: AppState) {
       return await resolveCurrentSession(state);
     }
 
+    const prismaSession = await getPrismaSession();
+    if (prismaSession) {
+      return prismaSession;
+    }
+
     return (await getRequestStateSession()).session;
   } catch (error) {
     if (isAuthRequiredError(error)) {
@@ -184,6 +195,19 @@ export async function getDeveloperWorkspaceContext() {
   return getWorkspaceContext("manage_workspace");
 }
 
+export async function getWorkspaceSessionContext(permission?: Permission) {
+  return timeAsync("workspace.sessionContext", async () => {
+    const session = await getSession();
+
+    if (permission && !hasPermission(session, permission)) {
+      const { redirect } = await import("next/navigation");
+      redirect(defaultWorkspacePath(session));
+    }
+
+    return { session, workspaceId: session.workspace.id };
+  }, { permission: permission ?? "none" });
+}
+
 const getCachedRequestStateSession = cache(async () => {
   const state = await readState();
   const session = await resolveCurrentSession(state);
@@ -192,6 +216,95 @@ const getCachedRequestStateSession = cache(async () => {
 
 async function getRequestStateSession() {
   return timeAsync("state.requestContext", () => getCachedRequestStateSession());
+}
+
+async function getPrismaSession(): Promise<Session | undefined> {
+  if (resolveStorageDriver() !== "prisma") {
+    return undefined;
+  }
+
+  const payload = await readSignedAuthPayload();
+  if (!payload) {
+    return undefined;
+  }
+
+  const { prisma } = await import("@/lib/prisma");
+  const [authSession, membership, account] = await Promise.all([
+    prisma.authSession.findFirst({
+      where: {
+        id: payload.sessionId,
+        userId: payload.userId,
+        workspaceId: payload.workspaceId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() }
+      },
+      include: {
+        user: true,
+        workspace: true
+      }
+    }),
+    prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: payload.workspaceId,
+          userId: payload.userId
+        }
+      }
+    }),
+    prisma.authAccount.findUnique({
+      where: { userId: payload.userId }
+    })
+  ]);
+
+  if (!authSession || !membership || !account || account.status !== "Active") {
+    throw new Error("Authentication required.");
+  }
+
+  const role = workspaceRoleFromPrisma(membership.role);
+  return {
+    user: {
+      id: authSession.user.id,
+      email: authSession.user.email,
+      name: authSession.user.name,
+      createdAt: authSession.user.createdAt.toISOString()
+    },
+    workspace: {
+      id: authSession.workspace.id,
+      name: authSession.workspace.name,
+      market: authSession.workspace.market ?? "",
+      seats: authSession.workspace.seats,
+      health: authSession.workspace.health ?? "",
+      createdAt: authSession.workspace.createdAt.toISOString(),
+      updatedAt: authSession.workspace.updatedAt.toISOString()
+    },
+    role,
+    permissions: rolePermissions(role),
+    authSessionId: authSession.id,
+    superadmin: account.superadmin
+  };
+}
+
+async function readSignedAuthPayload() {
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    return verifySignedAuthSessionCookie(cookieStore.get(authSessionCookieName)?.value);
+  } catch {
+    return undefined;
+  }
+}
+
+function workspaceRoleFromPrisma(role: string): WorkspaceRole {
+  const roles: Record<string, WorkspaceRole> = {
+    ADMIN: "Admin",
+    MANAGER: "Manager",
+    SDR: "SDR",
+    DATA_OPERATOR: "Data Operator",
+    VIEWER: "Viewer",
+    COMPLIANCE_ADMIN: "Compliance Admin"
+  };
+
+  return roles[role] ?? "Viewer";
 }
 
 export async function resetStore() {
