@@ -22,23 +22,63 @@ import {
   crmEventReadRowsForWorkspace,
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
-import { customFieldValuesForObject, opportunityStages, userNameForId } from "@/lib/phase1/crm";
+import {
+  readFastCrmOverviewModel,
+  type FastCrmOption,
+  type FastCrmOpportunityView
+} from "@/lib/phase1/crm-overview-read-model";
+import { opportunityStages } from "@/lib/phase1/crm";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { opportunityViews, ownedCrmRecordScope } from "@/lib/phase1/queries";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
+import type { CustomField, CustomFieldValue, User } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
 export default async function OpportunitiesPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
-  const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
-  const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
-  const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
-  const opportunities = ownedScope
-    ? opportunityViews(readState, workspaceId).filter((opportunity) => opportunity.ownerUserId === session.user.id)
-    : opportunityViews(readState, workspaceId);
+  const sessionContext = await getWorkspaceSessionContext("manage_crm");
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
+  let opportunities: FastCrmOpportunityView[] = [];
+  let opportunityFields: CustomField[] = [];
+  let customFieldValues: CustomFieldValue[] = [];
+  let accountOptions: FastCrmOption[] = [];
+  let contactOptions: FastCrmOption[] = [];
+  let ownerOptions: User[] = [];
+  const fastModel = await readFastCrmOverviewModel(session, workspaceId);
+
+  if (fastModel) {
+    opportunities = fastModel.opportunities;
+    opportunityFields = fastModel.opportunityFields;
+    customFieldValues = fastModel.customFieldValues;
+    accountOptions = fastModel.accountOptions;
+    contactOptions = fastModel.contactOptions;
+    ownerOptions = fastModel.users;
+  } else {
+    const context = await getWorkspaceContext("manage_crm");
+    const state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+    const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
+    const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
+    const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
+    opportunities = ownedScope
+      ? opportunityViews(readState, workspaceId).filter((opportunity) => opportunity.ownerUserId === session.user.id)
+      : opportunityViews(readState, workspaceId);
+    opportunityFields = state.customFields.filter(
+      (field) => field.workspaceId === workspaceId && field.objectType === "opportunity"
+    );
+    customFieldValues = state.customFieldValues;
+    accountOptions = state.companies
+      .filter((company) => company.workspaceId === workspaceId && (!ownedScope || ownedScope.companyIds.has(company.id)))
+      .map((company) => ({ id: company.id, name: company.name }));
+    contactOptions = state.contacts
+      .filter((contact) => contact.workspaceId === workspaceId && (!ownedScope || ownedScope.contactIds.has(contact.id)))
+      .map((contact) => ({ id: contact.id, name: contact.name }));
+    ownerOptions = state.users;
+  }
   const openOpportunities = opportunities.filter((opportunity) => !isClosedStage(opportunity.stage));
   const openPipeline = openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
   const weightedForecast = openOpportunities.reduce(
@@ -47,9 +87,6 @@ export default async function OpportunitiesPage() {
   );
   const proposalOpportunities = opportunities.filter((opportunity) => opportunity.stage === "Proposal");
   const wonOpportunities = opportunities.filter((opportunity) => opportunity.stage === "Closed won");
-  const opportunityFields = state.customFields.filter(
-    (field) => field.workspaceId === workspaceId && field.objectType === "opportunity"
-  );
   const stageRows = stageSummary(opportunities);
   const maxStageAmount = Math.max(...stageRows.map((row) => row.amount), 1);
   const focusOpportunities = [...openOpportunities]
@@ -291,26 +328,22 @@ export default async function OpportunitiesPage() {
             <div className="field">
               <label htmlFor="companyId">Account</label>
               <select id="companyId" name="companyId" required>
-                {state.companies
-                  .filter((company) => company.workspaceId === workspaceId && (!ownedScope || ownedScope.companyIds.has(company.id)))
-                  .map((company) => (
-                    <option key={company.id} value={company.id}>
-                      {company.name}
-                    </option>
-                  ))}
+                {accountOptions.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="field">
               <label htmlFor="contactId">Contact</label>
               <select id="contactId" name="contactId" defaultValue="">
                 <option value="">No primary contact</option>
-                {state.contacts
-                  .filter((contact) => contact.workspaceId === workspaceId && (!ownedScope || ownedScope.contactIds.has(contact.id)))
-                  .map((contact) => (
-                    <option key={contact.id} value={contact.id}>
-                      {contact.name}
-                    </option>
-                  ))}
+                {contactOptions.map((contact) => (
+                  <option key={contact.id} value={contact.id}>
+                    {contact.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="field">
@@ -337,8 +370,8 @@ export default async function OpportunitiesPage() {
             </div>
             <div className="field">
               <label htmlFor="ownerUserId">Owner</label>
-              <select id="ownerUserId" name="ownerUserId" defaultValue={state.users[0]?.id}>
-                {state.users.map((user) => (
+              <select id="ownerUserId" name="ownerUserId" defaultValue={ownerOptions[0]?.id}>
+                {ownerOptions.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.name}
                   </option>
@@ -446,7 +479,7 @@ export default async function OpportunitiesPage() {
             </thead>
             <tbody>
               {opportunities.map((opportunity) => {
-                const fieldMap = customFieldValuesForObject(state, opportunity.id);
+                const fieldMap = customFieldValuesForObject(customFieldValues, opportunity.id);
 
                 return (
                   <tr key={opportunity.id}>
@@ -468,7 +501,7 @@ export default async function OpportunitiesPage() {
                     </td>
                     <td>{formatCurrency(opportunity.amount)}</td>
                     <td>{opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : "Not set"}</td>
-                    <td>{userNameForId(state, opportunity.ownerUserId)}</td>
+                    <td>{opportunity.owner}</td>
                     <td>
                       <div className="chip-row">
                         {opportunityFields.map((field) => (
@@ -489,11 +522,15 @@ export default async function OpportunitiesPage() {
   );
 }
 
-type OpportunityView = ReturnType<typeof opportunityViews>[number];
+type OpportunityView = FastCrmOpportunityView;
 
 
 function isClosedStage(stage: OpportunityView["stage"]) {
   return stage === "Closed won" || stage === "Closed lost";
+}
+
+function customFieldValuesForObject(values: CustomFieldValue[], objectId: string) {
+  return new Map(values.filter((value) => value.objectId === objectId).map((value) => [value.customFieldId, value]));
 }
 
 function stageSummary(opportunities: OpportunityView[]) {

@@ -15,25 +15,45 @@ import {
   crmEventReadRowsForWorkspace,
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
+import {
+  readFastCrmOverviewModel,
+  type FastCrmAccountView,
+  type FastCrmOpportunityView
+} from "@/lib/phase1/crm-overview-read-model";
 import { opportunityStages } from "@/lib/phase1/crm";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { accountViewsForWorkspace, opportunityViews, ownedCrmRecordScope } from "@/lib/phase1/queries";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountsPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
-  const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
-  const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
-  const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
-  const allAccounts = await accountViewsForWorkspace(readState, workspaceId);
-  const accounts = ownedScope ? allAccounts.filter((account) => ownedScope.companyIds.has(account.id)) : allAccounts;
-  const opportunities = ownedScope
-    ? opportunityViews(readState, workspaceId).filter((opportunity) => opportunity.ownerUserId === session.user.id)
-    : opportunityViews(readState, workspaceId);
+  const sessionContext = await getWorkspaceSessionContext("manage_crm");
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
+  let accounts: FastCrmAccountView[] = [];
+  let opportunities: FastCrmOpportunityView[] = [];
+  const fastModel = await readFastCrmOverviewModel(session, workspaceId);
+
+  if (fastModel) {
+    accounts = fastModel.accounts;
+    opportunities = fastModel.opportunities;
+  } else {
+    const context = await getWorkspaceContext("manage_crm");
+    const state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+    const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
+    const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
+    const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
+    const allAccounts = await accountViewsForWorkspace(readState, workspaceId);
+    accounts = ownedScope ? allAccounts.filter((account) => ownedScope.companyIds.has(account.id)) : allAccounts;
+    opportunities = ownedScope
+      ? opportunityViews(readState, workspaceId).filter((opportunity) => opportunity.ownerUserId === session.user.id)
+      : opportunityViews(readState, workspaceId);
+  }
   const openOpportunities = opportunities.filter(
     (opportunity) => opportunity.stage !== "Closed won" && opportunity.stage !== "Closed lost"
   );
@@ -325,7 +345,7 @@ export default async function AccountsPage() {
   );
 }
 
-type AccountView = Awaited<ReturnType<typeof accountViewsForWorkspace>>[number];
+type AccountView = FastCrmAccountView;
 
 
 function sourceSummary(accounts: AccountView[]) {

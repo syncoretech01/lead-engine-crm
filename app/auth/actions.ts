@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { defaultWorkspacePath } from "@/lib/phase1/auth";
+import { acceptInvitePrismaFast, loginWithPasswordPrismaFast } from "@/lib/phase1/auth-fast-path";
 import {
   acceptUserInvite,
   createPasswordResetToken,
@@ -39,10 +40,12 @@ export async function loginAction(formData: FormData) {
   let result;
 
   try {
-    result = await updateAuthState(
-      (state) => loginWithPassword(state, { email, password }),
-      { normalizedTables: authWriteTables }
-    );
+    result =
+      await loginWithPasswordPrismaFast({ email, password }) ??
+      await updateAuthState(
+        (state) => loginWithPassword(state, { email, password }),
+        { normalizedTables: authWriteTables }
+      );
   } catch (error) {
     redirect(`/login?error=${encodeURIComponent(errorMessage(error))}&next=${encodeURIComponent(next)}`);
   }
@@ -122,10 +125,12 @@ export async function acceptInviteAction(formData: FormData) {
   let result;
 
   try {
-    result = await updateAuthState(
-      (state) => acceptUserInvite(state, { token, name, password }),
-      { normalizedTables: authWriteTables }
-    );
+    result =
+      await acceptInvitePrismaFast({ token, name, password }) ??
+      await updateAuthState(
+        (state) => acceptUserInvite(state, { token, name, password }),
+        { normalizedTables: authWriteTables }
+      );
   } catch (error) {
     redirect(`/invite/${encodeURIComponent(token)}?error=${encodeURIComponent(errorMessage(error))}`);
   }

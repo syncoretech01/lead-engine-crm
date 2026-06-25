@@ -19,45 +19,82 @@ import {
   crmEventReadRowsForWorkspace,
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
+import {
+  readFastCrmOverviewModel,
+  type FastCrmAccountView,
+  type FastCrmCampaignSummary,
+  type FastCrmContactSummary,
+  type FastCrmOpportunityView
+} from "@/lib/phase1/crm-overview-read-model";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { accountViewsForWorkspace, contactViewsForWorkspace, opportunityViews, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { sdrQueueSnapshot } from "@/lib/phase1/sdr";
-import { getWorkspaceContext } from "@/lib/phase1/store";
-import type { Opportunity } from "@/lib/phase1/types";
+import { readFastSdrQueueModel, type SdrQueueReadModel } from "@/lib/phase1/sdr-queue-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
+import type { OpportunityStage } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
 export default async function CrmDashboardPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_crm");
-  const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
-  const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
-  const [allAccounts, allContacts] = await Promise.all([
-    accountViewsForWorkspace(readState, workspaceId),
-    contactViewsForWorkspace(readState, workspaceId)
-  ]);
-  const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
-  const accounts = ownedScope ? allAccounts.filter((account) => ownedScope.companyIds.has(account.id)) : allAccounts;
-  const contacts = ownedScope ? allContacts.filter((contact) => ownedScope.contactIds.has(contact.id)) : allContacts;
-  const opportunities = ownedScope
-    ? opportunityViews(readState, workspaceId).filter((opportunity) => opportunity.ownerUserId === session.user.id)
-    : opportunityViews(readState, workspaceId);
-  const openOpportunities = opportunities.filter((opportunity) => !isClosedStage(opportunity.stage));
-  const ownerFilter = session.role === "SDR" ? session.user.id : undefined;
+  const sessionContext = await getWorkspaceSessionContext("manage_crm");
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
+  let accounts: FastCrmAccountView[] = [];
+  let contacts: FastCrmContactSummary[] = [];
+  let opportunities: FastCrmOpportunityView[] = [];
+  let activeCampaigns: FastCrmCampaignSummary[] = [];
+  let queueSnapshot: DashboardQueueSnapshot | undefined;
+  let taskDueToday = 0;
+  let taskOverdue = 0;
   const canManageSdr = session.permissions.includes("manage_sdr");
   const canManageOutreach = session.permissions.includes("manage_outreach");
-  const queueSnapshot = canManageSdr ? sdrQueueSnapshot(readState, workspaceId, ownerFilter) : undefined;
+  const fastModel = await readFastCrmOverviewModel(session, workspaceId);
+
+  if (fastModel) {
+    accounts = fastModel.accounts;
+    contacts = fastModel.contacts;
+    opportunities = fastModel.opportunities;
+    activeCampaigns = fastModel.activeCampaigns;
+    taskDueToday = fastModel.dueToday;
+    taskOverdue = fastModel.overdue;
+    if (canManageSdr) {
+      queueSnapshot = (await readFastSdrQueueModel(session, workspaceId))?.snapshot;
+    }
+  } else {
+    const context = await getWorkspaceContext("manage_crm");
+    const state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+    const crmRows = await crmEventReadRowsForWorkspace(state, workspaceId);
+    const readState = stateWithCrmEventReadRows(state, workspaceId, crmRows);
+    const [allAccounts, allContacts] = await Promise.all([
+      accountViewsForWorkspace(readState, workspaceId),
+      contactViewsForWorkspace(readState, workspaceId)
+    ]);
+    const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(readState, session) : null;
+    accounts = ownedScope ? allAccounts.filter((account) => ownedScope.companyIds.has(account.id)) : allAccounts;
+    contacts = ownedScope ? allContacts.filter((contact) => ownedScope.contactIds.has(contact.id)) : allContacts;
+    opportunities = ownedScope
+      ? opportunityViews(readState, workspaceId).filter((opportunity) => opportunity.ownerUserId === session.user.id)
+      : opportunityViews(readState, workspaceId);
+    const ownerFilter = session.role === "SDR" ? session.user.id : undefined;
+    queueSnapshot = canManageSdr ? sdrQueueSnapshot(readState, workspaceId, ownerFilter) : undefined;
+    taskDueToday = openTasksDueToday(readState.tasks, workspaceId);
+    taskOverdue = readState.tasks.filter((task) => task.workspaceId === workspaceId && task.status === "Overdue").length;
+    activeCampaigns = readState.outreachCampaigns.filter(
+      (campaign) => campaign.workspaceId === workspaceId && campaign.status === "Active"
+    );
+  }
+  const openOpportunities = opportunities.filter((opportunity) => !isClosedStage(opportunity.stage));
   const activeAssignments = queueSnapshot?.metrics.assigned ?? 0;
-  const dueToday = queueSnapshot?.metrics.dueToday ?? openTasksDueToday(readState.tasks, workspaceId);
-  const overdue = queueSnapshot?.metrics.overdue ?? readState.tasks.filter((task) => task.workspaceId === workspaceId && task.status === "Overdue").length;
+  const dueToday = queueSnapshot?.metrics.dueToday ?? taskDueToday;
+  const overdue = queueSnapshot?.metrics.overdue ?? taskOverdue;
   const openPipeline = openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
   const weightedForecast = openOpportunities.reduce(
     (total, opportunity) => total + Math.round(opportunity.amount * (opportunity.probability / 100)),
     0
-  );
-  const activeCampaigns = readState.outreachCampaigns.filter(
-    (campaign) => campaign.workspaceId === workspaceId && campaign.status === "Active"
   );
   const priorityAssignments = [...(queueSnapshot?.assignments ?? [])]
     .sort((a, b) => priorityWeight(a.priority) - priorityWeight(b.priority))
@@ -438,7 +475,9 @@ export default async function CrmDashboardPage() {
   );
 }
 
-function isClosedStage(stage: Opportunity["stage"]) {
+type DashboardQueueSnapshot = ReturnType<typeof sdrQueueSnapshot> | SdrQueueReadModel["snapshot"];
+
+function isClosedStage(stage: OpportunityStage) {
   return stage === "Closed won" || stage === "Closed lost";
 }
 
