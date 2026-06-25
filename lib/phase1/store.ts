@@ -95,7 +95,7 @@ export async function updateState<T>(
       return client.$transaction(
         async (tx) => {
           const state = await readStateFromPrisma(tx);
-          const session = await resolveCurrentSession(state);
+          const session = await resolveCurrentRequestSession(state, tx);
           const result = mutator(state, session);
           await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
           return result;
@@ -105,7 +105,7 @@ export async function updateState<T>(
     }
 
     const state = readStateFromFile();
-    const session = await resolveCurrentSession(state);
+    const session = await resolveCurrentRequestSession(state);
     const result = mutator(state, session);
     writeStateToFile(state);
     return result;
@@ -160,7 +160,7 @@ export function appendAudit(
 export async function getSession(state?: AppState) {
   try {
     if (state) {
-      return await resolveCurrentSession(state);
+      return await resolveCurrentRequestSession(state);
     }
 
     const prismaSession = await getPrismaSession();
@@ -209,8 +209,8 @@ export async function getWorkspaceSessionContext(permission?: Permission) {
 }
 
 const getCachedRequestStateSession = cache(async () => {
-  const state = await readState();
-  const session = await resolveCurrentSession(state);
+  const [state, prismaSession] = await Promise.all([readState(), getPrismaSession()]);
+  const session = prismaSession ?? await resolveCurrentSession(state);
   return { state, session };
 });
 
@@ -218,7 +218,7 @@ async function getRequestStateSession() {
   return timeAsync("state.requestContext", () => getCachedRequestStateSession());
 }
 
-async function getPrismaSession(): Promise<Session | undefined> {
+async function getPrismaSession(client?: PrismaStoreClient): Promise<Session | undefined> {
   if (resolveStorageDriver() !== "prisma") {
     return undefined;
   }
@@ -228,9 +228,9 @@ async function getPrismaSession(): Promise<Session | undefined> {
     return undefined;
   }
 
-  const { prisma } = await import("@/lib/prisma");
+  const prismaClient = client ?? (await import("@/lib/prisma")).prisma;
   const [authSession, membership, account] = await Promise.all([
-    prisma.authSession.findFirst({
+    prismaClient.authSession.findFirst({
       where: {
         id: payload.sessionId,
         userId: payload.userId,
@@ -243,7 +243,7 @@ async function getPrismaSession(): Promise<Session | undefined> {
         workspace: true
       }
     }),
-    prisma.workspaceMember.findUnique({
+    prismaClient.workspaceMember.findUnique({
       where: {
         workspaceId_userId: {
           workspaceId: payload.workspaceId,
@@ -251,7 +251,7 @@ async function getPrismaSession(): Promise<Session | undefined> {
         }
       }
     }),
-    prisma.authAccount.findUnique({
+    prismaClient.authAccount.findUnique({
       where: { userId: payload.userId }
     })
   ]);
@@ -330,6 +330,15 @@ export async function persistedStateExists(): Promise<boolean> {
 async function resolveCurrentSession(state: AppState) {
   const selection = await readSessionSelection(state);
   return resolveSession(state, selection);
+}
+
+async function resolveCurrentRequestSession(state: AppState, client?: PrismaStoreClient) {
+  const prismaSession = await getPrismaSession(client);
+  if (prismaSession) {
+    return prismaSession;
+  }
+
+  return resolveCurrentSession(state);
 }
 
 async function readSessionSelection(state: AppState): Promise<SessionSelection> {
