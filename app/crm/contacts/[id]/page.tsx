@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -22,8 +23,8 @@ import {
   createNoteAction,
   createOpportunityAction,
   createTaskAction,
-  recordEmailEventAction,
   recordSmsEventAction,
+  sendDirectEmailAction,
   setCustomFieldValueAction,
   updateContactComplianceAction,
   updateOpportunityStageAction
@@ -43,7 +44,7 @@ import {
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
 import { consentStatuses, lawfulBases } from "@/lib/phase1/compliance";
-import { emailEventTypes, smsEventStatuses } from "@/lib/phase1/outreach";
+import { smsEventStatuses } from "@/lib/phase1/outreach";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext } from "@/lib/phase1/store";
@@ -116,6 +117,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const canManageCompliance = session.permissions.includes("manage_compliance");
   const canSendDirectOutreach = session.permissions.includes("send_direct_outreach");
   const canManageWaterfalls = session.permissions.includes("manage_waterfalls");
+  const canSendEmail = Boolean(contact.email && !contact.doNotContact && !contact.isSuppressed);
+  const directEmailRequestId = `direct-${contact.id}-${randomUUID()}`;
   const activeWaterfallTemplates = waterfallTemplatesForWorkspace(state, workspaceId).filter(
     (template) => template.status === "Active"
   );
@@ -536,33 +539,34 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             <div className="panel-header">
               <div className="panel-title-wrap">
                 <h2 className="section-title">Send 1:1 email</h2>
-                <p className="section-subtitle">Send an individual email to this assigned contact and log it on the timeline.</p>
+                <p className="section-subtitle">Send an individual SES email to this assigned contact and log it on the timeline.</p>
               </div>
               <Mail size={20} aria-hidden="true" />
             </div>
-            <form action={recordEmailEventAction} className="panel-body form-grid">
+            <form action={sendDirectEmailAction} className="panel-body form-grid">
               <input name="contactId" type="hidden" value={contact.id} />
+              <input name="requestId" type="hidden" value={directEmailRequestId} />
               <div className="field">
                 <label htmlFor="direct-email-subject">Subject</label>
-                <input id="direct-email-subject" name="subject" placeholder="Quick question" />
+                <input
+                  id="direct-email-subject"
+                  name="subject"
+                  defaultValue={`Quick question for ${company?.name ?? contact.name}`}
+                  required
+                />
               </div>
               <div className="field">
                 <label htmlFor="direct-email-body">Body</label>
-                <textarea id="direct-email-body" name="bodySnapshot" placeholder="Write the message" />
-              </div>
-              <div className="field">
-                <label htmlFor="direct-email-type">Status</label>
-                <select id="direct-email-type" name="eventType" defaultValue="Sent">
-                  {emailEventTypes.map((eventType) => (
-                    <option key={eventType} value={eventType}>
-                      {eventType}
-                    </option>
-                  ))}
-                </select>
+                <textarea
+                  id="direct-email-body"
+                  name="bodySnapshot"
+                  placeholder="Hi {{first_name}}, quick question about {{company}}."
+                  required
+                />
               </div>
               <div className="field">
                 <label aria-hidden="true">&nbsp;</label>
-                <button className="button primary" type="submit">
+                <button className="button primary" type="submit" disabled={!canSendEmail}>
                   <Mail size={16} aria-hidden="true" />
                   Send email
                 </button>

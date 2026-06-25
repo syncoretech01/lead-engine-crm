@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -14,12 +15,13 @@ import {
 import {
   completeFollowUpReminderAction,
   logFirstTouchAction,
-  runSdrAssignmentAction
+  runSdrAssignmentAction,
+  sendAssignedBulkEmailAction
 } from "@/app/actions";
+import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { PageHeader } from "@/components/page-header";
-import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
-import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot } from "@/lib/phase1/sdr";
+import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { getWorkspaceContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
@@ -48,6 +50,13 @@ export default async function SdrQueuePage() {
   const meetingFollowUps = activeAssignments.filter((assignment) => assignment.status === "Meeting Booked");
   const pageTitle = session.role === "SDR" ? "My SDR queue" : "SDR queue";
   const recentlyReplied = snapshot.queueViews.find((view) => view.name === "Recently Replied")?.count ?? 0;
+  const bulkRequestId = `sdr-bulk-${session.user.id}-${randomUUID()}`;
+  const bulkOwnerUsers = sdrUsers(state, workspaceId);
+  const canSelectBulkOwner = session.role !== "SDR";
+  const bulkEligibleAssignments = activeAssignments.filter((assignment) => {
+    const contact = state.contacts.find((item) => item.id === assignment.contactId && item.workspaceId === workspaceId);
+    return Boolean(contact && !directEmailBlockReason(contact));
+  });
 
   const metrics = [
     {
@@ -331,15 +340,72 @@ export default async function SdrQueuePage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Channel readiness</h2>
-              <p className="section-subtitle">Recommended work lanes based on verification and available contact data.</p>
+              <h2 className="section-title">Bulk email assigned contacts</h2>
+              <p className="section-subtitle">Send one SES-backed email to eligible active assignments in this queue scope.</p>
             </div>
             <Mail size={20} aria-hidden="true" />
           </div>
-          <div className="panel-body stage-list">
-            <ReadinessRow label="Email-ready" count={emailReady.length} total={activeAssignments.length} tone="success" />
-            <ReadinessRow label="Call-ready" count={callReady.length} total={activeAssignments.length} tone="info" />
-            <ReadinessRow label="Meeting follow-up" count={meetingFollowUps.length} total={activeAssignments.length} tone="warning" />
+          <form action={sendAssignedBulkEmailAction} className="panel-body form-grid">
+            <input name="requestId" type="hidden" value={bulkRequestId} />
+            {canSelectBulkOwner ? (
+              <div className="field">
+                <label htmlFor="bulk-owner">Owner</label>
+                <select id="bulk-owner" name="ownerUserId" defaultValue="all">
+                  <option value="all">All SDRs</option>
+                  {bulkOwnerUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <div className="field">
+              <label htmlFor="bulk-audience">Audience</label>
+              <select id="bulk-audience" name="audience" defaultValue="all_assigned">
+                <option value="all_assigned">All eligible assigned</option>
+                <option value="p1">P1 assigned</option>
+                <option value="due_or_overdue">Due or overdue</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="bulk-limit">Max sends</label>
+              <input
+                id="bulk-limit"
+                name="limit"
+                type="number"
+                min="1"
+                max="50"
+                defaultValue={Math.min(Math.max(bulkEligibleAssignments.length, 1), 25)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="bulk-subject">Subject</label>
+              <input id="bulk-subject" name="subject" defaultValue="Quick question about {{company}}" required />
+            </div>
+            <div className="field">
+              <label htmlFor="bulk-body">Body</label>
+              <textarea
+                id="bulk-body"
+                name="bodySnapshot"
+                placeholder="Hi {{first_name}}, quick question about {{company}}."
+                required
+              />
+            </div>
+            <div className="field">
+              <label aria-hidden="true">&nbsp;</label>
+              <button className="button primary" type="submit" disabled={bulkEligibleAssignments.length === 0}>
+                <Mail size={16} aria-hidden="true" />
+                Send bulk email
+              </button>
+            </div>
+          </form>
+          <div className="panel-body">
+            <div className="chip-row">
+              <StatusPill label={`${bulkEligibleAssignments.length} eligible`} tone={bulkEligibleAssignments.length ? "success" : "warning"} />
+              <span className="pill">{formatNumber(emailReady.length)} A/B email-ready</span>
+              <span className="pill">{formatNumber(callReady.length)} call-ready</span>
+            </div>
           </div>
         </div>
       </section>
@@ -411,31 +477,6 @@ function queueWeight(assignment: AssignmentView) {
   const due = assignment.dueAt ? Date.parse(assignment.dueAt) / 1_000_000_000_000 : 9;
 
   return overdueWeight * 10 + priority + due;
-}
-
-function ReadinessRow({
-  label,
-  count,
-  total,
-  tone
-}: {
-  label: string;
-  count: number;
-  total: number;
-  tone: "success" | "info" | "warning";
-}) {
-  const percent = total ? Math.round((count / total) * 100) : 0;
-
-  return (
-    <div className="stage-row">
-      <div className="stage-meta">
-        <strong>{label}</strong>
-        <StatusPill label={`${formatNumber(count)} leads`} tone={tone} />
-      </div>
-      <ProgressBar value={percent} />
-      <span className="section-subtitle">{percent}% of active assignments</span>
-    </div>
-  );
 }
 
 function slaTone(status: string) {

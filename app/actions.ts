@@ -40,6 +40,13 @@ import {
 } from "@/lib/phase1/crm";
 import { splitList } from "@/lib/phase1/csv";
 import { detectWorkspaceDuplicates, ignoreDedupeMatch, mergeDedupeMatch } from "@/lib/phase1/dedupe";
+import {
+  assignedBulkEmailContactIds,
+  buildDirectEmailSendPlan,
+  recordDirectEmailSendResults,
+  sendDirectEmailBatch,
+  type BulkEmailAudience
+} from "@/lib/phase1/direct-email-send";
 import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import { createExportRecord } from "@/lib/phase1/exporting";
 import { createTrackedJob, retryFailedJob } from "@/lib/phase1/jobs";
@@ -1376,6 +1383,132 @@ export async function recordEmailEventAction(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
+export async function sendDirectEmailAction(formData: FormData) {
+  const contactId = stringValue(formData.get("contactId"));
+  const requestId = stringValue(formData.get("requestId"), `direct-${contactId}-${randomUUID()}`);
+  const subject = stringValue(formData.get("subject"), "Quick question");
+  const body = stringValue(formData.get("bodySnapshot"), "Hi {{first_name}}, quick question about {{company}}.");
+
+  const plan = await updateState((state, session) => {
+    assertPermission(session, "send_direct_outreach");
+    assertAssignedContactForOutreach(state, session, contactId);
+    return buildDirectEmailSendPlan(state, {
+      workspaceId: session.workspace.id,
+      actor: session.user,
+      requestId,
+      mode: "one_to_one",
+      contactIds: [contactId],
+      subject,
+      body
+    });
+  }, { normalizedTables: outreachEmailWriteTables });
+
+  const outcomes = plan.credentialOk
+    ? await sendDirectEmailBatch(plan.recipients, plan.credential, plan.workspaceId)
+    : plan.recipients.map((recipient) => ({
+        contactId: recipient.contactId,
+        status: "failed" as const,
+        reason: plan.reason
+      }));
+
+  await updateState((state, session) => {
+    assertPermission(session, "send_direct_outreach");
+    const summary = recordDirectEmailSendResults(state, {
+      workspaceId: session.workspace.id,
+      actorUserId: session.user.id,
+      recipients: plan.recipients,
+      outcomes,
+      skipped: plan.skipped
+    });
+
+    appendAudit(state, session, {
+      objectType: "email_event",
+      objectId: requestId,
+      action: plan.credentialOk ? "direct_email_live" : "direct_email_not_sent",
+      newValue: {
+        ...summary,
+        totalRequested: plan.totalRequested,
+        reason: plan.credentialOk ? undefined : plan.reason
+      }
+    });
+  }, { normalizedTables: outreachEmailWriteTables });
+
+  revalidatePath("/", "layout");
+  revalidatePath(`/crm/contacts/${contactId}`);
+  revalidatePath("/outreach/events");
+}
+
+export async function sendAssignedBulkEmailAction(formData: FormData) {
+  const requestId = stringValue(formData.get("requestId"), `sdr-bulk-${randomUUID()}`);
+  const subject = stringValue(formData.get("subject"), "Quick question");
+  const body = stringValue(formData.get("bodySnapshot"), "Hi {{first_name}}, quick question about {{company}}.");
+  const audience = bulkEmailAudienceValue(formData.get("audience"));
+  const rawOwnerUserId = stringValue(formData.get("ownerUserId"));
+  const rawLimit = numberValue(formData.get("limit")) || outreachBatchSize();
+  const limit = Math.max(1, Math.min(rawLimit, outreachBatchSize()));
+
+  const plan = await updateState((state, session) => {
+    assertPermission(session, "send_direct_outreach");
+    const ownerUserId = restrictsToOwnedRecords(session)
+      ? session.user.id
+      : rawOwnerUserId === "all"
+        ? undefined
+        : rawOwnerUserId || session.user.id;
+    const contactIds = assignedBulkEmailContactIds(state, {
+      workspaceId: session.workspace.id,
+      ownerUserId,
+      audience,
+      limit
+    });
+    const sendPlan = buildDirectEmailSendPlan(state, {
+      workspaceId: session.workspace.id,
+      actor: session.user,
+      requestId,
+      mode: "sdr_bulk",
+      contactIds,
+      subject,
+      body
+    });
+    return { ...sendPlan, audience, ownerUserId };
+  }, { normalizedTables: outreachEmailWriteTables });
+
+  const outcomes = plan.credentialOk
+    ? await sendDirectEmailBatch(plan.recipients, plan.credential, plan.workspaceId)
+    : plan.recipients.map((recipient) => ({
+        contactId: recipient.contactId,
+        status: "failed" as const,
+        reason: plan.reason
+      }));
+
+  await updateState((state, session) => {
+    assertPermission(session, "send_direct_outreach");
+    const summary = recordDirectEmailSendResults(state, {
+      workspaceId: session.workspace.id,
+      actorUserId: session.user.id,
+      recipients: plan.recipients,
+      outcomes,
+      skipped: plan.skipped
+    });
+
+    appendAudit(state, session, {
+      objectType: "email_event",
+      objectId: requestId,
+      action: plan.credentialOk ? "sdr_bulk_email_live" : "sdr_bulk_email_not_sent",
+      newValue: {
+        ...summary,
+        totalRequested: plan.totalRequested,
+        audience: plan.audience,
+        ownerUserId: plan.ownerUserId,
+        reason: plan.credentialOk ? undefined : plan.reason
+      }
+    });
+  }, { normalizedTables: outreachEmailWriteTables });
+
+  revalidatePath("/", "layout");
+  revalidatePath("/sdr/queue");
+  revalidatePath("/outreach/events");
+}
+
 export async function recordSmsEventAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "send_direct_outreach");
@@ -2155,6 +2288,14 @@ function providerIdValue(value: FormDataEntryValue | null): ProviderId {
 
 function providerCapabilityValues(formData: FormData): ProviderCapability[] {
   return formData.getAll("allowedOperations").map(String) as ProviderCapability[];
+}
+
+function bulkEmailAudienceValue(value: FormDataEntryValue | null): BulkEmailAudience {
+  const audience = stringValue(value, "all_assigned");
+  if (audience === "p1" || audience === "due_or_overdue") {
+    return audience;
+  }
+  return "all_assigned";
 }
 
 function exportName(type: ExportRecord["type"]) {

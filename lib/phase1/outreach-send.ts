@@ -330,7 +330,7 @@ export function emailAddressFromMailbox(value: string): string {
   return (match?.[1] ?? value).trim();
 }
 
-function findLiveSesConnection(state: AppState, workspaceId?: string): ProviderConnection | undefined {
+export function findLiveSesConnection(state: AppState, workspaceId?: string): ProviderConnection | undefined {
   const live = (state.providerConnections ?? []).filter(
     (connection) =>
       connection.providerId === "amazon_ses" &&
