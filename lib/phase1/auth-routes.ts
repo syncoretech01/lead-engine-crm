@@ -24,3 +24,7 @@ export function isSignedWebhookPath(pathname: string) {
     pathname === "/api/webhooks/ses"
   );
 }
+
+export function isPublicUnsubscribePath(pathname: string) {
+  return pathname === "/api/unsubscribe" || pathname.startsWith("/unsubscribe/");
+}

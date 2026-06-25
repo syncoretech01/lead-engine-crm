@@ -57,4 +57,26 @@ describe("SDR record visibility", () => {
       expect(scope.contactIds.has(foreignAssignment.contactId)).toBe(false);
     }
   });
+
+  it("creates assignments in the requested ordered contact sequence", () => {
+    const state = createSeedState();
+    const workspaceId = state.workspaces[0].id;
+    state.sdrAssignments = [];
+    const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId).slice(0, 3);
+    for (const contact of contacts) {
+      contact.owner = "Unassigned";
+      contact.status = "Ready for SDR";
+      contact.priority = "P2";
+      contact.isSuppressed = false;
+    }
+    const orderedContactIds = contacts.map((contact) => contact.id).reverse();
+
+    const result = assignWorkspaceLeads(state, workspaceId, state.users[0].id, "2026-01-01T00:00:00.000Z", {
+      orderedContactIds,
+      eligibleContactIds: new Set(orderedContactIds)
+    });
+
+    expect(result.created).toBe(3);
+    expect(state.sdrAssignments.map((assignment) => assignment.contactId)).toEqual(orderedContactIds);
+  });
 });

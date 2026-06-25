@@ -30,7 +30,8 @@ export const dataSubjectRequestTypes: DataSubjectRequestType[] = [
   "Export"
 ];
 export const dataSubjectRequestStatuses: DataSubjectRequestStatus[] = ["Open", "Verified", "Completed", "Rejected"];
-export const defaultPhysicalAddress = "Syncore Tech, 123 Market Street, San Francisco, CA 94105";
+export const defaultPhysicalAddress =
+  process.env.SYNCORE_MAILING_ADDRESS?.trim() || "Syncore Tech, 1500 N Grant St, Denver, CO 80203, USA";
 export const defaultUnsubscribeUrl = "https://syncore.local/unsubscribe/{{contact_id}}";
 
 type ContactComplianceDefaults = Pick<
@@ -347,7 +348,7 @@ function upsertSuppressionRecord(
 function appendEmailFooter(bodyTemplate: string, physicalAddress: string) {
   const parts = [bodyTemplate.trim()];
   if (!hasUnsubscribeMechanism(bodyTemplate)) {
-    parts.push(`Unsubscribe: ${defaultUnsubscribeUrl}`);
+    parts.push("Unsubscribe: {{unsubscribe_url}}");
   }
   if (!hasPhysicalAddress(bodyTemplate, physicalAddress)) {
     parts.push(`{{physical_address}}`);

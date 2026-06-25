@@ -16,7 +16,8 @@ import {
   createCampaignSequenceAction,
   createOutreachCampaignAction,
   createSequenceStepAction,
-  simulateCampaignSendAction,
+  scoreAndAssignByCampaignAction,
+  sendCampaignAction,
   updateOutreachProviderStatusAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
@@ -41,7 +42,7 @@ import { StatCard, LaneCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function OutreachCampaignsPage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_outreach");
+  const { state, session, workspaceId } = await getWorkspaceContext("manage_outreach");
   const outreachRows = await outreachEventReadRowsForWorkspace(state, workspaceId);
   const readState = stateWithOutreachEventReadRows(state, workspaceId, outreachRows);
   const snapshot = outreachDashboardSnapshot(readState, workspaceId);
@@ -54,6 +55,7 @@ export default async function OutreachCampaignsPage() {
   const providerRisk = snapshot.providers.filter(
     (provider) => provider.status !== "Connected" || provider.bounceRate > 3 || provider.complaintRate > 1
   );
+  const canAssignByEngagement = session.permissions.includes("manage_sdr_team");
 
   const metrics = [
     {
@@ -210,12 +212,23 @@ export default async function OutreachCampaignsPage() {
                         </div>
                       </td>
                       <td>
-                        <form action={simulateCampaignSendAction}>
-                          <input name="campaignId" type="hidden" value={campaign.id} />
-                          <button className="button secondary" type="submit">
-                            Simulate send
-                          </button>
-                        </form>
+                        <div className="entity">
+                          <form action={sendCampaignAction}>
+                            <input name="campaignId" type="hidden" value={campaign.id} />
+                            <button className="button secondary" type="submit">
+                              Send campaign
+                            </button>
+                          </form>
+                          <span>Live SES sends one batch; local mode simulates.</span>
+                          {canAssignByEngagement && campaign.sentCount > 0 ? (
+                            <form action={scoreAndAssignByCampaignAction}>
+                              <input name="campaignId" type="hidden" value={campaign.id} />
+                              <button className="button secondary" type="submit">
+                                Score & assign by engagement
+                              </button>
+                            </form>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );

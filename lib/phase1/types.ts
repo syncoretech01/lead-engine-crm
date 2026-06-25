@@ -1055,7 +1055,7 @@ export type EmailEvent = {
   sequenceId?: string;
   sequenceStepId?: string;
   messageId: string;
-  provider: "Syncore Mail Local";
+  provider: "Syncore Mail Local" | "Amazon SES";
   senderEmail: string;
   recipientEmail: string;
   eventType: EmailEventType;

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { BadgeCheck, Database, GitMerge, Play, ShieldCheck, Sparkles, Target, UserCheck, Wand2, Workflow } from "lucide-react";
 import {
   approveBuildListEnrichmentAction,
-  assignBuildListLeadsAction,
+  assignLeadsNowAction,
   confirmLeadListIcpAction,
   detectDuplicatesAction,
   draftLeadListIcpAction,
@@ -445,11 +445,11 @@ export default async function BuildListPage() {
 
             {canAssign ? (
               gate.ready.length > 0 ? (
-                <form action={assignBuildListLeadsAction} className="form-grid">
+                <form action={assignLeadsNowAction} className="form-grid">
                   <div className="field integration-actions">
                     <ToastButton toast="Assigning ready leads to SDRs…">
                       <UserCheck size={17} aria-hidden="true" />
-                      Assign {formatNumber(gate.ready.length)} ready leads to SDRs
+                      Assign now (current score): {formatNumber(gate.ready.length)} ready leads
                     </ToastButton>
                   </div>
                 </form>

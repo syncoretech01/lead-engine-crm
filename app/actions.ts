@@ -45,7 +45,14 @@ import { createExportRecord } from "@/lib/phase1/exporting";
 import { createTrackedJob, retryFailedJob } from "@/lib/phase1/jobs";
 import { partitionLeadsForAssignment } from "@/lib/phase1/lead-gate";
 import { applyLeadOverride, createLeadJobFromPreflight } from "@/lib/phase1/lead-planning";
+import { applyCampaignEngagementScores } from "@/lib/phase1/engagement-scoring";
 import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/phase1/normalization";
+import { outreachBatchSize } from "@/lib/phase1/outreach-config";
+import {
+  buildCampaignSendBatch,
+  recordCampaignSendResults,
+  sendCampaignBatch
+} from "@/lib/phase1/outreach-send";
 import {
   aiWriteTables,
   complianceWriteTables,
@@ -1224,21 +1231,113 @@ export async function createSequenceStepAction(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
-export async function simulateCampaignSendAction(formData: FormData) {
+export async function sendCampaignAction(formData: FormData) {
+  const campaignId = stringValue(formData.get("campaignId"));
+  const plan = await updateState((state, session) => {
+    assertPermission(session, "manage_outreach");
+    return {
+      workspaceId: session.workspace.id,
+      actorUserId: session.user.id,
+      ...buildCampaignSendBatch(state, session.workspace.id, campaignId, { batchSize: outreachBatchSize() })
+    };
+  }, { normalizedTables: outreachCampaignSendWriteTables });
+
+  if (!plan.credentialOk) {
+    await updateState((state, session) => {
+      assertPermission(session, "manage_outreach");
+      const result = simulateCampaignSend(state, session.workspace.id, campaignId, session.user.id);
+
+      appendAudit(state, session, {
+        objectType: "outreach_campaign",
+        objectId: campaignId,
+        action: "provider_send_simulated",
+        newValue: { ...result, reason: plan.reason }
+      });
+    }, { normalizedTables: outreachCampaignSendWriteTables });
+
+    revalidatePath("/", "layout");
+    return;
+  }
+
+  const outcomes = plan.recipients.length
+    ? await sendCampaignBatch(plan.recipients, plan.credential, plan.workspaceId)
+    : [];
+
   await updateState((state, session) => {
     assertPermission(session, "manage_outreach");
-    const campaignId = stringValue(formData.get("campaignId"));
-    const result = simulateCampaignSend(state, session.workspace.id, campaignId, session.user.id);
+    const summary = recordCampaignSendResults(state, session.workspace.id, campaignId, session.user.id, outcomes);
 
     appendAudit(state, session, {
       objectType: "outreach_campaign",
       objectId: campaignId,
-      action: "provider_send_simulated",
-      newValue: result
+      action: "provider_send_live",
+      newValue: {
+        sent: summary.sent,
+        failed: summary.failed,
+        completed: summary.completed,
+        remaining: plan.remaining,
+        totalEligible: plan.totalEligible
+      }
     });
   }, { normalizedTables: outreachCampaignSendWriteTables });
 
   revalidatePath("/", "layout");
+}
+
+export { sendCampaignAction as simulateCampaignSendAction };
+
+export async function scoreAndAssignByCampaignAction(formData: FormData) {
+  const campaignId = stringValue(formData.get("campaignId"));
+  await updateState((state, session) => {
+    assertPermission(session, "manage_sdr_team");
+    const now = new Date().toISOString();
+    const rescored = applyCampaignEngagementScores(state, session.workspace.id, campaignId, now);
+    const eligibleContactIds = new Set(rescored.orderedContactIds);
+    const result = assignWorkspaceLeads(state, session.workspace.id, session.user.id, now, {
+      orderedContactIds: rescored.orderedContactIds,
+      eligibleContactIds
+    });
+    const sla = refreshSlaStatuses(state, session.workspace.id, now);
+
+    appendAudit(state, session, {
+      objectType: "sdr_assignment",
+      objectId: campaignId,
+      action: "leads_assigned_by_engagement",
+      newValue: { campaignId, rescored: rescored.rescored, assigned: result.created, sla }
+    });
+  }, { normalizedTables: sdrWriteTables });
+
+  revalidatePath("/", "layout");
+}
+
+export async function assignLeadsNowAction() {
+  await updateState((state, session) => {
+    assertPermission(session, "manage_sdr_team");
+    const profile = state.searchProfiles
+      .filter((item) => item.workspaceId === session.workspace.id)
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
+    const contacts = state.contacts.filter((contact) => contact.workspaceId === session.workspace.id);
+    const { ready, held } = partitionLeadsForAssignment({ contacts, requiredFields: profile?.requiredFields });
+    const eligibleContactIds = new Set(ready.map((contact) => contact.id));
+    const result = assignWorkspaceLeads(
+      state,
+      session.workspace.id,
+      session.user.id,
+      new Date().toISOString(),
+      { eligibleContactIds }
+    );
+    const sla = refreshSlaStatuses(state, session.workspace.id);
+
+    appendAudit(state, session, {
+      objectType: "sdr_assignment",
+      objectId: session.workspace.id,
+      action: "leads_assigned_precampaign",
+      newValue: { ...result, held: held.length, sla, gated: true }
+    });
+  }, { normalizedTables: sdrWriteTables });
+
+  revalidatePath("/", "layout");
+  revalidatePath("/build-list");
 }
 
 function assertAssignedContactForOutreach(state: AppState, session: Session, contactId: string) {

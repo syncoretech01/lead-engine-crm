@@ -88,7 +88,7 @@ export function assignWorkspaceLeads(
   workspaceId: string,
   assignedById: string,
   assignedAt = new Date().toISOString(),
-  options?: { eligibleContactIds?: Set<string> }
+  options?: { eligibleContactIds?: Set<string>; orderedContactIds?: string[] }
 ) {
   let created = 0;
   const existingContactIds = new Set(
@@ -96,8 +96,14 @@ export function assignWorkspaceLeads(
       .filter((assignment) => assignment.workspaceId === workspaceId)
       .map((assignment) => assignment.contactId)
   );
+  const orderedIds = options?.orderedContactIds ? [...new Set(options.orderedContactIds)] : undefined;
+  const contacts = orderedIds
+    ? orderedIds
+        .map((id) => state.contacts.find((item) => item.id === id && item.workspaceId === workspaceId))
+        .filter((contact): contact is NonNullable<typeof contact> => Boolean(contact))
+    : state.contacts.filter((item) => item.workspaceId === workspaceId);
 
-  for (const contact of state.contacts.filter((item) => item.workspaceId === workspaceId)) {
+  for (const contact of contacts) {
     if (existingContactIds.has(contact.id)) {
       continue;
     }

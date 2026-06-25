@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   completeDataSubjectRequest,
   createDataSubjectRequest,
-  defaultPhysicalAddress,
-  defaultUnsubscribeUrl
+  defaultPhysicalAddress
 } from "@/lib/phase1/compliance";
 import { createSequenceStep, createTrackedCall } from "@/lib/phase1/outreach";
 import { createSeedState } from "@/lib/phase1/seed";
@@ -19,7 +18,7 @@ describe("compliance hardening", () => {
     expect(state.dataSubjectRequests).toEqual([]);
     expect(state.contacts.every((contact) => contact.lawfulBasis && contact.consentStatus && contact.consentSource)).toBe(true);
     expect(emailSteps.every((step) => step.complianceStatus === "Compliant")).toBe(true);
-    expect(emailSteps.every((step) => step.bodyTemplate?.includes(defaultUnsubscribeUrl))).toBe(true);
+    expect(emailSteps.every((step) => step.bodyTemplate?.includes("{{unsubscribe_url}}"))).toBe(true);
     expect(emailSteps.every((step) => step.bodyTemplate?.includes("{{physical_address}}"))).toBe(true);
     expect(calls.every((call) => call.recordingConsent)).toBe(true);
   });
@@ -55,7 +54,7 @@ describe("compliance hardening", () => {
     });
 
     expect(emailStep.complianceStatus).toBe("Compliant");
-    expect(emailStep.bodyTemplate).toContain(defaultUnsubscribeUrl);
+    expect(emailStep.bodyTemplate).toContain("{{unsubscribe_url}}");
     expect(emailStep.physicalAddress).toBe(defaultPhysicalAddress);
     expect(smsStep.smsTemplate).toContain("STOP");
     expect(smsStep.complianceStatus).toBe("Compliant");

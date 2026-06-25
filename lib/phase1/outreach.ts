@@ -112,6 +112,8 @@ export function createEmailEvent(
     smtpCode?: string;
     occurredAt?: string;
     messageId?: string;
+    provider?: EmailEvent["provider"];
+    senderEmail?: string;
     rawPayload?: EmailEvent["rawPayload"];
   }
 ) {
@@ -134,8 +136,8 @@ export function createEmailEvent(
     sequenceId: input.sequenceId,
     sequenceStepId: input.sequenceStepId,
     messageId: input.messageId ?? `msg-${randomUUID()}`,
-    provider: "Syncore Mail Local",
-    senderEmail: provider?.senderEmail ?? "outbound@syncore.tech",
+    provider: input.provider ?? "Syncore Mail Local",
+    senderEmail: input.senderEmail ?? provider?.senderEmail ?? "outbound@syncore.tech",
     recipientEmail: contact.email,
     eventType: input.eventType,
     subject: input.subject,
