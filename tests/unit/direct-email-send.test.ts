@@ -62,14 +62,18 @@ describe("direct SDR email send planning", () => {
       replyTo: "replies@syncoretech.com",
       subject: "Acme Co quick question"
     });
-    expect(plan.recipients[0].headers["List-Unsubscribe"]).toContain("https://app.syncore.test/api/unsubscribe?t=");
-    expect(plan.recipients[0].text).toContain("https://app.syncore.test/unsubscribe/contact-a?t=");
+    expect(plan.recipients[0].headers["List-Unsubscribe"]).toMatch(
+      /https:\/\/app\.syncore\.test\/api\/unsubscribe\?c=contact-a&s=[A-Za-z0-9_-]{24}/
+    );
+    expect(plan.recipients[0].text).toMatch(
+      /https:\/\/app\.syncore\.test\/unsubscribe\/contact-a\?s=[A-Za-z0-9_-]{24}/
+    );
     expect(plan.recipients[0].html).toContain(">Unsubscribe</a>");
     expect(plan.recipients[0].html).toMatch(
-      /<a href="https:\/\/app\.syncore\.test\/unsubscribe\/contact-a\?t=[^"]+">Unsubscribe<\/a>/
+      /<a href="https:\/\/app\.syncore\.test\/unsubscribe\/contact-a\?s=[A-Za-z0-9_-]{24}">Unsubscribe<\/a>/
     );
     expect(plan.recipients[0].html).not.toContain('<a href="<a href=');
-    expect(plan.recipients[0].html).not.toContain("Unsubscribe: https://app.syncore.test/unsubscribe/contact-a?t=");
+    expect(plan.recipients[0].html).not.toContain("Unsubscribe: https://app.syncore.test/unsubscribe/contact-a?s=");
     expect(plan.recipients[0].text).toContain("Syncore Tech, 1500 N Grant St, Denver, CO 80203, USA");
   });
 

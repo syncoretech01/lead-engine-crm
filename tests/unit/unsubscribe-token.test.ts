@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildOneClickUnsubscribeUrl,
   buildUnsubscribeUrl,
+  signShortUnsubscribeToken,
   signUnsubscribeToken,
+  verifyShortUnsubscribeToken,
   verifyUnsubscribeToken
 } from "@/lib/phase1/unsubscribe-token";
 
@@ -29,6 +31,15 @@ describe("unsubscribe tokens", () => {
     expect(verifyUnsubscribeToken(`${payload}.x${signature}`, env)).toEqual({ ok: false });
   });
 
+  it("signs and verifies short contact-bound tokens", () => {
+    const token = signShortUnsubscribeToken("contact-a", env);
+
+    expect(token).toHaveLength(24);
+    expect(verifyShortUnsubscribeToken("contact-a", token, env)).toBe(true);
+    expect(verifyShortUnsubscribeToken("contact-b", token, env)).toBe(false);
+    expect(verifyShortUnsubscribeToken("contact-a", `x${token.slice(1)}`, env)).toBe(false);
+  });
+
   it("lets callers catch a wrong-contact route mismatch", () => {
     const token = signUnsubscribeToken("workspace-a", "contact-a", env);
     const result = verifyUnsubscribeToken(token, env);
@@ -43,7 +54,7 @@ describe("unsubscribe tokens", () => {
     const url = buildUnsubscribeUrl("workspace-a", "contact-a", env);
     const oneClick = buildOneClickUnsubscribeUrl("workspace-a", "contact-a", env);
 
-    expect(url).toMatch(/^https:\/\/app\.syncore\.test\/unsubscribe\/contact-a\?t=/);
-    expect(oneClick).toMatch(/^https:\/\/app\.syncore\.test\/api\/unsubscribe\?t=/);
+    expect(url).toMatch(/^https:\/\/app\.syncore\.test\/unsubscribe\/contact-a\?s=[A-Za-z0-9_-]{24}$/);
+    expect(oneClick).toMatch(/^https:\/\/app\.syncore\.test\/api\/unsubscribe\?c=contact-a&s=[A-Za-z0-9_-]{24}$/);
   });
 });

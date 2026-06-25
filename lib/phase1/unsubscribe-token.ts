@@ -27,6 +27,23 @@ export function signUnsubscribeToken(workspaceId: string, contactId: string, env
   return `${payload}.${sig}`;
 }
 
+export function signShortUnsubscribeToken(contactId: string, env: UnsubscribeEnv = process.env): string {
+  return b64url(createHmac("sha256", secret(env)).update(`unsubscribe:${contactId}`).digest()).slice(0, 24);
+}
+
+export function verifyShortUnsubscribeToken(
+  contactId: string,
+  token: string,
+  env: UnsubscribeEnv = process.env
+): boolean {
+  if (!contactId || !token) return false;
+
+  const expected = signShortUnsubscribeToken(contactId, env);
+  const providedBuffer = Buffer.from(token);
+  const expectedBuffer = Buffer.from(expected);
+  return providedBuffer.length === expectedBuffer.length && timingSafeEqual(providedBuffer, expectedBuffer);
+}
+
 export function verifyUnsubscribeToken(
   token: string,
   env: UnsubscribeEnv = process.env
@@ -59,16 +76,16 @@ export function verifyUnsubscribeToken(
   }
 }
 
-export function buildUnsubscribeUrl(workspaceId: string, contactId: string, env: UnsubscribeEnv = process.env): string {
+export function buildUnsubscribeUrl(_workspaceId: string, contactId: string, env: UnsubscribeEnv = process.env): string {
   const base = resolveAppBaseUrl(env);
-  const token = signUnsubscribeToken(workspaceId, contactId, env);
-  const path = `/unsubscribe/${encodeURIComponent(contactId)}?t=${encodeURIComponent(token)}`;
+  const token = signShortUnsubscribeToken(contactId, env);
+  const path = `/unsubscribe/${encodeURIComponent(contactId)}?s=${encodeURIComponent(token)}`;
   return base ? `${base}${path}` : path;
 }
 
-export function buildOneClickUnsubscribeUrl(workspaceId: string, contactId: string, env: UnsubscribeEnv = process.env): string {
+export function buildOneClickUnsubscribeUrl(_workspaceId: string, contactId: string, env: UnsubscribeEnv = process.env): string {
   const base = resolveAppBaseUrl(env);
-  const token = signUnsubscribeToken(workspaceId, contactId, env);
-  const path = `/api/unsubscribe?t=${encodeURIComponent(token)}`;
+  const token = signShortUnsubscribeToken(contactId, env);
+  const path = `/api/unsubscribe?c=${encodeURIComponent(contactId)}&s=${encodeURIComponent(token)}`;
   return base ? `${base}${path}` : path;
 }

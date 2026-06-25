@@ -13,7 +13,7 @@ describe("Amazon SES raw MIME builder", () => {
           text: "Plain hello",
           html: "<p>Plain hello</p>",
           headers: {
-            "List-Unsubscribe": "<https://app.syncore.test/api/unsubscribe?t=abc>",
+            "List-Unsubscribe": "<https://app.syncore.test/api/unsubscribe?c=contact-a&s=abc>",
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
           }
         },
@@ -26,7 +26,7 @@ describe("Amazon SES raw MIME builder", () => {
     expect(message).toContain("Subject: Hello from Syncore\r\n");
     expect(message).toContain("Reply-To: replies@syncoretech.com\r\n");
     expect(message).toContain("MIME-Version: 1.0\r\n");
-    expect(message).toContain("List-Unsubscribe: <https://app.syncore.test/api/unsubscribe?t=abc>\r\n");
+    expect(message).toContain("List-Unsubscribe: <https://app.syncore.test/api/unsubscribe?c=contact-a&s=abc>\r\n");
     expect(message).toContain("List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n");
     expect(message).toContain("Content-Type: multipart/alternative;");
     expect(message).toContain(Buffer.from("Plain hello", "utf8").toString("base64"));

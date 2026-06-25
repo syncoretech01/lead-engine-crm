@@ -5,7 +5,7 @@ import { outreachEmailWriteTables } from "@/lib/phase1/normalized-write-tables";
 import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
 import { updateAuthState } from "@/lib/phase1/store";
 import { appendWorkspaceAudit, systemActorForWorkspace } from "@/lib/phase1/tenant-isolation";
-import { verifyUnsubscribeToken } from "@/lib/phase1/unsubscribe-token";
+import { verifyShortUnsubscribeToken, verifyUnsubscribeToken } from "@/lib/phase1/unsubscribe-token";
 import type { SuppressionRecord } from "@/lib/phase1/types";
 
 export const runtime = "nodejs";
@@ -27,10 +27,12 @@ export async function POST(request: Request) {
 
   const url = new URL(request.url);
   const token = url.searchParams.get("t") ?? "";
+  const shortContactId = url.searchParams.get("c") ?? "";
+  const shortToken = url.searchParams.get("s") ?? "";
   const body = await request.text().catch(() => "");
   const bodyParams = new URLSearchParams(body);
   const shouldRedirect = bodyParams.get("redirect") === "1";
-  const verified = verifyUnsubscribeToken(token);
+  const verified = resolveUnsubscribeRequest(token, shortContactId, shortToken);
 
   if (!verified.ok) {
     return NextResponse.json({ status: "ok" });
@@ -38,13 +40,14 @@ export async function POST(request: Request) {
 
   await updateAuthState((state) => {
     const contact = state.contacts.find(
-      (item) => item.id === verified.contactId && item.workspaceId === verified.workspaceId
+      (item) => item.id === verified.contactId && (!verified.workspaceId || item.workspaceId === verified.workspaceId)
     );
     if (!contact) {
       return { status: "no-contact" as const };
     }
 
-    const actor = systemActorForWorkspace(state, verified.workspaceId);
+    const workspaceId = contact.workspaceId;
+    const actor = systemActorForWorkspace(state, workspaceId);
     const now = new Date().toISOString();
     const alreadySuppressed = contact.isSuppressed;
     if (!alreadySuppressed) {
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
 
     upsertListUnsubscribeSuppression(state.suppressionRecords, {
       id: `supp-${randomUUID()}`,
-      workspaceId: verified.workspaceId,
+      workspaceId,
       type: "Unsubscribe",
       email: contact.email || undefined,
       reason: "List-Unsubscribe (email recipient)",
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
     });
 
     appendWorkspaceAudit(state, {
-      workspaceId: verified.workspaceId,
+      workspaceId,
       actorUserId: actor.id,
       objectType: "contact",
       objectId: contact.id,
@@ -75,12 +78,35 @@ export async function POST(request: Request) {
 
   if (shouldRedirect) {
     const redirectUrl = new URL(`/unsubscribe/${encodeURIComponent(verified.contactId)}`, request.url);
-    redirectUrl.searchParams.set("t", token);
+    if (verified.tokenType === "legacy") {
+      redirectUrl.searchParams.set("t", token);
+    } else {
+      redirectUrl.searchParams.set("s", shortToken);
+    }
     redirectUrl.searchParams.set("done", "1");
     return NextResponse.redirect(redirectUrl, 303);
   }
 
   return NextResponse.json({ status: "ok" });
+}
+
+function resolveUnsubscribeRequest(
+  legacyToken: string,
+  shortContactId: string,
+  shortToken: string
+):
+  | { ok: true; tokenType: "legacy" | "short"; contactId: string; workspaceId?: string }
+  | { ok: false } {
+  if (legacyToken) {
+    const verified = verifyUnsubscribeToken(legacyToken);
+    return verified.ok ? { ...verified, tokenType: "legacy" } : { ok: false };
+  }
+
+  if (verifyShortUnsubscribeToken(shortContactId, shortToken)) {
+    return { ok: true, tokenType: "short", contactId: shortContactId };
+  }
+
+  return { ok: false };
 }
 
 function upsertListUnsubscribeSuppression(records: SuppressionRecord[], record: SuppressionRecord) {
