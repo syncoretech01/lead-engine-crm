@@ -1240,14 +1240,14 @@ export async function createSequenceStepAction(formData: FormData) {
 
 export async function sendCampaignAction(formData: FormData) {
   const campaignId = stringValue(formData.get("campaignId"));
-  const plan = await updateState((state, session) => {
-    assertPermission(session, "manage_outreach");
-    return {
-      workspaceId: session.workspace.id,
-      actorUserId: session.user.id,
-      ...buildCampaignSendBatch(state, session.workspace.id, campaignId, { batchSize: outreachBatchSize() })
-    };
-  }, { normalizedTables: outreachCampaignSendWriteTables });
+  const state = await readState();
+  const session = await getSession(state);
+  assertPermission(session, "manage_outreach");
+  const plan = {
+    workspaceId: session.workspace.id,
+    actorUserId: session.user.id,
+    ...buildCampaignSendBatch(state, session.workspace.id, campaignId, { batchSize: outreachBatchSize() })
+  };
 
   if (!plan.credentialOk) {
     await updateState((state, session) => {
@@ -1389,19 +1389,19 @@ export async function sendDirectEmailAction(formData: FormData) {
   const subject = stringValue(formData.get("subject"), "Quick question");
   const body = stringValue(formData.get("bodySnapshot"), "Hi {{first_name}}, quick question about {{company}}.");
 
-  const plan = await updateState((state, session) => {
-    assertPermission(session, "send_direct_outreach");
-    assertAssignedContactForOutreach(state, session, contactId);
-    return buildDirectEmailSendPlan(state, {
-      workspaceId: session.workspace.id,
-      actor: session.user,
-      requestId,
-      mode: "one_to_one",
-      contactIds: [contactId],
-      subject,
-      body
-    });
-  }, { normalizedTables: outreachEmailWriteTables });
+  const state = await readState();
+  const session = await getSession(state);
+  assertPermission(session, "send_direct_outreach");
+  assertAssignedContactForOutreach(state, session, contactId);
+  const plan = buildDirectEmailSendPlan(state, {
+    workspaceId: session.workspace.id,
+    actor: session.user,
+    requestId,
+    mode: "one_to_one",
+    contactIds: [contactId],
+    subject,
+    body
+  });
 
   const outcomes = plan.credentialOk
     ? await sendDirectEmailBatch(plan.recipients, plan.credential, plan.workspaceId)
@@ -1447,30 +1447,30 @@ export async function sendAssignedBulkEmailAction(formData: FormData) {
   const rawLimit = numberValue(formData.get("limit")) || outreachBatchSize();
   const limit = Math.max(1, Math.min(rawLimit, outreachBatchSize()));
 
-  const plan = await updateState((state, session) => {
-    assertPermission(session, "send_direct_outreach");
-    const ownerUserId = restrictsToOwnedRecords(session)
-      ? session.user.id
-      : rawOwnerUserId === "all"
-        ? undefined
-        : rawOwnerUserId || session.user.id;
-    const contactIds = assignedBulkEmailContactIds(state, {
-      workspaceId: session.workspace.id,
-      ownerUserId,
-      audience,
-      limit
-    });
-    const sendPlan = buildDirectEmailSendPlan(state, {
-      workspaceId: session.workspace.id,
-      actor: session.user,
-      requestId,
-      mode: "sdr_bulk",
-      contactIds,
-      subject,
-      body
-    });
-    return { ...sendPlan, audience, ownerUserId };
-  }, { normalizedTables: outreachEmailWriteTables });
+  const state = await readState();
+  const session = await getSession(state);
+  assertPermission(session, "send_direct_outreach");
+  const ownerUserId = restrictsToOwnedRecords(session)
+    ? session.user.id
+    : rawOwnerUserId === "all"
+      ? undefined
+      : rawOwnerUserId || session.user.id;
+  const contactIds = assignedBulkEmailContactIds(state, {
+    workspaceId: session.workspace.id,
+    ownerUserId,
+    audience,
+    limit
+  });
+  const sendPlan = buildDirectEmailSendPlan(state, {
+    workspaceId: session.workspace.id,
+    actor: session.user,
+    requestId,
+    mode: "sdr_bulk",
+    contactIds,
+    subject,
+    body
+  });
+  const plan = { ...sendPlan, audience, ownerUserId };
 
   const outcomes = plan.credentialOk
     ? await sendDirectEmailBatch(plan.recipients, plan.credential, plan.workspaceId)

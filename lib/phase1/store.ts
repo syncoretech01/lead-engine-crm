@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { cache } from "react";
 import { ensureAiDefaults } from "@/lib/phase1/ai";
 import {
   authSessionCookieName,
@@ -34,6 +35,7 @@ import { createSeedState } from "@/lib/phase1/seed";
 import { defaultSegmentRules } from "@/lib/phase1/scoring";
 import { ensureSdrDefaults } from "@/lib/phase1/sdr";
 import { ensureWaterfallDefaults, pruneWaterfallTemplateProviders } from "@/lib/phase1/waterfall-templates";
+import { timeAsync, timeSync } from "@/lib/phase1/performance";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import type { AppState, AuditLog, Permission, Session } from "@/lib/phase1/types";
 import { defaultWorkspacePath, hasPermission, resolveSession, type SessionSelection } from "@/lib/phase1/auth";
@@ -54,68 +56,80 @@ export const sessionCookieNames = {
 } as const;
 
 export async function readState(): Promise<AppState> {
-  if (resolveStorageDriver() === "prisma") {
-    return readStateFromPrisma(await getPrismaClient());
-  }
+  const driver = resolveStorageDriver();
+  return timeAsync("state.read", async () => {
+    if (driver === "prisma") {
+      return readStateFromPrisma(await getPrismaClient());
+    }
 
-  return readStateFromFile();
+    return timeSync("state.file.read", readStateFromFile, { driver });
+  }, { driver });
 }
 
 export async function writeState(state: AppState) {
-  if (resolveStorageDriver() === "prisma") {
-    await writeStateToPrisma(state, await getPrismaClient());
-    return;
-  }
+  const driver = resolveStorageDriver();
+  await timeAsync("state.write", async () => {
+    if (driver === "prisma") {
+      await writeStateToPrisma(state, await getPrismaClient());
+      return;
+    }
 
-  writeStateToFile(state);
+    timeSync("state.file.write", () => writeStateToFile(state), { driver, ...stateCountMetadata(state) });
+  }, { driver, ...stateCountMetadata(state) });
 }
 
 export async function updateState<T>(
   mutator: (state: AppState, session: Session) => T,
   options: UpdateStateOptions = {}
 ): Promise<T> {
-  if (resolveStorageDriver() === "prisma") {
-    const client = await getPrismaClient();
-    return client.$transaction(
-      async (tx) => {
-        const state = await readStateFromPrisma(tx);
-        const session = await resolveCurrentSession(state);
-        const result = mutator(state, session);
-        await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
-        return result;
-      },
-      { maxWait: 5_000, timeout: 20_000 }
-    );
-  }
+  const driver = resolveStorageDriver();
+  return timeAsync("state.update", async () => {
+    if (driver === "prisma") {
+      const client = await getPrismaClient();
+      return client.$transaction(
+        async (tx) => {
+          const state = await readStateFromPrisma(tx);
+          const session = await resolveCurrentSession(state);
+          const result = mutator(state, session);
+          await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
+          return result;
+        },
+        { maxWait: 5_000, timeout: 20_000 }
+      );
+    }
 
-  const state = readStateFromFile();
-  const session = await resolveCurrentSession(state);
-  const result = mutator(state, session);
-  writeStateToFile(state);
-  return result;
+    const state = readStateFromFile();
+    const session = await resolveCurrentSession(state);
+    const result = mutator(state, session);
+    writeStateToFile(state);
+    return result;
+  }, { driver, tables: normalizedTablesLabel(options.normalizedTables) });
 }
 
 export async function updateAuthState<T>(
   mutator: (state: AppState) => T,
   options: UpdateStateOptions = {}
 ): Promise<T> {
-  if (resolveStorageDriver() === "prisma") {
-    const client = await getPrismaClient();
-    return client.$transaction(
-      async (tx) => {
-        const state = await readStateFromPrisma(tx);
-        const result = mutator(state);
-        await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
-        return result;
-      },
-      { maxWait: 5_000, timeout: 20_000 }
-    );
-  }
+  const driver = resolveStorageDriver();
+  return timeAsync("state.authUpdate", async () => {
+    if (driver === "prisma") {
+      const client = await getPrismaClient();
+      return client.$transaction(
+        async (tx) => {
+          const state = await readStateFromPrisma(tx);
+          const result = mutator(state);
+          await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
+          return result;
+        },
+        { maxWait: 5_000, timeout: 20_000 }
+      );
+    }
 
-  const state = readStateFromFile();
-  const result = mutator(state);
-  writeStateToFile(state);
-  return result;
+    const state = readStateFromFile();
+    const result = mutator(state);
+    writeStateToFile(state);
+    return result;
+  }, { driver, tables: normalizedTablesLabel(options.normalizedTables) });
 }
 
 async function getPrismaClient() {
@@ -139,7 +153,11 @@ export function appendAudit(
 
 export async function getSession(state?: AppState) {
   try {
-    return await resolveCurrentSession(state ?? (await readState()));
+    if (state) {
+      return await resolveCurrentSession(state);
+    }
+
+    return (await getRequestStateSession()).session;
   } catch (error) {
     if (isAuthRequiredError(error)) {
       const { redirect } = await import("next/navigation");
@@ -150,19 +168,30 @@ export async function getSession(state?: AppState) {
 }
 
 export async function getWorkspaceContext(permission?: Permission) {
-  const state = await readState();
-  const session = await getSession(state);
+  return timeAsync("workspace.context", async () => {
+    const { state, session } = await getRequestStateSession();
 
-  if (permission && !hasPermission(session, permission)) {
-    const { redirect } = await import("next/navigation");
-    redirect(defaultWorkspacePath(session));
-  }
+    if (permission && !hasPermission(session, permission)) {
+      const { redirect } = await import("next/navigation");
+      redirect(defaultWorkspacePath(session));
+    }
 
-  return { state, session, workspaceId: session.workspace.id };
+    return { state, session, workspaceId: session.workspace.id };
+  }, { permission: permission ?? "none" });
 }
 
 export async function getDeveloperWorkspaceContext() {
   return getWorkspaceContext("manage_workspace");
+}
+
+const getCachedRequestStateSession = cache(async () => {
+  const state = await readState();
+  const session = await resolveCurrentSession(state);
+  return { state, session };
+});
+
+async function getRequestStateSession() {
+  return timeAsync("state.requestContext", () => getCachedRequestStateSession());
 }
 
 export async function resetStore() {
@@ -261,9 +290,9 @@ function ensureFileStore() {
 }
 
 async function readStateFromPrisma(client: PrismaStoreClient): Promise<AppState> {
-  const snapshot = await client.appStateSnapshot.findUnique({
+  const snapshot = await timeAsync("state.prisma.snapshotRead", () => client.appStateSnapshot.findUnique({
     where: { id: stateSnapshotId }
-  });
+  }), { snapshotId: stateSnapshotId });
 
   if (!snapshot) {
     const state = readInitialStateForPrisma();
@@ -285,7 +314,7 @@ async function writeStateToPrisma(
   client: PrismaStoreClient,
   normalizedOptions: SyncNormalizedProjectionOptions = {}
 ) {
-  await client.appStateSnapshot.upsert({
+  await timeAsync("state.prisma.snapshotUpsert", () => client.appStateSnapshot.upsert({
     where: { id: stateSnapshotId },
     update: {
       version: state.version,
@@ -296,7 +325,7 @@ async function writeStateToPrisma(
       version: state.version,
       state: state as unknown as Prisma.InputJsonValue
     }
-  });
+  }), { snapshotId: stateSnapshotId, ...stateCountMetadata(state) });
   await syncNormalizedProjectionToPrisma(
     state,
     client as unknown as Parameters<typeof syncNormalizedProjectionToPrisma>[1],
@@ -306,6 +335,21 @@ async function writeStateToPrisma(
 
 function normalizedSyncOptions(options: UpdateStateOptions): SyncNormalizedProjectionOptions {
   return options.normalizedTables?.length ? { tables: options.normalizedTables } : {};
+}
+
+function normalizedTablesLabel(tables: ProjectionTableName[] | undefined) {
+  return tables?.length ? tables.join(",") : "all";
+}
+
+function stateCountMetadata(state: AppState) {
+  return {
+    contacts: state.contacts.length,
+    companies: state.companies.length,
+    emailEvents: state.emailEvents.length,
+    sdrAssignments: state.sdrAssignments.length,
+    activities: state.activities.length,
+    auditLogs: state.auditLogs.length
+  };
 }
 
 function readInitialStateForPrisma() {

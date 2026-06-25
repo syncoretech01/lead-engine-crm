@@ -60,9 +60,14 @@ describe("outreach send planning", () => {
   it("plans an idempotent live SES batch with signed unsubscribe headers", () => {
     const state = outreachState({ liveSes: true });
     state.emailEvents = [sentEvent("email-existing", "contact-a", "campaign-a")];
+    const campaign = state.outreachCampaigns[0];
+    const originalStatus = campaign.status;
+    const originalUpdatedAt = campaign.updatedAt;
 
     const batch = buildCampaignSendBatch(state, "workspace-syncore", "campaign-a", { batchSize: 1 });
 
+    expect(campaign.status).toBe(originalStatus);
+    expect(campaign.updatedAt).toBe(originalUpdatedAt);
     expect(batch.credentialOk).toBe(true);
     expect(batch.totalEligible).toBe(2);
     expect(batch.remaining).toBe(0);
@@ -78,6 +83,17 @@ describe("outreach send planning", () => {
     expect(batch.recipients[0].html).toContain(">Unsubscribe</a>");
     expect(batch.recipients[0].html).not.toContain("Unsubscribe: https://app.syncore.test/unsubscribe/contact-b?t=");
     expect(batch.recipients[0].text).toContain("Syncore Tech, 1500 N Grant St, Denver, CO 80203, USA");
+  });
+
+  it("records partial sends as active without completing the campaign", () => {
+    const state = outreachState({ liveSes: true });
+    const result = recordCampaignSendResults(state, "workspace-syncore", "campaign-a", "user-nora", [
+      { contactId: "contact-a", status: "sent", providerMessageId: "ses-message-1" }
+    ]);
+
+    expect(result).toEqual({ sent: 1, failed: 0, completed: false });
+    expect(state.outreachCampaigns[0].status).toBe("Active");
+    expect(state.emailEvents).toHaveLength(1);
   });
 
   it("records successful SES sends and completes the campaign when drained", () => {

@@ -1,6 +1,7 @@
 import { resolveLiveProviderCredential } from "@/lib/phase1/provider-live-execution";
 import { outreachBatchSize, outreachFrom, outreachMailingAddress, outreachReplyTo } from "@/lib/phase1/outreach-config";
 import { createEmailEvent, refreshCampaignMetrics } from "@/lib/phase1/outreach";
+import { startPerformanceTimer, timeAsync } from "@/lib/phase1/performance";
 import { buildOneClickUnsubscribeUrl, buildUnsubscribeUrl } from "@/lib/phase1/unsubscribe-token";
 import { amazonSesSendEmail } from "@/lib/providers/adapters/amazon-ses";
 import { resolveProviderExecutionMode } from "@/lib/providers/live-adapters";
@@ -186,11 +187,6 @@ export function buildCampaignSendBatch(
     };
   });
 
-  if (recipients.length > 0) {
-    campaign.status = "Active";
-    campaign.updatedAt = new Date().toISOString();
-  }
-
   return {
     credentialOk: true,
     credential: credentialResult.credential,
@@ -206,11 +202,12 @@ export async function sendCampaignBatch(
   workspaceId: string
 ): Promise<SendOutcome[]> {
   ensureLiveProviderAdaptersRegistered();
+  const timer = startPerformanceTimer("ses.campaignBatch", { workspaceId, recipientCount: recipients.length });
   const outcomes: SendOutcome[] = [];
 
   for (const recipient of recipients) {
     try {
-      const result = await amazonSesSendEmail(
+      const result = await timeAsync("ses.sendEmail", () => amazonSesSendEmail(
         {
           to: recipient.to,
           subject: recipient.subject,
@@ -227,7 +224,7 @@ export async function sendCampaignBatch(
           requestId: `outreach-${recipient.campaignId}-${recipient.contactId}`,
           credential
         }
-      );
+      ), { workspaceId, kind: "campaign" });
 
       if (result.status === "ok" && result.data[0]?.status === "sent") {
         outcomes.push({
@@ -251,6 +248,10 @@ export async function sendCampaignBatch(
     }
   }
 
+  timer.end({
+    sent: outcomes.filter((outcome) => outcome.status === "sent").length,
+    failed: outcomes.filter((outcome) => outcome.status === "failed").length
+  });
   return outcomes;
 }
 
@@ -311,6 +312,11 @@ export function recordCampaignSendResults(
       rawPayload: { provider: "Amazon SES", messageId: outcome.providerMessageId }
     });
     sent += 1;
+  }
+
+  if (sent > 0 && campaign.status !== "Active") {
+    campaign.status = "Active";
+    campaign.updatedAt = new Date().toISOString();
   }
 
   const remaining = campaignAudience(state, campaign)

@@ -1,6 +1,7 @@
 import { addActivity } from "@/lib/phase1/crm";
 import { outreachFrom, outreachMailingAddress, outreachReplyTo } from "@/lib/phase1/outreach-config";
 import { createEmailEvent } from "@/lib/phase1/outreach";
+import { startPerformanceTimer, timeAsync } from "@/lib/phase1/performance";
 import {
   emailAddressFromMailbox,
   findLiveSesConnection,
@@ -169,11 +170,12 @@ export async function sendDirectEmailBatch(
   workspaceId: string
 ): Promise<SendOutcome[]> {
   ensureLiveProviderAdaptersRegistered();
+  const timer = startPerformanceTimer("ses.directEmailBatch", { workspaceId, recipientCount: recipients.length });
   const outcomes: SendOutcome[] = [];
 
   for (const recipient of recipients) {
     try {
-      const result = await amazonSesSendEmail(
+      const result = await timeAsync("ses.sendEmail", () => amazonSesSendEmail(
         {
           to: recipient.to,
           subject: recipient.subject,
@@ -190,7 +192,7 @@ export async function sendDirectEmailBatch(
           requestId: `direct-${recipient.requestId}-${recipient.contactId}`,
           credential
         }
-      );
+      ), { workspaceId, kind: recipient.mode });
 
       if (result.status === "ok" && result.data[0]?.status === "sent") {
         outcomes.push({
@@ -214,6 +216,10 @@ export async function sendDirectEmailBatch(
     }
   }
 
+  timer.end({
+    sent: outcomes.filter((outcome) => outcome.status === "sent").length,
+    failed: outcomes.filter((outcome) => outcome.status === "failed").length
+  });
   return outcomes;
 }
 

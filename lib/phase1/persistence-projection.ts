@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { ownerUserIdForName } from "@/lib/phase1/crm";
+import { startPerformanceTimer, timeAsync, timeSync } from "@/lib/phase1/performance";
 import type {
   Activity,
   AppState,
@@ -1312,54 +1313,85 @@ export async function syncNormalizedProjectionToPrisma(
   client: PrismaMirrorClient,
   options: SyncNormalizedProjectionOptions = {}
 ) {
-  const projection = createNormalizedPersistenceProjection(state);
+  const totalTimer = startPerformanceTimer("projection.sync.total", {
+    requestedTables: projectionTablesLabel(options.tables)
+  });
+  const projection = timeSync("projection.create", () => createNormalizedPersistenceProjection(state), {
+    requestedTables: projectionTablesLabel(options.tables),
+    contacts: state.contacts.length,
+    emailEvents: state.emailEvents.length,
+    activities: state.activities.length
+  });
   const workspaceIds = projection.workspaces.map((workspace) => workspace.id);
   const requestedTables = options.tables?.length ? new Set(options.tables) : undefined;
   const selectedUpsertOrder = upsertOrder.filter((spec) => !requestedTables || requestedTables.has(spec.table));
   const skippedTables: ProjectionTableName[] = [];
+  const selectedRows = selectedUpsertOrder.reduce((total, spec) => total + projection[spec.table].length, 0);
 
-  for (const spec of [...selectedUpsertOrder].reverse()) {
-    if (!spec.workspaceScoped) continue;
-    const delegate = client[spec.delegate];
-    if (!delegate?.deleteMany) {
-      skippedTables.push(spec.table);
-      continue;
+  await timeAsync("projection.sync.deleteMany", async () => {
+    for (const spec of [...selectedUpsertOrder].reverse()) {
+      if (!spec.workspaceScoped) continue;
+      const delegate = client[spec.delegate];
+      if (!delegate?.deleteMany) {
+        skippedTables.push(spec.table);
+        continue;
+      }
+
+      for (const workspaceId of workspaceIds) {
+        const ids = projection[spec.table]
+          .filter((row) => row.workspaceId === workspaceId)
+          .map((row) => row.id);
+        await delegate.deleteMany({ where: { workspaceId, id: { notIn: ids } } });
+      }
     }
+  }, {
+    selectedTables: selectedUpsertOrder.length,
+    workspaceCount: workspaceIds.length,
+    requestedTables: projectionTablesLabel(options.tables)
+  });
 
-    for (const workspaceId of workspaceIds) {
-      const ids = projection[spec.table]
-        .filter((row) => row.workspaceId === workspaceId)
-        .map((row) => row.id);
-      await delegate.deleteMany({ where: { workspaceId, id: { notIn: ids } } });
+  await timeAsync("projection.sync.upsert", async () => {
+    for (const spec of selectedUpsertOrder) {
+      const delegate = client[spec.delegate];
+      if (!delegate?.upsert) {
+        if (!skippedTables.includes(spec.table)) skippedTables.push(spec.table);
+        continue;
+      }
+
+      for (const row of projection[spec.table]) {
+        const data = stripUndefined(row);
+        await delegate.upsert({
+          where: { id: row.id },
+          update: data,
+          create: data
+        });
+      }
     }
-  }
+  }, {
+    selectedTables: selectedUpsertOrder.length,
+    selectedRows,
+    requestedTables: projectionTablesLabel(options.tables)
+  });
 
-  for (const spec of selectedUpsertOrder) {
-    const delegate = client[spec.delegate];
-    if (!delegate?.upsert) {
-      if (!skippedTables.includes(spec.table)) skippedTables.push(spec.table);
-      continue;
-    }
-
-    for (const row of projection[spec.table]) {
-      const data = stripUndefined(row);
-      await delegate.upsert({
-        where: { id: row.id },
-        update: data,
-        create: data
-      });
-    }
-  }
-
-  return {
+  const result = {
     ...normalizedProjectionSummary(projection),
     syncedTables: selectedUpsertOrder.map((spec) => spec.table),
     skippedTables: Array.from(new Set(skippedTables))
   };
+  totalTimer.end({
+    selectedTables: selectedUpsertOrder.length,
+    selectedRows,
+    skippedTables: result.skippedTables.length
+  });
+  return result;
 }
 
 function sortRows<T extends ProjectionRow>(rows: T[]) {
   return [...rows].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function projectionTablesLabel(tables: ProjectionTableName[] | undefined) {
+  return tables?.length ? tables.join(",") : "all";
 }
 
 function workspaceRoleValue(role: WorkspaceRole) {
