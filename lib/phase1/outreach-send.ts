@@ -399,7 +399,10 @@ function escapeAttribute(value: string) {
 function linkVisibleUnsubscribeUrl(escapedText: string, unsubscribeUrl: string) {
   const escapedUrl = escapeHtml(unsubscribeUrl);
   const anchor = `<a href="${escapeAttribute(unsubscribeUrl)}">Unsubscribe</a>`;
+  const placeholder = "__SYNCORE_UNSUBSCRIBE_LINK__";
+
   return escapedText
-    .replaceAll(`Unsubscribe: ${escapedUrl}`, anchor)
-    .replaceAll(escapedUrl, anchor);
+    .replaceAll(`Unsubscribe: ${escapedUrl}`, placeholder)
+    .replaceAll(escapedUrl, placeholder)
+    .replaceAll(placeholder, anchor);
 }
