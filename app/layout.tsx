@@ -10,7 +10,7 @@ import "./globals.css";
 import { headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { syncoreBrand } from "@/lib/brand";
-import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
+import { isPublicAuthPath, isPublicUnsubscribePath } from "@/lib/phase1/auth-routes";
 import { getSession } from "@/lib/phase1/store";
 
 export const metadata: Metadata = {
@@ -29,7 +29,7 @@ export default async function RootLayout({
   const headerStore = await headers();
   const pathname = headerStore.get("x-syncore-pathname") ?? "";
 
-  if (isPublicAuthPath(pathname)) {
+  if (isPublicAuthPath(pathname) || isPublicUnsubscribePath(pathname)) {
     return (
       <html lang="en">
         <body>{children}</body>

@@ -108,7 +108,7 @@ export function renderOutreachEmail(args: {
   }
 
   const escaped = escapeHtml(text);
-  const linked = escaped.replaceAll(escapeHtml(args.unsubscribeUrl), `<a href="${escapeAttribute(args.unsubscribeUrl)}">${escapeHtml(args.unsubscribeUrl)}</a>`);
+  const linked = linkVisibleUnsubscribeUrl(escaped, args.unsubscribeUrl);
   return { subject, text, html: linked.replace(/\n/g, "<br>") };
 }
 
@@ -388,4 +388,12 @@ function escapeHtml(value: string) {
 
 function escapeAttribute(value: string) {
   return escapeHtml(value);
+}
+
+function linkVisibleUnsubscribeUrl(escapedText: string, unsubscribeUrl: string) {
+  const escapedUrl = escapeHtml(unsubscribeUrl);
+  const anchor = `<a href="${escapeAttribute(unsubscribeUrl)}">Unsubscribe</a>`;
+  return escapedText
+    .replaceAll(`Unsubscribe: ${escapedUrl}`, anchor)
+    .replaceAll(escapedUrl, anchor);
 }

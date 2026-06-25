@@ -64,6 +64,8 @@ describe("direct SDR email send planning", () => {
     });
     expect(plan.recipients[0].headers["List-Unsubscribe"]).toContain("https://app.syncore.test/api/unsubscribe?t=");
     expect(plan.recipients[0].text).toContain("https://app.syncore.test/unsubscribe/contact-a?t=");
+    expect(plan.recipients[0].html).toContain(">Unsubscribe</a>");
+    expect(plan.recipients[0].html).not.toContain("Unsubscribe: https://app.syncore.test/unsubscribe/contact-a?t=");
     expect(plan.recipients[0].text).toContain("Syncore Tech, 1500 N Grant St, Denver, CO 80203, USA");
   });
 

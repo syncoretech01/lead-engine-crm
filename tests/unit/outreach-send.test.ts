@@ -75,6 +75,8 @@ describe("outreach send planning", () => {
     expect(batch.recipients[0].headers["List-Unsubscribe"]).toContain("https://app.syncore.test/api/unsubscribe?t=");
     expect(batch.recipients[0].headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
     expect(batch.recipients[0].text).toContain("https://app.syncore.test/unsubscribe/contact-b?t=");
+    expect(batch.recipients[0].html).toContain(">Unsubscribe</a>");
+    expect(batch.recipients[0].html).not.toContain("Unsubscribe: https://app.syncore.test/unsubscribe/contact-b?t=");
     expect(batch.recipients[0].text).toContain("Syncore Tech, 1500 N Grant St, Denver, CO 80203, USA");
   });
 
