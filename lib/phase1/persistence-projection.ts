@@ -716,7 +716,7 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
         stage: opportunityStageValue(opportunity.stage),
         amountCents: Math.round(opportunity.amount * 100),
         probability: opportunity.probability,
-        expectedCloseDate: opportunity.expectedCloseDate,
+        expectedCloseDate: opportunity.expectedCloseDate ? asDateTime(opportunity.expectedCloseDate) : undefined,
         ownerUserId: state.users.some((user) => user.id === opportunity.ownerUserId) ? opportunity.ownerUserId : undefined,
         source: opportunity.source,
         createdAt: opportunity.createdAt,

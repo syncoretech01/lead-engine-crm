@@ -77,6 +77,7 @@ describe("normalized persistence projection", () => {
     expect(account?.companyId).toBe(state.companies[0].id);
     expect(crmContact?.accountId).toBe(state.contacts[0].companyId);
     expect(opportunity?.accountId).toBe(state.opportunities[0].companyId);
+    expect(opportunity?.expectedCloseDate).toMatch(/T00:00:00\.000Z$/);
     expect(emailEvent?.rawPayload).toMatchObject({ leadContactId: state.emailEvents[0].contactId });
     expect(smsEvent?.rawPayload).toMatchObject({ leadContactId: state.smsEvents[0].contactId });
     expect(contact?.consentStatus).toBe(state.contacts[0].consentStatus);
