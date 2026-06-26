@@ -32,6 +32,26 @@ describe("provider connection management", () => {
     expect(ensureProviderConnectionsForRegistry(state, workspaceId).changed).toBe(false);
   });
 
+  it("backfills the active workspace even when it is not the first workspace", () => {
+    const state = createSeedState();
+    const secondaryWorkspace = {
+      ...state.workspaces[0],
+      id: "workspace-production",
+      name: "Production Workspace"
+    };
+    state.workspaces.push(secondaryWorkspace);
+    state.providerConnections = state.providerConnections.filter(
+      (connection) => connection.workspaceId === state.workspaces[0].id
+    );
+
+    const result = ensureProviderConnectionsForRegistry(state, secondaryWorkspace.id);
+    const views = providerConnectionViewsForWorkspace(state, secondaryWorkspace.id);
+
+    expect(result.changed).toBe(true);
+    expect(views).toHaveLength(supportedProviders().length);
+    expect(views.every((connection) => connection.workspaceId === secondaryWorkspace.id)).toBe(true);
+  });
+
   it("toggles execution mode to live and keeps it across config saves", () => {
     const state = createSeedState();
     const session = resolveSession(state, {});

@@ -16,8 +16,10 @@ import {
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
-import { providerConnectionViewsForWorkspace } from "@/lib/phase1/provider-connections";
-import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
+import { assertPermission } from "@/lib/phase1/auth";
+import { providerConnectionWriteTables } from "@/lib/phase1/normalized-write-tables";
+import { ensureProviderConnectionsForRegistry, providerConnectionViewsForWorkspace } from "@/lib/phase1/provider-connections";
+import { getDeveloperWorkspaceContext, updateState } from "@/lib/phase1/store";
 import { liveProviderExecutionEnabled } from "@/lib/providers/live-adapters";
 import type { ProviderConnectionSafeView } from "@/lib/phase1/provider-connections";
 import { formatNumber } from "@/lib/utils";
@@ -27,6 +29,21 @@ export const dynamic = "force-dynamic";
 
 export default async function IntegrationsPage() {
   const { state, session, workspaceId } = await getDeveloperWorkspaceContext();
+  const providerDefaults = ensureProviderConnectionsForRegistry(
+    state,
+    workspaceId,
+    new Date().toISOString(),
+    session.user.id
+  );
+  if (providerDefaults.changed) {
+    await updateState(
+      (draftState, draftSession) => {
+        assertPermission(draftSession, "manage_workspace");
+        ensureProviderConnectionsForRegistry(draftState, draftSession.workspace.id, new Date().toISOString(), draftSession.user.id);
+      },
+      { normalizedTables: providerConnectionWriteTables }
+    );
+  }
   const connections = providerConnectionViewsForWorkspace(state, workspaceId);
   const liveFlag = liveProviderExecutionEnabled();
   const audits = state.providerCredentialAudits
