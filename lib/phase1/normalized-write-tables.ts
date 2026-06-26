@@ -163,3 +163,5 @@ export const providerJobWriteTables = [
   "providerUsageLedger",
   "auditLogs"
 ] satisfies ProjectionTableName[];
+
+export const snapshotOnlyWriteTables = ["auditLogs"] satisfies ProjectionTableName[];

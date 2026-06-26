@@ -1,6 +1,7 @@
 import { domainReadCache } from "@/lib/phase1/domain-read-cache";
 import { defaultExportRules } from "@/lib/phase1/exporting";
 import {
+  assignmentMethodValue,
   consentStatusValue,
   createFastState,
   iso,
@@ -8,29 +9,67 @@ import {
   leadGradeValue,
   leadStatusValue,
   optionalIso,
+  outreachChannelValue,
   priorityValue,
   recordFromJson,
-  stringArray
+  reminderStatusValue,
+  sdrLeadStatusValue,
+  slaStatusValue,
+  stringArray,
+  userFromPrisma,
+  workspaceMemberFromPrisma
 } from "@/lib/phase1/fast-read-utils";
+import { defaultSegmentRules } from "@/lib/phase1/scoring";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { defaultWaterfallTemplates } from "@/lib/phase1/waterfall-templates";
+import type { PrismaClient } from "@prisma/client";
 import type {
+  AiIcpRecommendation,
   AppState,
+  AsyncJobRun,
   Company,
   Contact,
+  DedupeMatch,
+  EnrichmentFields,
+  EnrichmentProvider,
+  EnrichmentResult,
   ExportRecord,
+  ExportRule,
+  FollowUpReminder,
+  JobIdempotencyRecord,
+  JobLog,
   JobStatus,
+  LeadScore,
   LeadJob,
   NormalizedRecord,
   ProcessingStatus,
+  ProviderCacheEntry,
   RawLead,
+  RecordSegment,
   SearchProfile,
+  SegmentCondition,
+  SegmentRule,
   Session,
-  VerificationResult
+  SdrAssignment,
+  SdrTeam,
+  VerificationResult,
+  WaterfallTemplate
 } from "@/lib/phase1/types";
 
 const DASHBOARD_RECORD_LIMIT = 2_000;
 const DASHBOARD_JOB_LIMIT = 100;
 const DASHBOARD_EXPORT_LIMIT = 100;
+const STATE_SNAPSHOT_ID = "syncore-primary-state";
+
+type LeadEngineSnapshotSlices = {
+  asyncJobRuns: AsyncJobRun[];
+  jobLogs: JobLog[];
+  jobIdempotencyRecords: JobIdempotencyRecord[];
+  dedupeMatches: DedupeMatch[];
+  exportRules: ExportRule[];
+  providerCache: ProviderCacheEntry[];
+  waterfallTemplates: WaterfallTemplate[];
+};
 
 export const readFastLeadDashboardState = domainReadCache(readFastLeadDashboardStateUncached);
 
@@ -51,7 +90,17 @@ async function readFastLeadDashboardStateUncached(
     companyRows,
     contactRows,
     verificationRows,
-    exportRows
+    exportRows,
+    aiIcpRows,
+    enrichmentRows,
+    segmentRows,
+    recordSegmentRows,
+    leadScoreRows,
+    sdrTeamRows,
+    sdrAssignmentRows,
+    followUpReminderRows,
+    workspaceMemberRows,
+    snapshotSlices
   ] = await Promise.all([
     prisma.searchProfile.findMany({
       where: { workspaceId },
@@ -259,7 +308,178 @@ async function readFastLeadDashboardStateUncached(
         createdById: true,
         createdAt: true
       }
-    })
+    }),
+    prisma.aiIcpRecommendation.findMany({
+      where: { workspaceId },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      take: 100,
+      select: {
+        id: true,
+        workspaceId: true,
+        name: true,
+        description: true,
+        industries: true,
+        titles: true,
+        geographies: true,
+        technologies: true,
+        segments: true,
+        sourceSummary: true,
+        fitSignals: true,
+        confidence: true,
+        prompt: true,
+        status: true,
+        createdById: true,
+        createdAt: true,
+        updatedAt: true,
+        appliedSearchProfileId: true
+      }
+    }),
+    prisma.enrichmentResult.findMany({
+      where: { workspaceId },
+      orderBy: [{ enrichedAt: "desc" }, { id: "asc" }],
+      take: DASHBOARD_RECORD_LIMIT,
+      select: {
+        id: true,
+        workspaceId: true,
+        contactId: true,
+        companyId: true,
+        provider: true,
+        confidence: true,
+        fields: true,
+        rawResponse: true,
+        enrichedAt: true,
+        expiresAt: true
+      }
+    }),
+    prisma.segment.findMany({
+      where: { workspaceId },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      select: {
+        id: true,
+        workspaceId: true,
+        name: true,
+        rules: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    }),
+    prisma.recordSegment.findMany({
+      where: { workspaceId },
+      orderBy: [{ assignedAt: "desc" }, { id: "asc" }],
+      take: DASHBOARD_RECORD_LIMIT,
+      select: {
+        id: true,
+        workspaceId: true,
+        segmentId: true,
+        contactId: true,
+        companyId: true,
+        assignedAt: true,
+        segment: {
+          select: {
+            name: true,
+            rules: true
+          }
+        }
+      }
+    }),
+    prisma.leadScore.findMany({
+      where: { workspaceId },
+      orderBy: [{ calculatedAt: "desc" }, { id: "asc" }],
+      take: DASHBOARD_RECORD_LIMIT,
+      select: {
+        id: true,
+        workspaceId: true,
+        contactId: true,
+        companyId: true,
+        score: true,
+        priority: true,
+        breakdown: true,
+        calculatedAt: true
+      }
+    }),
+    prisma.sdrTeam.findMany({
+      where: { workspaceId },
+      orderBy: [{ active: "desc" }, { name: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        workspaceId: true,
+        name: true,
+        managerUserId: true,
+        memberUserIds: true,
+        territories: true,
+        industries: true,
+        capacityWeight: true,
+        active: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    }),
+    prisma.sdrAssignment.findMany({
+      where: { workspaceId },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      take: DASHBOARD_RECORD_LIMIT,
+      select: {
+        id: true,
+        workspaceId: true,
+        accountId: true,
+        contactId: true,
+        assignedSdrId: true,
+        assignedTeamId: true,
+        assignedById: true,
+        assignmentMethod: true,
+        assignmentReason: true,
+        assignedAt: true,
+        firstTouchDueAt: true,
+        followUpDueAt: true,
+        status: true,
+        reassignmentReason: true,
+        previousOwnerId: true,
+        slaStatus: true,
+        firstTouchedAt: true,
+        lastTouchAt: true,
+        touchCount: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    }),
+    prisma.followUpReminder.findMany({
+      where: { workspaceId },
+      orderBy: [{ dueAt: "asc" }, { id: "asc" }],
+      take: DASHBOARD_RECORD_LIMIT,
+      select: {
+        id: true,
+        workspaceId: true,
+        assignmentId: true,
+        accountId: true,
+        contactId: true,
+        ownerUserId: true,
+        title: true,
+        channel: true,
+        dueAt: true,
+        status: true,
+        createdAt: true,
+        completedAt: true,
+        snoozedUntil: true
+      }
+    }),
+    prisma.workspaceMember.findMany({
+      where: {
+        workspaceId,
+        role: { in: ["SDR", "MANAGER", "ADMIN"] }
+      },
+      orderBy: [{ role: "asc" }, { id: "asc" }],
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            createdAt: true
+          }
+        }
+      }
+    }),
+    readLeadEngineSnapshotSlices(prisma, workspaceId)
   ]);
 
   const profileEstimates = new Map<string, number>();
@@ -271,16 +491,38 @@ async function readFastLeadDashboardStateUncached(
     );
   }
 
+  const segmentRules = segmentRows.map(segmentRuleFromPrisma);
+  const exportRules = snapshotSlices.exportRules.length ? snapshotSlices.exportRules : defaultExportRules(workspaceId);
+  const waterfallTemplates = snapshotSlices.waterfallTemplates.length
+    ? snapshotSlices.waterfallTemplates
+    : defaultWaterfallTemplates(workspaceId);
+
   return createFastState(session, {
+    users: workspaceMemberRows.map((row) => userFromPrisma(row.user)),
+    workspaceMembers: workspaceMemberRows.map(workspaceMemberFromPrisma),
     searchProfiles: profileRows.map((row) => searchProfileFromPrisma(row, profileEstimates.get(row.id) ?? 0)),
     leadJobs: jobRows.map(leadJobFromPrisma),
+    asyncJobRuns: snapshotSlices.asyncJobRuns,
+    jobLogs: snapshotSlices.jobLogs,
+    jobIdempotencyRecords: snapshotSlices.jobIdempotencyRecords,
     rawLeads: rawLeadRows.map(rawLeadFromPrisma),
     normalizedRecords: normalizedRows.map(normalizedRecordFromPrisma),
     companies: companyRows.map(companyFromPrisma),
     contacts: contactRows.map(contactFromPrisma),
     verificationResults: verificationRows.map(verificationResultFromPrisma),
-    exportRules: defaultExportRules(workspaceId),
-    exports: exportRows.map(exportRecordFromPrisma)
+    dedupeMatches: snapshotSlices.dedupeMatches,
+    exportRules,
+    providerCache: snapshotSlices.providerCache,
+    enrichmentResults: enrichmentRows.map(enrichmentResultFromPrisma),
+    segmentRules: segmentRules.length ? segmentRules : defaultSegmentRules(workspaceId),
+    recordSegments: recordSegmentRows.map(recordSegmentFromPrisma),
+    leadScores: leadScoreRows.map(leadScoreFromPrisma),
+    sdrTeams: sdrTeamRows.map(sdrTeamFromPrisma),
+    sdrAssignments: sdrAssignmentRows.map(sdrAssignmentFromPrisma),
+    followUpReminders: followUpReminderRows.map(followUpReminderFromPrisma),
+    aiIcpRecommendations: aiIcpRows.map(aiIcpRecommendationFromPrisma),
+    exports: exportRows.map(exportRecordFromPrisma),
+    waterfallTemplates
   });
 }
 
@@ -647,6 +889,298 @@ function exportRecordFromPrisma(row: {
   };
 }
 
+async function readLeadEngineSnapshotSlices(
+  prisma: Pick<PrismaClient, "$queryRaw">,
+  workspaceId: string
+): Promise<LeadEngineSnapshotSlices> {
+  const rows = await prisma.$queryRaw<Array<Record<keyof LeadEngineSnapshotSlices, unknown>>>`
+    SELECT
+      "state"->'asyncJobRuns' AS "asyncJobRuns",
+      "state"->'jobLogs' AS "jobLogs",
+      "state"->'jobIdempotencyRecords' AS "jobIdempotencyRecords",
+      "state"->'dedupeMatches' AS "dedupeMatches",
+      "state"->'exportRules' AS "exportRules",
+      "state"->'providerCache' AS "providerCache",
+      "state"->'waterfallTemplates' AS "waterfallTemplates"
+    FROM "AppStateSnapshot"
+    WHERE "id" = ${STATE_SNAPSHOT_ID}
+    LIMIT 1
+  `;
+  const row = rows[0];
+
+  return {
+    asyncJobRuns: workspaceSlice<AsyncJobRun>(row?.asyncJobRuns, workspaceId),
+    jobLogs: workspaceSlice<JobLog>(row?.jobLogs, workspaceId),
+    jobIdempotencyRecords: workspaceSlice<JobIdempotencyRecord>(row?.jobIdempotencyRecords, workspaceId),
+    dedupeMatches: workspaceSlice<DedupeMatch>(row?.dedupeMatches, workspaceId),
+    exportRules: workspaceSlice<ExportRule>(row?.exportRules, workspaceId),
+    providerCache: workspaceSlice<ProviderCacheEntry>(row?.providerCache, workspaceId),
+    waterfallTemplates: workspaceSlice<WaterfallTemplate>(row?.waterfallTemplates, workspaceId)
+  };
+}
+
+function aiIcpRecommendationFromPrisma(row: {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description: string;
+  industries: string[];
+  titles: string[];
+  geographies: string[];
+  technologies: string[];
+  segments: string[];
+  sourceSummary: string;
+  fitSignals: string[];
+  confidence: number;
+  prompt: string | null;
+  status: string;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  appliedSearchProfileId: string | null;
+}): AiIcpRecommendation {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    name: row.name,
+    description: row.description,
+    industries: row.industries,
+    titles: row.titles,
+    geographies: row.geographies,
+    technologies: row.technologies,
+    segments: row.segments,
+    sourceSummary: row.sourceSummary,
+    fitSignals: row.fitSignals,
+    confidence: row.confidence,
+    prompt: row.prompt ?? undefined,
+    status: aiRecordStatusValue(row.status),
+    createdById: row.createdById ?? "system",
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+    appliedSearchProfileId: row.appliedSearchProfileId ?? undefined
+  };
+}
+
+function enrichmentResultFromPrisma(row: {
+  id: string;
+  workspaceId: string;
+  contactId: string | null;
+  companyId: string | null;
+  provider: string;
+  confidence: number | null;
+  fields: unknown;
+  rawResponse: unknown;
+  enrichedAt: Date;
+  expiresAt: Date | null;
+}): EnrichmentResult {
+  const rawResponse = objectValue(row.rawResponse);
+  const targetType = row.contactId ? "contact" : "company";
+  const targetId = row.contactId ?? row.companyId ?? stringValue(rawResponse.targetId) ?? row.id;
+  const cacheKey = stringValue(rawResponse.cacheKey) ?? `${row.provider}:${targetType}:${targetId}`;
+
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    provider: enrichmentProviderValue(row.provider),
+    targetType,
+    targetId,
+    confidence: row.confidence ?? 0,
+    fields: enrichmentFieldsFromJson(row.fields),
+    rawResponse: rawResponseFromJson(row.rawResponse),
+    cacheKey,
+    enrichedAt: iso(row.enrichedAt),
+    expiresAt: optionalIso(row.expiresAt) ?? iso(row.enrichedAt)
+  };
+}
+
+function segmentRuleFromPrisma(row: {
+  id: string;
+  workspaceId: string;
+  name: string;
+  rules: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}): SegmentRule {
+  const rules = objectValue(row.rules);
+  const conditions = segmentConditionValue(rules.conditions);
+
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    name: stringValue(rules.name) ?? row.name,
+    description: stringValue(rules.description) ?? "",
+    outputSegment: row.name,
+    scoreBoost: numberValue(rules.scoreBoost) ?? 0,
+    priorityOverride: optionalPriorityValue(rules.priorityOverride),
+    conditions,
+    active: booleanValue(rules.active, true),
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt)
+  };
+}
+
+function recordSegmentFromPrisma(row: {
+  id: string;
+  workspaceId: string;
+  segmentId: string;
+  contactId: string | null;
+  companyId: string | null;
+  assignedAt: Date;
+  segment: { name: string; rules: unknown } | null;
+}): RecordSegment {
+  const rules = objectValue(row.segment?.rules);
+
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    contactId: row.contactId ?? "",
+    companyId: row.companyId ?? "",
+    segmentRuleId: row.segmentId,
+    segment: row.segment?.name ?? stringValue(rules.name) ?? "Unsegmented",
+    scoreContribution: numberValue(rules.scoreBoost) ?? 0,
+    assignedAt: iso(row.assignedAt)
+  };
+}
+
+function leadScoreFromPrisma(row: {
+  id: string;
+  workspaceId: string;
+  contactId: string | null;
+  companyId: string | null;
+  score: number;
+  priority: string;
+  breakdown: unknown;
+  calculatedAt: Date;
+}): LeadScore {
+  const breakdown = objectValue(row.breakdown);
+
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    contactId: row.contactId ?? "",
+    companyId: row.companyId ?? "",
+    score: row.score,
+    priority: priorityValue(row.priority),
+    breakdown: {
+      verification: numberValue(breakdown.verification) ?? 0,
+      enrichment: numberValue(breakdown.enrichment) ?? 0,
+      segment: numberValue(breakdown.segment) ?? 0,
+      fit: numberValue(breakdown.fit) ?? 0,
+      compliance: numberValue(breakdown.compliance) ?? 0
+    },
+    reasons: stringArray(breakdown.reasons),
+    calculatedAt: iso(row.calculatedAt)
+  };
+}
+
+function sdrTeamFromPrisma(row: {
+  id: string;
+  workspaceId: string;
+  name: string;
+  managerUserId: string | null;
+  memberUserIds: string[];
+  territories: string[];
+  industries: string[];
+  capacityWeight: number;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}): SdrTeam {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    name: row.name,
+    managerUserId: row.managerUserId ?? "",
+    memberUserIds: row.memberUserIds,
+    territories: row.territories,
+    industries: row.industries,
+    capacityWeight: row.capacityWeight,
+    active: row.active,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt)
+  };
+}
+
+function sdrAssignmentFromPrisma(row: {
+  id: string;
+  workspaceId: string;
+  accountId: string | null;
+  contactId: string | null;
+  assignedSdrId: string | null;
+  assignedTeamId: string | null;
+  assignedById: string | null;
+  assignmentMethod: string;
+  assignmentReason: string;
+  assignedAt: Date;
+  firstTouchDueAt: Date | null;
+  followUpDueAt: Date | null;
+  status: string;
+  reassignmentReason: string | null;
+  previousOwnerId: string | null;
+  slaStatus: string;
+  firstTouchedAt: Date | null;
+  lastTouchAt: Date | null;
+  touchCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): SdrAssignment {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    companyId: row.accountId ?? "",
+    contactId: row.contactId ?? "",
+    assignedSdrId: row.assignedSdrId ?? "",
+    assignedTeamId: row.assignedTeamId ?? undefined,
+    assignedById: row.assignedById ?? "system",
+    assignmentMethod: assignmentMethodValue(row.assignmentMethod),
+    assignmentReason: row.assignmentReason,
+    assignedAt: iso(row.assignedAt),
+    firstTouchDueAt: optionalIso(row.firstTouchDueAt),
+    followUpDueAt: optionalIso(row.followUpDueAt),
+    status: sdrLeadStatusValue(row.status),
+    reassignmentReason: row.reassignmentReason ?? undefined,
+    previousOwnerId: row.previousOwnerId ?? undefined,
+    slaStatus: slaStatusValue(row.slaStatus),
+    firstTouchedAt: optionalIso(row.firstTouchedAt),
+    lastTouchAt: optionalIso(row.lastTouchAt),
+    touchCount: row.touchCount,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt)
+  };
+}
+
+function followUpReminderFromPrisma(row: {
+  id: string;
+  workspaceId: string;
+  assignmentId: string;
+  accountId: string | null;
+  contactId: string | null;
+  ownerUserId: string | null;
+  title: string;
+  channel: string;
+  dueAt: Date;
+  status: string;
+  createdAt: Date;
+  completedAt: Date | null;
+  snoozedUntil: Date | null;
+}): FollowUpReminder {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    assignmentId: row.assignmentId,
+    companyId: row.accountId ?? "",
+    contactId: row.contactId ?? "",
+    ownerUserId: row.ownerUserId ?? "",
+    title: row.title,
+    channel: outreachChannelValue(row.channel),
+    dueAt: iso(row.dueAt),
+    status: reminderStatusValue(row.status),
+    createdAt: iso(row.createdAt),
+    completedAt: optionalIso(row.completedAt),
+    snoozedUntil: optionalIso(row.snoozedUntil)
+  };
+}
+
 function profileSources(value: unknown) {
   if (Array.isArray(value)) {
     return stringArray(value);
@@ -787,6 +1321,99 @@ function phoneStatusValue(value: unknown, phone: string | null): VerificationRes
   return phone ? "Valid" : "Missing";
 }
 
-function booleanValue(value: unknown) {
-  return typeof value === "boolean" ? value : false;
+function workspaceSlice<T extends { workspaceId: string }>(value: unknown, workspaceId: string): T[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is T => {
+    return Boolean(item) && typeof item === "object" && !Array.isArray(item) && "workspaceId" in item && item.workspaceId === workspaceId;
+  });
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function booleanValue(value: unknown, fallback = false) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function rawResponseFromJson(value: unknown): Record<string, string | number | boolean | string[] | undefined> {
+  const record = objectValue(value);
+  const output: Record<string, string | number | boolean | string[] | undefined> = {};
+
+  for (const [key, item] of Object.entries(record)) {
+    if (typeof item === "string" || typeof item === "number" || typeof item === "boolean" || item === undefined) {
+      output[key] = item;
+    } else if (Array.isArray(item)) {
+      output[key] = stringArray(item);
+    }
+  }
+
+  return output;
+}
+
+function enrichmentFieldsFromJson(value: unknown): EnrichmentFields {
+  const record = objectValue(value);
+
+  return {
+    industry: stringValue(record.industry),
+    employeeBand: stringValue(record.employeeBand),
+    revenueBand: stringValue(record.revenueBand),
+    technologies: stringArray(record.technologies),
+    signals: stringArray(record.signals),
+    seniority: stringValue(record.seniority),
+    department: stringValue(record.department),
+    directEmailCandidate: stringValue(record.directEmailCandidate),
+    confidenceNote: stringValue(record.confidenceNote)
+  };
+}
+
+function segmentConditionValue(value: unknown): SegmentCondition {
+  const record = objectValue(value);
+  const grades = stringArray(record.grades)
+    .map((grade) => leadGradeValue(grade))
+    .filter((grade) => grade !== "S");
+
+  return {
+    industries: stringArray(record.industries),
+    titleKeywords: stringArray(record.titleKeywords),
+    domainKeywords: stringArray(record.domainKeywords),
+    technologyKeywords: stringArray(record.technologyKeywords),
+    signalKeywords: stringArray(record.signalKeywords),
+    grades: grades.length ? grades : ["A", "B", "C"],
+    minScore: numberValue(record.minScore) ?? 0,
+    requirePhone: booleanValue(record.requirePhone)
+  };
+}
+
+function optionalPriorityValue(value: unknown): SegmentRule["priorityOverride"] {
+  return value === "P1" || value === "P2" || value === "P3" || value === "P4" || value === "S"
+    ? value
+    : undefined;
+}
+
+function aiRecordStatusValue(value: string): AiIcpRecommendation["status"] {
+  return value === "Applied" || value === "Dismissed" || value === "Generated" ? value : "Generated";
+}
+
+function enrichmentProviderValue(value: string): EnrichmentProvider {
+  if (
+    value === "Syncore Apollo Local" ||
+    value === "Syncore Hunter Local" ||
+    value === "Syncore Web Signals Local"
+  ) {
+    return value;
+  }
+
+  return "Syncore Apollo Local";
 }

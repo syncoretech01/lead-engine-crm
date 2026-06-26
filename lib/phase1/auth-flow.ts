@@ -1,6 +1,12 @@
 import { defaultWorkspacePath } from "@/lib/phase1/auth";
 import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
-import { acceptInvitePrismaFast, loginWithPasswordPrismaFast, revokeAuthSessionPrismaFast } from "@/lib/phase1/auth-fast-path";
+import {
+  acceptInvitePrismaFast,
+  createPasswordResetTokenPrismaFast,
+  loginWithPasswordPrismaFast,
+  resetPasswordWithTokenPrismaFast,
+  revokeAuthSessionPrismaFast
+} from "@/lib/phase1/auth-fast-path";
 import {
   acceptUserInvite,
   createPasswordResetToken,
@@ -113,9 +119,14 @@ export async function submitPasswordResetRequestForm(
   }
 
   let resetUrl = "";
-  await updateAuthState((state) => {
-    resetUrl = createPasswordResetToken(state, email)?.url ?? "";
-  }, { normalizedTables: authWriteTables });
+  const fastReset = await createPasswordResetTokenPrismaFast({ email });
+  if (fastReset === undefined) {
+    await updateAuthState((state) => {
+      resetUrl = createPasswordResetToken(state, email)?.url ?? "";
+    }, { normalizedTables: authWriteTables });
+  } else {
+    resetUrl = fastReset.url;
+  }
 
   if (resetUrl) {
     try {
@@ -140,10 +151,13 @@ export async function submitPasswordResetForm(formData: FormData, headers: Heade
   }
 
   try {
-    await updateAuthState(
-      (state) => resetPasswordWithToken(state, { token, password }),
-      { normalizedTables: authWriteTables }
-    );
+    const fastReset = await resetPasswordWithTokenPrismaFast({ token, password });
+    if (fastReset === undefined) {
+      await updateAuthState(
+        (state) => resetPasswordWithToken(state, { token, password }),
+        { normalizedTables: authWriteTables }
+      );
+    }
   } catch (error) {
     return { redirectTo: `/reset-password/${encodeURIComponent(token)}?error=${encodeURIComponent(errorMessage(error))}` };
   }

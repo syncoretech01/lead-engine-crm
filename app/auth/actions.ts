@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { defaultWorkspacePath } from "@/lib/phase1/auth";
 import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
-import { acceptInvitePrismaFast, loginWithPasswordPrismaFast, revokeAuthSessionPrismaFast } from "@/lib/phase1/auth-fast-path";
+import {
+  acceptInvitePrismaFast,
+  createPasswordResetTokenPrismaFast,
+  loginWithPasswordPrismaFast,
+  resetPasswordWithTokenPrismaFast,
+  revokeAuthSessionPrismaFast
+} from "@/lib/phase1/auth-fast-path";
 import {
   acceptUserInvite,
   createPasswordResetToken,
@@ -157,9 +163,14 @@ export async function requestPasswordResetAction(formData: FormData) {
   }
 
   let resetUrl = "";
-  await updateAuthState((state) => {
-    resetUrl = createPasswordResetToken(state, email)?.url ?? "";
-  }, { normalizedTables: authWriteTables });
+  const fastReset = await createPasswordResetTokenPrismaFast({ email });
+  if (fastReset === undefined) {
+    await updateAuthState((state) => {
+      resetUrl = createPasswordResetToken(state, email)?.url ?? "";
+    }, { normalizedTables: authWriteTables });
+  } else {
+    resetUrl = fastReset.url;
+  }
 
   // Out-of-band: email the reset link via SES when configured live; otherwise a
   // no-op and the link is still shown. A send failure never blocks the flow.
@@ -189,10 +200,13 @@ export async function resetPasswordAction(formData: FormData) {
   }
 
   try {
-    await updateAuthState(
-      (state) => resetPasswordWithToken(state, { token, password }),
-      { normalizedTables: authWriteTables }
-    );
+    const fastReset = await resetPasswordWithTokenPrismaFast({ token, password });
+    if (fastReset === undefined) {
+      await updateAuthState(
+        (state) => resetPasswordWithToken(state, { token, password }),
+        { normalizedTables: authWriteTables }
+      );
+    }
   } catch (error) {
     redirect(`/reset-password/${encodeURIComponent(token)}?error=${encodeURIComponent(errorMessage(error))}`);
   }

@@ -15,15 +15,23 @@ import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { jobObservabilitySnapshot } from "@/lib/phase1/jobs";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { createLeadJobPreflight } from "@/lib/phase1/lead-planning";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeadJobsPage() {
-  const { state, workspaceId } = await getWorkspaceContext("run_jobs");
+  const { session, workspaceId: scopedWorkspaceId } = await getWorkspaceSessionContext("run_jobs");
+  let workspaceId = scopedWorkspaceId;
+  let state = await readFastLeadDashboardState(session, workspaceId);
+  if (!state) {
+    const context = await getWorkspaceContext("run_jobs");
+    state = context.state;
+    workspaceId = context.workspaceId;
+  }
   const leadJobs = state.leadJobs.filter((job) => job.workspaceId === workspaceId);
   const searchProfiles = state.searchProfiles.filter((profile) => profile.workspaceId === workspaceId);
   const jobRows = leadJobs

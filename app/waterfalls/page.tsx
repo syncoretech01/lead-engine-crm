@@ -8,15 +8,23 @@ import {
   restoreDefaultWaterfallTemplatesAction,
   setWaterfallTemplateStatusAction
 } from "@/lib/phase1/waterfall-template-service";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { WaterfallCondition, WaterfallStep, WaterfallTemplate } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function WaterfallsPage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_waterfalls");
+  const { session, workspaceId: scopedWorkspaceId } = await getWorkspaceSessionContext("manage_waterfalls");
+  let workspaceId = scopedWorkspaceId;
+  let state = await readFastLeadDashboardState(session, workspaceId);
+  if (!state) {
+    const context = await getWorkspaceContext("manage_waterfalls");
+    state = context.state;
+    workspaceId = context.workspaceId;
+  }
   const templates = waterfallTemplatesForWorkspace(state, workspaceId);
   const active = templates.filter((template) => template.status === "Active").length;
   const custom = templates.filter((template) => !template.isDefault).length;

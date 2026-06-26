@@ -16,10 +16,9 @@ import {
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
-import { assertPermission } from "@/lib/phase1/auth";
-import { providerConnectionWriteTables } from "@/lib/phase1/normalized-write-tables";
+import { readFastDevSettingsState } from "@/lib/phase1/dev-dashboard-read-model";
 import { ensureProviderConnectionsForRegistry, providerConnectionViewsForWorkspace } from "@/lib/phase1/provider-connections";
-import { getDeveloperWorkspaceContext, updateState } from "@/lib/phase1/store";
+import { getDeveloperWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { liveProviderExecutionEnabled } from "@/lib/providers/live-adapters";
 import type { ProviderConnectionSafeView } from "@/lib/phase1/provider-connections";
 import { formatNumber } from "@/lib/utils";
@@ -28,22 +27,20 @@ import { StatCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function IntegrationsPage() {
-  const { state, session, workspaceId } = await getDeveloperWorkspaceContext();
-  const providerDefaults = ensureProviderConnectionsForRegistry(
+  let { session, workspaceId } = await getWorkspaceSessionContext("manage_workspace");
+  let state = await readFastDevSettingsState(session, workspaceId);
+  if (!state) {
+    const context = await getDeveloperWorkspaceContext();
+    state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+  }
+  ensureProviderConnectionsForRegistry(
     state,
     workspaceId,
     new Date().toISOString(),
     session.user.id
   );
-  if (providerDefaults.changed) {
-    await updateState(
-      (draftState, draftSession) => {
-        assertPermission(draftSession, "manage_workspace");
-        ensureProviderConnectionsForRegistry(draftState, draftSession.workspace.id, new Date().toISOString(), draftSession.user.id);
-      },
-      { normalizedTables: providerConnectionWriteTables }
-    );
-  }
   const connections = providerConnectionViewsForWorkspace(state, workspaceId);
   const liveFlag = liveProviderExecutionEnabled();
   const audits = state.providerCredentialAudits

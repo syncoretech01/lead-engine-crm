@@ -6,7 +6,8 @@ import {
 } from "@/app/auth/actions";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
+import { readFastDevSettingsState } from "@/lib/phase1/dev-dashboard-read-model";
+import { getDeveloperWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { WorkspaceRole } from "@/lib/phase1/types";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,14 @@ type AccessPageProps = {
 const roles: WorkspaceRole[] = ["Admin", "Manager", "SDR", "Data Operator", "Viewer", "Compliance Admin"];
 
 export default async function AccessPage({ searchParams }: AccessPageProps) {
-  const { state, session, workspaceId } = await getDeveloperWorkspaceContext();
+  let { session, workspaceId } = await getWorkspaceSessionContext("manage_workspace");
+  let state = await readFastDevSettingsState(session, workspaceId);
+  if (!state) {
+    const context = await getDeveloperWorkspaceContext();
+    state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+  }
   const params = await searchParams;
   const members = state.workspaceMembers
     .filter((member) => member.workspaceId === workspaceId)

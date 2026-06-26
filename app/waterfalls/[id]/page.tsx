@@ -11,7 +11,8 @@ import {
   updateWaterfallTemplateMetaAction
 } from "@/lib/phase1/waterfall-template-service";
 import { supportedProviders } from "@/lib/providers/registry";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { WaterfallCondition, WaterfallStep } from "@/lib/phase1/types";
 import type { ProviderCapability } from "@/lib/providers/types";
 
@@ -44,7 +45,14 @@ const CAPABILITIES: ProviderCapability[] = [
 
 export default async function WaterfallTemplateEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { state, workspaceId } = await getWorkspaceContext("manage_waterfalls");
+  const { session, workspaceId: scopedWorkspaceId } = await getWorkspaceSessionContext("manage_waterfalls");
+  let workspaceId = scopedWorkspaceId;
+  let state = await readFastLeadDashboardState(session, workspaceId);
+  if (!state) {
+    const context = await getWorkspaceContext("manage_waterfalls");
+    state = context.state;
+    workspaceId = context.workspaceId;
+  }
   const template = state.waterfallTemplates.find((item) => item.id === id && item.workspaceId === workspaceId);
   if (!template) {
     notFound();

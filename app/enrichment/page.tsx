@@ -20,7 +20,8 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill } from "@/components/status-pill";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { AppState, EnrichmentProvider } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
@@ -28,7 +29,14 @@ import { StatCard, LaneCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function EnrichmentPage() {
-  const { state, workspaceId } = await getWorkspaceContext("manage_enrichment");
+  const { session, workspaceId: scopedWorkspaceId } = await getWorkspaceSessionContext("manage_enrichment");
+  let workspaceId = scopedWorkspaceId;
+  let state = await readFastLeadDashboardState(session, workspaceId);
+  if (!state) {
+    const context = await getWorkspaceContext("manage_enrichment");
+    state = context.state;
+    workspaceId = context.workspaceId;
+  }
   const companies = state.companies.filter((company) => company.workspaceId === workspaceId);
   const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId);
   const enrichments = state.enrichmentResults.filter((result) => result.workspaceId === workspaceId);

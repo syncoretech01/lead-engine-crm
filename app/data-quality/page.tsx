@@ -18,7 +18,8 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { AppState, LeadGrade } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
@@ -26,7 +27,14 @@ import { StatCard, LaneCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function DataQualityPage() {
-  const { state, workspaceId } = await getWorkspaceContext("run_jobs");
+  const { session, workspaceId: scopedWorkspaceId } = await getWorkspaceSessionContext("run_jobs");
+  let workspaceId = scopedWorkspaceId;
+  let state = await readFastLeadDashboardState(session, workspaceId);
+  if (!state) {
+    const context = await getWorkspaceContext("run_jobs");
+    state = context.state;
+    workspaceId = context.workspaceId;
+  }
   const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId);
   const verificationResults = state.verificationResults.filter((result) => result.workspaceId === workspaceId);
   const openMatches = state.dedupeMatches.filter(

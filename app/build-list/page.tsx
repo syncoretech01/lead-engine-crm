@@ -11,12 +11,13 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { llmEnabled } from "@/lib/llm/openai-client";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { partitionLeadsForAssignment } from "@/lib/phase1/lead-gate";
 import { sdrWorkloads } from "@/lib/phase1/sdr";
 import { leadSourceOptions, recommendSourcesForIcp } from "@/lib/phase1/source-recommender";
 import { pickWaterfallTemplateForProfile } from "@/lib/phase1/waterfall-recommender";
 import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { BuildProgressRail, type RailStage } from "@/app/build-list/build-progress-rail";
 import { RunConfigurator, type ConfiguratorProfile } from "@/app/build-list/run-configurator";
@@ -27,7 +28,14 @@ export const dynamic = "force-dynamic";
 type StageStatus = "done" | "active" | "upcoming";
 
 export default async function BuildListPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_profiles");
+  let { session, workspaceId } = await getWorkspaceSessionContext("manage_profiles");
+  let state = await readFastLeadDashboardState(session, workspaceId);
+  if (!state) {
+    const context = await getWorkspaceContext("manage_profiles");
+    state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+  }
   const aiOn = llmEnabled();
 
   const draft = state.aiIcpRecommendations

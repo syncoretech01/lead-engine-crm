@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { rolePermissions } from "@/lib/phase1/auth";
 import { complianceReadRowsForWorkspace } from "@/lib/phase1/compliance-read-path";
-import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
+import { readFastDevSettingsState } from "@/lib/phase1/dev-dashboard-read-model";
+import { getDeveloperWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { SuppressionRecord } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 import { StatCard } from "@/components/ui-metrics";
@@ -12,7 +13,14 @@ import { StatCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function CompliancePage() {
-  const { state, workspaceId } = await getDeveloperWorkspaceContext();
+  const sessionContext = await getWorkspaceSessionContext("manage_workspace");
+  let workspaceId = sessionContext.workspaceId;
+  let state = await readFastDevSettingsState(sessionContext.session, workspaceId);
+  if (!state) {
+    const context = await getDeveloperWorkspaceContext();
+    state = context.state;
+    workspaceId = context.workspaceId;
+  }
   const complianceRows = await complianceReadRowsForWorkspace(state, workspaceId);
   const suppressionSummary = suppressionMetrics(complianceRows.suppressionRecords, workspaceId);
   const members = state.workspaceMembers

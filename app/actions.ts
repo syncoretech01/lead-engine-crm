@@ -73,8 +73,10 @@ import {
   outreachSmsWriteTables,
   outreachTrackedCallWriteTables,
   reportingWriteTables,
-  sdrWriteTables
+  sdrWriteTables,
+  snapshotOnlyWriteTables
 } from "@/lib/phase1/normalized-write-tables";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import {
   callDispositions,
   campaignStatuses,
@@ -122,7 +124,7 @@ import {
 } from "@/lib/phase1/sdr";
 import { ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { createSeedState } from "@/lib/phase1/seed";
-import { appendAudit, getSession, readState, updateState } from "@/lib/phase1/store";
+import { appendAudit, getSession, getWorkspaceSessionContext, readState, updateState } from "@/lib/phase1/store";
 import { requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
 import { enrichContactsWithWaterfall } from "@/lib/phase1/waterfall-enrichment-service";
@@ -195,8 +197,7 @@ export async function createSearchProfileAction(formData: FormData) {
     });
   }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidatePath("/");
-  revalidatePath("/search-profiles");
+  revalidateLeadEnginePages(["/", "/search-profiles", "/build-list"]);
 }
 
 export async function duplicateSearchProfileAction(formData: FormData) {
@@ -229,7 +230,7 @@ export async function duplicateSearchProfileAction(formData: FormData) {
     });
   }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidatePath("/search-profiles");
+  revalidateLeadEnginePages(["/search-profiles", "/build-list"]);
 }
 
 export async function deleteSearchProfileAction(formData: FormData) {
@@ -250,8 +251,7 @@ export async function deleteSearchProfileAction(formData: FormData) {
     }
   }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidatePath("/");
-  revalidatePath("/search-profiles");
+  revalidateLeadEnginePages(["/", "/search-profiles", "/build-list"]);
 }
 
 export async function createLeadJobAction(formData: FormData) {
@@ -293,8 +293,7 @@ export async function createLeadJobAction(formData: FormData) {
     });
   }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidatePath("/");
-  revalidatePath("/lead-jobs");
+  revalidateLeadEnginePages(["/", "/lead-jobs", "/build-list"]);
 }
 
 export async function retryLeadJobAction(formData: FormData) {
@@ -311,7 +310,7 @@ export async function retryLeadJobAction(formData: FormData) {
     });
   }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidatePath("/lead-jobs");
+  revalidateLeadEnginePages(["/lead-jobs", "/build-list"]);
 }
 
 export async function createExportAction(formData: FormData) {
@@ -335,8 +334,7 @@ export async function createExportAction(formData: FormData) {
     });
   }, { normalizedTables: exportWriteTables });
 
-  revalidatePath("/");
-  revalidatePath("/exports");
+  revalidateLeadEnginePages(["/", "/exports"]);
 }
 
 export async function runVerificationAction() {
@@ -352,7 +350,7 @@ export async function runVerificationAction() {
     });
   }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
 }
 
 export async function detectDuplicatesAction() {
@@ -368,7 +366,7 @@ export async function detectDuplicatesAction() {
     });
   }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
 }
 
 export async function mergeDuplicateAction(formData: FormData) {
@@ -386,7 +384,7 @@ export async function mergeDuplicateAction(formData: FormData) {
     }
   }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
 }
 
 export async function ignoreDuplicateAction(formData: FormData) {
@@ -404,7 +402,7 @@ export async function ignoreDuplicateAction(formData: FormData) {
     }
   }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
 }
 
 export async function addSuppressionAction(formData: FormData) {
@@ -440,7 +438,9 @@ export async function addSuppressionAction(formData: FormData) {
     });
   }, { normalizedTables: complianceWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/compliance", "/reports/compliance"]);
+  revalidateLeadEnginePages();
+  revalidateCrmPages();
 }
 
 export async function deleteSuppressionAction(formData: FormData) {
@@ -459,7 +459,9 @@ export async function deleteSuppressionAction(formData: FormData) {
     });
   }, { normalizedTables: complianceWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/compliance", "/reports/compliance"]);
+  revalidateLeadEnginePages();
+  revalidateCrmPages();
 }
 
 export async function createExportRuleAction(formData: FormData) {
@@ -498,9 +500,9 @@ export async function createExportRuleAction(formData: FormData) {
       action: "created",
       newValue: rule
     });
-  });
+  }, { normalizedTables: snapshotOnlyWriteTables });
 
-  revalidatePath("/exports");
+  revalidateLeadEnginePages(["/exports"]);
 }
 
 export async function deleteExportRuleAction(formData: FormData) {
@@ -516,9 +518,9 @@ export async function deleteExportRuleAction(formData: FormData) {
       objectId: id,
       action: "deleted"
     });
-  });
+  }, { normalizedTables: snapshotOnlyWriteTables });
 
-  revalidatePath("/exports");
+  revalidateLeadEnginePages(["/exports"]);
 }
 
 export async function runEnrichmentAction(formData?: FormData) {
@@ -539,7 +541,7 @@ export async function runEnrichmentAction(formData?: FormData) {
     });
   }, { normalizedTables: enrichmentWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
 }
 
 export async function overrideLeadPrioritySegmentAction(formData: FormData) {
@@ -565,7 +567,7 @@ export async function overrideLeadPrioritySegmentAction(formData: FormData) {
     });
   }, { normalizedTables: enrichmentWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
 }
 
 export async function applySegmentsAndScoresAction() {
@@ -581,7 +583,7 @@ export async function applySegmentsAndScoresAction() {
     });
   }, { normalizedTables: enrichmentWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
 }
 
 export async function createSegmentRuleAction(formData: FormData) {
@@ -617,7 +619,7 @@ export async function createSegmentRuleAction(formData: FormData) {
     });
   }, { normalizedTables: enrichmentWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
 }
 
 export async function deleteSegmentRuleAction(formData: FormData) {
@@ -638,7 +640,7 @@ export async function deleteSegmentRuleAction(formData: FormData) {
     });
   }, { normalizedTables: enrichmentWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
 }
 
 export async function createOpportunityAction(formData: FormData) {
@@ -1344,7 +1346,7 @@ export async function assignLeadsNowAction() {
   }, { normalizedTables: sdrWriteTables });
 
   revalidateSdrPages();
-  revalidatePath("/build-list");
+  revalidateLeadEnginePages(["/build-list"]);
 }
 
 function assertAssignedContactForOutreach(state: AppState, session: Session, contactId: string) {
@@ -1607,7 +1609,7 @@ export async function generateReportSnapshotsAction() {
     });
   }, { normalizedTables: reportingWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/reports", "/reports/compliance"]);
 }
 
 export async function runRetentionPolicyAction(formData: FormData) {
@@ -1626,7 +1628,9 @@ export async function runRetentionPolicyAction(formData: FormData) {
     });
   }, { normalizedTables: reportingWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/compliance", "/reports/compliance"]);
+  revalidateLeadEnginePages();
+  revalidateCrmPages();
 }
 
 export async function updateRetentionPolicyAction(formData: FormData) {
@@ -1656,7 +1660,7 @@ export async function updateRetentionPolicyAction(formData: FormData) {
     });
   }, { normalizedTables: reportingWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/reports", "/reports/compliance", "/compliance"]);
 }
 
 export async function createDataSubjectRequestAction(formData: FormData) {
@@ -1679,7 +1683,7 @@ export async function createDataSubjectRequestAction(formData: FormData) {
     });
   }, { normalizedTables: complianceWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/reports", "/reports/compliance", "/compliance"]);
 }
 
 export async function completeDataSubjectRequestAction(formData: FormData) {
@@ -1702,7 +1706,9 @@ export async function completeDataSubjectRequestAction(formData: FormData) {
     });
   }, { normalizedTables: complianceWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/reports", "/reports/compliance", "/compliance"]);
+  revalidateLeadEnginePages();
+  revalidateCrmPages();
 }
 
 export async function updateContactComplianceAction(formData: FormData) {
@@ -1787,7 +1793,7 @@ export async function resolveDeliverabilityAlertAction(formData: FormData) {
     });
   }, { normalizedTables: complianceWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/reports/compliance", "/compliance"]);
 }
 
 export async function updateComplianceChecklistStatusAction(formData: FormData) {
@@ -1816,7 +1822,7 @@ export async function updateComplianceChecklistStatusAction(formData: FormData) 
     });
   }, { normalizedTables: complianceWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/reports/compliance", "/compliance"]);
 }
 
 export async function runAiAutomationSuiteAction() {
@@ -1833,7 +1839,7 @@ export async function runAiAutomationSuiteAction() {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 export async function generateAiPersonalizationsAction() {
@@ -1850,7 +1856,7 @@ export async function generateAiPersonalizationsAction() {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 export async function classifyAiRepliesAction() {
@@ -1867,7 +1873,7 @@ export async function classifyAiRepliesAction() {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 export async function generateAiCallSummariesAction() {
@@ -1884,7 +1890,7 @@ export async function generateAiCallSummariesAction() {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 export async function generateAiLeadScoresAction() {
@@ -1901,7 +1907,7 @@ export async function generateAiLeadScoresAction() {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 export async function generateAiIcpRecommendationsAction() {
@@ -1918,7 +1924,7 @@ export async function generateAiIcpRecommendationsAction() {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 export async function createAiIcpRecommendationAction(formData: FormData) {
@@ -1936,7 +1942,7 @@ export async function createAiIcpRecommendationAction(formData: FormData) {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 /**
@@ -1950,8 +1956,7 @@ export async function draftLeadListIcpAction(formData: FormData) {
   const prompt = stringValue(formData.get("prompt"), "Find high-fit B2B accounts similar to our best customers.");
 
   // Phase A — authorize before any LLM spend.
-  const state = await readState();
-  const session = await getSession(state);
+  const { session } = await getWorkspaceSessionContext("manage_profiles");
   assertPermission(session, "manage_profiles");
 
   // Phase B — async: resolve the ICP draft (model when enabled, else keyword parser).
@@ -1977,7 +1982,7 @@ export async function draftLeadListIcpAction(formData: FormData) {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/build-list");
+  revalidateLeadEnginePages(["/build-list"]);
 }
 
 /**
@@ -2013,8 +2018,7 @@ export async function confirmLeadListIcpAction(formData: FormData) {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/build-list");
-  revalidatePath("/search-profiles");
+  revalidateLeadEnginePages(["/build-list", "/search-profiles"]);
 }
 
 /**
@@ -2029,14 +2033,14 @@ export async function approveBuildListEnrichmentAction(formData: FormData) {
     throw new Error("A waterfall template is required.");
   }
 
-  const state = await readState();
-  const session = await getSession(state);
+  const { session, workspaceId } = await getWorkspaceSessionContext("manage_waterfalls");
   assertPermission(session, "manage_waterfalls");
+  const state = await readFastLeadDashboardState(session, workspaceId) ?? await readState();
 
   const contactIds = state.contacts
     .filter(
       (contact) =>
-        contact.workspaceId === session.workspace.id && !contact.isSuppressed && (!contact.phone || !contact.email)
+        contact.workspaceId === workspaceId && !contact.isSuppressed && (!contact.phone || !contact.email)
     )
     .slice(0, 200)
     .map((contact) => contact.id);
@@ -2045,7 +2049,7 @@ export async function approveBuildListEnrichmentAction(formData: FormData) {
     await enrichContactsWithWaterfall({ templateId, contactIds });
   }
 
-  revalidatePath("/build-list");
+  revalidateLeadEnginePages(["/build-list"]);
 }
 
 /**
@@ -2080,8 +2084,8 @@ export async function assignBuildListLeadsAction() {
     });
   }, { normalizedTables: sdrWriteTables });
 
-  revalidatePath("/build-list");
-  revalidatePath("/", "layout");
+  revalidateLeadEnginePages();
+  revalidateSdrPages();
 }
 
 export async function generateAiDeliverabilityRecommendationsAction() {
@@ -2098,7 +2102,7 @@ export async function generateAiDeliverabilityRecommendationsAction() {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 export async function generateAiRevenueInsightsAction() {
@@ -2115,7 +2119,7 @@ export async function generateAiRevenueInsightsAction() {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 export async function applyAiLeadScoreAction(formData: FormData) {
@@ -2133,7 +2137,8 @@ export async function applyAiLeadScoreAction(formData: FormData) {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
+  revalidateCrmPages();
 }
 
 export async function applyAiPersonalizationAction(formData: FormData) {
@@ -2151,7 +2156,8 @@ export async function applyAiPersonalizationAction(formData: FormData) {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
+  revalidateCrmPages();
 }
 
 export async function applyAiIcpRecommendationAction(formData: FormData) {
@@ -2169,7 +2175,8 @@ export async function applyAiIcpRecommendationAction(formData: FormData) {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
+  revalidateLeadEnginePages(["/search-profiles", "/build-list"]);
 }
 
 export async function dismissAiRecordAction(formData: FormData) {
@@ -2188,7 +2195,7 @@ export async function dismissAiRecordAction(formData: FormData) {
     });
   }, { normalizedTables: aiWriteTables });
 
-  revalidatePath("/", "layout");
+  revalidateDevPages(["/automation"]);
 }
 
 export async function saveProviderConnectionAction(formData: FormData) {
@@ -2204,18 +2211,18 @@ export async function saveProviderConnectionAction(formData: FormData) {
     waterfallOrder: optionalNumberValue(formData.get("waterfallOrder"))
   });
 
-  revalidatePath("/integrations");
+  revalidateDevPages(["/integrations"]);
 }
 
 export async function testProviderConnectionAction(formData: FormData) {
   await testProviderConnection(providerIdValue(formData.get("providerId")));
-  revalidatePath("/integrations");
+  revalidateDevPages(["/integrations"]);
 }
 
 export async function setProviderExecutionModeAction(formData: FormData) {
   const executionMode = stringValue(formData.get("executionMode")) === "live" ? "live" : "mock";
   await setProviderConnectionExecutionMode(providerIdValue(formData.get("providerId")), executionMode);
-  revalidatePath("/integrations");
+  revalidateDevPages(["/integrations"]);
 }
 
 export async function disableProviderConnectionAction(formData: FormData) {
@@ -2224,7 +2231,7 @@ export async function disableProviderConnectionAction(formData: FormData) {
     stringValue(formData.get("reason"), "Disabled from Integration Center")
   );
 
-  revalidatePath("/integrations");
+  revalidateDevPages(["/integrations"]);
 }
 
 export async function resetPhase1DataAction() {
@@ -2292,6 +2299,36 @@ function bulkEmailAudienceValue(value: FormDataEntryValue | null): BulkEmailAudi
     return audience;
   }
   return "all_assigned";
+}
+
+function revalidateDevPages(paths: string[] = []) {
+  const devPaths = paths.length
+    ? paths
+    : ["/integrations", "/access", "/reports", "/reports/compliance", "/compliance", "/automation"];
+
+  for (const path of [...new Set(devPaths)]) {
+    if (path) revalidatePath(path);
+  }
+}
+
+function revalidateLeadEnginePages(paths: string[] = []) {
+  const leadPaths = [
+    "/",
+    "/build-list",
+    "/search-profiles",
+    "/lead-jobs",
+    "/staging",
+    "/data-quality",
+    "/enrichment",
+    "/waterfalls",
+    "/exports",
+    ...paths
+  ];
+
+  for (const path of [...new Set(leadPaths)]) {
+    if (path) revalidatePath(path);
+  }
+  revalidatePath("/waterfalls/[id]", "page");
 }
 
 function revalidateCrmPages(paths: string[] = []) {

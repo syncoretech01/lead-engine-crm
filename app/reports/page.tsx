@@ -26,14 +26,22 @@ import {
   stateWithOutreachEventReadRows
 } from "@/lib/phase1/outreach-read-path";
 import { reportCategories, reportingDashboardSnapshot } from "@/lib/phase1/reporting";
-import { getDeveloperWorkspaceContext } from "@/lib/phase1/store";
+import { readFastDevReportsState } from "@/lib/phase1/dev-dashboard-read-model";
+import { getDeveloperWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
-  const { state, workspaceId } = await getDeveloperWorkspaceContext();
+  const sessionContext = await getWorkspaceSessionContext("manage_workspace");
+  let workspaceId = sessionContext.workspaceId;
+  let state = await readFastDevReportsState(sessionContext.session, workspaceId);
+  if (!state) {
+    const context = await getDeveloperWorkspaceContext();
+    state = context.state;
+    workspaceId = context.workspaceId;
+  }
   const [complianceRows, crmRows, outreachRows, exportRows] = await Promise.all([
     complianceReadRowsForWorkspace(state, workspaceId),
     crmEventReadRowsForWorkspace(state, workspaceId),

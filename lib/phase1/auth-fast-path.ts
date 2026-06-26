@@ -6,11 +6,12 @@ import {
   defaultAuthSessionMaxAgeSeconds,
   hashPassword,
   hashToken,
+  randomToken,
   verifyPassword,
   verifySignedAuthSessionCookie
 } from "@/lib/phase1/auth-security";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import type { AuthLoginResult } from "@/lib/phase1/auth-service";
+import type { AuthLoginResult, AuthTokenResult } from "@/lib/phase1/auth-service";
 import type { Session, WorkspaceRole } from "@/lib/phase1/types";
 
 type LoginInput = {
@@ -33,6 +34,15 @@ type LogoutInput = {
   cookieValue?: string;
   ipAddress?: string;
   userAgent?: string;
+};
+
+type PasswordResetRequestInput = {
+  email: string;
+};
+
+type PasswordResetInput = {
+  token: string;
+  password: string;
 };
 
 type PrismaAuthAccountWithUser = {
@@ -266,6 +276,155 @@ export async function revokeAuthSessionPrismaFast(input: LogoutInput): Promise<b
         reason: "Session revoked",
         ipAddress: input.ipAddress,
         userAgent: input.userAgent,
+        createdAt: now
+      }
+    });
+
+    return true;
+  });
+}
+
+export async function createPasswordResetTokenPrismaFast(
+  input: PasswordResetRequestInput
+): Promise<AuthTokenResult | undefined> {
+  if (resolveStorageDriver() !== "prisma") {
+    return undefined;
+  }
+
+  const { prisma } = await import("@/lib/prisma");
+  const email = normalizeEmail(input.email);
+  const account = await prisma.authAccount.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      userId: true,
+      status: true
+    }
+  });
+
+  if (!account || account.status !== "Active") {
+    return undefined;
+  }
+
+  const membership = await prisma.workspaceMember.findFirst({
+    where: { userId: account.userId },
+    orderBy: { createdAt: "asc" },
+    select: { workspaceId: true }
+  });
+
+  if (!membership) {
+    return undefined;
+  }
+
+  const now = new Date();
+  const token = randomToken();
+  const resetId = `reset-${randomUUID()}`;
+
+  await prisma.$transaction([
+    prisma.passwordResetToken.create({
+      data: {
+        id: resetId,
+        userId: account.userId,
+        tokenHash: hashToken(token),
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+        createdAt: now
+      }
+    }),
+    prisma.auditLog.create({
+      data: {
+        id: `audit-${randomUUID()}`,
+        workspaceId: membership.workspaceId,
+        actorUserId: account.userId,
+        objectType: "password_reset_token",
+        objectId: resetId,
+        action: "created",
+        reason: "Password reset requested",
+        createdAt: now
+      }
+    })
+  ]);
+
+  return { token, url: `/reset-password/${token}` };
+}
+
+export async function resetPasswordWithTokenPrismaFast(input: PasswordResetInput): Promise<boolean | undefined> {
+  if (resolveStorageDriver() !== "prisma") {
+    return undefined;
+  }
+
+  const { prisma } = await import("@/lib/prisma");
+  const now = new Date();
+  const genericMessage = "Reset link is invalid or expired.";
+
+  return prisma.$transaction(async (tx) => {
+    const reset = await tx.passwordResetToken.findUnique({
+      where: { tokenHash: hashToken(input.token) },
+      select: {
+        id: true,
+        userId: true,
+        expiresAt: true,
+        usedAt: true
+      }
+    });
+
+    if (!reset || reset.usedAt || reset.expiresAt.getTime() <= now.getTime()) {
+      throw new Error(genericMessage);
+    }
+
+    const account = await tx.authAccount.findUnique({
+      where: { userId: reset.userId },
+      select: {
+        id: true,
+        status: true
+      }
+    });
+
+    if (!account || account.status !== "Active") {
+      throw new Error(genericMessage);
+    }
+
+    const membership = await tx.workspaceMember.findFirst({
+      where: { userId: reset.userId },
+      orderBy: { createdAt: "asc" },
+      select: { workspaceId: true }
+    });
+
+    if (!membership) {
+      throw new Error(genericMessage);
+    }
+
+    await tx.authAccount.update({
+      where: { id: account.id },
+      data: {
+        passwordHash: hashPassword(input.password),
+        passwordUpdatedAt: now,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        updatedAt: now
+      }
+    });
+    await tx.passwordResetToken.update({
+      where: { id: reset.id },
+      data: { usedAt: now }
+    });
+    await tx.authSession.updateMany({
+      where: {
+        userId: reset.userId,
+        revokedAt: null
+      },
+      data: {
+        revokedAt: now,
+        lastSeenAt: now
+      }
+    });
+    await tx.auditLog.create({
+      data: {
+        id: `audit-${randomUUID()}`,
+        workspaceId: membership.workspaceId,
+        actorUserId: reset.userId,
+        objectType: "auth_account",
+        objectId: account.id,
+        action: "password_reset",
         createdAt: now
       }
     });
