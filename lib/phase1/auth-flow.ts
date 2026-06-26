@@ -1,4 +1,5 @@
 import { defaultWorkspacePath } from "@/lib/phase1/auth";
+import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
 import { acceptInvitePrismaFast, loginWithPasswordPrismaFast, revokeAuthSessionPrismaFast } from "@/lib/phase1/auth-fast-path";
 import {
   acceptUserInvite,
@@ -156,6 +157,11 @@ export function stringValue(value: FormDataEntryValue | null, fallback = "") {
 
 export function safeNextPath(value: string) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/";
+  }
+
+  const pathname = value.split(/[?#]/)[0] ?? "";
+  if (pathname === "/auth" || pathname.startsWith("/api/") || isPublicAuthPath(pathname)) {
     return "/";
   }
 

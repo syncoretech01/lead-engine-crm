@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { defaultWorkspacePath } from "@/lib/phase1/auth";
+import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
 import { acceptInvitePrismaFast, loginWithPasswordPrismaFast, revokeAuthSessionPrismaFast } from "@/lib/phase1/auth-fast-path";
 import {
   acceptUserInvite,
@@ -242,6 +243,11 @@ function roleValue(value: FormDataEntryValue | null): WorkspaceRole {
 
 function safeNextPath(value: string) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/";
+  }
+
+  const pathname = value.split(/[?#]/)[0] ?? "";
+  if (pathname === "/auth" || pathname.startsWith("/api/") || isPublicAuthPath(pathname)) {
     return "/";
   }
 
