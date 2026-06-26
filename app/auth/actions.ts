@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { defaultWorkspacePath } from "@/lib/phase1/auth";
-import { acceptInvitePrismaFast, loginWithPasswordPrismaFast } from "@/lib/phase1/auth-fast-path";
+import { acceptInvitePrismaFast, loginWithPasswordPrismaFast, revokeAuthSessionPrismaFast } from "@/lib/phase1/auth-fast-path";
 import {
   acceptUserInvite,
   createPasswordResetToken,
@@ -56,13 +56,20 @@ export async function loginAction(formData: FormData) {
 }
 
 export async function logoutAction() {
-  const session = await getSession();
-  await updateAuthState((state) => {
-    if (session.authSessionId) {
-      revokeAuthSession(state, session.authSessionId);
-    }
-  }, { normalizedTables: authWriteTables });
   const cookieStore = await cookies();
+  const fastRevoked = await revokeAuthSessionPrismaFast({
+    cookieValue: cookieStore.get(authSessionCookieName)?.value
+  });
+
+  if (fastRevoked === undefined) {
+    const session = await getSession();
+    await updateAuthState((state) => {
+      if (session.authSessionId) {
+        revokeAuthSession(state, session.authSessionId);
+      }
+    }, { normalizedTables: authWriteTables });
+  }
+
   cookieStore.set(authSessionCookieName, "", expiredAuthCookieOptions());
   redirect("/login?loggedOut=1");
 }

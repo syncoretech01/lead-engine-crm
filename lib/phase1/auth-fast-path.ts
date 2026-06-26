@@ -6,7 +6,8 @@ import {
   defaultAuthSessionMaxAgeSeconds,
   hashPassword,
   hashToken,
-  verifyPassword
+  verifyPassword,
+  verifySignedAuthSessionCookie
 } from "@/lib/phase1/auth-security";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import type { AuthLoginResult } from "@/lib/phase1/auth-service";
@@ -24,6 +25,12 @@ type AcceptInviteInput = {
   token: string;
   name: string;
   password: string;
+  ipAddress?: string;
+  userAgent?: string;
+};
+
+type LogoutInput = {
+  cookieValue?: string;
   ipAddress?: string;
   userAgent?: string;
 };
@@ -206,6 +213,64 @@ export async function acceptInvitePrismaFast(input: AcceptInviteInput): Promise<
       ipAddress: input.ipAddress,
       userAgent: input.userAgent
     });
+  });
+}
+
+export async function revokeAuthSessionPrismaFast(input: LogoutInput): Promise<boolean | undefined> {
+  if (resolveStorageDriver() !== "prisma") {
+    return undefined;
+  }
+
+  const payload = verifySignedAuthSessionCookie(input.cookieValue);
+  if (!payload) {
+    return false;
+  }
+
+  const { prisma } = await import("@/lib/prisma");
+  const now = new Date();
+
+  return prisma.$transaction(async (tx) => {
+    const session = await tx.authSession.findFirst({
+      where: {
+        id: payload.sessionId,
+        userId: payload.userId,
+        workspaceId: payload.workspaceId,
+        revokedAt: null
+      },
+      select: {
+        id: true,
+        userId: true,
+        workspaceId: true
+      }
+    });
+
+    if (!session) {
+      return false;
+    }
+
+    await tx.authSession.update({
+      where: { id: session.id },
+      data: {
+        revokedAt: now,
+        lastSeenAt: now
+      }
+    });
+    await tx.auditLog.create({
+      data: {
+        id: `audit-${randomUUID()}`,
+        workspaceId: session.workspaceId,
+        actorUserId: session.userId,
+        objectType: "auth_session",
+        objectId: session.id,
+        action: "logout",
+        reason: "Session revoked",
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+        createdAt: now
+      }
+    });
+
+    return true;
   });
 }
 
