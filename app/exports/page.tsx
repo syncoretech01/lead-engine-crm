@@ -5,8 +5,9 @@ import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { exportReadRowsForWorkspace } from "@/lib/phase1/export-read-path";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { exportTemplates } from "@/lib/phase1/queries";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { ExportRecord } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
@@ -14,7 +15,16 @@ import { StatCard, LaneCard } from "@/components/ui-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function ExportsPage() {
-  const { state, workspaceId } = await getWorkspaceContext("export_csv");
+  const sessionContext = await getWorkspaceSessionContext("export_csv");
+  let { workspaceId } = sessionContext;
+  let state = await readFastLeadDashboardState(sessionContext.session, workspaceId);
+
+  if (!state) {
+    const context = await getWorkspaceContext("export_csv");
+    state = context.state;
+    workspaceId = context.workspaceId;
+  }
+
   const templates = exportTemplates(state, workspaceId);
   const exportHistory = await exportReadRowsForWorkspace(state, workspaceId);
   const rules = state.exportRules.filter((rule) => rule.workspaceId === workspaceId);

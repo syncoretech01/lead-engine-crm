@@ -20,7 +20,8 @@ import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { contactRowsForStaging, exportTemplates, sourceHealth } from "@/lib/phase1/queries";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { canUseLeadGenerationWorkspace, defaultWorkspacePath } from "@/lib/phase1/auth";
 import type { Contact, LeadJob, Priority, SearchProfile } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
@@ -38,7 +39,17 @@ type SegmentSummary = {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const { state, session, workspaceId } = await getWorkspaceContext("view_records");
+  const sessionContext = await getWorkspaceSessionContext("view_records");
+  let { session, workspaceId } = sessionContext;
+  let state = await readFastLeadDashboardState(session, workspaceId);
+
+  if (!state) {
+    const context = await getWorkspaceContext("view_records");
+    state = context.state;
+    session = context.session;
+    workspaceId = context.workspaceId;
+  }
+
   if (!canUseLeadGenerationWorkspace(session)) {
     const fallbackPath = defaultWorkspacePath(session);
     if (fallbackPath !== "/") {
@@ -58,6 +69,7 @@ export default async function DashboardPage() {
   );
   const suppressedContacts = contacts.filter((contact) => contact.isSuppressed);
   const duplicateRows = normalizedRecords.filter((record) => record.duplicateCompanyId || record.duplicateContactId);
+  const duplicateCandidateCount = duplicateRows.length || jobs.reduce((total, job) => total + job.duplicates, 0);
   const needsReviewRows = stagedRows.filter(
     (row) => row.status === "In review" || row.status === "Needs enrichment" || row.emailGrade === "C" || row.emailGrade === "D"
   );
@@ -76,7 +88,6 @@ export default async function DashboardPage() {
   );
   const exportedCount = exportedIds.size || templates.reduce((total, template) => total + template.eligible, 0);
   const enrichedCount = contacts.filter((contact) => (contact.enrichmentCoverage ?? 0) > 0).length;
-  const dedupedCount = Math.max(normalizedRecords.length - duplicateRows.length, 0);
   const funnelMax = Math.max(rawLeads.length, normalizedRecords.length, contacts.length, stagedRows.length, 1);
   const topSegments = segmentSummaries(contacts, stagedRows).slice(0, 5);
 
@@ -105,7 +116,7 @@ export default async function DashboardPage() {
     {
       label: "Suppressed",
       value: formatNumber(suppressedContacts.length),
-      note: `${formatNumber(duplicateRows.length)} duplicate candidates`,
+      note: `${formatNumber(duplicateCandidateCount)} duplicate candidates`,
       icon: ShieldCheck,
       tone: suppressedContacts.length ? "warning" as const : "success" as const
     }
@@ -128,8 +139,8 @@ export default async function DashboardPage() {
     },
     {
       label: "Deduped",
-      value: dedupedCount,
-      note: `${formatNumber(duplicateRows.length)} duplicates isolated`,
+      value: Math.max(normalizedRecords.length - duplicateCandidateCount, 0),
+      note: `${formatNumber(duplicateCandidateCount)} duplicates isolated`,
       icon: Search,
       tone: "teal" as const
     },

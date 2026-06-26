@@ -17,8 +17,9 @@ import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StagingWorkbench } from "@/components/staging-workbench";
 import { StatusPill } from "@/components/status-pill";
+import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { contactRowsForStaging } from "@/lib/phase1/queries";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
@@ -27,10 +28,20 @@ export const dynamic = "force-dynamic";
 type StagedLead = ReturnType<typeof contactRowsForStaging>[number];
 
 export default async function StagingPage() {
-  const { state, workspaceId } = await getWorkspaceContext("import_csv");
+  const sessionContext = await getWorkspaceSessionContext("import_csv");
+  let { workspaceId } = sessionContext;
+  let state = await readFastLeadDashboardState(sessionContext.session, workspaceId);
+
+  if (!state) {
+    const context = await getWorkspaceContext("import_csv");
+    state = context.state;
+    workspaceId = context.workspaceId;
+  }
+
   const profiles = state.searchProfiles
     .filter((profile) => profile.workspaceId === workspaceId)
     .map((profile) => ({ id: profile.id, name: profile.name }));
+  const leadJobs = state.leadJobs.filter((job) => job.workspaceId === workspaceId);
   const rawLeads = state.rawLeads.filter((lead) => lead.workspaceId === workspaceId);
   const normalizedRecords = state.normalizedRecords.filter((record) => record.workspaceId === workspaceId);
   const leads = contactRowsForStaging(state, workspaceId);
@@ -39,7 +50,8 @@ export default async function StagingPage() {
   const suppressed = leads.filter((lead) => lead.status === "Suppressed" || lead.emailGrade === "S").length;
   const phoneReady = leads.filter((lead) => lead.phone).length;
   const readyForSdr = leads.filter((lead) => lead.status === "Ready for SDR").length;
-  const duplicateCandidates = normalizedRecords.filter((record) => record.duplicateCompanyId || record.duplicateContactId).length;
+  const duplicateRows = normalizedRecords.filter((record) => record.duplicateCompanyId || record.duplicateContactId);
+  const duplicateCandidates = duplicateRows.length || leadJobs.reduce((total, job) => total + job.duplicates, 0);
   const exportReady = leads.filter(
     (lead) => (lead.emailGrade === "A" || lead.emailGrade === "B") && lead.status !== "Suppressed"
   ).length;
