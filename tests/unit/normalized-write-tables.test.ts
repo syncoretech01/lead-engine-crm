@@ -6,6 +6,7 @@ import {
   complianceWriteTables,
   crmWriteTables,
   enrichmentWriteTables,
+  exportRuleWriteTables,
   exportWriteTables,
   leadGenerationWriteTables,
   outreachCampaignSendWriteTables,
@@ -16,7 +17,8 @@ import {
   providerConnectionWriteTables,
   providerJobWriteTables,
   reportingWriteTables,
-  sdrWriteTables
+  sdrWriteTables,
+  waterfallTemplateWriteTables
 } from "@/lib/phase1/normalized-write-tables";
 import { createSeedState } from "@/lib/phase1/seed";
 
@@ -26,6 +28,7 @@ const scopedWriteTableGroups = {
   complianceWriteTables,
   crmWriteTables,
   enrichmentWriteTables,
+  exportRuleWriteTables,
   exportWriteTables,
   leadGenerationWriteTables,
   outreachCampaignSendWriteTables,
@@ -36,7 +39,8 @@ const scopedWriteTableGroups = {
   providerConnectionWriteTables,
   providerJobWriteTables,
   reportingWriteTables,
-  sdrWriteTables
+  sdrWriteTables,
+  waterfallTemplateWriteTables
 };
 
 describe("normalized write table scopes", () => {
@@ -64,9 +68,18 @@ describe("normalized write table scopes", () => {
       "leadJobs",
       "rawLeads",
       "normalizedRecords",
+      "asyncJobRuns",
+      "jobLogs",
+      "jobIdempotencyRecords",
       "companies",
       "contacts",
-      "verificationResults"
+      "verificationResults",
+      "dedupeMatches"
+    ]));
+    expect(enrichmentWriteTables).toEqual(expect.arrayContaining([
+      "fieldSources",
+      "providerCache",
+      "providerMetricsDaily"
     ]));
     expect(crmWriteTables).toEqual(expect.arrayContaining([
       "accounts",
@@ -93,8 +106,14 @@ describe("normalized write table scopes", () => {
     expect(providerJobWriteTables).toEqual(expect.arrayContaining([
       "providerJobs",
       "providerJobRuns",
+      "providerMetricsDaily",
       "providerUsageLedger"
     ]));
+    expect(outreachEmailWriteTables).toContain("webhookEvents");
+    expect(outreachSmsWriteTables).toContain("webhookEvents");
+    expect(outreachCampaignSendWriteTables).toContain("webhookEvents");
+    expect(exportRuleWriteTables).toEqual(["exportRules", "auditLogs"]);
+    expect(waterfallTemplateWriteTables).toEqual(["waterfallTemplates", "auditLogs"]);
     expect(authWriteTables).toEqual(expect.arrayContaining([
       "users",
       "workspaceMembers",

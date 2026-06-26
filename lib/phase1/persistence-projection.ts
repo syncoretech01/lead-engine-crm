@@ -25,17 +25,24 @@ export type ProjectionTableName =
   | "providerJobs"
   | "providerJobRuns"
   | "providerUsageLedger"
+  | "providerMetricsDaily"
   | "searchProfiles"
   | "leadJobs"
+  | "asyncJobRuns"
+  | "jobLogs"
+  | "jobIdempotencyRecords"
   | "rawLeads"
   | "normalizedRecords"
   | "companies"
   | "contacts"
+  | "fieldSources"
   | "verificationResults"
   | "enrichmentResults"
+  | "providerCache"
   | "segments"
   | "recordSegments"
   | "leadScores"
+  | "dedupeMatches"
   | "accounts"
   | "crmContacts"
   | "opportunities"
@@ -50,6 +57,7 @@ export type ProjectionTableName =
   | "followUpReminders"
   | "reassignmentRules"
   | "suppressionRecords"
+  | "exportRules"
   | "exports"
   | "outreachProviders"
   | "outreachCampaigns"
@@ -57,6 +65,7 @@ export type ProjectionTableName =
   | "sequenceSteps"
   | "emailEvents"
   | "smsEvents"
+  | "webhookEvents"
   | "trackedCalls"
   | "reportSnapshots"
   | "retentionPolicies"
@@ -72,6 +81,7 @@ export type ProjectionTableName =
   | "aiDeliverabilityRecommendations"
   | "aiRevenueInsights"
   | "aiAutomationRuns"
+  | "waterfallTemplates"
   | "auditLogs";
 
 export type ProjectionRow = {
@@ -99,17 +109,24 @@ const projectionTables: ProjectionTableName[] = [
   "providerJobs",
   "providerJobRuns",
   "providerUsageLedger",
+  "providerMetricsDaily",
   "searchProfiles",
   "leadJobs",
+  "asyncJobRuns",
+  "jobLogs",
+  "jobIdempotencyRecords",
   "rawLeads",
   "normalizedRecords",
   "companies",
   "contacts",
+  "fieldSources",
   "verificationResults",
   "enrichmentResults",
+  "providerCache",
   "segments",
   "recordSegments",
   "leadScores",
+  "dedupeMatches",
   "accounts",
   "crmContacts",
   "opportunities",
@@ -124,6 +141,7 @@ const projectionTables: ProjectionTableName[] = [
   "followUpReminders",
   "reassignmentRules",
   "suppressionRecords",
+  "exportRules",
   "exports",
   "outreachProviders",
   "outreachCampaigns",
@@ -131,6 +149,7 @@ const projectionTables: ProjectionTableName[] = [
   "sequenceSteps",
   "emailEvents",
   "smsEvents",
+  "webhookEvents",
   "trackedCalls",
   "reportSnapshots",
   "retentionPolicies",
@@ -146,6 +165,7 @@ const projectionTables: ProjectionTableName[] = [
   "aiDeliverabilityRecommendations",
   "aiRevenueInsights",
   "aiAutomationRuns",
+  "waterfallTemplates",
   "auditLogs"
 ];
 
@@ -163,17 +183,24 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "providerJobs", delegate: "providerJob", workspaceScoped: true },
   { table: "providerJobRuns", delegate: "providerJobRun", workspaceScoped: true },
   { table: "providerUsageLedger", delegate: "providerUsageLedger", workspaceScoped: true },
+  { table: "providerMetricsDaily", delegate: "providerMetricDaily", workspaceScoped: true },
   { table: "searchProfiles", delegate: "searchProfile", workspaceScoped: true },
   { table: "leadJobs", delegate: "leadJob", workspaceScoped: true },
+  { table: "asyncJobRuns", delegate: "asyncJobRun", workspaceScoped: true },
+  { table: "jobLogs", delegate: "jobLog", workspaceScoped: true },
+  { table: "jobIdempotencyRecords", delegate: "jobIdempotencyRecord", workspaceScoped: true },
   { table: "rawLeads", delegate: "rawLead", workspaceScoped: true },
   { table: "normalizedRecords", delegate: "normalizedRecord", workspaceScoped: true },
   { table: "companies", delegate: "company", workspaceScoped: true },
   { table: "contacts", delegate: "contact", workspaceScoped: true },
+  { table: "fieldSources", delegate: "fieldSource", workspaceScoped: true },
   { table: "verificationResults", delegate: "verificationResult", workspaceScoped: true },
   { table: "enrichmentResults", delegate: "enrichmentResult", workspaceScoped: true },
+  { table: "providerCache", delegate: "providerCacheEntry", workspaceScoped: true },
   { table: "segments", delegate: "segment", workspaceScoped: true },
   { table: "recordSegments", delegate: "recordSegment", workspaceScoped: true },
   { table: "leadScores", delegate: "leadScore", workspaceScoped: true },
+  { table: "dedupeMatches", delegate: "dedupeMatch", workspaceScoped: true },
   { table: "accounts", delegate: "account", workspaceScoped: true },
   { table: "crmContacts", delegate: "crmContact", workspaceScoped: true },
   { table: "opportunities", delegate: "opportunity", workspaceScoped: true },
@@ -188,6 +215,7 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "followUpReminders", delegate: "followUpReminder", workspaceScoped: true },
   { table: "reassignmentRules", delegate: "reassignmentRule", workspaceScoped: true },
   { table: "suppressionRecords", delegate: "suppressionRecord", workspaceScoped: true },
+  { table: "exportRules", delegate: "exportRule", workspaceScoped: true },
   { table: "exports", delegate: "export", workspaceScoped: true },
   { table: "outreachProviders", delegate: "outreachProvider", workspaceScoped: true },
   { table: "outreachCampaigns", delegate: "outreachCampaign", workspaceScoped: true },
@@ -195,6 +223,7 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "sequenceSteps", delegate: "sequenceStep", workspaceScoped: true },
   { table: "emailEvents", delegate: "emailEvent", workspaceScoped: true },
   { table: "smsEvents", delegate: "smsEvent", workspaceScoped: true },
+  { table: "webhookEvents", delegate: "webhookEvent", workspaceScoped: true },
   { table: "trackedCalls", delegate: "trackedCall", workspaceScoped: true },
   { table: "reportSnapshots", delegate: "reportSnapshot", workspaceScoped: true },
   { table: "retentionPolicies", delegate: "retentionPolicy", workspaceScoped: true },
@@ -210,6 +239,7 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "aiDeliverabilityRecommendations", delegate: "aiDeliverabilityRecommendation", workspaceScoped: true },
   { table: "aiRevenueInsights", delegate: "aiRevenueInsight", workspaceScoped: true },
   { table: "aiAutomationRuns", delegate: "aiAutomationRun", workspaceScoped: true },
+  { table: "waterfallTemplates", delegate: "waterfallTemplate", workspaceScoped: true },
   { table: "auditLogs", delegate: "auditLog", workspaceScoped: true }
 ];
 
@@ -321,6 +351,8 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       maskedSecretSuffix: connection.maskedSecretSuffix,
       rateLimitPerMinute: connection.rateLimitPerMinute,
       dailyBudgetCents: connection.dailyBudgetCents,
+      costPerUnitCents: connection.costPerUnitCents,
+      supportedCountries: connection.supportedCountries ?? [],
       waterfallOrder: connection.waterfallOrder,
       lastTestStatus: connection.lastTestStatus,
       lastTestedAt: connection.lastTestedAt,
@@ -400,6 +432,10 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       idempotencyKey: run.idempotencyKey,
       providerRequestId: run.providerRequestId,
       providerRunId: run.providerRunId,
+      waterfallTemplateId: run.waterfallTemplateId,
+      waterfallStepId: run.waterfallStepId,
+      leadTargetType: run.leadTargetType,
+      leadTargetId: run.leadTargetId,
       checkpoint: run.checkpoint,
       requestSummary: run.requestSummary,
       responseSummary: run.responseSummary,
@@ -433,6 +469,22 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       amountKind: entry.amountKind,
       rawProviderMetadata: entry.rawProviderMetadata,
       createdAt: entry.createdAt
+    }))),
+    providerMetricsDaily: sortRows(state.providerMetricsDaily.map((metric) => ({
+      id: metric.id,
+      workspaceId: metric.workspaceId,
+      providerId: metric.providerId,
+      capability: metric.capability,
+      date: asDateTime(metric.date),
+      attempts: metric.attempts,
+      hits: metric.hits,
+      valid: metric.valid,
+      failures: metric.failures,
+      mobileCount: metric.mobileCount,
+      companyMainCount: metric.companyMainCount,
+      wrongNumber: metric.wrongNumber,
+      bounces: metric.bounces,
+      costCents: metric.costCents
     }))),
     searchProfiles: sortRows(state.searchProfiles.map((profile) => ({
       id: profile.id,
@@ -468,6 +520,15 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       },
       status: jobStatusValue(job.status),
       estimatedRecords: job.estimatedRecords ?? job.raw,
+      estimatedCredits: job.estimatedCredits ?? 0,
+      budgetCapCents: job.budgetCapCents,
+      budgetStatus: job.budgetStatus,
+      budgetConfirmedAt: job.budgetConfirmedAt,
+      budgetConfirmedById: job.budgetConfirmedById,
+      enrichmentBudgetCents: job.enrichmentBudgetCents,
+      highValueOnlyEnrichment: job.highValueOnlyEnrichment ?? false,
+      waterfallTemplateId: job.waterfallTemplateId,
+      waterfallOverride: job.waterfallOverride,
       rawRecordsCount: job.raw,
       normalizedRecordsCount: job.normalized,
       duplicateRecordsCount: job.duplicates,
@@ -488,6 +549,49 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       completedAt: job.completedAt,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt
+    }))),
+    asyncJobRuns: sortRows(state.asyncJobRuns.map((run) => ({
+      id: run.id,
+      workspaceId: run.workspaceId,
+      leadJobId: run.leadJobId,
+      source: run.source,
+      status: run.status,
+      attempt: run.attempt,
+      maxAttempts: run.maxAttempts,
+      providerRunId: run.providerRunId,
+      idempotencyKey: run.idempotencyKey,
+      checkpoint: run.checkpoint,
+      creditUsage: run.creditUsage,
+      recordsRead: run.recordsRead,
+      recordsWritten: run.recordsWritten,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      nextRetryAt: run.nextRetryAt,
+      errorMessage: run.errorMessage,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt
+    }))),
+    jobLogs: sortRows(state.jobLogs.map((log) => ({
+      id: log.id,
+      workspaceId: log.workspaceId,
+      leadJobId: log.leadJobId,
+      runId: log.runId,
+      level: log.level,
+      message: log.message,
+      metadata: log.metadata,
+      createdAt: log.createdAt
+    }))),
+    jobIdempotencyRecords: sortRows(state.jobIdempotencyRecords.map((record) => ({
+      id: record.id,
+      workspaceId: record.workspaceId,
+      key: record.key,
+      scope: record.scope,
+      requestHash: record.requestHash,
+      leadJobId: record.leadJobId,
+      status: record.status,
+      recordIds: record.recordIds,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt
     }))),
     rawLeads: sortRows(state.rawLeads.map((lead) => ({
       id: lead.id,
@@ -582,6 +686,35 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       createdAt: contact.createdAt,
       updatedAt: contact.updatedAt
     }))),
+    fieldSources: sortRows(state.fieldSources.map((source) => ({
+      id: source.id,
+      workspaceId: source.workspaceId,
+      companyId: source.targetType === "company" && hasCompany(state, source.targetId) ? source.targetId : undefined,
+      contactId: source.targetType === "contact" && state.contacts.some((contact) => contact.id === source.targetId)
+        ? source.targetId
+        : undefined,
+      fieldName: source.field,
+      fieldValue: source.value,
+      source: source.providerId,
+      trustScore: source.confidence,
+      confidence: source.confidence,
+      seenAt: source.enrichmentDate,
+      targetType: source.targetType,
+      targetId: source.targetId,
+      field: source.field,
+      value: source.value,
+      providerId: source.providerId,
+      capability: source.capability,
+      sourcePlatform: source.sourcePlatform,
+      validationStatus: source.validationStatus,
+      phoneType: source.phoneType,
+      costCents: source.costCents,
+      cacheHit: source.cacheHit,
+      providerJobRunId: source.providerJobRunId,
+      enrichmentDate: source.enrichmentDate,
+      lastVerifiedDate: source.lastVerifiedDate,
+      expiresAt: source.expiresAt
+    }))),
     verificationResults: sortRows(state.verificationResults
       .filter((result) => state.contacts.some((contact) => contact.id === result.contactId))
       .map((result) => ({
@@ -628,6 +761,19 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       enrichedAt: result.enrichedAt,
       expiresAt: result.expiresAt
     }))),
+    providerCache: sortRows(state.providerCache.map((entry) => ({
+      id: entry.id,
+      workspaceId: entry.workspaceId,
+      provider: entry.provider,
+      targetType: entry.targetType,
+      cacheKey: entry.cacheKey,
+      inputHash: entry.inputHash,
+      fields: entry.fields,
+      confidence: entry.confidence,
+      hits: entry.hits,
+      createdAt: entry.createdAt,
+      expiresAt: entry.expiresAt
+    }))),
     segments: sortRows(state.segmentRules.map((rule) => ({
       id: rule.id,
       workspaceId: rule.workspaceId,
@@ -668,6 +814,18 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
         },
         calculatedAt: score.calculatedAt
       }))),
+    dedupeMatches: sortRows(state.dedupeMatches.map((match) => ({
+      id: match.id,
+      workspaceId: match.workspaceId,
+      objectType: match.objectType,
+      primaryId: match.primaryId,
+      duplicateId: match.duplicateId,
+      reason: match.reason,
+      confidence: match.confidence,
+      status: match.status,
+      detectedAt: match.detectedAt,
+      resolvedAt: match.resolvedAt
+    }))),
     accounts: sortRows(state.companies.map((company) => {
       const primaryContact = state.contacts.find((contact) => contact.companyId === company.id);
 
@@ -892,12 +1050,28 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       source: record.source,
       createdAt: record.createdAt
     }))),
+    exportRules: sortRows(state.exportRules.map((rule) => ({
+      id: rule.id,
+      workspaceId: rule.workspaceId,
+      name: rule.name,
+      exportType: rule.exportType,
+      allowedGrades: rule.allowedGrades,
+      allowedStatuses: rule.allowedStatuses,
+      minScore: rule.minScore,
+      includeRoleEmails: rule.includeRoleEmails,
+      includeCatchAll: rule.includeCatchAll,
+      requirePhone: rule.requirePhone,
+      excludeSuppressed: rule.excludeSuppressed,
+      createdAt: rule.createdAt,
+      updatedAt: rule.updatedAt
+    }))),
     exports: sortRows(state.exports.map((record) => ({
       id: record.id,
       workspaceId: record.workspaceId,
       leadJobId: record.leadJobId,
       name: record.name,
       exportType: record.type,
+      exportRuleId: record.exportRuleId,
       filterSnapshot: {
         exportRuleId: record.exportRuleId,
         recordIds: record.recordIds,
@@ -906,6 +1080,8 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       },
       columns: record.columns,
       recordCount: record.recordCount,
+      blockedCount: record.blockedCount ?? 0,
+      status: record.status ?? "Ready",
       createdById: record.createdById,
       createdAt: record.createdAt
     }))),
@@ -1050,6 +1226,21 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
         companyId: event.companyId
       },
       createdAt: event.createdAt
+    }))),
+    webhookEvents: sortRows(state.webhookEvents.map((event) => ({
+      id: event.id,
+      workspaceId: event.workspaceId,
+      provider: event.provider,
+      target: event.target,
+      providerEventId: event.providerEventId,
+      eventType: event.eventType,
+      idempotencyKey: event.idempotencyKey,
+      status: event.status,
+      processedRecordId: event.processedRecordId,
+      errorMessage: event.errorMessage,
+      rawPayload: event.rawPayload,
+      receivedAt: event.receivedAt,
+      processedAt: event.processedAt
     }))),
     trackedCalls: sortRows(state.trackedCalls.map((call) => ({
       id: call.id,
@@ -1281,6 +1472,27 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       runById: state.users.some((user) => user.id === run.runById) ? run.runById : undefined,
       startedAt: run.startedAt,
       completedAt: run.completedAt
+    }))),
+    waterfallTemplates: sortRows(state.waterfallTemplates.map((template) => ({
+      id: template.id,
+      workspaceId: template.workspaceId,
+      name: template.name,
+      campaignType: template.campaignType,
+      description: template.description,
+      status: template.status,
+      isDefault: template.isDefault,
+      country: template.country,
+      outreachChannel: template.outreachChannel,
+      requiredFields: template.requiredFields,
+      personas: template.personas ?? [],
+      allowGenericEmail: template.allowGenericEmail ?? false,
+      maxCostPerLeadCents: template.maxCostPerLeadCents,
+      maxCostPerCampaignCents: template.maxCostPerCampaignCents,
+      highValueScoreThreshold: template.highValueScoreThreshold,
+      steps: template.steps,
+      createdById: template.createdById,
+      createdAt: template.createdAt,
+      updatedAt: template.updatedAt
     }))),
     auditLogs: sortRows(state.auditLogs.map((log) => ({
       id: log.id,

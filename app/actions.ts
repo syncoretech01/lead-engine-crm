@@ -64,6 +64,7 @@ import {
   aiWriteTables,
   complianceWriteTables,
   crmWriteTables,
+  exportRuleWriteTables,
   enrichmentWriteTables,
   exportWriteTables,
   leadGenerationWriteTables,
@@ -73,8 +74,7 @@ import {
   outreachSmsWriteTables,
   outreachTrackedCallWriteTables,
   reportingWriteTables,
-  sdrWriteTables,
-  snapshotOnlyWriteTables
+  sdrWriteTables
 } from "@/lib/phase1/normalized-write-tables";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import {
@@ -500,7 +500,7 @@ export async function createExportRuleAction(formData: FormData) {
       action: "created",
       newValue: rule
     });
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: exportRuleWriteTables });
 
   revalidateLeadEnginePages(["/exports"]);
 }
@@ -518,7 +518,7 @@ export async function deleteExportRuleAction(formData: FormData) {
       objectId: id,
       action: "deleted"
     });
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: exportRuleWriteTables });
 
   revalidateLeadEnginePages(["/exports"]);
 }

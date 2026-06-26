@@ -1,6 +1,6 @@
 # Phase 6 Database Cutover
 
-Updated: 2026-06-16
+Updated: 2026-06-26
 
 ## Goal
 
@@ -16,6 +16,7 @@ Phase 6 moves Syncore from snapshot-first persistence toward normalized Prisma/P
 - `npm run prisma:validate` validates the schema.
 - Production blocks implicit or explicit file storage unless `SYNCORE_ALLOW_FILE_STORAGE_IN_PRODUCTION=true`.
 - The normalized projection now covers the main lead, CRM, SDR, outreach, compliance, reporting, provider, AI, and audit tables.
+- The remaining helper domains now have normalized projection coverage too: export rules, provider cache entries, async job logs/idempotency rows, dedupe matches, webhook receipts, waterfall templates, field provenance, and provider daily metrics.
 - Major server actions declare scoped normalized table writes through `normalizedTables`.
 
 ## Local Commands
@@ -108,14 +109,17 @@ Do not use destructive Prisma commands such as `migrate reset` on production. Us
 
 Production should treat normalized Prisma tables as the business data boundary. New production features should add normalized models, scoped write tables, and Prisma-first reads instead of adding snapshot-only fields.
 
-## Remaining Snapshot-Only Compatibility Gaps
+## Snapshot-Only Compatibility Status
 
-The cutover bridge is now broad enough for production hardening work, but a few legacy/demo objects still do not have dedicated normalized tables:
+The production cutover bridge no longer has known business-critical snapshot-only helper domains. The following state arrays are now covered by dedicated normalized tables and scoped write paths:
 
 - Export rule configuration.
 - Provider cache entries.
 - Async job observability helper rows outside provider jobs.
 - Dedupe match helper rows.
-- Webhook event debug rows.
+- Webhook event receipts/debug rows.
+- Waterfall templates.
+- Field provenance rows.
+- Provider daily metrics.
 
-These should either receive normalized models before production use or remain explicitly local/debug-only.
+`AppStateSnapshot` is still retained for local/demo/debug compatibility. New production features should continue to add normalized Prisma models and scoped write tables before storing new customer-facing state.

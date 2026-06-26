@@ -2,6 +2,8 @@ import type { ProjectionTableName } from "@/lib/phase1/persistence-projection";
 
 export const exportWriteTables = ["exports", "auditLogs"] satisfies ProjectionTableName[];
 
+export const exportRuleWriteTables = ["exportRules", "auditLogs"] satisfies ProjectionTableName[];
+
 export const authWriteTables = [
   "users",
   "workspaceMembers",
@@ -15,11 +17,15 @@ export const authWriteTables = [
 export const leadGenerationWriteTables = [
   "searchProfiles",
   "leadJobs",
+  "asyncJobRuns",
+  "jobLogs",
+  "jobIdempotencyRecords",
   "rawLeads",
   "normalizedRecords",
   "companies",
   "contacts",
   "verificationResults",
+  "dedupeMatches",
   "providerUsageLedger",
   "auditLogs"
 ] satisfies ProjectionTableName[];
@@ -29,9 +35,12 @@ export const enrichmentWriteTables = [
   "contacts",
   "verificationResults",
   "enrichmentResults",
+  "fieldSources",
+  "providerCache",
   "segments",
   "recordSegments",
   "leadScores",
+  "providerMetricsDaily",
   "providerUsageLedger",
   "auditLogs"
 ] satisfies ProjectionTableName[];
@@ -114,6 +123,7 @@ export const outreachEmailWriteTables = [
   "followUpReminders",
   "outreachCampaigns",
   "emailEvents",
+  "webhookEvents",
   "activities",
   "auditLogs"
 ] satisfies ProjectionTableName[];
@@ -133,6 +143,7 @@ export const outreachSmsWriteTables = [
   "suppressionRecords",
   "outreachCampaigns",
   "smsEvents",
+  "webhookEvents",
   "activities",
   "auditLogs"
 ] satisfies ProjectionTableName[];
@@ -146,6 +157,7 @@ export const outreachTrackedCallWriteTables = [
 export const outreachCampaignSendWriteTables = [
   "outreachCampaigns",
   "emailEvents",
+  "webhookEvents",
   "activities",
   "auditLogs"
 ] satisfies ProjectionTableName[];
@@ -160,7 +172,13 @@ export const providerConnectionWriteTables = [
 export const providerJobWriteTables = [
   "providerJobs",
   "providerJobRuns",
+  "providerMetricsDaily",
   "providerUsageLedger",
+  "auditLogs"
+] satisfies ProjectionTableName[];
+
+export const waterfallTemplateWriteTables = [
+  "waterfallTemplates",
   "auditLogs"
 ] satisfies ProjectionTableName[];
 

@@ -1,6 +1,6 @@
 # Persistence Hardening
 
-Updated: 2026-06-16
+Updated: 2026-06-26
 
 ## Current State
 
@@ -10,11 +10,12 @@ Mirrored tables currently include:
 
 - Workspace, user, and workspace membership rows
 - Provider connection metadata, encrypted credential rows, and credential audit rows
-- Provider execution job, run, and usage ledger rows
-- Search profiles, lead jobs, raw leads, and normalized records
-- Companies, contacts, verification results, enrichment results, segments, record segments, lead scores, CRM accounts, CRM contacts, opportunities, activities, tasks, notes, call logs, custom fields, SDR teams, SDR assignments, follow-up reminders, reassignment rules, and suppression records
-- Exports, outreach providers, outreach campaigns, campaign sequences, sequence steps, email events, SMS events, and tracked calls
+- Provider execution job, run, usage ledger, daily metric, async job run, job log, and idempotency rows
+- Search profiles, lead jobs, raw leads, normalized records, dedupe matches, export rules, and generated exports
+- Companies, contacts, field provenance, verification results, enrichment results, provider cache entries, segments, record segments, lead scores, CRM accounts, CRM contacts, opportunities, activities, tasks, notes, call logs, custom fields, SDR teams, SDR assignments, follow-up reminders, reassignment rules, and suppression records
+- Outreach providers, outreach campaigns, campaign sequences, sequence steps, email events, SMS events, webhook receipts, and tracked calls
 - Report snapshots, retention policies/runs, compliance checklist items, data subject requests, deliverability alerts, AI automation outputs, and audit logs
+- Waterfall templates and their JSON step definitions
 
 ## Verification
 
@@ -30,6 +31,7 @@ Unit coverage verifies:
 - Prisma-style delegates receive mirrored delete/upsert calls
 - Provider connection and encrypted credential tables mirror credential lifecycle state without storing raw plaintext credentials
 - Provider job/run tables mirror future provider execution state, local worker leases, retry state, and mock execution results for extraction, verification, enrichment, sending, and webhook sync
+- Export rule, provider cache, async job observability, dedupe match, webhook receipt, waterfall template, field provenance, and provider metric arrays are included in the normalized projection
 
 Run:
 
@@ -63,4 +65,6 @@ The normalized tables are now populated as the production cutover bridge. Contac
 
 Scoped normalized writes are in place for generated export records, lead generation actions, verification, enrichment/scoring, CRM records, SDR assignment workflows, outreach setup/events/sending, signed email/SMS webhook processing, reporting/retention, compliance/DSR, AI automation outputs, provider connection settings, and provider job execution. These paths still update the snapshot for compatibility, but Prisma mode now syncs only the relevant normalized tables in the same transaction.
 
-Provider connection metadata, encrypted credential records, credential audit tables, and provider execution job/run/usage tables are included in the normalized projection and server-only write services. Remaining snapshot-only compatibility gaps are documented in `docs/PHASE_6_DATABASE_CUTOVER.md`.
+Provider connection metadata, encrypted credential records, credential audit tables, provider execution job/run/usage/metric tables, export rules, provider cache entries, async job logs/idempotency records, dedupe matches, webhook receipts, waterfall templates, and field provenance rows are included in the normalized projection and scoped write services.
+
+No known production business-data domains remain intentionally snapshot-only. The snapshot remains in place for local/demo/debug compatibility and transitional recovery only.

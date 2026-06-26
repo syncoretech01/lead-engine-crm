@@ -92,107 +92,116 @@ enum SuppressionType {
 }
 
 model Workspace {
-  id                  String               @id @default(cuid())
-  name                String
-  market              String?
-  seats               Int                  @default(0)
-  health              String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  members             WorkspaceMember[]
-  authSessions        AuthSession[]
-  userInvites         UserInvite[]
-  integrations        Integration[]
-  providerConnections ProviderConnection[]
-  providerCredentialAudits ProviderCredentialAudit[]
-  providerEncryptedSecrets ProviderEncryptedSecret[]
-  providerJobs        ProviderJob[]
-  providerJobRuns     ProviderJobRun[]
-  providerUsageLedger ProviderUsageLedger[]
-  searchProfiles      SearchProfile[]
-  leadJobs            LeadJob[]
-  rawLeads            RawLead[]
-  normalizedRecords   NormalizedRecord[]
-  companies           Company[]
-  contacts            Contact[]
-  fieldSources        FieldSource[]
-  verificationResults VerificationResult[]
-  enrichmentResults   EnrichmentResult[]
-  segments            Segment[]
-  recordSegments      RecordSegment[]
-  leadScores          LeadScore[]
-  exports             Export[]
-  accounts            Account[]
-  opportunities       Opportunity[]
-  activities          Activity[]
-  tasks               Task[]
-  notes               Note[]
-  callLogs            CallLog[]
-  customFields        CustomField[]
-  customFieldValues   CustomFieldValue[]
-  sdrTeams            SdrTeam[]
-  sdrAssignments      SdrAssignment[]
-  followUpReminders   FollowUpReminder[]
-  reassignmentRules   ReassignmentRule[]
-  outreachProviders   OutreachProvider[]
-  outreachCampaigns   OutreachCampaign[]
-  campaignSequences   CampaignSequence[]
-  sequenceSteps       SequenceStep[]
-  emailEvents         EmailEvent[]
-  smsEvents           SmsEvent[]
-  trackedCalls        TrackedCall[]
-  reportSnapshots     ReportSnapshot[]
-  retentionPolicies   RetentionPolicy[]
-  retentionRuns       RetentionRun[]
-  complianceChecklistItems ComplianceChecklistItem[]
-  dataSubjectRequests DataSubjectRequest[]
-  deliverabilityAlerts DeliverabilityAlert[]
-  aiPersonalizations   AiPersonalization[]
-  aiReplyClassifications AiReplyClassification[]
-  aiCallSummaries      AiCallSummary[]
-  aiLeadScorePredictions AiLeadScorePrediction[]
-  aiIcpRecommendations AiIcpRecommendation[]
+  id                              String                           @id @default(cuid())
+  name                            String
+  market                          String?
+  seats                           Int                              @default(0)
+  health                          String?
+  createdAt                       DateTime                         @default(now())
+  updatedAt                       DateTime                         @updatedAt
+  members                         WorkspaceMember[]
+  authSessions                    AuthSession[]
+  userInvites                     UserInvite[]
+  integrations                    Integration[]
+  providerConnections             ProviderConnection[]
+  providerCredentialAudits        ProviderCredentialAudit[]
+  providerEncryptedSecrets        ProviderEncryptedSecret[]
+  providerJobs                    ProviderJob[]
+  providerJobRuns                 ProviderJobRun[]
+  providerUsageLedger             ProviderUsageLedger[]
+  providerMetricsDaily            ProviderMetricDaily[]
+  searchProfiles                  SearchProfile[]
+  leadJobs                        LeadJob[]
+  asyncJobRuns                    AsyncJobRun[]
+  jobLogs                         JobLog[]
+  jobIdempotencyRecords           JobIdempotencyRecord[]
+  rawLeads                        RawLead[]
+  normalizedRecords               NormalizedRecord[]
+  companies                       Company[]
+  contacts                        Contact[]
+  fieldSources                    FieldSource[]
+  verificationResults             VerificationResult[]
+  enrichmentResults               EnrichmentResult[]
+  providerCacheEntries            ProviderCacheEntry[]
+  segments                        Segment[]
+  recordSegments                  RecordSegment[]
+  leadScores                      LeadScore[]
+  dedupeMatches                   DedupeMatch[]
+  exportRules                     ExportRule[]
+  exports                         Export[]
+  accounts                        Account[]
+  opportunities                   Opportunity[]
+  activities                      Activity[]
+  tasks                           Task[]
+  notes                           Note[]
+  callLogs                        CallLog[]
+  customFields                    CustomField[]
+  customFieldValues               CustomFieldValue[]
+  sdrTeams                        SdrTeam[]
+  sdrAssignments                  SdrAssignment[]
+  followUpReminders               FollowUpReminder[]
+  reassignmentRules               ReassignmentRule[]
+  outreachProviders               OutreachProvider[]
+  outreachCampaigns               OutreachCampaign[]
+  campaignSequences               CampaignSequence[]
+  sequenceSteps                   SequenceStep[]
+  emailEvents                     EmailEvent[]
+  smsEvents                       SmsEvent[]
+  webhookEvents                   WebhookEvent[]
+  trackedCalls                    TrackedCall[]
+  reportSnapshots                 ReportSnapshot[]
+  retentionPolicies               RetentionPolicy[]
+  retentionRuns                   RetentionRun[]
+  complianceChecklistItems        ComplianceChecklistItem[]
+  dataSubjectRequests             DataSubjectRequest[]
+  deliverabilityAlerts            DeliverabilityAlert[]
+  aiPersonalizations              AiPersonalization[]
+  aiReplyClassifications          AiReplyClassification[]
+  aiCallSummaries                 AiCallSummary[]
+  aiLeadScorePredictions          AiLeadScorePrediction[]
+  aiIcpRecommendations            AiIcpRecommendation[]
   aiDeliverabilityRecommendations AiDeliverabilityRecommendation[]
-  aiRevenueInsights    AiRevenueInsight[]
-  aiAutomationRuns     AiAutomationRun[]
-  suppressionRecords  SuppressionRecord[]
-  auditLogs           AuditLog[]
+  aiRevenueInsights               AiRevenueInsight[]
+  aiAutomationRuns                AiAutomationRun[]
+  waterfallTemplates              WaterfallTemplate[]
+  suppressionRecords              SuppressionRecord[]
+  auditLogs                       AuditLog[]
 }
 
 model User {
-  id          String            @id @default(cuid())
-  email       String            @unique
-  name        String
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  memberships WorkspaceMember[]
-  createdJobs LeadJob[]         @relation("LeadJobCreator")
-  ownedOpportunities Opportunity[] @relation("OpportunityOwner")
-  ownedTasks  Task[]            @relation("TaskOwner")
-  createdTasks Task[]           @relation("TaskCreator")
-  createdNotes Note[]           @relation("NoteCreator")
-  callLogs    CallLog[]
-  managedSdrTeams SdrTeam[]     @relation("SdrTeamManager")
-  assignedSdrAssignments SdrAssignment[] @relation("AssignedSdr")
-  createdSdrAssignments SdrAssignment[]  @relation("AssignmentCreator")
-  ownedFollowUpReminders FollowUpReminder[] @relation("ReminderOwner")
-  ownedOutreachCampaigns OutreachCampaign[] @relation("CampaignOwner")
-  createdCampaignSequences CampaignSequence[] @relation("SequenceCreator")
-  smsEvents SmsEvent[]
-  trackedCalls TrackedCall[]
-  activities  Activity[]
-  generatedReportSnapshots ReportSnapshot[] @relation("ReportSnapshotGenerator")
-  retentionRuns RetentionRun[] @relation("RetentionRunActor")
+  id                           String                @id @default(cuid())
+  email                        String                @unique
+  name                         String
+  createdAt                    DateTime              @default(now())
+  updatedAt                    DateTime              @updatedAt
+  memberships                  WorkspaceMember[]
+  createdJobs                  LeadJob[]             @relation("LeadJobCreator")
+  ownedOpportunities           Opportunity[]         @relation("OpportunityOwner")
+  ownedTasks                   Task[]                @relation("TaskOwner")
+  createdTasks                 Task[]                @relation("TaskCreator")
+  createdNotes                 Note[]                @relation("NoteCreator")
+  callLogs                     CallLog[]
+  managedSdrTeams              SdrTeam[]             @relation("SdrTeamManager")
+  assignedSdrAssignments       SdrAssignment[]       @relation("AssignedSdr")
+  createdSdrAssignments        SdrAssignment[]       @relation("AssignmentCreator")
+  ownedFollowUpReminders       FollowUpReminder[]    @relation("ReminderOwner")
+  ownedOutreachCampaigns       OutreachCampaign[]    @relation("CampaignOwner")
+  createdCampaignSequences     CampaignSequence[]    @relation("SequenceCreator")
+  smsEvents                    SmsEvent[]
+  trackedCalls                 TrackedCall[]
+  activities                   Activity[]
+  generatedReportSnapshots     ReportSnapshot[]      @relation("ReportSnapshotGenerator")
+  retentionRuns                RetentionRun[]        @relation("RetentionRunActor")
   resolvedDeliverabilityAlerts DeliverabilityAlert[] @relation("DeliverabilityAlertResolver")
-  handledDataSubjectRequests DataSubjectRequest[] @relation("DataSubjectRequestHandler")
-  generatedAiPersonalizations AiPersonalization[] @relation("AiPersonalizationGenerator")
-  createdAiIcpRecommendations AiIcpRecommendation[] @relation("AiIcpRecommendationCreator")
-  aiAutomationRuns AiAutomationRun[] @relation("AiAutomationRunActor")
-  auditLogs   AuditLog[]
-  authAccount AuthAccount?
-  authSessions AuthSession[]
-  sentUserInvites UserInvite[] @relation("UserInviteSender")
-  passwordResetTokens PasswordResetToken[]
+  handledDataSubjectRequests   DataSubjectRequest[]  @relation("DataSubjectRequestHandler")
+  generatedAiPersonalizations  AiPersonalization[]   @relation("AiPersonalizationGenerator")
+  createdAiIcpRecommendations  AiIcpRecommendation[] @relation("AiIcpRecommendationCreator")
+  aiAutomationRuns             AiAutomationRun[]     @relation("AiAutomationRunActor")
+  auditLogs                    AuditLog[]
+  authAccount                  AuthAccount?
+  authSessions                 AuthSession[]
+  sentUserInvites              UserInvite[]          @relation("UserInviteSender")
+  passwordResetTokens          PasswordResetToken[]
 }
 
 model WorkspaceMember {
@@ -209,21 +218,21 @@ model WorkspaceMember {
 }
 
 model AuthAccount {
-  id               String    @id @default(cuid())
-  userId           String    @unique
-  email            String    @unique
-  passwordHash     String
-  status           String
-  emailVerifiedAt  DateTime?
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  email             String    @unique
+  passwordHash      String
+  status            String
+  emailVerifiedAt   DateTime?
   passwordUpdatedAt DateTime?
-  lastLoginAt      DateTime?
-  failedLoginCount Int       @default(0)
-  lockedUntil      DateTime?
-  mfaEnabled       Boolean   @default(false)
-  superadmin       Boolean   @default(false)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastLoginAt       DateTime?
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  mfaEnabled        Boolean   @default(false)
+  superadmin        Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([superadmin])
@@ -294,38 +303,40 @@ model Integration {
 }
 
 model ProviderConnection {
-  id                 String    @id @default(cuid())
+  id                 String                    @id @default(cuid())
   workspaceId        String
   providerId         String
   displayName        String
   status             String
-  enabled            Boolean   @default(false)
-  executionMode      String    @default("mock")
+  enabled            Boolean                   @default(false)
+  executionMode      String                    @default("mock")
   categories         String[]
   capabilities       String[]
   scopes             String[]
   allowedOperations  String[]
   credentialLabel    String?
   secretRef          String?
-  secretStorage      String    @default("Not configured")
-  secretVersion      Int       @default(0)
+  secretStorage      String                    @default("Not configured")
+  secretVersion      Int                       @default(0)
   maskedSecretSuffix String?
   rateLimitPerMinute Int?
   dailyBudgetCents   Int?
-  waterfallOrder     Int       @default(0)
-  lastTestStatus     String    @default("Not tested")
+  costPerUnitCents   Int?
+  supportedCountries String[]                  @default([])
+  waterfallOrder     Int                       @default(0)
+  lastTestStatus     String                    @default("Not tested")
   lastTestedAt       DateTime?
   lastTestedById     String?
   lastTestError      String?
   createdById        String?
   updatedById        String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  workspace          Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   credentialAudits   ProviderCredentialAudit[]
   encryptedSecrets   ProviderEncryptedSecret[]
-  providerJobs        ProviderJob[]
-  providerJobRuns     ProviderJobRun[]
+  providerJobs       ProviderJob[]
+  providerJobRuns    ProviderJobRun[]
 
   @@unique([workspaceId, providerId])
   @@index([workspaceId, status])
@@ -423,6 +434,10 @@ model ProviderJobRun {
   idempotencyKey       String
   providerRequestId    String
   providerRunId        String?
+  waterfallTemplateId  String?
+  waterfallStepId      String?
+  leadTargetType       String?
+  leadTargetId         String?
   checkpoint           Json?
   requestSummary       Json?
   responseSummary      Json?
@@ -474,6 +489,28 @@ model ProviderUsageLedger {
   @@index([workspaceId, providerJobRunId])
 }
 
+model ProviderMetricDaily {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  providerId       String
+  capability       String
+  date             DateTime
+  attempts         Int       @default(0)
+  hits             Int       @default(0)
+  valid            Int       @default(0)
+  failures         Int       @default(0)
+  mobileCount      Int       @default(0)
+  companyMainCount Int       @default(0)
+  wrongNumber      Int       @default(0)
+  bounces          Int       @default(0)
+  costCents        Int       @default(0)
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, providerId, capability, date])
+  @@index([workspaceId, providerId, capability])
+  @@index([workspaceId, date])
+}
+
 model SearchProfile {
   id                String    @id @default(cuid())
   workspaceId       String
@@ -500,40 +537,49 @@ model SearchProfile {
 }
 
 model LeadJob {
-  id                     String          @id @default(cuid())
-  workspaceId            String
-  searchProfileId        String?
-  jobName                String
-  selectedSources        String[]
-  sourceConfigs          Json
-  status                 JobStatus       @default(DRAFT)
-  priority               String          @default("normal")
-  estimatedRecords       Int             @default(0)
-  rawRecordsCount        Int             @default(0)
-  normalizedRecordsCount Int             @default(0)
-  duplicateRecordsCount  Int             @default(0)
-  suppressedRecordsCount Int             @default(0)
-  verifiedEmailCount     Int             @default(0)
-  verifiedPhoneCount     Int             @default(0)
-  enrichedRecordsCount   Int             @default(0)
-  exportedRecordsCount   Int             @default(0)
-  pushedToCrmCount       Int             @default(0)
-  failedRecordsCount     Int             @default(0)
-  estimatedCostCents     Int             @default(0)
-  actualCostCents        Int             @default(0)
-  complianceNotes        String?
-  errorSummary           String?
-  createdById            String?
-  startedAt              DateTime?
-  completedAt            DateTime?
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-  workspace              Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  searchProfile          SearchProfile?  @relation(fields: [searchProfileId], references: [id])
-  createdBy              User?           @relation("LeadJobCreator", fields: [createdById], references: [id])
-  sourceRuns             LeadJobSource[]
-  rawLeads               RawLead[]
-  exports                Export[]
+  id                      String          @id @default(cuid())
+  workspaceId             String
+  searchProfileId         String?
+  jobName                 String
+  selectedSources         String[]
+  sourceConfigs           Json
+  status                  JobStatus       @default(DRAFT)
+  priority                String          @default("normal")
+  estimatedRecords        Int             @default(0)
+  rawRecordsCount         Int             @default(0)
+  normalizedRecordsCount  Int             @default(0)
+  duplicateRecordsCount   Int             @default(0)
+  suppressedRecordsCount  Int             @default(0)
+  verifiedEmailCount      Int             @default(0)
+  verifiedPhoneCount      Int             @default(0)
+  enrichedRecordsCount    Int             @default(0)
+  exportedRecordsCount    Int             @default(0)
+  pushedToCrmCount        Int             @default(0)
+  failedRecordsCount      Int             @default(0)
+  estimatedCostCents      Int             @default(0)
+  estimatedCredits        Int             @default(0)
+  budgetCapCents          Int?
+  budgetStatus            String?
+  budgetConfirmedAt       DateTime?
+  budgetConfirmedById     String?
+  enrichmentBudgetCents   Int?
+  highValueOnlyEnrichment Boolean         @default(false)
+  waterfallTemplateId     String?
+  waterfallOverride       Json?
+  actualCostCents         Int             @default(0)
+  complianceNotes         String?
+  errorSummary            String?
+  createdById             String?
+  startedAt               DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  workspace               Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  searchProfile           SearchProfile?  @relation(fields: [searchProfileId], references: [id])
+  createdBy               User?           @relation("LeadJobCreator", fields: [createdById], references: [id])
+  sourceRuns              LeadJobSource[]
+  rawLeads                RawLead[]
+  exports                 Export[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, createdAt])
@@ -559,6 +605,66 @@ model LeadJobSource {
   @@unique([leadJobId, source])
 }
 
+model AsyncJobRun {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  leadJobId      String
+  source         String
+  status         String
+  attempt        Int       @default(1)
+  maxAttempts    Int       @default(3)
+  providerRunId  String
+  idempotencyKey String
+  checkpoint     Json?
+  creditUsage    Int       @default(0)
+  recordsRead    Int       @default(0)
+  recordsWritten Int       @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  nextRetryAt    DateTime?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, idempotencyKey, attempt])
+  @@index([workspaceId, leadJobId, status])
+  @@index([workspaceId, status, nextRetryAt])
+}
+
+model JobLog {
+  id          String    @id @default(cuid())
+  workspaceId String
+  leadJobId   String
+  runId       String?
+  level       String
+  message     String
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, leadJobId, createdAt])
+  @@index([workspaceId, level, createdAt])
+}
+
+model JobIdempotencyRecord {
+  id          String    @id @default(cuid())
+  workspaceId String
+  key         String
+  scope       String
+  requestHash String
+  leadJobId   String
+  status      String
+  recordIds   String[]  @default([])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId, leadJobId, scope])
+  @@index([workspaceId, status])
+}
+
 model RawLead {
   id               String            @id @default(cuid())
   workspaceId      String
@@ -580,36 +686,36 @@ model RawLead {
 }
 
 model NormalizedRecord {
-  id             String    @id @default(cuid())
-  workspaceId    String
-  rawLeadId      String    @unique
-  leadJobId      String?
-  companyName    String?
-  normalizedName String?
-  domain         String?
-  website        String?
-  contactName    String?
-  title          String?
-  seniority      String?
-  email          String?
-  phone          String?
-  city           String?
-  state          String?
-  country        String?
-  linkedinUrl    String?
-  industry       String?
-  technology     String[]
-  grade          String?
-  score          Int       @default(0)
-  priority       String?
-  status         String?
-  segment        String?
-  owner          String?
-  verification   String?
+  id                String    @id @default(cuid())
+  workspaceId       String
+  rawLeadId         String    @unique
+  leadJobId         String?
+  companyName       String?
+  normalizedName    String?
+  domain            String?
+  website           String?
+  contactName       String?
+  title             String?
+  seniority         String?
+  email             String?
+  phone             String?
+  city              String?
+  state             String?
+  country           String?
+  linkedinUrl       String?
+  industry          String?
+  technology        String[]
+  grade             String?
+  score             Int       @default(0)
+  priority          String?
+  status            String?
+  segment           String?
+  owner             String?
+  verification      String?
   suppressionReason String?
-  normalizedAt   DateTime  @default(now())
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  rawLead        RawLead   @relation(fields: [rawLeadId], references: [id], onDelete: Cascade)
+  normalizedAt      DateTime  @default(now())
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  rawLead           RawLead   @relation(fields: [rawLeadId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, domain])
   @@index([workspaceId, email])
@@ -648,43 +754,43 @@ model Company {
 }
 
 model Contact {
-  id            String               @id @default(cuid())
-  workspaceId   String
-  companyId     String?
-  fullName      String
-  title         String?
-  seniority     String?
-  department    String?
-  email         String?
-  phone         String?
-  linkedinUrl   String?
-  sourceLineage Json
-  confidence    Int                  @default(50)
-  grade         String?
-  score         Int                   @default(0)
-  priority      String?
-  status        String?
-  segment       String?
-  owner         String?
-  verification  String?
-  enrichmentCoverage Int?
-  fitReason     String?
-  enrichedAt    DateTime?
-  lawfulBasis   String?
-  consentStatus String?
-  consentSource String?
-  consentCapturedAt DateTime?
-  doNotContact  Boolean              @default(false)
-  isSuppressed  Boolean              @default(false)
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  company       Company?             @relation(fields: [companyId], references: [id])
-  fieldSources  FieldSource[]
-  verifications VerificationResult[]
-  enrichments   EnrichmentResult[]
-  scores        LeadScore[]
-  crmContacts   CrmContact[]
+  id                  String               @id @default(cuid())
+  workspaceId         String
+  companyId           String?
+  fullName            String
+  title               String?
+  seniority           String?
+  department          String?
+  email               String?
+  phone               String?
+  linkedinUrl         String?
+  sourceLineage       Json
+  confidence          Int                  @default(50)
+  grade               String?
+  score               Int                  @default(0)
+  priority            String?
+  status              String?
+  segment             String?
+  owner               String?
+  verification        String?
+  enrichmentCoverage  Int?
+  fitReason           String?
+  enrichedAt          DateTime?
+  lawfulBasis         String?
+  consentStatus       String?
+  consentSource       String?
+  consentCapturedAt   DateTime?
+  doNotContact        Boolean              @default(false)
+  isSuppressed        Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company             Company?             @relation(fields: [companyId], references: [id])
+  fieldSources        FieldSource[]
+  verifications       VerificationResult[]
+  enrichments         EnrichmentResult[]
+  scores              LeadScore[]
+  crmContacts         CrmContact[]
   dataSubjectRequests DataSubjectRequest[]
 
   @@index([workspaceId, email])
@@ -692,21 +798,39 @@ model Contact {
 }
 
 model FieldSource {
-  id          String    @id @default(cuid())
-  workspaceId String
-  companyId   String?
-  contactId   String?
-  fieldName   String
-  fieldValue  String
-  source      String
-  trustScore  Int
-  confidence  Int?
-  seenAt      DateTime  @default(now())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  company     Company?  @relation(fields: [companyId], references: [id])
-  contact     Contact?  @relation(fields: [contactId], references: [id])
+  id               String    @id @default(cuid())
+  workspaceId      String
+  companyId        String?
+  contactId        String?
+  fieldName        String
+  fieldValue       String
+  source           String
+  trustScore       Int
+  confidence       Int?
+  seenAt           DateTime  @default(now())
+  targetType       String    @default("contact")
+  targetId         String    @default("")
+  field            String    @default("")
+  value            String    @default("")
+  providerId       String    @default("")
+  capability       String    @default("")
+  sourcePlatform   String?
+  validationStatus String    @default("unknown")
+  phoneType        String?
+  costCents        Int       @default(0)
+  cacheHit         Boolean   @default(false)
+  providerJobRunId String?
+  enrichmentDate   DateTime  @default(now())
+  lastVerifiedDate DateTime?
+  expiresAt        DateTime?
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company          Company?  @relation(fields: [companyId], references: [id])
+  contact          Contact?  @relation(fields: [contactId], references: [id])
 
   @@index([workspaceId, fieldName])
+  @@index([workspaceId, targetType, targetId])
+  @@index([workspaceId, providerId, capability])
+  @@index([workspaceId, expiresAt])
 }
 
 model VerificationResult {
@@ -729,6 +853,24 @@ model VerificationResult {
   @@index([workspaceId, expiresAt])
 }
 
+model DedupeMatch {
+  id          String    @id @default(cuid())
+  workspaceId String
+  objectType  String
+  primaryId   String
+  duplicateId String
+  reason      String
+  confidence  Int
+  status      String
+  detectedAt  DateTime  @default(now())
+  resolvedAt  DateTime?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, objectType, status])
+  @@index([workspaceId, primaryId])
+  @@index([workspaceId, duplicateId])
+}
+
 model EnrichmentResult {
   id          String    @id @default(cuid())
   workspaceId String
@@ -744,6 +886,25 @@ model EnrichmentResult {
   contact     Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, provider])
+}
+
+model ProviderCacheEntry {
+  id          String    @id @default(cuid())
+  workspaceId String
+  provider    String
+  targetType  String
+  cacheKey    String
+  inputHash   String
+  fields      Json
+  confidence  Int
+  hits        Int       @default(0)
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider, cacheKey, inputHash])
+  @@index([workspaceId, provider, targetType])
+  @@index([workspaceId, expiresAt])
 }
 
 model Segment {
@@ -787,15 +948,37 @@ model LeadScore {
   @@index([workspaceId, priority])
 }
 
+model ExportRule {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  name              String
+  exportType        String
+  allowedGrades     String[]  @default([])
+  allowedStatuses   String[]  @default([])
+  minScore          Int       @default(0)
+  includeRoleEmails Boolean   @default(false)
+  includeCatchAll   Boolean   @default(false)
+  requirePhone      Boolean   @default(false)
+  excludeSuppressed Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, exportType])
+}
+
 model Export {
   id             String    @id @default(cuid())
   workspaceId    String
   leadJobId      String?
   name           String
   exportType     String
+  exportRuleId   String?
   filterSnapshot Json
   columns        String[]
   recordCount    Int
+  blockedCount   Int       @default(0)
+  status         String    @default("Ready")
   fileUrl        String?
   createdById    String?
   createdAt      DateTime  @default(now())
@@ -825,63 +1008,63 @@ model SuppressionRecord {
 }
 
 model Account {
-  id             String        @id @default(cuid())
-  workspaceId    String
-  companyId      String?       @unique
-  name           String
-  domain         String?
-  industry       String?
-  location       String?
-  ownerUserId    String?
-  source         String?
-  score          Int?
-  priority       PriorityTier?
-  complianceNote String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  company        Company?      @relation(fields: [companyId], references: [id])
-  contacts       CrmContact[]
-  opportunities  Opportunity[]
-  activities     Activity[]
-  tasks          Task[]
-  notes          Note[]
-  callLogs       CallLog[]
-  sdrAssignments SdrAssignment[]
+  id                String             @id @default(cuid())
+  workspaceId       String
+  companyId         String?            @unique
+  name              String
+  domain            String?
+  industry          String?
+  location          String?
+  ownerUserId       String?
+  source            String?
+  score             Int?
+  priority          PriorityTier?
+  complianceNote    String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company           Company?           @relation(fields: [companyId], references: [id])
+  contacts          CrmContact[]
+  opportunities     Opportunity[]
+  activities        Activity[]
+  tasks             Task[]
+  notes             Note[]
+  callLogs          CallLog[]
+  sdrAssignments    SdrAssignment[]
   followUpReminders FollowUpReminder[]
-  emailEvents    EmailEvent[]
-  smsEvents      SmsEvent[]
-  trackedCalls   TrackedCall[]
+  emailEvents       EmailEvent[]
+  smsEvents         SmsEvent[]
+  trackedCalls      TrackedCall[]
 
   @@index([workspaceId, domain])
   @@index([workspaceId, ownerUserId])
 }
 
 model CrmContact {
-  id          String   @id @default(cuid())
-  workspaceId String
-  accountId   String
-  contactId   String?
-  fullName    String
-  title       String?
-  email       String?
-  phone       String?
-  status      String
-  ownerUserId String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  contact     Contact? @relation(fields: [contactId], references: [id])
-  opportunities Opportunity[]
-  activities Activity[]
-  tasks      Task[]
-  notes      Note[]
-  callLogs   CallLog[]
-  sdrAssignments SdrAssignment[]
+  id                String             @id @default(cuid())
+  workspaceId       String
+  accountId         String
+  contactId         String?
+  fullName          String
+  title             String?
+  email             String?
+  phone             String?
+  status            String
+  ownerUserId       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  account           Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact           Contact?           @relation(fields: [contactId], references: [id])
+  opportunities     Opportunity[]
+  activities        Activity[]
+  tasks             Task[]
+  notes             Note[]
+  callLogs          CallLog[]
+  sdrAssignments    SdrAssignment[]
   followUpReminders FollowUpReminder[]
-  emailEvents EmailEvent[]
-  smsEvents SmsEvent[]
-  trackedCalls TrackedCall[]
+  emailEvents       EmailEvent[]
+  smsEvents         SmsEvent[]
+  trackedCalls      TrackedCall[]
 
   @@index([workspaceId, accountId])
   @@index([workspaceId, email])
@@ -913,22 +1096,22 @@ model Opportunity {
 }
 
 model Activity {
-  id          String       @id @default(cuid())
-  workspaceId String
-  accountId   String?
-  contactId   String?
+  id            String       @id @default(cuid())
+  workspaceId   String
+  accountId     String?
+  contactId     String?
   opportunityId String?
-  actorUserId String?
-  type        ActivityType
-  title       String
-  body        String?
-  metadata    Json?
-  occurredAt  DateTime     @default(now())
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account     Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  contact     CrmContact?  @relation(fields: [contactId], references: [id])
-  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
-  actor       User?        @relation(fields: [actorUserId], references: [id])
+  actorUserId   String?
+  type          ActivityType
+  title         String
+  body          String?
+  metadata      Json?
+  occurredAt    DateTime     @default(now())
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact       CrmContact?  @relation(fields: [contactId], references: [id])
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  actor         User?        @relation(fields: [actorUserId], references: [id])
 
   @@index([workspaceId, accountId, occurredAt])
   @@index([workspaceId, contactId, occurredAt])
@@ -936,42 +1119,42 @@ model Activity {
 }
 
 model Task {
-  id          String    @id @default(cuid())
+  id          String      @id @default(cuid())
   workspaceId String
   accountId   String?
   contactId   String?
   title       String
-  status      String    @default("open")
-  priority    String    @default("normal")
+  status      String      @default("open")
+  priority    String      @default("normal")
   dueAt       DateTime?
   ownerUserId String?
   createdById String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   completedAt DateTime?
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account     Account?  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account     Account?    @relation(fields: [accountId], references: [id], onDelete: Cascade)
   contact     CrmContact? @relation(fields: [contactId], references: [id])
-  owner       User?     @relation("TaskOwner", fields: [ownerUserId], references: [id])
-  createdBy   User?     @relation("TaskCreator", fields: [createdById], references: [id])
+  owner       User?       @relation("TaskOwner", fields: [ownerUserId], references: [id])
+  createdBy   User?       @relation("TaskCreator", fields: [createdById], references: [id])
 
   @@index([workspaceId, ownerUserId, dueAt])
   @@index([workspaceId, contactId])
 }
 
 model Note {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   workspaceId String
   accountId   String?
   contactId   String?
   body        String
   createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account     Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account     Account?    @relation(fields: [accountId], references: [id], onDelete: Cascade)
   contact     CrmContact? @relation(fields: [contactId], references: [id])
-  createdBy   User?    @relation("NoteCreator", fields: [createdById], references: [id])
+  createdBy   User?       @relation("NoteCreator", fields: [createdById], references: [id])
 
   @@index([workspaceId, accountId])
   @@index([workspaceId, contactId])
@@ -1026,54 +1209,54 @@ model CustomFieldValue {
 }
 
 model SdrTeam {
-  id              String             @id @default(cuid())
-  workspaceId     String
-  name            String
-  managerUserId   String?
-  memberUserIds   String[]
-  territories     String[]
-  industries      String[]
-  capacityWeight  Float              @default(1)
-  active          Boolean            @default(true)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  manager         User?              @relation("SdrTeamManager", fields: [managerUserId], references: [id])
-  assignments     SdrAssignment[]
+  id                String             @id @default(cuid())
+  workspaceId       String
+  name              String
+  managerUserId     String?
+  memberUserIds     String[]
+  territories       String[]
+  industries        String[]
+  capacityWeight    Float              @default(1)
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  manager           User?              @relation("SdrTeamManager", fields: [managerUserId], references: [id])
+  assignments       SdrAssignment[]
   reassignmentRules ReassignmentRule[]
 
   @@index([workspaceId, active])
 }
 
 model SdrAssignment {
-  id                  String             @id @default(cuid())
-  workspaceId          String
-  accountId            String?
-  contactId            String?
-  assignedSdrId        String?
-  assignedTeamId       String?
-  assignedById         String?
-  assignmentMethod     String
-  assignmentReason     String
-  assignedAt           DateTime          @default(now())
-  firstTouchDueAt      DateTime?
-  followUpDueAt        DateTime?
-  status               String
-  reassignmentReason   String?
-  previousOwnerId      String?
-  slaStatus            String
-  firstTouchedAt       DateTime?
-  lastTouchAt          DateTime?
-  touchCount           Int               @default(0)
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-  workspace            Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account              Account?          @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  contact              CrmContact?       @relation(fields: [contactId], references: [id])
-  assignedSdr          User?             @relation("AssignedSdr", fields: [assignedSdrId], references: [id])
-  assignedBy           User?             @relation("AssignmentCreator", fields: [assignedById], references: [id])
-  assignedTeam         SdrTeam?          @relation(fields: [assignedTeamId], references: [id])
-  reminders            FollowUpReminder[]
+  id                 String             @id @default(cuid())
+  workspaceId        String
+  accountId          String?
+  contactId          String?
+  assignedSdrId      String?
+  assignedTeamId     String?
+  assignedById       String?
+  assignmentMethod   String
+  assignmentReason   String
+  assignedAt         DateTime           @default(now())
+  firstTouchDueAt    DateTime?
+  followUpDueAt      DateTime?
+  status             String
+  reassignmentReason String?
+  previousOwnerId    String?
+  slaStatus          String
+  firstTouchedAt     DateTime?
+  lastTouchAt        DateTime?
+  touchCount         Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account            Account?           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact            CrmContact?        @relation(fields: [contactId], references: [id])
+  assignedSdr        User?              @relation("AssignedSdr", fields: [assignedSdrId], references: [id])
+  assignedBy         User?              @relation("AssignmentCreator", fields: [assignedById], references: [id])
+  assignedTeam       SdrTeam?           @relation(fields: [assignedTeamId], references: [id])
+  reminders          FollowUpReminder[]
 
   @@unique([workspaceId, contactId])
   @@index([workspaceId, assignedSdrId, status])
@@ -1083,70 +1266,70 @@ model SdrAssignment {
 }
 
 model FollowUpReminder {
-  id            String         @id @default(cuid())
-  workspaceId   String
-  assignmentId  String
-  accountId     String?
-  contactId     String?
-  ownerUserId   String?
-  title         String
-  channel       String
-  dueAt         DateTime
-  status        String
-  createdAt     DateTime       @default(now())
-  completedAt   DateTime?
-  snoozedUntil  DateTime?
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  assignment    SdrAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  account       Account?       @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  contact       CrmContact?    @relation(fields: [contactId], references: [id])
-  owner         User?          @relation("ReminderOwner", fields: [ownerUserId], references: [id])
+  id           String        @id @default(cuid())
+  workspaceId  String
+  assignmentId String
+  accountId    String?
+  contactId    String?
+  ownerUserId  String?
+  title        String
+  channel      String
+  dueAt        DateTime
+  status       String
+  createdAt    DateTime      @default(now())
+  completedAt  DateTime?
+  snoozedUntil DateTime?
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assignment   SdrAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  account      Account?      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact      CrmContact?   @relation(fields: [contactId], references: [id])
+  owner        User?         @relation("ReminderOwner", fields: [ownerUserId], references: [id])
 
   @@index([workspaceId, ownerUserId, dueAt])
   @@index([workspaceId, status])
 }
 
 model ReassignmentRule {
-  id                String      @id @default(cuid())
-  workspaceId       String
-  name              String
-  trigger           String
-  assignmentMethod  String
-  thresholdHours    Int         @default(4)
-  targetTeamId      String?
-  active            Boolean     @default(true)
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  workspace         Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  targetTeam        SdrTeam?    @relation(fields: [targetTeamId], references: [id])
+  id               String    @id @default(cuid())
+  workspaceId      String
+  name             String
+  trigger          String
+  assignmentMethod String
+  thresholdHours   Int       @default(4)
+  targetTeamId     String?
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  targetTeam       SdrTeam?  @relation(fields: [targetTeamId], references: [id])
 
   @@index([workspaceId, active])
 }
 
 model OutreachProvider {
-  id              String    @id @default(cuid())
-  workspaceId     String
-  kind            String
-  provider        String
-  status          String
-  sendingDomain   String?
-  mailboxGroup    String?
-  senderEmail     String?
-  fromNumber      String?
-  dailyLimit      Int       @default(0)
-  sentToday       Int       @default(0)
-  bounceRate      Int       @default(0)
-  complaintRate   Int       @default(0)
-  unsubscribeRate Int       @default(0)
-  warmupStage     String?
-  spf             Boolean   @default(false)
-  dkim            Boolean   @default(false)
-  dmarc           Boolean   @default(false)
-  tls             Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  deliverabilityAlerts DeliverabilityAlert[]
+  id                              String                           @id @default(cuid())
+  workspaceId                     String
+  kind                            String
+  provider                        String
+  status                          String
+  sendingDomain                   String?
+  mailboxGroup                    String?
+  senderEmail                     String?
+  fromNumber                      String?
+  dailyLimit                      Int                              @default(0)
+  sentToday                       Int                              @default(0)
+  bounceRate                      Int                              @default(0)
+  complaintRate                   Int                              @default(0)
+  unsubscribeRate                 Int                              @default(0)
+  warmupStage                     String?
+  spf                             Boolean                          @default(false)
+  dkim                            Boolean                          @default(false)
+  dmarc                           Boolean                          @default(false)
+  tls                             Boolean                          @default(true)
+  createdAt                       DateTime                         @default(now())
+  updatedAt                       DateTime                         @updatedAt
+  workspace                       Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliverabilityAlerts            DeliverabilityAlert[]
   aiDeliverabilityRecommendations AiDeliverabilityRecommendation[]
 
   @@index([workspaceId, kind])
@@ -1154,35 +1337,35 @@ model OutreachProvider {
 }
 
 model OutreachCampaign {
-  id                     String             @id @default(cuid())
-  workspaceId            String
-  name                   String
-  campaignType           String
-  targetSegment          String
-  sourceJobIds           String[]
-  ownerUserId            String?
-  sendingDomain          String?
-  mailboxGroup           String?
-  status                 String
-  startDate              DateTime?
-  endDate                DateTime?
-  totalLeads             Int                @default(0)
-  sentCount              Int                @default(0)
-  openCount              Int                @default(0)
-  clickCount             Int                @default(0)
-  replyCount             Int                @default(0)
-  bounceCount            Int                @default(0)
-  unsubscribeCount       Int                @default(0)
-  meetingsBooked         Int                @default(0)
-  opportunitiesCreated   Int                @default(0)
-  revenueWonCents        Int                @default(0)
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
-  workspace              Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  owner                  User?              @relation("CampaignOwner", fields: [ownerUserId], references: [id])
-  sequences              CampaignSequence[]
-  emailEvents            EmailEvent[]
-  smsEvents              SmsEvent[]
+  id                   String             @id @default(cuid())
+  workspaceId          String
+  name                 String
+  campaignType         String
+  targetSegment        String
+  sourceJobIds         String[]
+  ownerUserId          String?
+  sendingDomain        String?
+  mailboxGroup         String?
+  status               String
+  startDate            DateTime?
+  endDate              DateTime?
+  totalLeads           Int                @default(0)
+  sentCount            Int                @default(0)
+  openCount            Int                @default(0)
+  clickCount           Int                @default(0)
+  replyCount           Int                @default(0)
+  bounceCount          Int                @default(0)
+  unsubscribeCount     Int                @default(0)
+  meetingsBooked       Int                @default(0)
+  opportunitiesCreated Int                @default(0)
+  revenueWonCents      Int                @default(0)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner                User?              @relation("CampaignOwner", fields: [ownerUserId], references: [id])
+  sequences            CampaignSequence[]
+  emailEvents          EmailEvent[]
+  smsEvents            SmsEvent[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, targetSegment])
@@ -1214,30 +1397,30 @@ model CampaignSequence {
 }
 
 model SequenceStep {
-  id                       String           @id @default(cuid())
-  workspaceId              String
-  sequenceId               String
-  stepNumber               Int
-  channel                  String
-  delayDays                Int              @default(0)
-  subject                  String?
-  bodyTemplate             String?
-  callScript               String?
-  smsTemplate              String?
-  manualTaskInstruction    String?
-  personalizationVariables String[]
-  requiredFields           String[]
+  id                        String           @id @default(cuid())
+  workspaceId               String
+  sequenceId                String
+  stepNumber                Int
+  channel                   String
+  delayDays                 Int              @default(0)
+  subject                   String?
+  bodyTemplate              String?
+  callScript                String?
+  smsTemplate               String?
+  manualTaskInstruction     String?
+  personalizationVariables  String[]
+  requiredFields            String[]
   unsubscribeFooterRequired Boolean          @default(false)
-  physicalAddress          String?
-  complianceStatus         String            @default("Compliant")
-  complianceNotes          String?
-  active                   Boolean          @default(true)
-  createdAt                DateTime         @default(now())
-  updatedAt                DateTime         @updatedAt
-  workspace                Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  sequence                 CampaignSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
-  emailEvents              EmailEvent[]
-  smsEvents                SmsEvent[]
+  physicalAddress           String?
+  complianceStatus          String           @default("Compliant")
+  complianceNotes           String?
+  active                    Boolean          @default(true)
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+  workspace                 Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sequence                  CampaignSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  emailEvents               EmailEvent[]
+  smsEvents                 SmsEvent[]
 
   @@unique([sequenceId, stepNumber])
   @@index([workspaceId, channel])
@@ -1275,10 +1458,10 @@ model EmailEvent {
   sequence       CampaignSequence? @relation(fields: [sequenceId], references: [id])
   sequenceStep   SequenceStep?     @relation(fields: [sequenceStepId], references: [id])
 
+  @@unique([workspaceId, messageId, eventType])
   @@index([workspaceId, eventType])
   @@index([workspaceId, campaignId])
   @@index([workspaceId, contactId])
-  @@unique([workspaceId, messageId, eventType])
 }
 
 model SmsEvent {
@@ -1315,32 +1498,53 @@ model SmsEvent {
   @@index([workspaceId, contactId])
 }
 
+model WebhookEvent {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  provider          String
+  target            String
+  providerEventId   String
+  eventType         String
+  idempotencyKey    String
+  status            String
+  processedRecordId String?
+  errorMessage      String?
+  rawPayload        Json
+  receivedAt        DateTime  @default(now())
+  processedAt       DateTime?
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, provider, eventType])
+  @@index([workspaceId, status, receivedAt])
+}
+
 model TrackedCall {
-  id                   String      @id @default(cuid())
-  workspaceId           String
-  contactId             String?
-  accountId             String?
-  sdrUserId             String?
-  leadContactId         String?
-  companyId             String?
-  phoneNumber           String
-  direction             String
-  callStatus            String
-  disposition           String
-  durationSeconds       Int         @default(0)
-  recordingConsent      String      @default("Not recorded")
-  recordingConsentSource String?
+  id                         String      @id @default(cuid())
+  workspaceId                String
+  contactId                  String?
+  accountId                  String?
+  sdrUserId                  String?
+  leadContactId              String?
+  companyId                  String?
+  phoneNumber                String
+  direction                  String
+  callStatus                 String
+  disposition                String
+  durationSeconds            Int         @default(0)
+  recordingConsent           String      @default("Not recorded")
+  recordingConsentSource     String?
   recordingConsentCapturedAt DateTime?
-  recordingUrl          String?
-  recordingStoragePath  String?
-  transcript            String?
-  callSummary           String?
-  nextStep              String?
-  createdAt             DateTime    @default(now())
-  workspace             Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account               Account?    @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  contact               CrmContact? @relation(fields: [contactId], references: [id])
-  sdr                   User?       @relation(fields: [sdrUserId], references: [id])
+  recordingUrl               String?
+  recordingStoragePath       String?
+  transcript                 String?
+  callSummary                String?
+  nextStep                   String?
+  createdAt                  DateTime    @default(now())
+  workspace                  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account                    Account?    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact                    CrmContact? @relation(fields: [contactId], references: [id])
+  sdr                        User?       @relation(fields: [sdrUserId], references: [id])
 
   @@index([workspaceId, contactId, createdAt])
   @@index([workspaceId, leadContactId, createdAt])
@@ -1413,28 +1617,28 @@ model ComplianceChecklistItem {
   updatedAt   DateTime  @updatedAt
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@index([workspaceId, status])
   @@unique([workspaceId, category, requirement])
+  @@index([workspaceId, status])
 }
 
 model DataSubjectRequest {
-  id           String    @id @default(cuid())
-  workspaceId  String
-  requestType  String
-  status       String
-  email        String?
-  phone        String?
-  contactId    String?
-  requestedAt  DateTime  @default(now())
-  dueAt        DateTime
-  verifiedAt   DateTime?
-  completedAt  DateTime?
-  handledById  String?
-  notes        String
-  evidence     String?
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  contact      Contact?  @relation(fields: [contactId], references: [id])
-  handledBy    User?     @relation("DataSubjectRequestHandler", fields: [handledById], references: [id])
+  id          String    @id @default(cuid())
+  workspaceId String
+  requestType String
+  status      String
+  email       String?
+  phone       String?
+  contactId   String?
+  requestedAt DateTime  @default(now())
+  dueAt       DateTime
+  verifiedAt  DateTime?
+  completedAt DateTime?
+  handledById String?
+  notes       String
+  evidence    String?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact     Contact?  @relation(fields: [contactId], references: [id])
+  handledBy   User?     @relation("DataSubjectRequestHandler", fields: [handledById], references: [id])
 
   @@index([workspaceId, status])
   @@index([workspaceId, requestType])
@@ -1629,6 +1833,32 @@ model AiAutomationRun {
 
   @@index([workspaceId, completedAt])
   @@index([workspaceId, automationType])
+}
+
+model WaterfallTemplate {
+  id                      String    @id @default(cuid())
+  workspaceId             String
+  name                    String
+  campaignType            String
+  description             String?
+  status                  String
+  isDefault               Boolean   @default(false)
+  country                 String?
+  outreachChannel         String
+  requiredFields          String[]  @default([])
+  personas                String[]  @default([])
+  allowGenericEmail       Boolean   @default(false)
+  maxCostPerLeadCents     Int?
+  maxCostPerCampaignCents Int?
+  highValueScoreThreshold Int?
+  steps                   Json
+  createdById             String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  workspace               Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, campaignType, status])
+  @@index([workspaceId, isDefault])
 }
 
 model AuditLog {

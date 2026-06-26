@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { assertPermission } from "@/lib/phase1/auth";
-import { snapshotOnlyWriteTables } from "@/lib/phase1/normalized-write-tables";
+import { waterfallTemplateWriteTables } from "@/lib/phase1/normalized-write-tables";
 import { appendAudit, updateState } from "@/lib/phase1/store";
 import { defaultWaterfallTemplates, normalizeStepOrders, reorderTemplateStep } from "@/lib/phase1/waterfall-templates";
 import type { AppState, Session, WaterfallStage, WaterfallStep, WaterfallTemplate } from "@/lib/phase1/types";
@@ -121,7 +121,7 @@ export async function cloneWaterfallTemplateAction(formData: FormData) {
       action: "cloned",
       newValue: { from: sourceId, name: clone.name, campaignType: clone.campaignType }
     });
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: waterfallTemplateWriteTables });
 
   revalidatePath("/waterfalls");
 }
@@ -156,7 +156,7 @@ export async function setWaterfallTemplateStatusAction(formData: FormData) {
       oldValue: { status: previous },
       newValue: { status }
     });
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: waterfallTemplateWriteTables });
 
   revalidatePath("/waterfalls");
 }
@@ -186,7 +186,7 @@ export async function restoreDefaultWaterfallTemplatesAction() {
         newValue: { restored }
       });
     }
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: waterfallTemplateWriteTables });
 
   revalidatePath("/waterfalls");
 }
@@ -203,7 +203,7 @@ export async function updateWaterfallTemplateMetaAction(formData: FormData) {
     template.highValueScoreThreshold = optionalInt(formData.get("highValueScoreThreshold"));
     template.updatedAt = new Date().toISOString();
     appendAudit(state, session, { objectType: "waterfall_template", objectId: template.id, action: "meta_updated" });
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: waterfallTemplateWriteTables });
   revalidatePath(`/waterfalls/${templateId}`);
   revalidatePath("/waterfalls");
 }
@@ -225,7 +225,7 @@ export async function addWaterfallStepAction(formData: FormData) {
     template.steps = normalizeStepOrders([...template.steps, newStep]);
     template.updatedAt = new Date().toISOString();
     appendAudit(state, session, { objectType: "waterfall_template", objectId: template.id, action: "step_added", newValue: { stage, capability } });
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: waterfallTemplateWriteTables });
   revalidatePath(`/waterfalls/${templateId}`);
 }
 
@@ -244,7 +244,7 @@ export async function updateWaterfallStepAction(formData: FormData) {
     step.allowCompanyMainPhone = formData.get("allowCompanyMainPhone") != null;
     template.updatedAt = new Date().toISOString();
     appendAudit(state, session, { objectType: "waterfall_template", objectId: template.id, action: "step_updated", newValue: { stepId } });
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: waterfallTemplateWriteTables });
   revalidatePath(`/waterfalls/${templateId}`);
 }
 
@@ -256,7 +256,7 @@ export async function removeWaterfallStepAction(formData: FormData) {
     template.steps = normalizeStepOrders(template.steps.filter((item) => item.id !== stepId));
     template.updatedAt = new Date().toISOString();
     appendAudit(state, session, { objectType: "waterfall_template", objectId: template.id, action: "step_removed", newValue: { stepId } });
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: waterfallTemplateWriteTables });
   revalidatePath(`/waterfalls/${templateId}`);
 }
 
@@ -268,6 +268,6 @@ export async function moveWaterfallStepAction(formData: FormData) {
     const template = findEditableTemplate(state, session, templateId);
     template.steps = reorderTemplateStep(template.steps, stepId, direction);
     template.updatedAt = new Date().toISOString();
-  }, { normalizedTables: snapshotOnlyWriteTables });
+  }, { normalizedTables: waterfallTemplateWriteTables });
   revalidatePath(`/waterfalls/${templateId}`);
 }
