@@ -133,21 +133,21 @@ body {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 32px 18px;
+  padding: 28px 18px;
   background:
-    radial-gradient(circle at 20% 15%, rgba(0, 118, 254, 0.12), transparent 34%),
-    linear-gradient(135deg, #f8fbff 0%, #eef7ff 48%, #f6fffd 100%);
+    linear-gradient(180deg, rgba(245, 251, 255, 0.98) 0%, rgba(238, 247, 253, 0.98) 100%),
+    var(--bg-subtle);
 }
 
 .auth-panel {
-  width: min(100%, 460px);
+  width: min(100%, 430px);
   display: grid;
-  gap: 22px;
-  padding: 30px;
-  border: 1px solid rgba(20, 36, 64, 0.12);
+  gap: 20px;
+  padding: 36px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 24px 80px rgba(14, 31, 53, 0.14);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.12);
 }
 
 .unsubscribe-page {
@@ -269,12 +269,13 @@ body {
 
 .auth-brand {
   display: grid;
-  gap: 6px;
-  justify-items: start;
+  gap: 0;
+  justify-items: center;
+  margin-bottom: 6px;
 }
 
 .auth-brand img {
-  width: 180px;
+  width: 156px;
   height: auto;
 }
 
@@ -287,23 +288,39 @@ body {
 
 .auth-copy {
   display: grid;
-  gap: 8px;
+  gap: 0;
+  justify-items: center;
+  text-align: center;
 }
 
 .auth-copy h1 {
   margin: 0;
-  font-size: 34px;
-  line-height: 1.05;
+  font-size: 32px;
+  line-height: 1;
 }
 
 .auth-form {
   display: grid;
-  gap: 16px;
+  gap: 15px;
+}
+
+.auth-form .field {
+  gap: 7px;
+}
+
+.auth-form input {
+  min-height: 48px;
+  background: #fbfdff;
+}
+
+.auth-form .button {
+  min-height: 48px;
+  margin-top: 2px;
 }
 
 .auth-links {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   font-size: 14px;
 }
 
