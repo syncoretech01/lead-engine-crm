@@ -2,20 +2,15 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { assertPermission } from "@/lib/phase1/auth";
 import { parseCsv } from "@/lib/phase1/csv";
-import { detectWorkspaceDuplicates } from "@/lib/phase1/dedupe";
-import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import {
   appendJobLog,
-  completeJobRun,
   createTrackedJob,
   csvImportIdempotencyKey,
   csvImportRequestHash,
-  markIdempotencyCompleted,
   reserveJobIdempotency
 } from "@/lib/phase1/jobs";
-import { normalizeImportedRows } from "@/lib/phase1/normalization";
+import { leadGenerationWriteTables } from "@/lib/phase1/normalized-write-tables";
 import { appendAudit, updateState } from "@/lib/phase1/store";
-import { runWorkspaceVerification } from "@/lib/phase1/verification";
 import type { CsvImportMapping, CsvImportResult, LeadJob, RawLead } from "@/lib/phase1/types";
 
 export async function POST(request: Request) {
@@ -92,7 +87,8 @@ export async function POST(request: Request) {
           duplicates: existingJob.duplicates,
           suppressed: existingJob.suppressed,
           companies: 0,
-          contacts: 0
+          contacts: 0,
+          queued: existingJob.status !== "Completed" && existingJob.status !== "Failed"
         };
       }
     }
@@ -102,8 +98,8 @@ export async function POST(request: Request) {
       workspaceId: session.workspace.id,
       searchProfileId: profile?.id,
       name: stringValue(formData.get("jobName"), `${profile?.name ?? "CSV"} Import`),
-      status: "Running",
-      progress: 35,
+      status: "Queued",
+      progress: 10,
       sources: [source],
       raw: rows.length,
       normalized: 0,
@@ -117,9 +113,8 @@ export async function POST(request: Request) {
       actualCostCents: 0,
       actualCostSource: "Actual",
       estimatedCostSource: "Estimated",
-      startedAt: now,
-      eta: "Normalizing",
-      errorSummary: "Processing CSV rows",
+      eta: "Queued for background processing",
+      errorSummary: "Waiting for lead job worker",
       createdById: session.user.id,
       createdAt: now,
       updatedAt: now
@@ -143,7 +138,8 @@ export async function POST(request: Request) {
         duplicates: existingJob?.duplicates ?? 0,
         suppressed: existingJob?.suppressed ?? 0,
         companies: 0,
-        contacts: 0
+        contacts: 0,
+        queued: existingJob ? existingJob.status !== "Completed" && existingJob.status !== "Failed" : false
       };
     }
 
@@ -165,53 +161,42 @@ export async function POST(request: Request) {
       job,
       sources: [source],
       idempotencyKey,
-      startImmediately: true,
-      logMessage: "CSV import job started"
+      startImmediately: false,
+      checkpoint: {
+        kind: "csv_import",
+        fileName: file.name,
+        source,
+        rows: rows.length,
+        mapping,
+        stage: "queued"
+      },
+      logMessage: "CSV import job queued for background processing"
     });
     state.rawLeads.unshift(...rawLeads);
-    const counts = normalizeImportedRows({
-      state,
+    appendJobLog(state, {
       workspaceId: session.workspace.id,
-      leadJob: job,
-      rawLeads,
-      mapping
-    });
-    const verification = runWorkspaceVerification(state, session.workspace.id);
-    const dedupe = detectWorkspaceDuplicates(state, session.workspace.id);
-    const enrichment = runWorkspaceEnrichment(state, session.workspace.id);
-    completeJobRun(state, {
-      runId: trackedJob.runs[0].id,
-      recordsRead: rows.length,
-      recordsWritten: counts.normalized,
-      checkpoint: {
+      leadJobId: job.id,
+      runId: trackedJob.runs[0]?.id,
+      level: "Info",
+      message: "Raw CSV rows stored; worker will normalize, verify, dedupe, and enrich",
+      metadata: {
+        idempotencyKey,
+        requestHash,
         rows: rows.length,
-        normalized: counts.normalized,
-        duplicates: counts.duplicates,
-        suppressed: counts.suppressed
-      },
-      message: "CSV import normalized, verified, deduped, and enriched"
+        fileName: file.name
+      }
     });
-    markIdempotencyCompleted(
-      state,
-      session.workspace.id,
-      idempotencyKey,
-      job.id,
-      rawLeads.map((lead) => lead.id)
-    );
 
     appendAudit(state, session, {
       objectType: "lead_job",
       objectId: job.id,
-      action: "csv_imported",
+      action: "csv_import_queued",
       newValue: {
         fileName: file.name,
         source,
         rows: rows.length,
         idempotencyKey,
-        counts,
-        verification,
-        dedupe,
-        enrichment
+        runId: trackedJob.runs[0]?.id
       }
     });
 
@@ -219,9 +204,15 @@ export async function POST(request: Request) {
       jobId: job.id,
       replayed: false,
       idempotencyKey,
-      ...counts
+      queued: true,
+      raw: rows.length,
+      normalized: 0,
+      duplicates: 0,
+      suppressed: 0,
+      companies: 0,
+      contacts: 0
     };
-  });
+  }, { normalizedTables: leadGenerationWriteTables });
 
   return NextResponse.json(result);
 }

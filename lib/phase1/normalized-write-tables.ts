@@ -45,6 +45,31 @@ export const enrichmentWriteTables = [
   "auditLogs"
 ] satisfies ProjectionTableName[];
 
+export const leadJobWorkerWriteTables = [
+  "searchProfiles",
+  "leadJobs",
+  "asyncJobRuns",
+  "jobLogs",
+  "jobIdempotencyRecords",
+  "rawLeads",
+  "normalizedRecords",
+  "companies",
+  "contacts",
+  "verificationResults",
+  "dedupeMatches",
+  "enrichmentResults",
+  "fieldSources",
+  "providerCache",
+  "segments",
+  "recordSegments",
+  "leadScores",
+  "providerMetricsDaily",
+  "providerUsageLedger",
+  "customFields",
+  "customFieldValues",
+  "auditLogs"
+] satisfies ProjectionTableName[];
+
 export const crmWriteTables = [
   "companies",
   "contacts",

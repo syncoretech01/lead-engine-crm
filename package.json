@@ -17,6 +17,8 @@
     "db:provision": "tsx scripts/provision-workspace.ts",
     "generate-secrets": "tsx scripts/generate-secrets.ts",
     "worker:provider": "tsx scripts/run-provider-worker.ts",
+    "worker:lead": "tsx scripts/run-lead-worker.ts",
+    "worker:background": "tsx scripts/run-background-worker.ts",
     "validate-adapter": "tsx scripts/validate-adapter.ts",
     "providers:status": "tsx scripts/providers-status.ts",
     "db:migrate:status": "prisma migrate status",

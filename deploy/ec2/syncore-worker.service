@@ -1,0 +1,28 @@
+[Unit]
+Description=Syncore background worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+Group=__SERVICE_USER__
+WorkingDirectory=__APP_DIR__
+Environment=NODE_ENV=production
+Environment=HOME=/tmp
+Environment=XDG_CACHE_HOME=/tmp/syncore-worker-cache
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/etc/syncore/worker.env
+ExecStart=/usr/bin/bash -lc 'npm run worker:background -- --loop "${SYNCORE_WORKER_LOOP_MS:-60000}"'
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+KillSignal=SIGINT
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/tmp /var/tmp
+
+[Install]
+WantedBy=multi-user.target

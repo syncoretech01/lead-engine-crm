@@ -12,6 +12,7 @@ type ImportResult = {
   jobId: string;
   replayed?: boolean;
   idempotencyKey?: string;
+  queued?: boolean;
   raw: number;
   normalized: number;
   duplicates: number;
@@ -180,12 +181,12 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
           <label aria-hidden="true">&nbsp;</label>
           <button className="button primary" disabled={loading} type="submit">
             <Upload size={17} aria-hidden="true" />
-            {loading ? "Importing" : "Import and normalize"}
+            {loading ? "Uploading" : "Upload and queue"}
           </button>
         </div>
         {loading ? (
           <p className="section-subtitle info-text" aria-live="polite">
-            Uploading the file, validating the mapping, and normalizing rows.
+            Uploading the file, validating the mapping, and queueing background processing.
           </p>
         ) : null}
         {error ? (
@@ -197,6 +198,8 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
           <p className="section-subtitle success-text" aria-live="polite">
             {result.replayed
               ? `Reused job ${result.jobId}; this CSV import was already processed.`
+              : result.queued
+                ? `Queued ${result.raw} rows in job ${result.jobId}. The worker will normalize, verify, dedupe, and enrich it.`
               : `Imported ${result.raw} rows into job ${result.jobId}. Created ${result.companies} companies and ${result.contacts} contacts.`}
           </p>
         ) : null}

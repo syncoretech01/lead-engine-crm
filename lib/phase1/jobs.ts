@@ -20,6 +20,7 @@ type CreateTrackedJobInput = {
   idempotencyScope?: JobIdempotencyRecord["scope"];
   requestHash?: string;
   startImmediately?: boolean;
+  checkpoint?: AsyncJobRun["checkpoint"];
   logMessage?: string;
 };
 
@@ -42,6 +43,7 @@ export function createTrackedJob(input: CreateTrackedJobInput) {
       status: runStatus,
       attempt: 1,
       idempotencyKey: input.idempotencyKey ?? leadJobIdempotencyKey(input.job.workspaceId, input.job.id, source),
+      checkpoint: input.checkpoint,
       now
     })
   );
@@ -260,6 +262,22 @@ export function markIdempotencyCompleted(
     record.status = "Completed";
     record.leadJobId = leadJobId;
     record.recordIds = unique([...record.recordIds, ...recordIds]);
+    record.updatedAt = now;
+  }
+}
+
+export function markIdempotencyFailed(
+  state: AppState,
+  workspaceId: string,
+  key: string,
+  leadJobId: string
+) {
+  const now = new Date().toISOString();
+  const record = state.jobIdempotencyRecords.find((item) => item.workspaceId === workspaceId && item.key === key);
+
+  if (record) {
+    record.status = "Failed";
+    record.leadJobId = leadJobId;
     record.updatedAt = now;
   }
 }

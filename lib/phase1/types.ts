@@ -282,7 +282,7 @@ export type AsyncJobRun = {
   maxAttempts: number;
   providerRunId: string;
   idempotencyKey: string;
-  checkpoint?: Record<string, string | number | boolean | undefined>;
+  checkpoint?: Record<string, unknown>;
   creditUsage: number;
   recordsRead: number;
   recordsWritten: number;
@@ -1641,6 +1641,7 @@ export type CsvImportResult = {
   jobId: string;
   replayed?: boolean;
   idempotencyKey?: string;
+  queued?: boolean;
   raw: number;
   normalized: number;
   duplicates: number;
