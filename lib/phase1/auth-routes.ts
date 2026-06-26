@@ -1,6 +1,11 @@
 export function isPublicAuthPath(pathname: string) {
   return (
     pathname === "/login" ||
+    pathname === "/auth/login" ||
+    pathname === "/auth/logout" ||
+    pathname === "/auth/accept-invite" ||
+    pathname === "/auth/request-password-reset" ||
+    pathname === "/auth/reset-password" ||
     pathname === "/reset-password" ||
     pathname.startsWith("/reset-password/") ||
     pathname.startsWith("/invite/")
