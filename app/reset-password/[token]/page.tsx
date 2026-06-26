@@ -1,5 +1,4 @@
 import Image from "next/image";
-import { resetPasswordAction } from "@/app/auth/actions";
 import { syncoreBrand } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +26,7 @@ export default async function ResetPasswordTokenPage({ params, searchParams }: R
 
         {query?.error ? <p className="form-alert danger">{query.error}</p> : null}
 
-        <form action={resetPasswordAction} className="auth-form">
+        <form action="/auth/reset-password" method="post" className="auth-form">
           <input type="hidden" name="token" value={token} />
           <div className="field">
             <label htmlFor="password">New password</label>

@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { requestPasswordResetAction } from "@/app/auth/actions";
 import { syncoreBrand } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +30,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
           </p>
         ) : null}
 
-        <form action={requestPasswordResetAction} className="auth-form">
+        <form action="/auth/request-password-reset" method="post" className="auth-form">
           <div className="field">
             <label htmlFor="email">Email</label>
             <input id="email" name="email" type="email" required />

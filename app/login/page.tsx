@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { loginAction } from "@/app/auth/actions";
 import { syncoreBrand } from "@/lib/brand";
 import { seededAuthPassword } from "@/lib/phase1/auth-service";
 
@@ -42,7 +41,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         {params?.loggedOut ? <p className="form-alert success">You have been signed out.</p> : null}
         {params?.reset ? <p className="form-alert success">Password updated. Sign in with your new password.</p> : null}
 
-        <form action={loginAction} className="auth-form">
+        <form action="/auth/login" method="post" className="auth-form">
           <input type="hidden" name="next" value={next} />
           <div className="field">
             <label htmlFor="email">Email</label>

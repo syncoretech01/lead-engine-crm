@@ -37,7 +37,6 @@ import {
   workspaceRoleLabel
 } from "@/lib/phase1/auth";
 import { cn } from "@/lib/utils";
-import { logoutAction } from "@/app/auth/actions";
 
 type WorkspaceViewId = "lead-generation" | "crm" | "developer";
 
@@ -209,7 +208,7 @@ export function AppShell({ children, session }: AppShellProps) {
             <button className="icon-button" aria-label="Notifications">
               <Bell size={18} aria-hidden="true" />
             </button>
-            <form action={logoutAction}>
+            <form action="/auth/logout" method="post">
               <button className="icon-button" type="submit" aria-label="Sign out">
                 <LogOut size={18} aria-hidden="true" />
               </button>
