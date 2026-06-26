@@ -21,6 +21,7 @@ import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { contactRowsForStaging, exportTemplates, sourceHealth } from "@/lib/phase1/queries";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
+import { buildLeadEngineMetrics } from "@/lib/phase1/lead-engine-metrics";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { canUseLeadGenerationWorkspace, defaultWorkspacePath } from "@/lib/phase1/auth";
 import type { Contact, LeadJob, Priority, SearchProfile } from "@/lib/phase1/types";
@@ -59,116 +60,103 @@ export default async function DashboardPage() {
 
   const profiles = state.searchProfiles.filter((profile) => profile.workspaceId === workspaceId);
   const jobs = state.leadJobs.filter((job) => job.workspaceId === workspaceId);
+  const metrics = buildLeadEngineMetrics(state, workspaceId);
   const activeJobs = jobs.filter((job) => job.status !== "Completed");
-  const rawLeads = state.rawLeads.filter((lead) => lead.workspaceId === workspaceId);
-  const normalizedRecords = state.normalizedRecords.filter((record) => record.workspaceId === workspaceId);
   const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId);
   const stagedRows = contactRowsForStaging(state, workspaceId);
-  const exportReadyContacts = contacts.filter(
-    (contact) => !contact.isSuppressed && (contact.grade === "A" || contact.grade === "B")
-  );
-  const suppressedContacts = contacts.filter((contact) => contact.isSuppressed);
-  const duplicateRows = normalizedRecords.filter((record) => record.duplicateCompanyId || record.duplicateContactId);
-  const duplicateCandidateCount = duplicateRows.length || jobs.reduce((total, job) => total + job.duplicates, 0);
   const needsReviewRows = stagedRows.filter(
-    (row) => row.status === "In review" || row.status === "Needs enrichment" || row.emailGrade === "C" || row.emailGrade === "D"
+    (row) =>
+      row.reviewReason !== "Ready" ||
+      row.status === "In review" ||
+      row.status === "Needs enrichment" ||
+      row.emailGrade === "C" ||
+      row.emailGrade === "D"
   );
   const templates = exportTemplates(state, workspaceId);
   const recentJobRows = recentJobs(jobs).slice(0, 5);
   const canManageProfiles = session.permissions.includes("manage_profiles");
   const canImport = session.permissions.includes("import_csv");
-  const nonSuppressedContacts = contacts.filter((contact) => !contact.isSuppressed);
-  const verifiedRate = nonSuppressedContacts.length
-    ? Math.round((exportReadyContacts.length / nonSuppressedContacts.length) * 100)
-    : 0;
-  const exportedIds = new Set(
-    state.exports
-      .filter((exportRecord) => exportRecord.workspaceId === workspaceId)
-      .flatMap((exportRecord) => exportRecord.recordIds)
-  );
-  const exportedCount = exportedIds.size || templates.reduce((total, template) => total + template.eligible, 0);
-  const enrichedCount = contacts.filter((contact) => (contact.enrichmentCoverage ?? 0) > 0).length;
-  const funnelMax = Math.max(rawLeads.length, normalizedRecords.length, contacts.length, stagedRows.length, 1);
+  const funnelMax = Math.max(metrics.rawCount, metrics.normalizedCount, metrics.contactCount, metrics.stagedCount, 1);
   const topSegments = segmentSummaries(contacts, stagedRows).slice(0, 5);
 
   const stats = [
     {
       label: "Leads in staging",
-      value: formatNumber(stagedRows.length || rawLeads.length),
-      note: `${formatNumber(needsReviewRows.length)} need review`,
+      value: formatNumber(metrics.stagedCount || metrics.rawCount),
+      note: `${formatNumber(metrics.needsReviewCount)} need review`,
       icon: Database,
       tone: "info" as const
     },
     {
       label: "Verified rate",
-      value: `${verifiedRate}%`,
-      note: `${formatNumber(exportReadyContacts.length)} A/B contacts`,
+      value: `${metrics.verifiedRate}%`,
+      note: `${formatNumber(metrics.verifiedCount)} A/B contacts`,
       icon: BadgeCheck,
       tone: "success" as const
     },
     {
       label: "Export-ready",
-      value: formatNumber(exportReadyContacts.length),
+      value: formatNumber(metrics.exportReadyCount),
       note: `${formatNumber(topSegments.filter((segment) => segment.priority === "P1").length)} P1 segments`,
       icon: Download,
       tone: "success" as const
     },
     {
-      label: "Suppressed",
-      value: formatNumber(suppressedContacts.length),
-      note: `${formatNumber(duplicateCandidateCount)} duplicate candidates`,
-      icon: ShieldCheck,
-      tone: suppressedContacts.length ? "warning" as const : "success" as const
+      label: "Open duplicates",
+      value: formatNumber(metrics.duplicateGroupCount),
+      note: `${formatNumber(metrics.hiddenDuplicatePairCount)} stale pairs hidden`,
+      icon: GitMerge,
+      tone: metrics.duplicateGroupCount ? "warning" as const : "success" as const
     }
   ];
 
   const funnelStages = [
     {
       label: "Raw data",
-      value: rawLeads.length || stagedRows.length,
+      value: metrics.rawCount || metrics.stagedCount,
       note: "Imported and source-read",
       icon: Database,
       tone: "blue" as const
     },
     {
       label: "Normalized",
-      value: normalizedRecords.length,
+      value: metrics.normalizedCount,
       note: "Mapped to company/contact records",
       icon: GitMerge,
       tone: "blue" as const
     },
     {
       label: "Deduped",
-      value: Math.max(normalizedRecords.length - duplicateCandidateCount, 0),
-      note: `${formatNumber(duplicateCandidateCount)} duplicates isolated`,
+      value: Math.max(metrics.normalizedCount - metrics.actionableDuplicatePairCount, 0),
+      note: `${formatNumber(metrics.duplicateGroupCount)} groups to resolve`,
       icon: Search,
       tone: "teal" as const
     },
     {
       label: "Suppressed",
-      value: suppressedContacts.length,
+      value: metrics.suppressedCount,
       note: "DNC, bounces, customers, invalids",
       icon: ShieldCheck,
       tone: "warn" as const
     },
     {
       label: "Verified",
-      value: exportReadyContacts.length,
+      value: metrics.verifiedCount,
       note: "A/B email grade",
       icon: BadgeCheck,
       tone: "teal" as const
     },
     {
       label: "Enriched",
-      value: enrichedCount,
+      value: metrics.enrichedCount,
       note: "Firmographic and persona coverage",
       icon: Layers3,
       tone: "blue" as const
     },
     {
       label: "Exported",
-      value: exportedCount,
-      note: "CSV and SDR handoff output",
+      value: metrics.exportedCount,
+      note: `${formatNumber(metrics.crmHandoffCount)} CRM handoff records`,
       icon: Download,
       tone: "teal" as const
     }
@@ -195,7 +183,7 @@ export default async function DashboardPage() {
       title: "Review staging",
       copy: "Clean records before CRM handoff: verification, dedupe, suppression, and enrichment.",
       href: "/staging",
-      count: needsReviewRows.length,
+      count: metrics.needsReviewCount,
       label: "review",
       icon: Search
     },
@@ -203,7 +191,7 @@ export default async function DashboardPage() {
       title: "Export clean list",
       copy: "Generate gated CSVs only from verified, non-suppressed records with source lineage.",
       href: "/exports",
-      count: exportReadyContacts.length,
+      count: metrics.exportReadyCount,
       label: "ready",
       icon: Download
     }

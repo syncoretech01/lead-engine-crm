@@ -16,6 +16,7 @@ import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { jobObservabilitySnapshot } from "@/lib/phase1/jobs";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
+import { buildLeadEngineMetrics } from "@/lib/phase1/lead-engine-metrics";
 import { createLeadJobPreflight } from "@/lib/phase1/lead-planning";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -33,6 +34,7 @@ export default async function LeadJobsPage() {
     workspaceId = context.workspaceId;
   }
   const leadJobs = state.leadJobs.filter((job) => job.workspaceId === workspaceId);
+  const metrics = buildLeadEngineMetrics(state, workspaceId);
   const searchProfiles = state.searchProfiles.filter((profile) => profile.workspaceId === workspaceId);
   const jobRows = leadJobs
     .map((job) => ({
@@ -40,15 +42,10 @@ export default async function LeadJobsPage() {
       observability: jobObservabilitySnapshot(state, workspaceId, job.id)
     }))
     .sort((a, b) => Date.parse(b.job.updatedAt) - Date.parse(a.job.updatedAt));
-  const activeJobs = leadJobs.filter((job) => job.status !== "Completed");
   const retryQueue = jobRows.filter(({ observability }) => observability.canRetry || observability.failedRuns > 0);
-  const totalVerified = leadJobs.reduce((total, job) => total + job.verified, 0);
-  const totalCost = leadJobs.reduce((total, job) => total + job.actualCost, 0);
   const completedJobs = leadJobs.filter((job) => job.status === "Completed");
   const queuedJobs = leadJobs.filter((job) => job.status === "Queued");
   const runningJobs = leadJobs.filter((job) => job.status === "Running");
-  const exportReady = leadJobs.reduce((total, job) => total + job.exported + job.pushedToCrm, 0);
-  const estimatedPipelineCostCents = leadJobs.reduce((total, job) => total + (job.estimatedCostCents ?? 0), 0);
   const preflightRows = searchProfiles.map((profile) => ({
     profile,
     preflight: createLeadJobPreflight({
@@ -60,15 +57,15 @@ export default async function LeadJobsPage() {
 
   const stats = [
     {
-      label: "Active jobs",
-      value: formatNumber(activeJobs.length),
-      note: `${formatNumber(leadJobs.length)} total lead jobs`,
+      label: "Open jobs",
+      value: formatNumber(metrics.activeJobCount),
+      note: `${formatNumber(metrics.totalJobCount)} total lead jobs`,
       icon: Activity,
-      tone: activeJobs.length ? "warning" as const : "success" as const
+      tone: metrics.activeJobCount ? "warning" as const : "success" as const
     },
     {
       label: "Verified",
-      value: formatNumber(totalVerified),
+      value: formatNumber(metrics.verifiedCount),
       note: "Contacts passing verification",
       icon: BadgeCheck,
       tone: "success" as const
@@ -82,8 +79,8 @@ export default async function LeadJobsPage() {
     },
     {
       label: "Spend tracked",
-      value: formatCurrencyCompact(totalCost),
-      note: `${formatCents(estimatedPipelineCostCents)} estimated pipeline`,
+      value: formatCurrencyCompact(metrics.totalActualCost),
+      note: `${formatCents(metrics.estimatedCostCents)} estimated pipeline`,
       icon: CircleDollarSign,
       tone: "info" as const
     }
@@ -107,7 +104,7 @@ export default async function LeadJobsPage() {
     {
       label: "Completed",
       value: completedJobs.length,
-      note: `${formatNumber(exportReady)} downstream writes`,
+      note: `${formatNumber(metrics.crmHandoffCount)} CRM handoff records`,
       icon: BadgeCheck,
       tone: "success" as const
     },
@@ -206,7 +203,7 @@ export default async function LeadJobsPage() {
           <StatusPill label={`${leadJobs.length} jobs`} tone="info" />
         </div>
         <div className="table-wrap">
-          <table>
+          <table className="compact-table">
             <thead>
               <tr>
                 <th>Job</th>
@@ -263,9 +260,10 @@ export default async function LeadJobsPage() {
                   </td>
                   <td>
                     <div className="entity">
-                      <strong>{formatCurrency(job.actualCost)} {job.actualCostSource ?? "Actual"}</strong>
-                      <span>{formatCents(job.estimatedCostCents ?? 0)} {job.estimatedCostSource ?? "Estimated"}</span>
-                      <span>{formatCents(job.budgetCapCents ?? 0)} {job.budgetCapSource ?? "Manual"} cap</span>
+                      <strong>{formatCurrency(job.actualCost)}</strong>
+                      <span>{job.actualCostSource ?? "Actual"}</span>
+                      <span>Est. {formatCents(job.estimatedCostCents ?? 0)}</span>
+                      <span>Cap {formatCents(job.budgetCapCents ?? 0)}</span>
                     </div>
                   </td>
                   <td>
@@ -356,14 +354,14 @@ export default async function LeadJobsPage() {
         </div>
       </section>
 
-      <section className="panel" id="create-job">
-        <div className="panel-header">
+      <details className="panel collapsible-panel" id="create-job">
+        <summary className="panel-header">
           <div className="panel-title-wrap">
             <h2 className="section-title">Queue job manually</h2>
             <p className="section-subtitle">Launch a saved search profile or create a manual job when CSV import is not the entry point.</p>
           </div>
           <StatusPill label="Job setup" tone="success" />
-        </div>
+        </summary>
         <form action={createLeadJobAction} className="panel-body form-grid">
           <div className="field">
             <label htmlFor="name">Job name</label>
@@ -420,7 +418,7 @@ export default async function LeadJobsPage() {
             </button>
           </div>
         </form>
-      </section>
+      </details>
     </>
   );
 }

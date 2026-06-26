@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 import {
   detectDuplicatesAction,
+  ignoreDuplicateGroupAction,
   ignoreDuplicateAction,
+  ignoreUnactionableDuplicatesAction,
+  mergeDuplicateGroupAction,
   mergeDuplicateAction,
   runVerificationAction
 } from "@/app/actions";
@@ -19,6 +22,7 @@ import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
+import { buildLeadEngineMetrics, groupOpenDedupeMatches } from "@/lib/phase1/lead-engine-metrics";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { AppState, LeadGrade } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
@@ -40,10 +44,13 @@ export default async function DataQualityPage() {
   const openMatches = state.dedupeMatches.filter(
     (match) => match.workspaceId === workspaceId && match.status === "Open"
   );
+  const metrics = buildLeadEngineMetrics(state, workspaceId);
+  const duplicateGroups = groupOpenDedupeMatches(state, workspaceId);
+  const visibleDuplicateGroups = duplicateGroups.slice(0, 50);
   const suppressed = contacts.filter((contact) => contact.isSuppressed).length;
-  const verified = contacts.filter((contact) => contact.grade === "A" || contact.grade === "B").length;
-  const risky = contacts.filter((contact) => contact.grade === "C").length;
-  const invalid = contacts.filter((contact) => contact.grade === "D").length;
+  const verified = metrics.verifiedCount;
+  const risky = metrics.riskCount;
+  const invalid = metrics.invalidCount;
   const missingEmail = verificationResults.filter((result) => result.emailStatus === "Missing").length;
   const catchAll = verificationResults.filter((result) => result.catchAll).length;
   const roleEmail = verificationResults.filter((result) => result.roleEmail).length;
@@ -83,10 +90,10 @@ export default async function DataQualityPage() {
     },
     {
       label: "Open duplicates",
-      value: formatNumber(openMatches.length),
-      note: "Company/contact candidates",
+      value: formatNumber(metrics.duplicateGroupCount),
+      note: `${formatNumber(metrics.actionableDuplicatePairCount)} actionable pairs`,
       icon: GitMerge,
-      tone: openMatches.length ? "warning" as const : "success" as const
+      tone: metrics.duplicateGroupCount ? "warning" as const : "success" as const
     }
   ];
 
@@ -196,45 +203,82 @@ export default async function DataQualityPage() {
         <div className="panel-header">
           <div className="panel-title-wrap">
             <h2 className="section-title">Duplicate candidates</h2>
-            <p className="section-subtitle">Resolve open candidates before export or CRM sync.</p>
+            <p className="section-subtitle">
+              Actionable duplicate groups are shown first. Placeholder or low-quality legacy matches are hidden from the operator queue.
+            </p>
           </div>
-          <StatusPill label={`${openMatches.length} open`} tone={openMatches.length ? "warning" : "success"} />
+          <div className="page-actions">
+            {metrics.hiddenDuplicatePairCount ? (
+              <form action={ignoreUnactionableDuplicatesAction}>
+                <button className="button secondary" type="submit">
+                  Ignore {formatNumber(metrics.hiddenDuplicatePairCount)} stale
+                </button>
+              </form>
+            ) : null}
+            <StatusPill
+              label={`${formatNumber(metrics.duplicateGroupCount)} groups`}
+              tone={metrics.duplicateGroupCount ? "warning" : "success"}
+            />
+          </div>
+        </div>
+        <div className="quality-queue-summary">
+          <span>{formatNumber(metrics.duplicatePairCount)} open raw pairs</span>
+          <span>{formatNumber(metrics.actionableDuplicatePairCount)} actionable pairs</span>
+          <span>{formatNumber(metrics.hiddenDuplicatePairCount)} hidden stale pairs</span>
+          <span>Showing {formatNumber(visibleDuplicateGroups.length)} groups</span>
         </div>
         <div className="table-wrap">
-          <table>
+          <table className="compact-table">
             <thead>
               <tr>
-                <th>Type</th>
+                <th>Match</th>
                 <th>Primary</th>
-                <th>Duplicate</th>
-                <th>Reason</th>
+                <th>Duplicates</th>
+                <th>Evidence</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {openMatches.map((match) => (
-                <tr key={match.id}>
-                  <td>
-                    <StatusPill label={match.objectType} tone="info" />
-                  </td>
-                  <td>{entityName(state, match.objectType, match.primaryId)}</td>
-                  <td>{entityName(state, match.objectType, match.duplicateId)}</td>
+              {visibleDuplicateGroups.map((group) => (
+                <tr key={group.id}>
                   <td>
                     <div className="entity">
-                      <strong>{match.reason}</strong>
-                      <span>{match.confidence}% confidence</span>
+                      <StatusPill label={group.matchType} tone="info" />
+                      <span>{group.objectType}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="entity">
+                      <strong>{group.primaryLabel}</strong>
+                      <span>{group.primaryDetail}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="entity">
+                      <strong>{formatNumber(group.duplicateIds.length)} duplicate{group.duplicateIds.length === 1 ? "" : "s"}</strong>
+                      <span>{group.duplicateLabels.slice(0, 3).join(", ")}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="entity">
+                      <strong>{group.reason}</strong>
+                      <span>{group.confidence}% confidence</span>
                     </div>
                   </td>
                   <td>
                     <div className="item-card-actions">
-                      <form action={mergeDuplicateAction}>
-                        <input name="id" type="hidden" value={match.id} />
+                      <form action={group.matchIds.length > 1 ? mergeDuplicateGroupAction : mergeDuplicateAction}>
+                        {group.matchIds.map((id) => (
+                          <input name="id" type="hidden" value={id} key={id} />
+                        ))}
                         <button className="button primary" type="submit">
                           Merge
                         </button>
                       </form>
-                      <form action={ignoreDuplicateAction}>
-                        <input name="id" type="hidden" value={match.id} />
+                      <form action={group.matchIds.length > 1 ? ignoreDuplicateGroupAction : ignoreDuplicateAction}>
+                        {group.matchIds.map((id) => (
+                          <input name="id" type="hidden" value={id} key={id} />
+                        ))}
                         <button className="button secondary" type="submit">
                           Ignore
                         </button>
@@ -243,9 +287,13 @@ export default async function DataQualityPage() {
                   </td>
                 </tr>
               ))}
-              {openMatches.length === 0 ? (
+              {visibleDuplicateGroups.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>No open duplicate candidates.</td>
+                  <td colSpan={5}>
+                    {openMatches.length
+                      ? "No actionable duplicate groups. Use the stale cleanup action to clear old placeholder matches."
+                      : "No open duplicate candidates."}
+                  </td>
                 </tr>
               ) : null}
             </tbody>
@@ -368,18 +416,6 @@ function RiskRow({
       </div>
     </div>
   );
-}
-
-function entityName(
-  state: AppState,
-  objectType: "company" | "contact",
-  id: string
-) {
-  if (objectType === "company") {
-    return state.companies.find((company) => company.id === id)?.name ?? id;
-  }
-
-  return state.contacts.find((contact) => contact.id === id)?.name ?? id;
 }
 
 function gradeDistribution(contacts: AppState["contacts"]) {

@@ -22,6 +22,13 @@ type ImportResult = {
 };
 
 type CustomColumn = { column: string; fieldName: string };
+type CsvPreview = {
+  headers: string[];
+  looksPersonal: boolean;
+  hasCompany: boolean;
+  hasContact: boolean;
+  hasEmail: boolean;
+};
 
 export function CsvImportForm({ profiles }: CsvImportFormProps) {
   const router = useRouter();
@@ -29,6 +36,7 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
+  const [preview, setPreview] = useState<CsvPreview | null>(null);
 
   function addCustomColumn() {
     setCustomColumns((columns) => [...columns, { column: "", fieldName: "" }]);
@@ -40,6 +48,26 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
 
   function removeCustomColumn(index: number) {
     setCustomColumns((columns) => columns.filter((_, i) => i !== index));
+  }
+
+  async function previewFile(file: File | null) {
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+
+    const text = await file.slice(0, 64_000).text();
+    const headerLine = text.split(/\r?\n/).find((line) => line.trim());
+    const headers = headerLine ? parseCsvLine(headerLine).map((header) => header.trim()).filter(Boolean) : [];
+    const normalizedHeaders = headers.map(normalizeHeader);
+    const hasCompany = normalizedHeaders.some((header) => ["company", "company name", "account", "business", "business name"].includes(header));
+    const hasContact = normalizedHeaders.some((header) =>
+      ["contact", "contact name", "name", "full name", "first name", "last name", "person", "customer name"].includes(header)
+    );
+    const hasEmail = normalizedHeaders.some((header) => ["email", "email address", "work email"].includes(header));
+    const looksPersonal = hasEmail && hasContact && !hasCompany;
+
+    setPreview({ headers, looksPersonal, hasCompany, hasContact, hasEmail });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -78,7 +106,14 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
       <form onSubmit={handleSubmit} className="panel-body form-grid" aria-busy={loading}>
         <div className="field">
           <label htmlFor="file">CSV file</label>
-          <input id="file" name="file" type="file" accept=".csv,text/csv" required />
+          <input
+            id="file"
+            name="file"
+            type="file"
+            accept=".csv,text/csv"
+            required
+            onChange={(event) => void previewFile(event.currentTarget.files?.[0] ?? null)}
+          />
         </div>
         <div className="field">
           <label htmlFor="jobName">Lead job name</label>
@@ -109,7 +144,7 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
         </div>
         <div className="field">
           <label htmlFor="contactName">Contact column</label>
-          <input id="contactName" name="contactName" defaultValue="contact" />
+          <input id="contactName" name="contactName" defaultValue="name" />
         </div>
         <div className="field">
           <label htmlFor="title">Title column</label>
@@ -142,6 +177,22 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
         <div className="field">
           <label htmlFor="industry">Industry column</label>
           <input id="industry" name="industry" defaultValue="industry" />
+        </div>
+        <div className="field full">
+          {preview ? (
+            <div className={`csv-preview ${preview.looksPersonal ? "warning" : "success"}`}>
+              <strong>{preview.looksPersonal ? "Personal-contact style CSV detected" : "CSV headers detected"}</strong>
+              <span>
+                {preview.headers.slice(0, 12).join(", ")}
+                {preview.headers.length > 12 ? `, +${preview.headers.length - 12} more` : ""}
+              </span>
+              <p>
+                {preview.looksPersonal
+                  ? "No company column was detected. The worker will keep free-email domains out of company matching and mark these rows for enrichment."
+                  : "The worker will normalize names, company fields, domains, verification grades, and duplicate signals in the background."}
+              </p>
+            </div>
+          ) : null}
         </div>
         <div className="field full">
           <label>Custom columns</label>
@@ -206,4 +257,41 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
       </form>
     </section>
   );
+}
+
+function normalizeHeader(value: string) {
+  return value.trim().toLowerCase().replaceAll("_", " ").replace(/\s+/g, " ");
+}
+
+function parseCsvLine(line: string) {
+  const values: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+
+    if (char === "," && !quoted) {
+      values.push(current);
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current);
+  return values;
 }

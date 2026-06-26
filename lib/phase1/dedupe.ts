@@ -1,9 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { AppState, Company, Contact, DedupeMatch } from "@/lib/phase1/types";
 import { normalizeCompanyName, normalizeDomain } from "@/lib/phase1/normalization";
+import {
+  isMeaningfulCompanyName,
+  isMeaningfulPersonName,
+  isPersonalEmailDomain,
+  isPlaceholderCompanyName,
+  isPlaceholderPersonName
+} from "@/lib/phase1/lead-data-quality";
 
 export function detectWorkspaceDuplicates(state: AppState, workspaceId: string) {
   const now = new Date().toISOString();
+  const ignored = ignoreUnusableOpenMatches(state, workspaceId, now);
   const existingOpen = new Set(
     state.dedupeMatches
       .filter((match) => match.workspaceId === workspaceId && match.status === "Open")
@@ -29,7 +37,11 @@ export function detectWorkspaceDuplicates(state: AppState, workspaceId: string) 
     }
   }
 
-  return { detected, open: state.dedupeMatches.filter((match) => match.workspaceId === workspaceId && match.status === "Open").length };
+  return {
+    detected,
+    ignored,
+    open: state.dedupeMatches.filter((match) => match.workspaceId === workspaceId && match.status === "Open").length
+  };
 }
 
 export function mergeDedupeMatch(state: AppState, matchId: string) {
@@ -60,6 +72,73 @@ export function ignoreDedupeMatch(state: AppState, matchId: string) {
   return true;
 }
 
+export function ignoreUnusableDedupeMatches(state: AppState, workspaceId: string) {
+  return ignoreUnusableOpenMatches(state, workspaceId, new Date().toISOString());
+}
+
+export function isActionableDedupeMatch(state: AppState, match: DedupeMatch) {
+  if (match.status !== "Open") {
+    return false;
+  }
+
+  if (match.primaryId === match.duplicateId) {
+    return false;
+  }
+
+  if (match.objectType === "company") {
+    const left = state.companies.find((company) => company.id === match.primaryId);
+    const right = state.companies.find((company) => company.id === match.duplicateId);
+    if (!left || !right) return false;
+
+    const leftDomain = normalizeDomain(left.domain);
+    const rightDomain = normalizeDomain(right.domain);
+    if (leftDomain && rightDomain && leftDomain === rightDomain && !isPersonalEmailDomain(leftDomain)) {
+      return true;
+    }
+
+    const leftName = normalizeCompanyName(left.name);
+    const rightName = normalizeCompanyName(right.name);
+    if (!isMeaningfulCompanyName(leftName) || !isMeaningfulCompanyName(rightName)) {
+      return false;
+    }
+
+    if (leftName === rightName && sameLocation(left, right)) {
+      return true;
+    }
+
+    return match.confidence >= 88 && similarity(leftName, rightName) >= 0.9;
+  }
+
+  const left = state.contacts.find((contact) => contact.id === match.primaryId);
+  const right = state.contacts.find((contact) => contact.id === match.duplicateId);
+  if (!left || !right) return false;
+
+  if (left.email && right.email && left.email.toLowerCase() === right.email.toLowerCase()) {
+    return true;
+  }
+
+  return (
+    left.companyId === right.companyId &&
+    isMeaningfulPersonName(left.name) &&
+    isMeaningfulPersonName(right.name) &&
+    left.name.trim().toLowerCase() === right.name.trim().toLowerCase()
+  );
+}
+
+function ignoreUnusableOpenMatches(state: AppState, workspaceId: string, now: string) {
+  let ignored = 0;
+
+  for (const match of state.dedupeMatches.filter((item) => item.workspaceId === workspaceId && item.status === "Open")) {
+    if (!isActionableDedupeMatch(state, match)) {
+      match.status = "Ignored";
+      match.resolvedAt = now;
+      ignored += 1;
+    }
+  }
+
+  return ignored;
+}
+
 function detectCompanyMatches(companies: Company[], workspaceId: string, now: string): DedupeMatch[] {
   const matches: DedupeMatch[] = [];
 
@@ -69,13 +148,20 @@ function detectCompanyMatches(companies: Company[], workspaceId: string, now: st
       const right = companies[j];
       const leftDomain = normalizeDomain(left.domain);
       const rightDomain = normalizeDomain(right.domain);
-      const sameDomain = leftDomain && rightDomain && leftDomain === rightDomain;
+      const sameDomain = leftDomain && rightDomain && leftDomain === rightDomain && !isPersonalEmailDomain(leftDomain);
+      const leftName = normalizeCompanyName(left.name);
+      const rightName = normalizeCompanyName(right.name);
       const sameNameLocation =
-        normalizeCompanyName(left.name) &&
-        normalizeCompanyName(left.name) === normalizeCompanyName(right.name) &&
-        left.city.toLowerCase() === right.city.toLowerCase() &&
-        left.state.toLowerCase() === right.state.toLowerCase();
-      const fuzzyName = similarity(normalizeCompanyName(left.name), normalizeCompanyName(right.name)) >= 0.88;
+        isMeaningfulCompanyName(leftName) &&
+        isMeaningfulCompanyName(rightName) &&
+        leftName === rightName &&
+        sameLocation(left, right);
+      const fuzzyName =
+        isMeaningfulCompanyName(leftName) &&
+        isMeaningfulCompanyName(rightName) &&
+        !isPlaceholderCompanyName(left.name) &&
+        !isPlaceholderCompanyName(right.name) &&
+        similarity(leftName, rightName) >= 0.9;
 
       if (sameDomain || sameNameLocation || fuzzyName) {
         matches.push({
@@ -106,8 +192,10 @@ function detectContactMatches(contacts: Contact[], workspaceId: string, now: str
       const sameEmail = left.email && right.email && left.email.toLowerCase() === right.email.toLowerCase();
       const sameNameCompany =
         left.companyId === right.companyId &&
-        left.name &&
-        right.name &&
+        isMeaningfulPersonName(left.name) &&
+        isMeaningfulPersonName(right.name) &&
+        !isPlaceholderPersonName(left.name) &&
+        !isPlaceholderPersonName(right.name) &&
         left.name.toLowerCase() === right.name.toLowerCase();
 
       if (sameEmail || sameNameCompany) {
@@ -127,6 +215,10 @@ function detectContactMatches(contacts: Contact[], workspaceId: string, now: str
   }
 
   return matches;
+}
+
+function sameLocation(left: { city: string; state: string }, right: { city: string; state: string }) {
+  return left.city.toLowerCase() === right.city.toLowerCase() && left.state.toLowerCase() === right.state.toLowerCase();
 }
 
 function mergeCompanies(state: AppState, primaryId: string, duplicateId: string) {

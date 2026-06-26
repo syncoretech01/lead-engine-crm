@@ -39,7 +39,12 @@ import {
   taskPriorities
 } from "@/lib/phase1/crm";
 import { splitList } from "@/lib/phase1/csv";
-import { detectWorkspaceDuplicates, ignoreDedupeMatch, mergeDedupeMatch } from "@/lib/phase1/dedupe";
+import {
+  detectWorkspaceDuplicates,
+  ignoreDedupeMatch,
+  ignoreUnusableDedupeMatches,
+  mergeDedupeMatch
+} from "@/lib/phase1/dedupe";
 import {
   assignedBulkEmailContactIds,
   buildDirectEmailSendPlan,
@@ -398,6 +403,74 @@ export async function ignoreDuplicateAction(formData: FormData) {
         objectType: "dedupe_match",
         objectId: id,
         action: "ignored"
+      });
+    }
+  }, { normalizedTables: leadGenerationWriteTables });
+
+  revalidateLeadEnginePages();
+}
+
+export async function mergeDuplicateGroupAction(formData: FormData) {
+  await updateState((state, session) => {
+    assertPermission(session, "run_jobs");
+    const ids = formData.getAll("id").map((value) => stringValue(value)).filter(Boolean);
+    let merged = 0;
+
+    for (const id of ids) {
+      if (mergeDedupeMatch(state, id)) {
+        merged += 1;
+      }
+    }
+
+    if (merged > 0) {
+      appendAudit(state, session, {
+        objectType: "dedupe_match",
+        objectId: session.workspace.id,
+        action: "merged_group",
+        newValue: { ids, merged }
+      });
+    }
+  }, { normalizedTables: leadGenerationWriteTables });
+
+  revalidateLeadEnginePages();
+}
+
+export async function ignoreDuplicateGroupAction(formData: FormData) {
+  await updateState((state, session) => {
+    assertPermission(session, "run_jobs");
+    const ids = formData.getAll("id").map((value) => stringValue(value)).filter(Boolean);
+    let ignored = 0;
+
+    for (const id of ids) {
+      if (ignoreDedupeMatch(state, id)) {
+        ignored += 1;
+      }
+    }
+
+    if (ignored > 0) {
+      appendAudit(state, session, {
+        objectType: "dedupe_match",
+        objectId: session.workspace.id,
+        action: "ignored_group",
+        newValue: { ids, ignored }
+      });
+    }
+  }, { normalizedTables: leadGenerationWriteTables });
+
+  revalidateLeadEnginePages();
+}
+
+export async function ignoreUnactionableDuplicatesAction() {
+  await updateState((state, session) => {
+    assertPermission(session, "run_jobs");
+    const ignored = ignoreUnusableDedupeMatches(state, session.workspace.id);
+
+    if (ignored > 0) {
+      appendAudit(state, session, {
+        objectType: "dedupe",
+        objectId: session.workspace.id,
+        action: "ignored_unactionable",
+        newValue: { ignored }
       });
     }
   }, { normalizedTables: leadGenerationWriteTables });

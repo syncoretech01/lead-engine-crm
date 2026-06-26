@@ -18,6 +18,7 @@ import { ProgressBar } from "@/components/progress-bar";
 import { StagingWorkbench } from "@/components/staging-workbench";
 import { StatusPill } from "@/components/status-pill";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
+import { buildLeadEngineMetrics } from "@/lib/phase1/lead-engine-metrics";
 import { contactRowsForStaging } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
@@ -41,20 +42,16 @@ export default async function StagingPage() {
   const profiles = state.searchProfiles
     .filter((profile) => profile.workspaceId === workspaceId)
     .map((profile) => ({ id: profile.id, name: profile.name }));
-  const leadJobs = state.leadJobs.filter((job) => job.workspaceId === workspaceId);
   const rawLeads = state.rawLeads.filter((lead) => lead.workspaceId === workspaceId);
-  const normalizedRecords = state.normalizedRecords.filter((record) => record.workspaceId === workspaceId);
   const leads = contactRowsForStaging(state, workspaceId);
-  const verified = leads.filter((lead) => lead.emailGrade === "A" || lead.emailGrade === "B").length;
-  const needsReview = leads.filter((lead) => needsOperatorReview(lead)).length;
-  const suppressed = leads.filter((lead) => lead.status === "Suppressed" || lead.emailGrade === "S").length;
-  const phoneReady = leads.filter((lead) => lead.phone).length;
-  const readyForSdr = leads.filter((lead) => lead.status === "Ready for SDR").length;
-  const duplicateRows = normalizedRecords.filter((record) => record.duplicateCompanyId || record.duplicateContactId);
-  const duplicateCandidates = duplicateRows.length || leadJobs.reduce((total, job) => total + job.duplicates, 0);
-  const exportReady = leads.filter(
-    (lead) => (lead.emailGrade === "A" || lead.emailGrade === "B") && lead.status !== "Suppressed"
-  ).length;
+  const metrics = buildLeadEngineMetrics(state, workspaceId);
+  const verified = metrics.verifiedCount;
+  const needsReview = metrics.needsReviewCount;
+  const suppressed = metrics.suppressedCount;
+  const phoneReady = metrics.phoneReadyCount;
+  const readyForSdr = metrics.readyForSdrCount;
+  const duplicateCandidates = metrics.duplicateGroupCount;
+  const exportReady = metrics.exportReadyCount;
   const sourceRows = sourceSummaries(leads).slice(0, 5);
   const segmentRows = segmentSummaries(leads).slice(0, 5);
   const reviewRows = leads.filter((lead) => needsOperatorReview(lead)).slice(0, 5);
@@ -311,7 +308,13 @@ function GateCard({
 }
 
 function needsOperatorReview(lead: StagedLead) {
-  return lead.status === "In review" || lead.status === "Needs enrichment" || lead.emailGrade === "C" || lead.emailGrade === "D";
+  return (
+    lead.reviewReason !== "Ready" ||
+    lead.status === "In review" ||
+    lead.status === "Needs enrichment" ||
+    lead.emailGrade === "C" ||
+    lead.emailGrade === "D"
+  );
 }
 
 function sourceSummaries(leads: StagedLead[]) {

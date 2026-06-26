@@ -1,4 +1,5 @@
 import { findExportRule, recordIdsForExport } from "@/lib/phase1/exporting";
+import { leadReviewReason } from "@/lib/phase1/lead-engine-metrics";
 import {
   isOpenOpportunityStage,
   latestActivityForCompany,
@@ -673,6 +674,7 @@ export function contactRowsForStaging(state: AppState, workspaceId = state.works
     segment: record.segment,
     owner: record.owner,
     verification: record.verification,
+    reviewReason: leadReviewReason(record),
     signals: [record.source, record.priority, record.status],
     lastSeen: new Date(record.normalizedAt).toLocaleDateString("en-US", {
       month: "short",

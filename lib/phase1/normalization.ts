@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { defaultContactCompliance, suppressContact } from "@/lib/phase1/compliance";
+import {
+  displayNameFromEmail,
+  domainFromEmail,
+  isPersonalEmailDomain,
+  isPlaceholderCompanyName
+} from "@/lib/phase1/lead-data-quality";
 import type {
   AppState,
   Company,
@@ -44,27 +50,31 @@ export function normalizeImportedRows({
     if (mappedSource) {
       rawLead.source = mappedSource;
     }
-    const companyName = readMapped(payload, mapping.companyName, [
+    const mappedCompanyName = readMapped(payload, mapping.companyName, [
       "company",
       "company name",
       "account",
       "business",
       "business name"
     ]);
-    const contactName = readMapped(payload, mapping.contactName, [
-      "contact",
-      "contact name",
-      "name",
-      "full name",
-      "person"
-    ]);
+    const contactName = readPersonName(payload, mapping.contactName);
     const title = readMapped(payload, mapping.title, ["title", "job title", "role"]);
     const email = normalizeEmail(readMapped(payload, mapping.email, ["email", "email address", "work email"]));
     const phone = normalizePhone(readMapped(payload, mapping.phone, ["phone", "phone number", "mobile"]));
     const website = normalizeWebsite(readMapped(payload, mapping.website, ["website", "url", "company website"]));
+    const emailDomain = domainFromEmail(email);
+    const personalEmailDomain = isPersonalEmailDomain(emailDomain);
     const domain = normalizeDomain(
-      readMapped(payload, mapping.domain, ["domain", "root domain"]) || website || email.split("@")[1] || ""
+      readMapped(payload, mapping.domain, ["domain", "root domain"]) ||
+      website ||
+      (personalEmailDomain ? "" : emailDomain)
     );
+    const companyName = resolveCompanyName({
+      mappedCompanyName,
+      contactName,
+      domain,
+      personalEmailDomain
+    });
     const city = readMapped(payload, mapping.city, ["city"]);
     const stateValue = readMapped(payload, mapping.state, ["state", "region", "province"]);
     const country = readMapped(payload, mapping.country, ["country"]) || "US";
@@ -72,8 +82,8 @@ export function normalizeImportedRows({
     const normalizedCompanyName = normalizeCompanyName(companyName);
     const suppressionReason = findSuppressionReason(state, workspaceId, { email, phone, domain });
     const isSuppressed = Boolean(suppressionReason);
-    const grade = suppressionReason ? "S" : gradeEmail(email);
-    const score = scoreLead({ email, phone, domain, title, industry, grade });
+    const grade = suppressionReason ? "S" : gradeEmail(email, { personalEmailDomain });
+    const score = scoreLead({ email, phone, domain, title, industry, grade, personalEmailDomain });
     const priority = priorityForScore(score, grade);
     const status = statusForGrade(grade);
     const segment = segmentForLead({ industry, title, domain, grade });
@@ -332,6 +342,75 @@ function readMapped(payload: Record<string, string>, preferred: string | undefin
   return "";
 }
 
+function readPersonName(payload: Record<string, string>, preferred: string | undefined) {
+  const mapped = readMapped(payload, preferred, [
+    "contact",
+    "contact name",
+    "name",
+    "full name",
+    "person",
+    "person name",
+    "lead name",
+    "customer name"
+  ]);
+  if (mapped) {
+    return mapped;
+  }
+
+  const firstName = readMapped(payload, undefined, ["first name", "firstname", "first"]);
+  const lastName = readMapped(payload, undefined, ["last name", "lastname", "last", "surname"]);
+  const combined = [firstName, lastName].filter(Boolean).join(" ").trim();
+  if (combined) {
+    return combined;
+  }
+
+  const email = normalizeEmail(readMapped(payload, undefined, ["email", "email address", "work email"]));
+  return displayNameFromEmail(email);
+}
+
+function resolveCompanyName({
+  mappedCompanyName,
+  contactName,
+  domain,
+  personalEmailDomain
+}: {
+  mappedCompanyName: string;
+  contactName: string;
+  domain: string;
+  personalEmailDomain: boolean;
+}) {
+  const companyLooksLikePerson =
+    personalEmailDomain &&
+    mappedCompanyName &&
+    contactName &&
+    mappedCompanyName.trim().toLowerCase() === contactName.trim().toLowerCase();
+
+  if (mappedCompanyName && !companyLooksLikePerson && !isPlaceholderCompanyName(mappedCompanyName)) {
+    return mappedCompanyName;
+  }
+
+  if (domain) {
+    return companyNameFromDomain(domain);
+  }
+
+  return personalEmailDomain ? "Individual contact" : "Unknown company";
+}
+
+function companyNameFromDomain(domain: string) {
+  const root = normalizeDomain(domain).split(".")[0] ?? "";
+  if (!root) {
+    return "Unknown company";
+  }
+
+  return root
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function normalizeHeader(value: string) {
   return value.trim().toLowerCase().replaceAll("_", " ").replace(/\s+/g, " ");
 }
@@ -378,9 +457,13 @@ export function normalizeCompanyName(value: string) {
     .trim();
 }
 
-function gradeEmail(email: string): LeadGrade {
+function gradeEmail(email: string, options: { personalEmailDomain?: boolean } = {}): LeadGrade {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return "D";
+  }
+
+  if (options.personalEmailDomain) {
+    return "C";
   }
 
   const prefix = email.split("@")[0];
@@ -397,7 +480,8 @@ function scoreLead({
   domain,
   title,
   industry,
-  grade
+  grade,
+  personalEmailDomain
 }: {
   email: string;
   phone: string;
@@ -405,6 +489,7 @@ function scoreLead({
   title: string;
   industry: string;
   grade: LeadGrade;
+  personalEmailDomain?: boolean;
 }) {
   if (grade === "S") {
     return 0;
@@ -419,8 +504,9 @@ function scoreLead({
   if (domain) score += 8;
   if (title) score += 8;
   if (industry) score += 6;
+  if (personalEmailDomain) score -= 12;
 
-  return Math.min(score, 100);
+  return Math.max(0, Math.min(score, 100));
 }
 
 function priorityForScore(score: number, grade: LeadGrade): Priority {
@@ -467,7 +553,7 @@ function verificationForGrade(grade: LeadGrade, suppressionReason?: string) {
   if (suppressionReason) return `Suppressed: ${suppressionReason}`;
   if (grade === "A") return "Email format valid; direct mailbox candidate";
   if (grade === "B") return "Email format valid; standard risk";
-  if (grade === "C") return "Role email; enrichment recommended";
+  if (grade === "C") return "Role or personal email; enrichment recommended";
   return "Invalid or missing email; do not export as verified";
 }
 
