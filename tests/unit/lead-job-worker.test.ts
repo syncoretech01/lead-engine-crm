@@ -79,6 +79,55 @@ describe("lead job worker", () => {
     expect(state.leadJobs.find((item) => item.id === job.id)?.status).toBe("Queued");
   });
 
+  it("preserves CSV processing when worker audit identity is missing", () => {
+    const state = cleanLeadState(createSeedState());
+    const workspaceId = state.workspaces[0].id;
+    const mapping = {
+      companyName: "company",
+      contactName: "name",
+      email: "email",
+      domain: "domain"
+    };
+    const csvText = "company,name,email,domain\nAcme Test,Ada Lovelace,ada@acmetest.example,acmetest.example";
+    const requestHash = csvImportRequestHash({
+      csvText,
+      source: "CSV Upload",
+      mapping,
+      workspaceId
+    });
+    const idempotencyKey = csvImportIdempotencyKey(workspaceId, requestHash);
+    const job = createLeadJob(workspaceId, "job-csv-worker-missing-audit-identity", "CSV Upload");
+    const tracked = createTrackedJob({
+      state,
+      job,
+      sources: ["CSV Upload"],
+      idempotencyKey,
+      idempotencyScope: "csv_import",
+      requestHash,
+      checkpoint: {
+        kind: "csv_import",
+        mapping,
+        rows: 1,
+        stage: "queued"
+      }
+    });
+    state.rawLeads.unshift(createRawLead(workspaceId, job.id));
+    state.workspaces = state.workspaces.filter((workspace) => workspace.id !== workspaceId);
+    state.workspaceMembers = state.workspaceMembers.filter((member) => member.workspaceId !== workspaceId);
+
+    const result = processLeadJobQueue(state, {
+      workspaceId,
+      now: "2026-06-26T12:00:00.000Z",
+      workerId: "test-worker"
+    });
+
+    expect(result.completed).toBe(1);
+    expect(tracked.runs[0].status).toBe("Completed");
+    expect(state.normalizedRecords.filter((item) => item.leadJobId === job.id)).toHaveLength(1);
+    expect(state.auditLogs).toHaveLength(0);
+    expect(state.jobLogs.some((log) => log.level === "Warning" && log.message.includes("Worker audit skipped"))).toBe(true);
+  });
+
   it("increments attempts when retry-scheduled CSV runs become due", () => {
     const state = cleanLeadState(createSeedState());
     const workspaceId = state.workspaces[0].id;

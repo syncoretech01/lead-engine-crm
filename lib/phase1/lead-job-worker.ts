@@ -294,15 +294,28 @@ function appendWorkerAudit(
   workspaceId: string,
   input: { objectId: string; action: string; newValue: unknown }
 ) {
-  const actor = systemActorForWorkspace(state, workspaceId);
-  appendWorkspaceAudit(state, {
-    workspaceId,
-    actorUserId: actor.id,
-    objectType: "lead_job",
-    objectId: input.objectId,
-    action: input.action,
-    newValue: input.newValue
-  });
+  try {
+    const actor = systemActorForWorkspace(state, workspaceId);
+    appendWorkspaceAudit(state, {
+      workspaceId,
+      actorUserId: actor.id,
+      objectType: "lead_job",
+      objectId: input.objectId,
+      action: input.action,
+      newValue: input.newValue
+    });
+  } catch (error) {
+    appendJobLog(state, {
+      workspaceId,
+      leadJobId: input.objectId,
+      level: "Warning",
+      message: "Worker audit skipped; CSV processing was preserved",
+      metadata: {
+        action: input.action,
+        reason: error instanceof Error ? error.message : String(error)
+      }
+    });
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -37,7 +37,7 @@ import { ensureSdrDefaults } from "@/lib/phase1/sdr";
 import { ensureWaterfallDefaults, pruneWaterfallTemplateProviders } from "@/lib/phase1/waterfall-templates";
 import { timeAsync, timeSync } from "@/lib/phase1/performance";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import type { AppState, AuditLog, Permission, Session, WorkspaceRole } from "@/lib/phase1/types";
+import type { AppState, AuditLog, AuthAccountStatus, Permission, Session, WorkspaceRole } from "@/lib/phase1/types";
 import {
   defaultWorkspacePath,
   hasPermission,
@@ -307,6 +307,13 @@ function workspaceRoleFromPrisma(role: string): WorkspaceRole {
   return roles[role] ?? "Viewer";
 }
 
+function authAccountStatusFromPrisma(status: string): AuthAccountStatus {
+  if (status === "Invited" || status === "Disabled") {
+    return status;
+  }
+  return "Active";
+}
+
 export async function resetStore() {
   await writeState(createSeedState());
 }
@@ -424,11 +431,153 @@ async function readStateFromPrisma(client: PrismaStoreClient): Promise<AppState>
 
   const parsed = snapshot.state as unknown as AppState;
   const { state, changed } = migrateState(parsed);
-  if (changed || snapshot.version !== state.version) {
+  const identityMerge = await mergePrismaIdentityRows(client, state);
+  if (changed || identityMerge.changed || snapshot.version !== state.version) {
     await writeStateToPrisma(state, client);
   }
 
   return state;
+}
+
+async function mergePrismaIdentityRows(client: PrismaStoreClient, state: AppState) {
+  let changed = false;
+  const [workspaces, users, members, authAccounts, authSessions] = await Promise.all([
+    client.workspace.findMany(),
+    client.user.findMany(),
+    client.workspaceMember.findMany(),
+    client.authAccount.findMany(),
+    client.authSession.findMany()
+  ]);
+
+  for (const workspace of workspaces) {
+    const existing = state.workspaces.find((item) => item.id === workspace.id);
+    const next = {
+      id: workspace.id,
+      name: workspace.name,
+      market: workspace.market ?? "",
+      seats: workspace.seats,
+      health: workspace.health ?? "",
+      createdAt: workspace.createdAt.toISOString(),
+      updatedAt: workspace.updatedAt.toISOString()
+    };
+
+    if (existing) {
+      if (
+        existing.name !== next.name ||
+        existing.market !== next.market ||
+        existing.seats !== next.seats ||
+        existing.health !== next.health ||
+        existing.updatedAt !== next.updatedAt
+      ) {
+        Object.assign(existing, next);
+        changed = true;
+      }
+    } else {
+      state.workspaces.push(next);
+      changed = true;
+    }
+  }
+
+  for (const user of users) {
+    const existing = state.users.find((item) => item.id === user.id);
+    const next = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      createdAt: user.createdAt.toISOString()
+    };
+
+    if (existing) {
+      if (existing.email !== next.email || existing.name !== next.name || existing.createdAt !== next.createdAt) {
+        Object.assign(existing, next);
+        changed = true;
+      }
+    } else {
+      state.users.push(next);
+      changed = true;
+    }
+  }
+
+  for (const member of members) {
+    const existing = state.workspaceMembers.find((item) => item.id === member.id);
+    const next = {
+      id: member.id,
+      workspaceId: member.workspaceId,
+      userId: member.userId,
+      role: workspaceRoleFromPrisma(member.role)
+    };
+
+    if (existing) {
+      if (
+        existing.workspaceId !== next.workspaceId ||
+        existing.userId !== next.userId ||
+        existing.role !== next.role
+      ) {
+        Object.assign(existing, next);
+        changed = true;
+      }
+    } else {
+      state.workspaceMembers.push(next);
+      changed = true;
+    }
+  }
+
+  for (const account of authAccounts) {
+    const existing = state.authAccounts.find((item) => item.id === account.id);
+    const next = {
+      id: account.id,
+      userId: account.userId,
+      email: account.email,
+      passwordHash: account.passwordHash,
+      status: authAccountStatusFromPrisma(account.status),
+      emailVerifiedAt: account.emailVerifiedAt?.toISOString(),
+      passwordUpdatedAt: account.passwordUpdatedAt?.toISOString(),
+      lastLoginAt: account.lastLoginAt?.toISOString(),
+      failedLoginCount: account.failedLoginCount,
+      lockedUntil: account.lockedUntil?.toISOString(),
+      mfaEnabled: account.mfaEnabled,
+      superadmin: account.superadmin,
+      createdAt: account.createdAt.toISOString(),
+      updatedAt: account.updatedAt.toISOString()
+    };
+
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(next)) {
+        Object.assign(existing, next);
+        changed = true;
+      }
+    } else {
+      state.authAccounts.push(next);
+      changed = true;
+    }
+  }
+
+  for (const session of authSessions) {
+    const existing = state.authSessions.find((item) => item.id === session.id);
+    const next = {
+      id: session.id,
+      userId: session.userId,
+      workspaceId: session.workspaceId,
+      expiresAt: session.expiresAt.toISOString(),
+      revokedAt: session.revokedAt?.toISOString(),
+      createdAt: session.createdAt.toISOString(),
+      lastSeenAt: session.lastSeenAt.toISOString(),
+      ipAddress: session.ipAddress ?? undefined,
+      userAgent: session.userAgent ?? undefined
+    };
+
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(next)) {
+        Object.assign(existing, next);
+        changed = true;
+      }
+    } else {
+      state.authSessions.push(next);
+      changed = true;
+    }
+  }
+
+  return { changed };
 }
 
 async function writeStateToPrisma(
