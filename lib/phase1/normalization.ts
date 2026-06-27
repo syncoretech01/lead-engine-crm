@@ -3,6 +3,8 @@ import { defaultContactCompliance, suppressContact } from "@/lib/phase1/complian
 import {
   displayNameFromEmail,
   domainFromEmail,
+  isEmailLikeValue,
+  isMeaningfulPersonName,
   isPersonalEmailDomain,
   isPlaceholderCompanyName
 } from "@/lib/phase1/lead-data-quality";
@@ -40,6 +42,7 @@ export function normalizeImportedRows({
   let companiesCreated = 0;
   let contactsCreated = 0;
   const now = new Date().toISOString();
+  const sharedImportEmails = sharedImportEmailValues(rawLeads, mapping);
 
   for (const rawLead of rawLeads) {
     const payload = rawLead.sourcePayload;
@@ -57,23 +60,33 @@ export function normalizeImportedRows({
       "business",
       "business name"
     ]);
-    const contactName = readPersonName(payload, mapping.contactName);
+    const explicitContactName = readPersonName(payload, mapping.contactName);
     const title = readMapped(payload, mapping.title, ["title", "job title", "role"]);
-    const email = normalizeEmail(readMapped(payload, mapping.email, ["email", "email address", "work email"]));
+    const mappedEmail = normalizeEmail(readMapped(payload, mapping.email, ["email", "email address", "work email"]));
+    const sharedImportEmail = sharedImportEmails.has(mappedEmail);
+    const email = sharedImportEmail ? "" : mappedEmail;
     const phone = normalizePhone(readMapped(payload, mapping.phone, ["phone", "phone number", "mobile"]));
     const website = normalizeWebsite(readMapped(payload, mapping.website, ["website", "url", "company website"]));
-    const emailDomain = domainFromEmail(email);
+    const emailDomain = domainFromEmail(email || mappedEmail);
     const personalEmailDomain = isPersonalEmailDomain(emailDomain);
+    const personalContactImport = personalEmailDomain || sharedImportEmail;
     const domain = normalizeDomain(
       readMapped(payload, mapping.domain, ["domain", "root domain"]) ||
       website ||
-      (personalEmailDomain ? "" : emailDomain)
+      (personalContactImport ? "" : emailDomain)
     );
+    const contactName = resolveContactName({
+      mappedCompanyName,
+      explicitContactName,
+      email,
+      domain,
+      personalEmailDomain: personalContactImport
+    });
     const companyName = resolveCompanyName({
       mappedCompanyName,
       contactName,
       domain,
-      personalEmailDomain
+      personalEmailDomain: personalContactImport
     });
     const city = readMapped(payload, mapping.city, ["city"]);
     const stateValue = readMapped(payload, mapping.state, ["state", "region", "province"]);
@@ -82,8 +95,8 @@ export function normalizeImportedRows({
     const normalizedCompanyName = normalizeCompanyName(companyName);
     const suppressionReason = findSuppressionReason(state, workspaceId, { email, phone, domain });
     const isSuppressed = Boolean(suppressionReason);
-    const grade = suppressionReason ? "S" : gradeEmail(email, { personalEmailDomain });
-    const score = scoreLead({ email, phone, domain, title, industry, grade, personalEmailDomain });
+    const grade = suppressionReason ? "S" : gradeEmail(email, { personalEmailDomain: personalContactImport });
+    const score = scoreLead({ email, phone, domain, title, industry, grade, personalEmailDomain: personalContactImport });
     const priority = priorityForScore(score, grade);
     const status = statusForGrade(grade);
     const segment = segmentForLead({ industry, title, domain, grade });
@@ -342,6 +355,24 @@ function readMapped(payload: Record<string, string>, preferred: string | undefin
   return "";
 }
 
+function sharedImportEmailValues(rawLeads: RawLead[], mapping: CsvImportMapping) {
+  const counts = new Map<string, number>();
+
+  for (const rawLead of rawLeads) {
+    const email = normalizeEmail(readMapped(rawLead.sourcePayload, mapping.email, ["email", "email address", "work email"]));
+    if (!email || !isPersonalEmailDomain(domainFromEmail(email))) {
+      continue;
+    }
+    counts.set(email, (counts.get(email) ?? 0) + 1);
+  }
+
+  return new Set(
+    Array.from(counts.entries())
+      .filter(([, count]) => count >= 3 && count / Math.max(rawLeads.length, 1) >= 0.5)
+      .map(([email]) => email)
+  );
+}
+
 function readPersonName(payload: Record<string, string>, preferred: string | undefined) {
   const mapped = readMapped(payload, preferred, [
     "contact",
@@ -353,7 +384,7 @@ function readPersonName(payload: Record<string, string>, preferred: string | und
     "lead name",
     "customer name"
   ]);
-  if (mapped) {
+  if (mapped && !isEmailLikeValue(mapped)) {
     return mapped;
   }
 
@@ -364,7 +395,35 @@ function readPersonName(payload: Record<string, string>, preferred: string | und
     return combined;
   }
 
-  const email = normalizeEmail(readMapped(payload, undefined, ["email", "email address", "work email"]));
+  return "";
+}
+
+function resolveContactName({
+  mappedCompanyName,
+  explicitContactName,
+  email,
+  domain,
+  personalEmailDomain
+}: {
+  mappedCompanyName: string;
+  explicitContactName: string;
+  email: string;
+  domain: string;
+  personalEmailDomain: boolean;
+}) {
+  if (isMeaningfulPersonName(explicitContactName)) {
+    return explicitContactName.trim();
+  }
+
+  if (
+    personalEmailDomain &&
+    !domain &&
+    isMeaningfulPersonName(mappedCompanyName) &&
+    !isPlaceholderCompanyName(mappedCompanyName)
+  ) {
+    return mappedCompanyName.trim();
+  }
+
   return displayNameFromEmail(email);
 }
 

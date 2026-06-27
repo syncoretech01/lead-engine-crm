@@ -1,6 +1,13 @@
 import { findExportRule, recordIdsForExport } from "@/lib/phase1/exporting";
 import { leadReviewReason } from "@/lib/phase1/lead-engine-metrics";
 import {
+  displayNameFromEmail,
+  domainFromEmail,
+  isMeaningfulPersonName,
+  isPersonalEmailDomain,
+  isPlaceholderCompanyName
+} from "@/lib/phase1/lead-data-quality";
+import {
   isOpenOpportunityStage,
   latestActivityForCompany,
   latestActivityForContact,
@@ -16,6 +23,7 @@ import type {
   LawfulBasis,
   LeadGrade,
   LeadStatus,
+  NormalizedRecord,
   OpportunityStage,
   Priority,
   Session
@@ -656,32 +664,98 @@ export function sdrQueues(state: AppState, workspaceId = state.workspaces[0].id)
 }
 
 export function contactRowsForStaging(state: AppState, workspaceId = state.workspaces[0].id) {
-  return state.normalizedRecords.filter((record) => record.workspaceId === workspaceId).map((record) => ({
-    id: record.id,
-    contactName: record.contactName,
-    title: record.title,
-    company: record.companyName,
-    domain: record.domain,
-    email: record.email,
-    phone: record.phone,
-    city: record.city,
-    state: record.state,
-    source: record.source,
-    emailGrade: record.grade,
-    score: record.score,
-    priority: record.priority,
-    status: record.status,
-    segment: record.segment,
-    owner: record.owner,
-    verification: record.verification,
-    reviewReason: leadReviewReason(record),
-    signals: [record.source, record.priority, record.status],
-    lastSeen: new Date(record.normalizedAt).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric"
-    })
-  }));
+  const records = state.normalizedRecords.filter((record) => record.workspaceId === workspaceId);
+  const sharedPersonalEmails = sharedStagingPersonalEmails(records);
+
+  return records.map((record) => {
+    const sharedPersonalEmail = sharedPersonalEmails.has(record.email.toLowerCase());
+    const email = sharedPersonalEmail ? "" : record.email;
+    const emailGrade: LeadGrade = sharedPersonalEmail ? "D" : record.grade;
+    const priority: Priority = sharedPersonalEmail ? "P4" : record.priority;
+    const status: LeadStatus = sharedPersonalEmail ? "In review" : record.status;
+    const verification = sharedPersonalEmail ? "Shared import email ignored; lead email missing" : record.verification;
+    const identity = stagingRecordIdentity(record);
+    const reviewRecord = {
+      ...record,
+      contactName: identity.contactName,
+      companyName: identity.companyName,
+      email,
+      grade: emailGrade,
+      priority,
+      status,
+      verification
+    };
+
+    return {
+      id: record.id,
+      contactName: identity.contactName,
+      title: record.title,
+      company: identity.companyName,
+      domain: record.domain,
+      email,
+      phone: record.phone,
+      city: record.city,
+      state: record.state,
+      source: record.source,
+      emailGrade,
+      score: record.score,
+      priority,
+      status,
+      segment: record.segment,
+      owner: record.owner,
+      verification,
+      reviewReason: leadReviewReason(reviewRecord),
+      signals: [record.source, priority, status],
+      lastSeen: new Date(record.normalizedAt).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric"
+      })
+    };
+  });
+}
+
+function sharedStagingPersonalEmails(records: NormalizedRecord[]) {
+  const counts = new Map<string, number>();
+
+  for (const record of records) {
+    if (!record.email || !isPersonalEmailDomain(domainFromEmail(record.email))) {
+      continue;
+    }
+    const email = record.email.toLowerCase();
+    counts.set(email, (counts.get(email) ?? 0) + 1);
+  }
+
+  return new Set(
+    Array.from(counts.entries())
+      .filter(([, count]) => count >= 3 && count / Math.max(records.length, 1) >= 0.5)
+      .map(([email]) => email)
+  );
+}
+
+function stagingRecordIdentity(record: NormalizedRecord) {
+  const shouldPromoteCompany = shouldUseCompanyAsContact(record);
+  const contactName = isMeaningfulPersonName(record.contactName)
+    ? record.contactName
+    : shouldPromoteCompany
+      ? record.companyName
+      : displayNameFromEmail(record.email);
+
+  return {
+    contactName: contactName || record.contactName,
+    companyName: shouldPromoteCompany && contactName === record.companyName ? "Individual contact" : record.companyName
+  };
+}
+
+function shouldUseCompanyAsContact(record: NormalizedRecord) {
+  const hasBusinessDomain = Boolean(record.domain && !isPersonalEmailDomain(record.domain));
+
+  return (
+    isPersonalEmailDomain(domainFromEmail(record.email)) &&
+    !hasBusinessDomain &&
+    isMeaningfulPersonName(record.companyName) &&
+    !isPlaceholderCompanyName(record.companyName)
+  );
 }
 
 function isExportableGrade(grade: LeadGrade) {

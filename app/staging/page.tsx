@@ -7,10 +7,13 @@ import {
   GitMerge,
   Mail,
   Phone,
+  Wrench,
   ShieldCheck,
   Upload,
   Users
 } from "lucide-react";
+import { repairStagedLeadIdentitiesAction } from "@/app/actions";
+import { Toaster, ToastButton } from "@/app/build-list/toaster";
 import type { LucideIcon } from "lucide-react";
 import { CsvImportForm } from "@/components/csv-import-form";
 import { PageHeader } from "@/components/page-header";
@@ -128,6 +131,7 @@ export default async function StagingPage() {
 
   return (
     <>
+      <Toaster />
       <PageHeader
         kicker="Lead generation"
         title="Lead staging"
@@ -138,6 +142,12 @@ export default async function StagingPage() {
               <Upload size={17} aria-hidden="true" />
               Import CSV
             </a>
+            <form action={repairStagedLeadIdentitiesAction}>
+              <ToastButton className="button secondary" toast="Repairing staged identities...">
+                <Wrench size={17} aria-hidden="true" />
+                Repair identities
+              </ToastButton>
+            </form>
             <Link className="button primary" href="/exports">
               <Download size={17} aria-hidden="true" />
               Open exports

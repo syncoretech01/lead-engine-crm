@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { detectWorkspaceDuplicates } from "@/lib/phase1/dedupe";
 import { buildLeadEngineMetrics, groupOpenDedupeMatches } from "@/lib/phase1/lead-engine-metrics";
+import { repairStagedLeadIdentities } from "@/lib/phase1/lead-identity-repair";
 import { normalizeImportedRows } from "@/lib/phase1/normalization";
+import { contactRowsForStaging } from "@/lib/phase1/queries";
 import { createSeedState } from "@/lib/phase1/seed";
 import type { AppState, Contact, RawLead } from "@/lib/phase1/types";
 
@@ -59,6 +61,160 @@ describe("Lead Engine data quality", () => {
     expect(metrics.readyForSdrCount).toBe(0);
     expect(metrics.assignmentBlockedCount).toBe(1);
     expect(metrics.personalEmailCount).toBe(1);
+  });
+
+  it("promotes mobile-contact names out of a mis-mapped company column", () => {
+    const state = createSeedState();
+    resetLeadData(state);
+    const workspaceId = state.workspaces[0].id;
+    const job = state.leadJobs[0];
+    const lead = rawLead(workspaceId, job.id, {
+      name: "skills.essential@gmail.com",
+      company: "Zack Austin",
+      email: "skills.essential@gmail.com",
+      city: "Dallas",
+      state: "TX"
+    });
+
+    normalizeImportedRows({
+      state,
+      workspaceId,
+      leadJob: job,
+      rawLeads: [lead],
+      mapping: { contactName: "name", companyName: "company", email: "email" }
+    });
+
+    const contact = state.contacts.find((item) => item.email === "skills.essential@gmail.com");
+    const company = state.companies.find((item) => item.id === contact?.companyId);
+    const normalized = state.normalizedRecords.find((item) => item.email === "skills.essential@gmail.com");
+    const stagedRow = contactRowsForStaging(state, workspaceId).find((row) => row.email === "skills.essential@gmail.com");
+
+    expect(contact?.name).toBe("Zack Austin");
+    expect(company?.name).toBe("Individual contact");
+    expect(normalized?.contactName).toBe("Zack Austin");
+    expect(normalized?.companyName).toBe("Individual contact");
+    expect(stagedRow?.contactName).toBe("Zack Austin");
+    expect(stagedRow?.company).toBe("Individual contact");
+  });
+
+  it("repairs staged display for legacy rows with an email stored as the contact name", () => {
+    const state = createSeedState();
+    resetLeadData(state);
+    const workspaceId = state.workspaces[0].id;
+    const job = state.leadJobs[0];
+    const lead = rawLead(workspaceId, job.id, {
+      name: "skills.essential@gmail.com",
+      company: "Zack Austin",
+      email: "skills.essential@gmail.com"
+    });
+
+    normalizeImportedRows({
+      state,
+      workspaceId,
+      leadJob: job,
+      rawLeads: [lead],
+      mapping: { contactName: "name", companyName: "company", email: "email" }
+    });
+    const normalized = state.normalizedRecords.find((item) => item.email === "skills.essential@gmail.com");
+    expect(normalized).toBeDefined();
+    if (!normalized) return;
+
+    normalized.contactName = "skills.essential@gmail.com";
+    normalized.companyName = "Zack Austin";
+
+    const stagedRow = contactRowsForStaging(state, workspaceId).find((row) => row.id === normalized.id);
+
+    expect(stagedRow?.contactName).toBe("Zack Austin");
+    expect(stagedRow?.company).toBe("Individual contact");
+  });
+
+  it("does not reuse a repeated personal import inbox as every lead email", () => {
+    const state = createSeedState();
+    resetLeadData(state);
+    const workspaceId = state.workspaces[0].id;
+    const job = state.leadJobs[0];
+    const leads = ["Zack Austin", "Bryan Stibbens", "Sam Carter", "Leo"].map((name) =>
+      rawLead(workspaceId, job.id, {
+        name: "skills.essential@gmail.com",
+        company: name,
+        email: "skills.essential@gmail.com",
+        city: "Dallas",
+        state: "TX"
+      })
+    );
+
+    normalizeImportedRows({
+      state,
+      workspaceId,
+      leadJob: job,
+      rawLeads: leads,
+      mapping: { contactName: "name", companyName: "company", email: "email" }
+    });
+
+    const stagedRows = contactRowsForStaging(state, workspaceId);
+
+    expect(state.contacts).toHaveLength(4);
+    expect(new Set(stagedRows.map((row) => row.contactName))).toEqual(
+      new Set(["Zack Austin", "Bryan Stibbens", "Sam Carter", "Leo"])
+    );
+    expect(stagedRows.every((row) => row.email === "")).toBe(true);
+    expect(stagedRows.every((row) => row.company === "Individual contact")).toBe(true);
+    expect(stagedRows.every((row) => row.emailGrade === "D")).toBe(true);
+  });
+
+  it("repairs existing staged records that were collapsed around one shared personal email", () => {
+    const state = createSeedState();
+    resetLeadData(state);
+    const workspaceId = state.workspaces[0].id;
+    const job = state.leadJobs[0];
+    const leads = ["Zack Austin", "Bryan Stibbens", "Sam Carter", "Leo"].map((name) =>
+      rawLead(workspaceId, job.id, {
+        name: "skills.essential@gmail.com",
+        company: name,
+        email: "skills.essential@gmail.com",
+        city: "Dallas",
+        state: "TX"
+      })
+    );
+
+    normalizeImportedRows({
+      state,
+      workspaceId,
+      leadJob: job,
+      rawLeads: leads,
+      mapping: { contactName: "name", companyName: "company", email: "email" }
+    });
+
+    for (const record of state.normalizedRecords) {
+      record.email = "skills.essential@gmail.com";
+      record.contactName = "skills.essential@gmail.com";
+      record.companyName = record.companyName === "Individual contact" ? "Zack Austin" : record.companyName;
+      record.domain = "gmail.com";
+      record.grade = "C";
+      record.status = "Needs enrichment";
+      record.verification = "C verification contributed 22; 78% contact enrichment coverage";
+    }
+    state.normalizedRecords[1].companyName = "Bryan Stibbens";
+    state.normalizedRecords[2].companyName = "Sam Carter";
+    state.normalizedRecords[3].companyName = "Leo";
+
+    const rowsBeforeRepair = contactRowsForStaging(state, workspaceId);
+    expect(rowsBeforeRepair.every((row) => row.email === "")).toBe(true);
+    expect(rowsBeforeRepair.every((row) => row.emailGrade === "D")).toBe(true);
+    expect(rowsBeforeRepair.every((row) => row.status === "In review")).toBe(true);
+
+    const result = repairStagedLeadIdentities(state, workspaceId);
+    const stagedRows = contactRowsForStaging(state, workspaceId);
+
+    expect(result.normalizedRecordsRepaired).toBe(4);
+    expect(result.sharedEmailsCleared).toBe(4);
+    expect(new Set(stagedRows.map((row) => row.contactName))).toEqual(
+      new Set(["Zack Austin", "Bryan Stibbens", "Sam Carter", "Leo"])
+    );
+    expect(stagedRows.every((row) => row.email === "")).toBe(true);
+    expect(stagedRows.every((row) => row.company === "Individual contact")).toBe(true);
+    expect(stagedRows.every((row) => row.emailGrade === "D")).toBe(true);
+    expect(stagedRows.every((row) => row.status === "In review")).toBe(true);
   });
 
   it("does not create duplicate matches from placeholder contact names", () => {

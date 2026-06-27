@@ -57,6 +57,7 @@ import { createExportRecord } from "@/lib/phase1/exporting";
 import { createTrackedJob, retryFailedJob } from "@/lib/phase1/jobs";
 import { partitionLeadsForAssignment } from "@/lib/phase1/lead-gate";
 import { applyLeadOverride, createLeadJobFromPreflight } from "@/lib/phase1/lead-planning";
+import { repairStagedLeadIdentities } from "@/lib/phase1/lead-identity-repair";
 import { applyCampaignEngagementScores } from "@/lib/phase1/engagement-scoring";
 import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/phase1/normalization";
 import { outreachBatchSize } from "@/lib/phase1/outreach-config";
@@ -476,6 +477,23 @@ export async function ignoreUnactionableDuplicatesAction() {
   }, { normalizedTables: leadGenerationWriteTables });
 
   revalidateLeadEnginePages();
+}
+
+export async function repairStagedLeadIdentitiesAction() {
+  await updateState((state, session) => {
+    assertPermission(session, "import_csv");
+    const result = repairStagedLeadIdentities(state, session.workspace.id);
+
+    appendAudit(state, session, {
+      objectType: "lead_identity_repair",
+      objectId: session.workspace.id,
+      action: "repaired_staged_lead_identities",
+      newValue: result
+    });
+  }, { normalizedTables: leadGenerationWriteTables });
+
+  revalidateLeadEnginePages();
+  revalidateCrmPages();
 }
 
 export async function addSuppressionAction(formData: FormData) {

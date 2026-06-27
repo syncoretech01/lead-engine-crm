@@ -60,9 +60,18 @@ export function isPlaceholderCompanyName(value: string | undefined | null) {
   return PLACEHOLDER_COMPANY_NAMES.has(normalizePlaceholder(value));
 }
 
+export function isEmailLikeValue(value: string | undefined | null) {
+  const normalized = normalizePlaceholder(value);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) || normalized.includes("@");
+}
+
 export function isMeaningfulPersonName(value: string | undefined | null) {
   const normalized = normalizePlaceholder(value);
   if (isPlaceholderPersonName(normalized)) {
+    return false;
+  }
+
+  if (isEmailLikeValue(normalized)) {
     return false;
   }
 
