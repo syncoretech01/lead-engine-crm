@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BadgeCheck, Database, GitMerge, Play, ShieldCheck, Sparkles, Target, UserCheck, Wand2, Workflow } from "lucide-react";
 import {
+  assignEmailTestLeadsAction,
   approveBuildListEnrichmentAction,
   assignLeadsNowAction,
   confirmLeadListIcpAction,
@@ -11,6 +12,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { llmEnabled } from "@/lib/llm/openai-client";
+import { emailTestAssignmentCandidates } from "@/lib/phase1/email-test-assignment";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { partitionLeadsForAssignment } from "@/lib/phase1/lead-gate";
 import { sdrWorkloads } from "@/lib/phase1/sdr";
@@ -94,6 +96,7 @@ export default async function BuildListPage() {
     (match) => match.workspaceId === workspaceId && match.status === "Open"
   ).length;
   const gate = partitionLeadsForAssignment({ contacts: allContacts, state, requiredFields: selectedProfile?.requiredFields });
+  const emailTestCandidates = emailTestAssignmentCandidates(state, workspaceId);
   const workloads = sdrWorkloads(state, workspaceId);
   const canAssign = session.permissions.includes("manage_sdr_team");
 
@@ -455,18 +458,29 @@ export default async function BuildListPage() {
             </div>
 
             {canAssign ? (
-              gate.ready.length > 0 ? (
-                <form action={assignLeadsNowAction} className="form-grid">
-                  <div className="field integration-actions">
+              <div className="form-grid">
+                {gate.ready.length > 0 ? (
+                  <form action={assignLeadsNowAction} className="field integration-actions">
                     <ToastButton toast="Assigning ready leads to SDRs...">
                       <UserCheck size={17} aria-hidden="true" />
                       Assign now (current score): {formatNumber(gate.ready.length)} ready leads
                     </ToastButton>
-                  </div>
-                </form>
-              ) : (
-                <p className="surface-note">No ready leads to assign yet - fix the blockers above, then assign.</p>
-              )
+                  </form>
+                ) : (
+                  <p className="surface-note">No production-ready leads yet. You can still use test assignment for email sending below.</p>
+                )}
+                {emailTestCandidates.length > 0 ? (
+                  <form action={assignEmailTestLeadsAction} className="field integration-actions">
+                    <ToastButton className="button secondary" toast="Assigning contacts for email testing...">
+                      <UserCheck size={17} aria-hidden="true" />
+                      Assign for email test: {formatNumber(emailTestCandidates.length)} contacts
+                    </ToastButton>
+                    <span className="field-note">
+                      Skips enrichment and standard A/B gating. Suppressed, do-not-contact, missing-email, missing-name, and already-assigned contacts stay blocked.
+                    </span>
+                  </form>
+                ) : null}
+              </div>
             ) : (
               <p className="surface-note">Lead assignment is limited to Admins and Managers.</p>
             )}

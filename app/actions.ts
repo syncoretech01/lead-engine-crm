@@ -52,6 +52,7 @@ import {
   sendDirectEmailBatch,
   type BulkEmailAudience
 } from "@/lib/phase1/direct-email-send";
+import { prepareEmailTestAssignmentContacts } from "@/lib/phase1/email-test-assignment";
 import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import { createExportRecord } from "@/lib/phase1/exporting";
 import { createTrackedJob, retryFailedJob } from "@/lib/phase1/jobs";
@@ -2172,6 +2173,42 @@ export async function assignBuildListLeadsAction() {
       objectId: session.workspace.id,
       action: "assignment_run",
       newValue: { ...result, held: held.length, sla, gated: true }
+    });
+  }, { normalizedTables: sdrWriteTables });
+
+  revalidateLeadEnginePages();
+  revalidateSdrPages();
+}
+
+export async function assignEmailTestLeadsAction() {
+  await updateState((state, session) => {
+    assertPermission(session, "manage_sdr_team");
+    const now = new Date().toISOString();
+    const prepared = prepareEmailTestAssignmentContacts(state, session.workspace.id, now);
+    const result = assignWorkspaceLeads(
+      state,
+      session.workspace.id,
+      session.user.id,
+      now,
+      {
+        eligibleContactIds: new Set(prepared.contactIds),
+        orderedContactIds: prepared.contactIds
+      }
+    );
+    const sla = refreshSlaStatuses(state, session.workspace.id, now);
+
+    appendAudit(state, session, {
+      objectType: "sdr_assignment",
+      objectId: session.workspace.id,
+      action: "email_test_assignment_run",
+      newValue: {
+        ...result,
+        candidates: prepared.contactIds.length,
+        gradeOverrides: prepared.gradeOverrides,
+        sla,
+        testMode: true
+      },
+      reason: "Manual email-send test assignment; enrichment skipped."
     });
   }, { normalizedTables: sdrWriteTables });
 
