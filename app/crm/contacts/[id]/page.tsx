@@ -48,6 +48,7 @@ import { smsEventStatuses } from "@/lib/phase1/outreach";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { readFastContactDetailModel } from "@/lib/phase1/crm-detail-read-model";
+import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { runWaterfallEnrichmentAction } from "@/lib/phase1/waterfall-enrichment-service";
 import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
@@ -145,7 +146,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const canManageCompliance = session.permissions.includes("manage_compliance");
   const canSendDirectOutreach = session.permissions.includes("send_direct_outreach");
   const canManageWaterfalls = session.permissions.includes("manage_waterfalls");
-  const canSendEmail = Boolean(contact.email && !contact.doNotContact && !contact.isSuppressed);
+  const directSenderIdentity = resolveUserSenderIdentity(session.user);
+  const canSendEmail = Boolean(contact.email && !contact.doNotContact && !contact.isSuppressed && directSenderIdentity);
   const directEmailRequestId = `direct-${contact.id}-${randomUUID()}`;
   const activeWaterfallTemplates = waterfallTemplatesForWorkspace(state, workspaceId).filter(
     (template) => template.status === "Active"
@@ -574,6 +576,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             <form action={sendDirectEmailAction} className="panel-body form-grid">
               <input name="contactId" type="hidden" value={contact.id} />
               <input name="requestId" type="hidden" value={directEmailRequestId} />
+              <div className="surface-note">
+                From: {directSenderIdentity?.mailbox ?? "No approved sending email configured for this user."}
+              </div>
               <div className="field">
                 <label htmlFor="direct-email-subject">Subject</label>
                 <input

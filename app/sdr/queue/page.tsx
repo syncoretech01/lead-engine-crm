@@ -22,6 +22,7 @@ import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot, sdrUsers } from "@/lib/phase1/sdr";
+import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import {
   readFastSdrQueueModel,
   type SdrQueueAssignmentReadRow,
@@ -74,10 +75,15 @@ export default async function SdrQueuePage() {
   const recentlyReplied = snapshot.queueViews.find((view) => view.name === "Recently Replied")?.count ?? 0;
   const bulkRequestId = `sdr-bulk-${session.user.id}-${randomUUID()}`;
   const canSelectBulkOwner = session.role !== "SDR";
+  const currentSenderIdentity = resolveUserSenderIdentity(session.user);
+  const bulkSenderNote = canSelectBulkOwner
+    ? "All SDRs sends from each assigned SDR's approved sender. A single owner sends from that owner's approved sender."
+    : `From: ${currentSenderIdentity?.mailbox ?? "No approved sending email configured for this user."}`;
   const bulkEligibleAssignments = fastModel ? activeAssignments.filter(isFastEmailEligible) : activeAssignments.filter((assignment) => {
     const contact = fallbackState?.contacts.find((item) => item.id === assignment.contactId && item.workspaceId === workspaceId);
     return Boolean(contact && !directEmailBlockReason(contact));
   });
+  const canSubmitBulkEmail = Boolean(bulkEligibleAssignments.length) && (canSelectBulkOwner || Boolean(currentSenderIdentity));
 
   const metrics = [
     {
@@ -368,6 +374,7 @@ export default async function SdrQueuePage() {
           </div>
           <form action={sendAssignedBulkEmailAction} className="panel-body form-grid">
             <input name="requestId" type="hidden" value={bulkRequestId} />
+            <div className="surface-note">{bulkSenderNote}</div>
             {canSelectBulkOwner ? (
               <div className="field">
                 <label htmlFor="bulk-owner">Owner</label>
@@ -415,7 +422,7 @@ export default async function SdrQueuePage() {
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit" disabled={bulkEligibleAssignments.length === 0}>
+              <button className="button primary" type="submit" disabled={!canSubmitBulkEmail}>
                 <Mail size={16} aria-hidden="true" />
                 Send bulk email
               </button>

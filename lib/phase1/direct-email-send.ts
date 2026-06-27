@@ -1,5 +1,5 @@
 import { addActivity } from "@/lib/phase1/crm";
-import { outreachFrom, outreachMailingAddress, outreachReplyTo } from "@/lib/phase1/outreach-config";
+import { outreachMailingAddress } from "@/lib/phase1/outreach-config";
 import { createEmailEvent } from "@/lib/phase1/outreach";
 import { startPerformanceTimer, timeAsync } from "@/lib/phase1/performance";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/lib/phase1/outreach-send";
 import { resolveLiveProviderCredential } from "@/lib/phase1/provider-live-execution";
 import { recordFirstTouch } from "@/lib/phase1/sdr";
+import { resolveUserSenderIdentity, senderIdentityBlockReason } from "@/lib/phase1/sender-identities";
 import { buildOneClickUnsubscribeUrl, buildUnsubscribeUrl } from "@/lib/phase1/unsubscribe-token";
 import { amazonSesSendEmail } from "@/lib/providers/adapters/amazon-ses";
 import { ensureLiveProviderAdaptersRegistered } from "@/lib/providers/register-live-adapters";
@@ -29,6 +30,9 @@ export type DirectEmailRecipient = {
   html: string;
   from: string;
   replyTo: string;
+  senderUserId: string;
+  senderName: string;
+  senderEmail: string;
   headers: Record<string, string>;
 };
 
@@ -84,8 +88,6 @@ export function buildDirectEmailSendPlan(
     .filter((contactId) => !contactById.has(contactId))
     .map((contactId) => ({ contactId, reason: "Contact not found." }));
 
-  const from = outreachFrom();
-  const replyTo = outreachReplyTo();
   const physicalAddress = outreachMailingAddress();
   const recipients: DirectEmailRecipient[] = [];
 
@@ -101,6 +103,13 @@ export function buildDirectEmailSendPlan(
       continue;
     }
 
+    const senderUser = senderUserForContact(state, input.workspaceId, input.mode, contact.id, input.actor);
+    const senderIdentity = resolveUserSenderIdentity(senderUser);
+    if (!senderIdentity) {
+      skipped.push({ contactId: contact.id, reason: senderIdentityBlockReason(senderUser) });
+      continue;
+    }
+
     const unsubscribeUrl = buildUnsubscribeUrl(input.workspaceId, contact.id);
     const oneClick = buildOneClickUnsubscribeUrl(input.workspaceId, contact.id);
     const rendered = renderDirectEmail({
@@ -108,7 +117,7 @@ export function buildDirectEmailSendPlan(
       body: input.body,
       contact,
       companyName: companyName(state, contact.companyId, input.workspaceId),
-      senderName: input.actor.name,
+      senderName: senderIdentity.displayName,
       unsubscribeUrl,
       physicalAddress
     });
@@ -118,10 +127,13 @@ export function buildDirectEmailSendPlan(
       mode: input.mode,
       contactId: contact.id,
       to: contact.email,
-      from,
-      replyTo,
+      from: senderIdentity.mailbox,
+      replyTo: senderIdentity.replyTo,
+      senderUserId: senderUser.id,
+      senderName: senderIdentity.displayName,
+      senderEmail: senderIdentity.email,
       headers: {
-        "List-Unsubscribe": `<${oneClick}>, <mailto:${emailAddressFromMailbox(replyTo)}?subject=unsubscribe>`,
+        "List-Unsubscribe": `<${oneClick}>, <mailto:${emailAddressFromMailbox(senderIdentity.replyTo)}?subject=unsubscribe>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
       },
       ...rendered
@@ -262,12 +274,14 @@ export function recordDirectEmailSendResults(
       actorUserId: input.actorUserId,
       messageId: outcome.providerMessageId,
       provider: "Amazon SES",
-      senderEmail: emailAddressFromMailbox(recipient.from),
+      senderEmail: recipient.senderEmail,
       rawPayload: {
         provider: "Amazon SES",
         messageId: outcome.providerMessageId,
         directRequestId: recipient.requestId,
-        directEmailMode: recipient.mode
+        directEmailMode: recipient.mode,
+        senderUserId: recipient.senderUserId,
+        senderName: recipient.senderName
       }
     });
     markSdrAssignmentTouched(state, input.workspaceId, recipient.contactId, input.actorUserId, recipient.subject);
@@ -412,6 +426,8 @@ function addFailedEmailActivity(
       provider: "Amazon SES",
       directRequestId: recipient.requestId,
       directEmailMode: recipient.mode,
+      senderUserId: recipient.senderUserId,
+      senderEmail: recipient.senderEmail,
       reason
     }
   });
@@ -436,6 +452,23 @@ function assignmentWeight(state: AppState, workspaceId: string, contactId: strin
 
 function companyName(state: AppState, companyId: string, workspaceId: string) {
   return state.companies.find((company) => company.id === companyId && company.workspaceId === workspaceId)?.name ?? "your company";
+}
+
+function senderUserForContact(
+  state: AppState,
+  workspaceId: string,
+  mode: DirectEmailMode,
+  contactId: string,
+  actor: User
+) {
+  if (mode !== "sdr_bulk") {
+    return actor;
+  }
+
+  const assignment = state.sdrAssignments.find(
+    (item) => item.workspaceId === workspaceId && item.contactId === contactId
+  );
+  return state.users.find((user) => user.id === assignment?.assignedSdrId) ?? actor;
 }
 
 function replaceTokens(value: string, replacements: Record<string, string>) {

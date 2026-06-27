@@ -12,7 +12,8 @@ import type {
   Contact,
   EmailEvent,
   ProviderConnection,
-  SdrAssignment
+  SdrAssignment,
+  User
 } from "@/lib/phase1/types";
 
 const envSnapshot = { ...process.env };
@@ -41,7 +42,7 @@ describe("direct SDR email send planning", () => {
 
     const plan = buildDirectEmailSendPlan(state, {
       workspaceId,
-      actor: state.users[1],
+      actor: knownUser("sam"),
       requestId: "direct-req-1",
       mode: "one_to_one",
       contactIds: ["contact-a", "contact-no-email", "missing-contact"],
@@ -58,8 +59,8 @@ describe("direct SDR email send planning", () => {
     expect(plan.recipients[0]).toMatchObject({
       contactId: "contact-a",
       to: "contact-a@example.com",
-      from: "Bobby Jones <bobby@syncoretech.com>",
-      replyTo: "replies@syncoretech.com",
+      from: "Sam Carter <sam@syncoretech.com>",
+      replyTo: "sam@syncoretech.com",
       subject: "Acme Co quick question"
     });
     expect(plan.recipients[0].headers["List-Unsubscribe"]).toMatch(
@@ -83,7 +84,7 @@ describe("direct SDR email send planning", () => {
 
     const plan = buildDirectEmailSendPlan(state, {
       workspaceId,
-      actor: state.users[1],
+      actor: knownUser("sam"),
       requestId: "direct-req-1",
       mode: "one_to_one",
       contactIds: ["contact-a"],
@@ -95,6 +96,48 @@ describe("direct SDR email send planning", () => {
     expect(plan.skipped).toEqual([{ contactId: "contact-a", reason: "Already sent for this request." }]);
   });
 
+  it("uses the approved owner sender identity for owner direct email", () => {
+    const state = directState({ liveSes: true });
+
+    const plan = buildDirectEmailSendPlan(state, {
+      workspaceId,
+      actor: knownUser("owner"),
+      requestId: "direct-owner-1",
+      mode: "one_to_one",
+      contactIds: ["contact-a"],
+      subject: "Hello",
+      body: "Hello"
+    });
+
+    expect(plan.recipients[0]).toMatchObject({
+      from: "Syncore Tech <hello@syncoretech.com>",
+      replyTo: "hello@syncoretech.com",
+      senderUserId: "user-owner",
+      senderEmail: "hello@syncoretech.com"
+    });
+  });
+
+  it("uses the approved manager sender identity for Bobby direct email", () => {
+    const state = directState({ liveSes: true });
+
+    const plan = buildDirectEmailSendPlan(state, {
+      workspaceId,
+      actor: knownUser("bobby"),
+      requestId: "direct-bobby-1",
+      mode: "one_to_one",
+      contactIds: ["contact-a"],
+      subject: "Hello",
+      body: "Hello"
+    });
+
+    expect(plan.recipients[0]).toMatchObject({
+      from: "Bobby Jones <bobby@syncoretech.com>",
+      replyTo: "bobby@syncoretech.com",
+      senderUserId: "user-bobby",
+      senderEmail: "bobby@syncoretech.com"
+    });
+  });
+
   it("selects assigned bulk email contacts by owner and audience", () => {
     const state = directState({ liveSes: true });
     state.contacts[0].priority = "P1";
@@ -102,7 +145,7 @@ describe("direct SDR email send planning", () => {
 
     expect(assignedBulkEmailContactIds(state, {
       workspaceId,
-      ownerUserId: "user-ari",
+      ownerUserId: "user-sam",
       audience: "all_assigned",
       limit: 10
     })).toEqual(["contact-a"]);
@@ -117,7 +160,7 @@ describe("direct SDR email send planning", () => {
     const state = directState({ liveSes: true });
     const plan = buildDirectEmailSendPlan(state, {
       workspaceId,
-      actor: state.users[1],
+      actor: knownUser("bobby"),
       requestId: "direct-req-2",
       mode: "sdr_bulk",
       contactIds: ["contact-a"],
@@ -128,7 +171,7 @@ describe("direct SDR email send planning", () => {
 
     const summary = recordDirectEmailSendResults(state, {
       workspaceId,
-      actorUserId: "user-ari",
+      actorUserId: "user-bobby",
       recipients: plan.recipients,
       outcomes: [{ contactId: "contact-a", status: "sent", providerMessageId: "ses-message-1" }],
       skipped: plan.skipped
@@ -140,10 +183,11 @@ describe("direct SDR email send planning", () => {
       eventType: "Sent",
       provider: "Amazon SES",
       messageId: "ses-message-1",
-      senderEmail: "bobby@syncoretech.com",
+      senderEmail: "sam@syncoretech.com",
       rawPayload: {
         directRequestId: "direct-req-2",
-        directEmailMode: "sdr_bulk"
+        directEmailMode: "sdr_bulk",
+        senderUserId: "user-sam"
       }
     });
     expect(state.sdrAssignments[0]).toMatchObject({
@@ -157,15 +201,39 @@ describe("direct SDR email send planning", () => {
     const contact = { ...baseContact("contact-blocked"), doNotContact: true };
     expect(directEmailBlockReason(contact)).toBe("Contact is marked do-not-contact.");
   });
+
+  it("skips contacts when the sender user has no approved identity", () => {
+    const state = directState({ liveSes: true });
+
+    const plan = buildDirectEmailSendPlan(state, {
+      workspaceId,
+      actor: state.users[1],
+      requestId: "direct-req-no-sender",
+      mode: "one_to_one",
+      contactIds: ["contact-a"],
+      subject: "Hello",
+      body: "Hello"
+    });
+
+    expect(plan.recipients).toHaveLength(0);
+    expect(plan.skipped).toEqual([
+      { contactId: "contact-a", reason: "No approved sending email is configured for Ari Patel." }
+    ]);
+  });
 });
 
 function directState(options: { liveSes: boolean }): AppState {
   const state = createSeedState();
+  state.users.push(knownUser("bobby"), knownUser("sam"));
+  state.workspaceMembers.push(
+    { id: "member-bobby-test", workspaceId, userId: "user-bobby", role: "Manager" },
+    { id: "member-sam-test", workspaceId, userId: "user-sam", role: "SDR" }
+  );
   state.companies = [company("company-a")];
   state.contacts = [baseContact("contact-a"), baseContact("contact-b")];
   state.sdrAssignments = [
-    assignment("assign-a", "contact-a", "user-ari"),
-    assignment("assign-b", "contact-b", "user-ari")
+    assignment("assign-a", "contact-a", "user-sam"),
+    assignment("assign-b", "contact-b", "user-sam")
   ];
   state.followUpReminders = [];
   state.tasks = [];
@@ -174,6 +242,15 @@ function directState(options: { liveSes: boolean }): AppState {
   state.smsEvents = [];
   state.providerConnections = options.liveSes ? [sesConnection()] : [];
   return state;
+}
+
+function knownUser(kind: "bobby" | "sam" | "owner"): User {
+  const map = {
+    bobby: { id: "user-bobby", name: "Bobby Jones", email: "bobby@syncoretech.com" },
+    sam: { id: "user-sam", name: "Sam Carter", email: "sam@syncoretech.com" },
+    owner: { id: "user-owner", name: "Syncore Tech", email: "hello@syncoretech.com" }
+  };
+  return { ...map[kind], createdAt: "2026-01-01T00:00:00.000Z" };
 }
 
 function company(id: string): Company {
