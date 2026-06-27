@@ -53,6 +53,12 @@ describe("Lead Engine data quality", () => {
     expect(company?.domain).toBe("");
     expect(normalized?.companyName).toBe("Individual contact");
     expect(normalized?.verification).toContain("personal email");
+
+    const metrics = buildLeadEngineMetrics(state, workspaceId);
+    expect(job.pushedToCrm).toBe(0);
+    expect(metrics.readyForSdrCount).toBe(0);
+    expect(metrics.assignmentBlockedCount).toBe(1);
+    expect(metrics.personalEmailCount).toBe(1);
   });
 
   it("does not create duplicate matches from placeholder contact names", () => {

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Filter, SlidersHorizontal, UserPlus } from "lucide-react";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
+import { isMeaningfulCompanyName, isMeaningfulPersonName } from "@/lib/phase1/lead-data-quality";
 import type { LeadGrade, LeadStatus } from "@/lib/phase1/types";
 
 type StagedLeadRow = {
@@ -52,7 +53,7 @@ const reasonFilters = [
   "Invalid email",
   "Suppressed"
 ] as const;
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 
 export function StagingWorkbench({ leads }: StagingWorkbenchProps) {
   const [grade, setGrade] = useState<(typeof gradeFilters)[number]>("All");
@@ -66,7 +67,7 @@ export function StagingWorkbench({ leads }: StagingWorkbenchProps) {
       const matchesGrade = grade === "All" || lead.emailGrade === grade;
       const matchesStatus = status === "All" || lead.status === status;
       const matchesReason = reason === "All" || lead.reviewReason === reason;
-      const haystack = `${lead.contactName} ${lead.company} ${lead.domain} ${lead.segment}`.toLowerCase();
+      const haystack = `${lead.contactName} ${lead.company} ${lead.domain} ${lead.email} ${lead.phone} ${lead.segment}`.toLowerCase();
       const matchesQuery = haystack.includes(query.toLowerCase());
       return matchesGrade && matchesStatus && matchesReason && matchesQuery;
     });
@@ -93,7 +94,7 @@ export function StagingWorkbench({ leads }: StagingWorkbenchProps) {
           </a>
           <a className="button primary" href="/exports">
             <UserPlus size={17} aria-hidden="true" />
-            Export ready leads
+            Open exports
           </a>
         </div>
       </div>
@@ -177,18 +178,16 @@ export function StagingWorkbench({ leads }: StagingWorkbenchProps) {
                 <tr key={lead.id}>
                   <td>
                     <div className="entity">
-                      <strong>{lead.contactName}</strong>
+                      <strong>{displayLeadName(lead)}</strong>
                       <span>{lead.title}</span>
                       <span>{lead.email}</span>
                     </div>
                   </td>
                   <td>
                     <div className="entity">
-                      <strong>{lead.company}</strong>
+                      <strong>{displayAccountName(lead)}</strong>
+                      <span>{displayAccountLocation(lead)}</span>
                       <span>{lead.domain}</span>
-                      <span>
-                        {lead.city}, {lead.state}
-                      </span>
                     </div>
                   </td>
                   <td>
@@ -241,4 +240,25 @@ export function StagingWorkbench({ leads }: StagingWorkbenchProps) {
       </div>
     </section>
   );
+}
+
+function displayLeadName(lead: StagedLeadRow) {
+  if (isMeaningfulPersonName(lead.contactName)) {
+    return lead.contactName;
+  }
+
+  if (lead.email) {
+    return lead.email;
+  }
+
+  return isMeaningfulCompanyName(lead.company) ? lead.company : "Unknown lead";
+}
+
+function displayAccountLocation(lead: StagedLeadRow) {
+  const location = [lead.city, lead.state].filter(Boolean).join(", ");
+  return location || "No location";
+}
+
+function displayAccountName(lead: StagedLeadRow) {
+  return isMeaningfulCompanyName(lead.company) ? lead.company : "No company";
 }

@@ -4,6 +4,8 @@ export type ProviderId =
   | "apify"
   | "hunter"
   | "zerobounce"
+  | "lusha"
+  | "people_data_labs"
   | "twilio_lookup"
   | "ringcentral"
   | "smartlead"

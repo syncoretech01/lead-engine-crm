@@ -40,7 +40,7 @@ export default async function WaterfallsPage() {
       <PageHeader
         kicker="Lead engine"
         title="Provider Waterfalls"
-        copy="Campaign-specific provider order for sourcing, email, phone, enrichment, and verification. Global provider settings stay the defaults and limits; a template defines the order, conditions, quality gates, and budgets for a campaign type. Mock-first — no live provider calls."
+        copy="Campaign-specific provider order for sourcing, email, phone, enrichment, and verification. Global provider settings stay the defaults and limits; a template defines the order, conditions, quality gates, and budgets for a campaign type. Execution follows Dev provider settings: mock mode until a provider is enabled live with credentials."
       />
 
       <section className="stat-grid" aria-label="Waterfall metrics">
@@ -58,7 +58,7 @@ export default async function WaterfallsPage() {
           <form action={restoreDefaultWaterfallTemplatesAction}>
             <button className="button subtle" type="submit">
               <ListOrdered size={16} aria-hidden="true" />
-              Restore missing defaults
+              Refresh defaults
             </button>
           </form>
         </div>
@@ -113,9 +113,9 @@ function WaterfallTemplateCard({ template }: { template: WaterfallTemplate }) {
               <div className="entity">
                 <strong>
                   {labelize(step.stage)}
-                  {step.highValueOnly ? " · high-value only" : ""}
+                  {step.highValueOnly ? " - high-value only" : ""}
                 </strong>
-                <span>{step.providerIds.length ? step.providerIds.join(" → ") : "any enabled provider"}</span>
+                <span>{step.providerIds.length ? step.providerIds.join(" -> ") : "any enabled provider"}</span>
                 {describeStep(step) ? <span className="field-note">{describeStep(step)}</span> : null}
               </div>
             </li>
@@ -165,14 +165,14 @@ function describeStep(step: WaterfallStep): string {
   const gate = step.qualityGate;
   if (gate) {
     const gates: string[] = [];
-    if (gate.minConfidence != null) gates.push(`conf ≥ ${gate.minConfidence}`);
+    if (gate.minConfidence != null) gates.push(`conf >= ${gate.minConfidence}`);
     if (gate.acceptStatus) gates.push(`accept ${gate.acceptStatus.join("/")}`);
     if (gate.phoneTypeIn) gates.push(`phone ${gate.phoneTypeIn.join("/")}`);
     if (gate.allowCompanyMain) gates.push("company-main ok");
     if (gate.rejectVoipForSms) gates.push("no SMS to VoIP");
     if (gates.length) parts.push(`gate: ${gates.join(", ")}`);
   }
-  return parts.join(" · ");
+  return parts.join(" - ");
 }
 
 function describeCondition(condition: WaterfallCondition): string {
@@ -188,15 +188,15 @@ function describeCondition(condition: WaterfallCondition): string {
     case "equals":
       return `${field} = ${condition.value}`;
     case "notEquals":
-      return `${field} ≠ ${condition.value}`;
+      return `${field} != ${condition.value}`;
     case "in":
       return `${field} in [${condition.value.join(", ")}]`;
     case "notIn":
       return `${field} not in [${condition.value.join(", ")}]`;
     case "gte":
-      return `${field} ≥ ${condition.value}`;
+      return `${field} >= ${condition.value}`;
     case "lte":
-      return `${field} ≤ ${condition.value}`;
+      return `${field} <= ${condition.value}`;
     default:
       return field;
   }

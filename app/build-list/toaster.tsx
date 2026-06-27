@@ -40,7 +40,7 @@ export function Toaster() {
 
 /**
  * A submit button that fires an optimistic toast on click. Used inside server-action
- * forms — the click both dispatches the toast and submits the form.
+ * forms - the click both dispatches the toast and submits the form.
  */
 export function ToastButton({
   toast,

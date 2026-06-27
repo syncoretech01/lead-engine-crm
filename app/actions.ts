@@ -1399,7 +1399,7 @@ export async function assignLeadsNowAction() {
       .filter((item) => item.workspaceId === session.workspace.id)
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
     const contacts = state.contacts.filter((contact) => contact.workspaceId === session.workspace.id);
-    const { ready, held } = partitionLeadsForAssignment({ contacts, requiredFields: profile?.requiredFields });
+    const { ready, held } = partitionLeadsForAssignment({ contacts, state, requiredFields: profile?.requiredFields });
     const eligibleContactIds = new Set(ready.map((contact) => contact.id));
     const result = assignWorkspaceLeads(
       state,
@@ -2138,7 +2138,7 @@ export async function assignBuildListLeadsAction() {
       .filter((item) => item.workspaceId === session.workspace.id)
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
     const contacts = state.contacts.filter((contact) => contact.workspaceId === session.workspace.id);
-    const { ready, held } = partitionLeadsForAssignment({ contacts, requiredFields: profile?.requiredFields });
+    const { ready, held } = partitionLeadsForAssignment({ contacts, state, requiredFields: profile?.requiredFields });
     const eligibleContactIds = new Set(ready.map((contact) => contact.id));
     const result = assignWorkspaceLeads(
       state,

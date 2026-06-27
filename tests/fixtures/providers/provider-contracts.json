@@ -124,6 +124,57 @@
     }
   },
   {
+    "id": "lusha-find-phone-mock",
+    "providerId": "lusha",
+    "operation": "find_phone",
+    "recordedAt": "2026-06-26T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "Lusha email and phone fallback contract placeholder.",
+    "input": {
+      "fullName": "Nora Patel",
+      "companyName": "Syncore",
+      "domain": "syncore.tech"
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock phone finder"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "phones": []
+    },
+    "normalizedResultFixture": {
+      "foundPhones": []
+    }
+  },
+  {
+    "id": "people-data-labs-enrich-contact-mock",
+    "providerId": "people_data_labs",
+    "operation": "enrich_contact",
+    "recordedAt": "2026-06-26T00:00:00.000Z",
+    "mode": "mock-fixture",
+    "description": "People Data Labs person and company enrichment fallback contract placeholder.",
+    "input": {
+      "fullName": "Nora Patel",
+      "email": "nora@syncore.tech",
+      "companyName": "Syncore",
+      "domain": "syncore.tech"
+    },
+    "expected": {
+      "status": "skipped",
+      "dataLength": 0,
+      "warningIncludes": "Mock enrichment"
+    },
+    "providerResponseFixture": {
+      "source": "mock",
+      "people": []
+    },
+    "normalizedResultFixture": {
+      "enrichedContacts": []
+    }
+  },
+  {
     "id": "twilio-lookup-verify-phone-mock",
     "providerId": "twilio_lookup",
     "operation": "verify_phone",

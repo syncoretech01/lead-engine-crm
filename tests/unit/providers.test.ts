@@ -32,6 +32,8 @@ describe("provider registry", () => {
       "apify",
       "hunter",
       "zerobounce",
+      "lusha",
+      "people_data_labs",
       "twilio_lookup",
       "ringcentral",
       "smartlead",
@@ -57,6 +59,8 @@ describe("provider registry", () => {
     expect(providerSupportsCategory("hunter", "email_finder")).toBe(true);
     expect(providerSupportsCategory("hunter", "email_verification")).toBe(true);
     expect(providerSupportsCategory("zerobounce", "email_verification")).toBe(true);
+    expect(providerSupportsCategory("lusha", "phone_lookup")).toBe(true);
+    expect(providerSupportsCategory("people_data_labs", "enrichment")).toBe(true);
     expect(providerSupportsCategory("millionverifier", "email_verification")).toBe(true);
     expect(providerSupportsCategory("twilio_lookup", "phone_lookup")).toBe(true);
     expect(providerSupportsCategory("ringcentral", "telephony_sms")).toBe(true);
@@ -75,6 +79,8 @@ describe("provider registry", () => {
 
   it("exposes required future env vars through provider config", () => {
     expect(providerConfig("apollo").envVars).toEqual(["APOLLO_API_KEY"]);
+    expect(providerConfig("lusha").envVars).toEqual(["LUSHA_API_KEY"]);
+    expect(providerConfig("people_data_labs").envVars).toEqual(["PEOPLE_DATA_LABS_API_KEY"]);
     expect(providerConfig("twilio_lookup").envVars).toEqual(["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"]);
     expect(providerConfig("ringcentral").envVars).toEqual([
       "RINGCENTRAL_CLIENT_ID",

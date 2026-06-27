@@ -47,6 +47,24 @@ export const providerRegistry: ProviderConfig[] = [
     executionMode: "mock"
   },
   {
+    id: "lusha",
+    name: "Lusha",
+    categories: ["email_finder", "phone_lookup", "enrichment"],
+    capabilities: ["find_email", "find_phone", "enrich_contact"],
+    envVars: ["LUSHA_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
+    id: "people_data_labs",
+    name: "People Data Labs",
+    categories: ["enrichment"],
+    capabilities: ["enrich_company", "enrich_contact"],
+    envVars: ["PEOPLE_DATA_LABS_API_KEY"],
+    enabledByDefault: false,
+    executionMode: "mock"
+  },
+  {
     id: "twilio_lookup",
     name: "Twilio Lookup",
     categories: ["phone_lookup"],

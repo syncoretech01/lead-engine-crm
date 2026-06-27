@@ -28,7 +28,11 @@ export default async function ExportsPage() {
   const templates = exportTemplates(state, workspaceId);
   const exportHistory = await exportReadRowsForWorkspace(state, workspaceId);
   const rules = state.exportRules.filter((rule) => rule.workspaceId === workspaceId);
-  const eligibleTotal = templates.reduce((total, template) => total + template.eligible, 0);
+  const emailReady = templateEligible(templates, "verified_email_leads");
+  const contactRows = templateEligible(templates, "contacts");
+  const phoneReady = templateEligible(templates, "phone_leads");
+  const companyRows = templateEligible(templates, "companies");
+  const sdrHandoff = templateEligible(templates, "sdr_assignments");
   const blockedTotal = exportHistory.reduce((total, exportItem) => total + (exportItem.blockedCount ?? 0), 0);
   const readyExports = exportHistory.filter((exportItem) => exportItem.status === "Ready").length;
   const generatedRecords = exportHistory.reduce((total, exportItem) => total + exportItem.recordCount, 0);
@@ -42,9 +46,9 @@ export default async function ExportsPage() {
       tone: "info" as const
     },
     {
-      label: "Eligible records",
-      value: formatNumber(eligibleTotal),
-      note: "Across current export templates",
+      label: "Strict email rows",
+      value: formatNumber(emailReady),
+      note: "Verified A/B and suppression-clear",
       icon: BadgeCheck,
       tone: "success" as const
     },
@@ -74,21 +78,21 @@ export default async function ExportsPage() {
     },
     {
       label: "Phone-ready",
-      value: templates.find((template) => template.id === "phone_leads")?.eligible ?? 0,
+      value: phoneReady,
       note: "Validated call rows",
       icon: Phone,
       tone: "success" as const
     },
     {
       label: "Email-ready",
-      value: templates.find((template) => template.id === "verified_email_leads")?.eligible ?? 0,
+      value: emailReady,
       note: "Verified outbound rows",
       icon: Mail,
       tone: "success" as const
     },
     {
       label: "SDR handoff",
-      value: templates.find((template) => template.id === "sdr_assignments")?.eligible ?? 0,
+      value: sdrHandoff,
       note: "Assignment-ready rows",
       icon: Users,
       tone: "info" as const
@@ -128,9 +132,17 @@ export default async function ExportsPage() {
       </section>
 
       <section className="export-template-grid" id="export-templates">
-        {templates.map((template) => (
-          <ExportTemplateCard key={template.id} template={template} rules={rules.filter((rule) => rule.exportType === template.id)} />
-        ))}
+        {templates.map((template) => {
+          const matchingRows = template.id === "contacts" ? contactRows : template.id === "companies" ? companyRows : template.eligible;
+          return (
+            <ExportTemplateCard
+              key={template.id}
+              matchingRows={matchingRows}
+              template={template}
+              rules={rules.filter((rule) => rule.exportType === template.id)}
+            />
+          );
+        })}
       </section>
 
       <section className="grid two">
@@ -316,12 +328,14 @@ type ExportTemplate = ReturnType<typeof exportTemplates>[number];
 
 function ExportTemplateCard({
   template,
-  rules
+  rules,
+  matchingRows
 }: {
   template: ExportTemplate;
   rules: Array<{ id: string; name: string }>;
+  matchingRows: number;
 }) {
-  const readiness = Math.min(100, Math.max(0, Math.round(template.eligible * 10)));
+  const readiness = matchingRows > 0 ? 100 : 0;
 
   return (
     <article className="export-template-card card-hover">
@@ -335,7 +349,7 @@ function ExportTemplateCard({
         <h2 className="card-title">{template.name}</h2>
         <p className="section-subtitle">{template.description}</p>
       </div>
-      <SummaryMeter label="Readiness" value={readiness} total={100} note={`${formatNumber(template.columns.length)} columns`} />
+      <SummaryMeter label="Availability" value={readiness} total={100} note={`${formatNumber(template.columns.length)} columns`} />
       <div className="chip-row">
         {template.columns.slice(0, 5).map((column) => (
           <span className="pill" key={column}>
@@ -416,8 +430,12 @@ function templateIcon(type: ExportRecord["type"]) {
   if (type === "verified_email_leads") return <Mail size={18} aria-hidden="true" />;
   if (type === "phone_leads") return <Phone size={18} aria-hidden="true" />;
   if (type === "sdr_assignments") return <Users size={18} aria-hidden="true" />;
-  if (type === "contacts") return <Phone size={18} aria-hidden="true" />;
+  if (type === "contacts") return <Users size={18} aria-hidden="true" />;
   return <FileText size={18} aria-hidden="true" />;
+}
+
+function templateEligible(templates: ExportTemplate[], type: ExportRecord["type"]) {
+  return templates.find((template) => template.id === type)?.eligible ?? 0;
 }
 
 function formatDate(value: string) {

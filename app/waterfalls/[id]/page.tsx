@@ -69,10 +69,10 @@ export default async function WaterfallTemplateEditPage({ params }: { params: Pr
       <PageHeader
         kicker="Provider waterfalls"
         title={template.name}
-        copy={`${labelize(template.campaignType)} · ${template.outreachChannel} · stop on ${template.requiredFields.join(", ") || "completeness"}`}
+        copy={`${labelize(template.campaignType)} - ${template.outreachChannel} - stop on ${template.requiredFields.join(", ") || "completeness"}`}
       />
       <p className="surface-note">
-        <Link href="/waterfalls">← Back to templates</Link>
+        <Link href="/waterfalls">Back to templates</Link>
       </p>
 
       {template.isDefault ? (
@@ -136,7 +136,7 @@ export default async function WaterfallTemplateEditPage({ params }: { params: Pr
                 <article className="item-card" key={step.id}>
                   <div className="item-card-header">
                     <div className="entity">
-                      <strong>Step {step.order} · {labelize(step.stage)}</strong>
+                      <strong>Step {step.order} - {labelize(step.stage)}</strong>
                       <span>Eligible providers for {labelize(step.capability)}: {providersFor(step.capability).join(", ") || "none configured"}</span>
                       {describeStepConditions(step) ? <span className="field-note">{describeStepConditions(step)}</span> : null}
                     </div>
@@ -173,7 +173,7 @@ export default async function WaterfallTemplateEditPage({ params }: { params: Pr
                     </div>
                     <div className="field">
                       <label>Provider IDs (ranked, comma-separated)</label>
-                      <input name="providerIds" defaultValue={step.providerIds.join(", ")} placeholder="leadmagic, prospeo, …" />
+                      <input name="providerIds" defaultValue={step.providerIds.join(", ")} placeholder="leadmagic, prospeo, lusha" />
                     </div>
                     <div className="field">
                       <label>Step cost cap (cents)</label>
@@ -267,8 +267,8 @@ function ReadOnlySteps({ steps }: { steps: WaterfallStep[] }) {
         <li key={step.id}>
           <span className="pill">{step.order}</span>
           <div className="entity">
-            <strong>{labelize(step.stage)}{step.highValueOnly ? " · high-value only" : ""}</strong>
-            <span>{step.providerIds.length ? step.providerIds.join(" → ") : "any enabled provider"}</span>
+            <strong>{labelize(step.stage)}{step.highValueOnly ? " - high-value only" : ""}</strong>
+            <span>{step.providerIds.length ? step.providerIds.join(" -> ") : "any enabled provider"}</span>
             {describeStepConditions(step) ? <span className="field-note">{describeStepConditions(step)}</span> : null}
           </div>
         </li>
@@ -281,7 +281,7 @@ function describeStepConditions(step: WaterfallStep): string {
   const parts: string[] = [];
   if (step.runIf) parts.push(`run if ${describeCondition(step.runIf)}`);
   if (step.stopIf) parts.push(`stop if ${describeCondition(step.stopIf)}`);
-  return parts.join(" · ");
+  return parts.join(" - ");
 }
 
 function describeCondition(condition: WaterfallCondition): string {
@@ -297,15 +297,15 @@ function describeCondition(condition: WaterfallCondition): string {
     case "equals":
       return `${field} = ${condition.value}`;
     case "notEquals":
-      return `${field} ≠ ${condition.value}`;
+      return `${field} != ${condition.value}`;
     case "in":
       return `${field} in [${condition.value.join(", ")}]`;
     case "notIn":
       return `${field} not in [${condition.value.join(", ")}]`;
     case "gte":
-      return `${field} ≥ ${condition.value}`;
+      return `${field} >= ${condition.value}`;
     case "lte":
-      return `${field} ≤ ${condition.value}`;
+      return `${field} <= ${condition.value}`;
     default:
       return field;
   }

@@ -19,6 +19,7 @@ import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-mod
 import { buildLeadEngineMetrics } from "@/lib/phase1/lead-engine-metrics";
 import { createLeadJobPreflight } from "@/lib/phase1/lead-planning";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
+import type { AppState } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard } from "@/components/ui-metrics";
 
@@ -39,6 +40,7 @@ export default async function LeadJobsPage() {
   const jobRows = leadJobs
     .map((job) => ({
       job,
+      assigned: assignmentCountForJob(state, workspaceId, job.id),
       observability: jobObservabilitySnapshot(state, workspaceId, job.id)
     }))
     .sort((a, b) => Date.parse(b.job.updatedAt) - Date.parse(a.job.updatedAt));
@@ -66,7 +68,7 @@ export default async function LeadJobsPage() {
     {
       label: "Verified",
       value: formatNumber(metrics.verifiedCount),
-      note: "Contacts passing verification",
+      note: "A/B contacts passing strict gates",
       icon: BadgeCheck,
       tone: "success" as const
     },
@@ -104,7 +106,7 @@ export default async function LeadJobsPage() {
     {
       label: "Completed",
       value: completedJobs.length,
-      note: `${formatNumber(metrics.crmHandoffCount)} CRM handoff records`,
+      note: `${formatNumber(metrics.crmHandoffCount)} assigned contacts`,
       icon: BadgeCheck,
       tone: "success" as const
     },
@@ -122,7 +124,7 @@ export default async function LeadJobsPage() {
       <PageHeader
         kicker="Lead generation"
         title="Lead jobs"
-        copy="Monitor acquisition jobs from profile launch through raw intake, normalization, verification, enrichment, CRM handoff, and export readiness."
+        copy="Monitor acquisition jobs from profile launch through raw intake, normalization, verification, enrichment, and assignment readiness."
         actions={
           <>
             <a href="#create-job" className="button secondary">
@@ -198,7 +200,7 @@ export default async function LeadJobsPage() {
         <div className="panel-header">
           <div className="panel-title-wrap">
             <h2 className="section-title">Job monitor</h2>
-            <p className="section-subtitle">Source-aware job status with recovery, quality, cost, and CRM sync counts.</p>
+            <p className="section-subtitle">Source-aware job status with recovery, quality, cost, and assignment output.</p>
           </div>
           <StatusPill label={`${leadJobs.length} jobs`} tone="info" />
         </div>
@@ -212,13 +214,13 @@ export default async function LeadJobsPage() {
                 <th>Progress</th>
                 <th>Data</th>
                 <th>Quality</th>
-                <th>CRM</th>
+                <th>Assigned</th>
                 <th>Cost</th>
                 <th>Recovery</th>
               </tr>
             </thead>
             <tbody>
-              {jobRows.map(({ job, observability }) => (
+              {jobRows.map(({ job, assigned, observability }) => (
                 <tr key={job.id}>
                   <td>
                     <div className="entity">
@@ -247,14 +249,14 @@ export default async function LeadJobsPage() {
                   </td>
                   <td>
                     <div className="job-quality-stack">
-                      <span className="pill success">{formatNumber(job.verified)} verified</span>
+                      <span className="pill success">{formatNumber(job.verified)} A/B verified</span>
                       <span className="pill warning">{formatNumber(job.duplicates)} dupes</span>
                       <span className="pill danger">{formatNumber(job.suppressed)} blocked</span>
                     </div>
                   </td>
                   <td>
                     <div className="entity">
-                      <strong>{formatNumber(job.pushedToCrm)}</strong>
+                      <strong>{formatNumber(assigned)}</strong>
                       <span>{formatNumber(job.exported)} exported</span>
                     </div>
                   </td>
@@ -491,4 +493,29 @@ function sourceColor(source: string) {
   if (normalized.includes("csv")) return "var(--ink-600)";
   if (normalized.includes("apify")) return "var(--ink-700)";
   return "var(--syn-primary)";
+}
+
+function assignmentCountForJob(state: AppState, workspaceId: string, jobId: string) {
+  const jobEmails = new Set(
+    state.normalizedRecords
+      .filter((record) => record.workspaceId === workspaceId && record.leadJobId === jobId && record.email)
+      .map((record) => record.email.toLowerCase())
+  );
+
+  if (!jobEmails.size) {
+    return 0;
+  }
+
+  const assignedContactIds = new Set(
+    state.sdrAssignments
+      .filter((assignment) => assignment.workspaceId === workspaceId)
+      .map((assignment) => assignment.contactId)
+  );
+
+  return state.contacts.filter(
+    (contact) =>
+      contact.workspaceId === workspaceId &&
+      assignedContactIds.has(contact.id) &&
+      jobEmails.has(contact.email.toLowerCase())
+  ).length;
 }

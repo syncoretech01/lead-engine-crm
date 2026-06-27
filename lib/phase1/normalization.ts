@@ -245,7 +245,7 @@ export function normalizeImportedRows({
   ).length;
   leadJob.enriched = 0;
   leadJob.exported = 0;
-  leadJob.pushedToCrm = contactsCreated;
+  leadJob.pushedToCrm = 0;
   leadJob.actualCost = 0;
   leadJob.actualCostCents = 0;
   leadJob.actualCostSource = "Actual";

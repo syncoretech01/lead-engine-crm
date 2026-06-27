@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { assertPermission } from "@/lib/phase1/auth";
 import { waterfallTemplateWriteTables } from "@/lib/phase1/normalized-write-tables";
 import { appendAudit, updateState } from "@/lib/phase1/store";
-import { defaultWaterfallTemplates, normalizeStepOrders, reorderTemplateStep } from "@/lib/phase1/waterfall-templates";
+import { ensureWaterfallDefaults, normalizeStepOrders, reorderTemplateStep } from "@/lib/phase1/waterfall-templates";
 import type { AppState, Session, WaterfallStage, WaterfallStep, WaterfallTemplate } from "@/lib/phase1/types";
 import type { ProviderCapability } from "@/lib/providers/types";
 
@@ -166,24 +166,13 @@ export async function restoreDefaultWaterfallTemplatesAction() {
   await updateState((state, session) => {
     assertPermission(session, "manage_waterfalls");
     const now = new Date().toISOString();
-    const existingDefaultTypes = new Set(
-      state.waterfallTemplates
-        .filter((template) => template.workspaceId === session.workspace.id && template.isDefault)
-        .map((template) => template.campaignType)
-    );
-    let restored = 0;
-    for (const template of defaultWaterfallTemplates(session.workspace.id, now)) {
-      if (!existingDefaultTypes.has(template.campaignType)) {
-        state.waterfallTemplates.push(template);
-        restored += 1;
-      }
-    }
-    if (restored > 0) {
+    const result = ensureWaterfallDefaults(state, session.workspace.id, now);
+    if (result.changed) {
       appendAudit(state, session, {
         objectType: "waterfall_template",
         objectId: session.workspace.id,
-        action: "defaults_restored",
-        newValue: { restored }
+        action: "defaults_refreshed",
+        newValue: { refreshed: true }
       });
     }
   }, { normalizedTables: waterfallTemplateWriteTables });

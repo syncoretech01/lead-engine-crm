@@ -21,8 +21,9 @@ import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill } from "@/components/status-pill";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
+import { buildLeadEngineMetrics, displayContactLabel } from "@/lib/phase1/lead-engine-metrics";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
-import type { AppState, EnrichmentProvider } from "@/lib/phase1/types";
+import type { AppState, Company, Contact, EnrichmentProvider } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
 
@@ -39,6 +40,8 @@ export default async function EnrichmentPage() {
   }
   const companies = state.companies.filter((company) => company.workspaceId === workspaceId);
   const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId);
+  const metrics = buildLeadEngineMetrics(state, workspaceId);
+  const companyById = new Map(companies.map((company) => [company.id, company]));
   const enrichments = state.enrichmentResults.filter((result) => result.workspaceId === workspaceId);
   const cache = state.providerCache.filter((entry) => entry.workspaceId === workspaceId);
   const segmentRules = state.segmentRules.filter((rule) => rule.workspaceId === workspaceId);
@@ -113,7 +116,7 @@ export default async function EnrichmentPage() {
     {
       label: "High-value queue",
       value: highValueContacts.length,
-      note: `${formatCents(highValueContacts.length * 2)} est. enrich cap`,
+      note: `${formatNumber(metrics.assignmentBlockedCount)} blocked by quality gates`,
       icon: Gem,
       tone: highValueContacts.length ? "success" as const : "warning" as const
     },
@@ -203,7 +206,7 @@ export default async function EnrichmentPage() {
               <select id="contactId" name="contactId" required>
                 {contacts.slice(0, 80).map((contact) => (
                   <option key={contact.id} value={contact.id}>
-                    {contact.name} - {contact.companyId} - {contact.priority}/{contact.segment}
+                    {leadOptionLabel(contact, companyById.get(contact.companyId))}
                   </option>
                 ))}
               </select>
@@ -253,7 +256,7 @@ export default async function EnrichmentPage() {
                 <div className="score-focus-row" key={score.id}>
                   <div className="score-focus-top">
                     <div className="entity">
-                      <strong>{contact?.name ?? "Unknown contact"}</strong>
+                      <strong>{displayContactLabel(contact, score.contactId)}</strong>
                       <span>{contact?.email}</span>
                     </div>
                     <StatusPill label={score.priority} tone={score.priority === "P1" ? "success" : "info"} />
@@ -536,6 +539,11 @@ function providerSummaries(enrichments: AppState["enrichmentResults"], cache: Ap
 
 function providerLabel(provider: EnrichmentProvider) {
   return provider.replace("Syncore ", "").replace(" Local", "");
+}
+
+function leadOptionLabel(contact: Contact, company?: Company) {
+  const account = company?.name || "No company";
+  return `${displayContactLabel(contact, contact.email || contact.id)} - ${account} - ${contact.priority}/${contact.segment}`;
 }
 
 function formatDate(value: string) {

@@ -69,7 +69,7 @@ export default async function BuildListPage() {
     .slice(0, 6);
 
   const contacts = state.contacts.filter((contact) => contact.workspaceId === workspaceId && !contact.isSuppressed);
-  const gradeOrder = ["S", "A", "B", "C", "D"] as const;
+  const gradeOrder = ["A", "B", "C", "D", "S"] as const;
   const gradeCounts = gradeOrder.map((grade) => ({
     grade,
     count: contacts.filter((contact) => contact.grade === grade).length
@@ -93,7 +93,7 @@ export default async function BuildListPage() {
   const openDuplicates = state.dedupeMatches.filter(
     (match) => match.workspaceId === workspaceId && match.status === "Open"
   ).length;
-  const gate = partitionLeadsForAssignment({ contacts: allContacts, requiredFields: selectedProfile?.requiredFields });
+  const gate = partitionLeadsForAssignment({ contacts: allContacts, state, requiredFields: selectedProfile?.requiredFields });
   const workloads = sdrWorkloads(state, workspaceId);
   const canAssign = session.permissions.includes("manage_sdr_team");
 
@@ -145,7 +145,7 @@ export default async function BuildListPage() {
       <PageHeader
         kicker="Lead Generation"
         title="Build a Lead List"
-        copy="Describe your target, draft an ICP, cost the run, then verify, enrich, and assign — every step confirmed before anything is spent."
+        copy="Describe your target, draft an ICP, cost the run, then verify, enrich, and assign - every step confirmed before anything is spent."
       />
 
       <section className="build-next" aria-label="Next best action">
@@ -159,7 +159,7 @@ export default async function BuildListPage() {
           </>
         ) : (
           <>
-            <strong>All set —</strong>
+            <strong>All set -</strong>
             <span>every step is complete for this list.</span>
           </>
         )}
@@ -169,7 +169,7 @@ export default async function BuildListPage() {
         <BuildProgressRail stages={stages} stepLabel={stepLabel} progressPct={progressPct} />
 
         <div className="build-main">
-          {/* Stage 1 — Describe */}
+          {/* Stage 1 - Describe */}
           <section className="panel build-stage" id="stage-describe" data-stage="describe">
             <div className="build-stage-head">
               <StageBadge status={stageStatus.describe} n={1} />
@@ -200,7 +200,7 @@ export default async function BuildListPage() {
                 />
               </div>
               <div className="field integration-actions">
-                <ToastButton toast="Drafting your ICP…">
+                <ToastButton toast="Drafting your ICP...">
                   <Sparkles size={17} aria-hidden="true" />
                   Draft ICP
                 </ToastButton>
@@ -208,7 +208,7 @@ export default async function BuildListPage() {
             </form>
           </section>
 
-          {/* Stage 2 — Review ICP */}
+          {/* Stage 2 - Review ICP */}
           <section className="panel build-stage" id="stage-review" data-stage="review">
             <div className="build-stage-head">
               <StageBadge status={stageStatus.review} n={2} />
@@ -263,7 +263,7 @@ export default async function BuildListPage() {
             )}
           </section>
 
-          {/* Stage 3 — Configure & cost */}
+          {/* Stage 3 - Configure & cost */}
           <section className="panel build-stage" id="stage-configure" data-stage="configure">
             <div className="build-stage-head">
               <StageBadge status={stageStatus.configure} n={3} />
@@ -287,7 +287,7 @@ export default async function BuildListPage() {
             )}
           </section>
 
-          {/* Stage 4 — Verify & enrich */}
+          {/* Stage 4 - Verify & enrich */}
           <section className="panel build-stage" id="stage-verify" data-stage="verify">
             <div className="build-stage-head">
               <StageBadge status={stageStatus.verify} n={4} />
@@ -329,7 +329,7 @@ export default async function BuildListPage() {
             ) : (
               <div className="empty-state">
                 <ShieldCheck size={24} aria-hidden="true" />
-                <span>No contacts yet — queue a run, then verify grades here.</span>
+                <span>No contacts yet - queue a run, then verify grades here.</span>
               </div>
             )}
 
@@ -349,8 +349,8 @@ export default async function BuildListPage() {
                 <div className="chip-row">
                   {enrichTemplate.steps.map((step) => (
                     <span className="pill" key={step.id}>
-                      {step.order} · {labelize(step.stage)}
-                      {step.providerIds.length ? ` · ${step.providerIds.join(", ")}` : ""}
+                      {step.order} - {labelize(step.stage)}
+                      {step.providerIds.length ? ` - ${step.providerIds.join(", ")}` : ""}
                     </span>
                   ))}
                 </div>
@@ -366,7 +366,7 @@ export default async function BuildListPage() {
                       </div>
                     </form>
                   ) : (
-                    <p className="surface-note">No contacts are missing an email or phone — nothing to enrich.</p>
+                    <p className="surface-note">No contacts are missing an email or phone - nothing to enrich.</p>
                   )
                 ) : (
                   <p className="surface-note">Enrichment runs are limited to Admins and Managers.</p>
@@ -378,7 +378,7 @@ export default async function BuildListPage() {
             ) : null}
           </section>
 
-          {/* Stage 5 — Finalize & assign */}
+          {/* Stage 5 - Finalize & assign */}
           <section className="panel build-stage" id="stage-assign" data-stage="assign">
             <div className="build-stage-head">
               <StageBadge status={stageStatus.assign} n={5} />
@@ -396,11 +396,14 @@ export default async function BuildListPage() {
               />
               <span className="pill">{formatNumber(gate.ready.length)} ready</span>
               <span className="pill">{formatNumber(gate.held.length)} held</span>
-              {gate.reasons.map((entry) => (
+              {gate.reasons.slice(0, 5).map((entry) => (
                 <span className="pill" key={entry.reason}>
                   {entry.reason}: {formatNumber(entry.count)}
                 </span>
               ))}
+              {gate.reasons.length > 5 ? (
+                <span className="pill">+{formatNumber(gate.reasons.length - 5)} more blockers</span>
+              ) : null}
             </div>
 
             <div className="item-card-actions">
@@ -455,14 +458,14 @@ export default async function BuildListPage() {
               gate.ready.length > 0 ? (
                 <form action={assignLeadsNowAction} className="form-grid">
                   <div className="field integration-actions">
-                    <ToastButton toast="Assigning ready leads to SDRs…">
+                    <ToastButton toast="Assigning ready leads to SDRs...">
                       <UserCheck size={17} aria-hidden="true" />
                       Assign now (current score): {formatNumber(gate.ready.length)} ready leads
                     </ToastButton>
                   </div>
                 </form>
               ) : (
-                <p className="surface-note">No ready leads to assign yet — verify and enrich first.</p>
+                <p className="surface-note">No ready leads to assign yet - fix the blockers above, then assign.</p>
               )
             ) : (
               <p className="surface-note">Lead assignment is limited to Admins and Managers.</p>
@@ -475,7 +478,7 @@ export default async function BuildListPage() {
               <div className="panel-title-wrap">
                 <h2 className="section-title">Recent runs</h2>
                 <p className="section-subtitle">
-                  Queued runs wait for source data — extraction runs via the provider worker or a CSV import in Data Staging.
+                  Queued runs wait for source data - extraction runs via the provider worker or a CSV import in Data Staging.
                 </p>
               </div>
               <Link href="/lead-jobs" className="button subtle">

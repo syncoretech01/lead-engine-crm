@@ -6,7 +6,7 @@ function contact(overrides: Partial<Contact>): Contact {
   return {
     id: "x",
     workspaceId: "ws",
-    name: "X",
+    name: "Alex Rivera",
     email: "x@y.com",
     phone: "+15551234567",
     grade: "A",
@@ -30,11 +30,16 @@ describe("partitionLeadsForAssignment", () => {
 
     expect(result.ready.map((item) => item.id)).toEqual(["ok"]);
     expect(result.held).toHaveLength(4);
-    expect(result.reasons.reduce((total, entry) => total + entry.count, 0)).toBe(4);
+    expect(result.reasons.reduce((total, entry) => total + entry.count, 0)).toBeGreaterThanOrEqual(result.held.length);
+    expect(result.reasons.map((entry) => entry.reason)).toEqual(
+      expect.arrayContaining(["Suppressed", "Invalid email", "Not A/B verified", "Missing email"])
+    );
   });
 
-  it("does not require email/phone unless the profile says so", () => {
+  it("always holds contacts without a usable email", () => {
     const result = partitionLeadsForAssignment({ contacts: [contact({ id: "noemail", email: "" })] });
-    expect(result.ready.map((item) => item.id)).toEqual(["noemail"]);
+    expect(result.ready).toEqual([]);
+    expect(result.held.map((item) => item.id)).toEqual(["noemail"]);
+    expect(result.reasons.some((entry) => entry.reason === "Missing email")).toBe(true);
   });
 });

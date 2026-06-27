@@ -22,6 +22,7 @@ import { StatusPill, statusTone } from "@/components/status-pill";
 import { contactRowsForStaging, exportTemplates, sourceHealth } from "@/lib/phase1/queries";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { buildLeadEngineMetrics } from "@/lib/phase1/lead-engine-metrics";
+import { isMeaningfulCompanyName, isMeaningfulPersonName } from "@/lib/phase1/lead-data-quality";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { canUseLeadGenerationWorkspace, defaultWorkspacePath } from "@/lib/phase1/auth";
 import type { Contact, LeadJob, Priority, SearchProfile } from "@/lib/phase1/types";
@@ -88,16 +89,16 @@ export default async function DashboardPage() {
       tone: "info" as const
     },
     {
-      label: "Verified rate",
+      label: "Verified A/B rate",
       value: `${metrics.verifiedRate}%`,
       note: `${formatNumber(metrics.verifiedCount)} A/B contacts`,
       icon: BadgeCheck,
       tone: "success" as const
     },
     {
-      label: "Export-ready",
-      value: formatNumber(metrics.exportReadyCount),
-      note: `${formatNumber(topSegments.filter((segment) => segment.priority === "P1").length)} P1 segments`,
+      label: "Assignment-ready",
+      value: formatNumber(metrics.readyForSdrCount),
+      note: `${formatNumber(metrics.assignmentBlockedCount)} held by quality gates`,
       icon: Download,
       tone: "success" as const
     },
@@ -155,8 +156,8 @@ export default async function DashboardPage() {
     },
     {
       label: "Exported",
-      value: metrics.exportedCount,
-      note: `${formatNumber(metrics.crmHandoffCount)} CRM handoff records`,
+      value: metrics.crmHandoffCount,
+      note: `${formatNumber(metrics.exportedCount)} exported rows`,
       icon: Download,
       tone: "teal" as const
     }
@@ -189,7 +190,7 @@ export default async function DashboardPage() {
     },
     {
       title: "Export clean list",
-      copy: "Generate gated CSVs only from verified, non-suppressed records with source lineage.",
+      copy: "Generate gated CSVs or SDR handoff lists only from verified, non-suppressed records.",
       href: "/exports",
       count: metrics.exportReadyCount,
       label: "ready",
@@ -346,7 +347,7 @@ export default async function DashboardPage() {
                     <td>
                       <div className="entity">
                         <strong>{formatNumber(job.normalized || job.raw)}</strong>
-                        <span>{formatNumber(job.verified)} verified</span>
+                        <span>{formatNumber(job.verified)} A/B verified</span>
                       </div>
                     </td>
                     <td>{formatCurrencyCompact(job.actualCost)}</td>
@@ -422,9 +423,9 @@ export default async function DashboardPage() {
                   <tr key={row.id}>
                     <td>
                       <div className="entity">
-                        <strong>{row.contactName || row.company}</strong>
+                        <strong>{displayStagedLeadName(row)}</strong>
                         <span>{row.title}</span>
-                        <span>{row.company}</span>
+                        <span>{displayStagedAccountName(row)}</span>
                       </div>
                     </td>
                     <td>{row.source}</td>
@@ -660,6 +661,18 @@ function formatCurrencyCompact(value: number) {
     currency: "USD",
     maximumFractionDigits: 0
   }).format(value);
+}
+
+function displayStagedLeadName(row: StagedRow) {
+  if (isMeaningfulPersonName(row.contactName)) {
+    return row.contactName;
+  }
+
+  return row.email || displayStagedAccountName(row);
+}
+
+function displayStagedAccountName(row: StagedRow) {
+  return isMeaningfulCompanyName(row.company) ? row.company : "No company";
 }
 
 function sourceColor(source: string) {

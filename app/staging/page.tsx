@@ -19,6 +19,7 @@ import { StagingWorkbench } from "@/components/staging-workbench";
 import { StatusPill } from "@/components/status-pill";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { buildLeadEngineMetrics } from "@/lib/phase1/lead-engine-metrics";
+import { isMeaningfulCompanyName, isMeaningfulPersonName } from "@/lib/phase1/lead-data-quality";
 import { contactRowsForStaging } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
@@ -65,7 +66,7 @@ export default async function StagingPage() {
       tone: "info" as const
     },
     {
-      label: "Ready A/B",
+      label: "Verified A/B",
       value: formatNumber(verified),
       note: "Eligible for strict email export",
       icon: BadgeCheck,
@@ -103,9 +104,9 @@ export default async function StagingPage() {
       tone: "info" as const
     },
     {
-      label: "Ready for SDR",
+      label: "Assignment-ready",
       value: readyForSdr,
-      note: "Routed downstream",
+      note: "Passes SDR handoff gates",
       icon: Users,
       tone: "success" as const
     },
@@ -130,7 +131,7 @@ export default async function StagingPage() {
       <PageHeader
         kicker="Lead generation"
         title="Lead staging"
-        copy="Review normalized leads before CRM handoff: verify grade, dedupe, suppression, enrichment, segment, score, and ownership readiness."
+        copy="Review normalized leads before assignment or export: verify grade, dedupe, suppression, enrichment, segment, score, and ownership readiness."
         actions={
           <>
             <a className="button secondary" href="#import-csv">
@@ -139,7 +140,7 @@ export default async function StagingPage() {
             </a>
             <Link className="button primary" href="/exports">
               <Download size={17} aria-hidden="true" />
-              Export ready leads
+              Open exports
             </Link>
           </>
         }
@@ -173,7 +174,7 @@ export default async function StagingPage() {
                 <div className="signal-main">
                   <span className={`grade ${lead.emailGrade.toLowerCase()}`}>{lead.emailGrade}</span>
                   <div>
-                    <strong>{lead.contactName || lead.company}</strong>
+                    <strong>{displayStagedLeadName(lead)}</strong>
                     <span>{lead.verification}</span>
                   </div>
                 </div>
@@ -315,6 +316,18 @@ function needsOperatorReview(lead: StagedLead) {
     lead.emailGrade === "C" ||
     lead.emailGrade === "D"
   );
+}
+
+function displayStagedLeadName(lead: StagedLead) {
+  if (isMeaningfulPersonName(lead.contactName)) {
+    return lead.contactName;
+  }
+
+  if (lead.email) {
+    return lead.email;
+  }
+
+  return isMeaningfulCompanyName(lead.company) ? lead.company : "Unknown lead";
 }
 
 function sourceSummaries(leads: StagedLead[]) {

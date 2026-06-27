@@ -28,7 +28,7 @@ describe("pruneWaterfallTemplateProviders", () => {
       waterfallTemplates: [
         template([
           step(1, ["leadmagic", "prospeo", "fullenrich"]),
-          step(2, ["lusha"]),
+          step(2, ["fullenrich"]),
           step(3, ["twilio_lookup"])
         ])
       ]
@@ -40,8 +40,9 @@ describe("pruneWaterfallTemplateProviders", () => {
     const steps = state.waterfallTemplates[0].steps;
     expect(steps).toHaveLength(2);
     expect(steps[0].providerIds).toEqual(["leadmagic", "prospeo"]);
+    expect(steps[1].providerIds).toEqual(["twilio_lookup"]);
     expect(steps.map((item) => item.order)).toEqual([1, 2]);
-    expect(steps.some((item) => item.providerIds.includes("lusha") || item.providerIds.includes("fullenrich"))).toBe(false);
+    expect(steps.some((item) => item.providerIds.includes("fullenrich"))).toBe(false);
   });
 
   it("is a no-op for clean templates", () => {

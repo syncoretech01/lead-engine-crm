@@ -164,7 +164,7 @@ export function RunConfigurator({
                 />
               </span>
               <span className="cost-bar-value">
-                <strong>{money(estimate.estimatedCostCents)}</strong> · {formatNumber(estimate.estimatedRecords)} rec
+                <strong>{money(estimate.estimatedCostCents)}</strong> - {formatNumber(estimate.estimatedRecords)} rec
               </span>
             </div>
           ))}
@@ -184,9 +184,9 @@ export function RunConfigurator({
             <input type="hidden" name="sources" value={source} key={source} />
           ))}
           <div className="field integration-actions">
-            <ToastButton toast="Run queued — extraction starts when source data arrives.">
+            <ToastButton toast="Run queued - extraction starts when source data arrives.">
               <Play size={17} aria-hidden="true" />
-              Confirm &amp; queue run · {money(cost.estimatedCostCents)}
+              Confirm &amp; queue run - {money(cost.estimatedCostCents)}
             </ToastButton>
           </div>
         </form>
@@ -196,7 +196,7 @@ export function RunConfigurator({
             Over budget. Raise the cap to at least <strong>{money(cost.estimatedCostCents)}</strong> to queue.
           </span>
           <button type="button" className="button secondary" onClick={() => setBudgetDollars(recommendedCapDollars)}>
-            Use recommended · ${recommendedCapDollars}
+            Use recommended - ${recommendedCapDollars}
           </button>
         </div>
       )}

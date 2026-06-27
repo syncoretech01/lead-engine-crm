@@ -13,7 +13,7 @@ export type RailStage = {
 /**
  * Sticky build-progress rail: reflects each stage's server-derived status, scroll-
  * spies the active stage as you read, and jumps to a stage on click. Presentation
- * only — all state lives on the server.
+ * only - all state lives on the server.
  */
 export function BuildProgressRail({
   stages,

@@ -9,6 +9,7 @@ import { resolveSession } from "@/lib/phase1/auth";
 import { createProviderJob } from "@/lib/phase1/provider-jobs";
 import { saveProviderConnectionConfig } from "@/lib/phase1/provider-connections";
 import { createSeedState } from "@/lib/phase1/seed";
+import { supportedProviders } from "@/lib/providers";
 
 describe("normalized persistence projection", () => {
   it("projects seeded state into normalized table rows with compliance fields", () => {
@@ -103,7 +104,7 @@ describe("normalized persistence projection", () => {
     const projection = createNormalizedPersistenceProjection(state);
     const connection = projection.providerConnections.find((row) => row.providerId === "apollo");
 
-    expect(projection.providerConnections).toHaveLength(20);
+    expect(projection.providerConnections).toHaveLength(supportedProviders().length);
     expect(connection).toMatchObject({
       displayName: "Apollo",
       status: "Not configured",

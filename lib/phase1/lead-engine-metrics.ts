@@ -1,11 +1,13 @@
 import { isActionableDedupeMatch } from "@/lib/phase1/dedupe";
 import {
   domainFromEmail,
+  isMeaningfulCompanyName,
+  isMeaningfulPersonName,
   isPersonalEmailDomain,
   isPlaceholderCompanyName,
   isPlaceholderPersonName
 } from "@/lib/phase1/lead-data-quality";
-import type { AppState, DedupeMatch, LeadGrade, NormalizedRecord } from "@/lib/phase1/types";
+import type { AppState, Contact, DedupeMatch, LeadGrade, NormalizedRecord } from "@/lib/phase1/types";
 
 export type LeadEngineMetrics = {
   rawCount: number;
@@ -39,6 +41,8 @@ export type LeadEngineMetrics = {
   personalEmailCount: number;
   missingCompanyCount: number;
   missingContactCount: number;
+  missingPhoneCount: number;
+  assignmentBlockedCount: number;
 };
 
 export type DedupeGroup = {
@@ -65,9 +69,9 @@ export function buildLeadEngineMetrics(state: AppState, workspaceId: string): Le
   const actionableMatches = openMatches.filter((match) => isActionableDedupeMatch(state, match));
   const duplicateGroups = groupOpenDedupeMatches(state, workspaceId);
   const nonSuppressedContacts = contacts.filter((contact) => !contact.isSuppressed && contact.grade !== "S");
-  const verifiedContacts = contacts.filter((contact) => isExportableGrade(contact.grade) && !contact.isSuppressed);
-  const verifiedRecords = normalizedRecords.filter((record) => isExportableGrade(record.grade) && record.status !== "Suppressed");
-  const exportReadyCount = Math.max(verifiedContacts.length, verifiedRecords.length);
+  const verifiedContacts = contacts.filter((contact) => isStrictlyVerifiedContact(contact));
+  const verifiedRecords = normalizedRecords.filter((record) => isStrictlyVerifiedRecord(record));
+  const assignmentReadyContacts = contacts.filter((contact) => isSdrReadyContact(state, contact));
   const exportedIds = new Set(
     state.exports
       .filter((exportRecord) => exportRecord.workspaceId === workspaceId)
@@ -80,18 +84,18 @@ export function buildLeadEngineMetrics(state: AppState, workspaceId: string): Le
     stagedCount: normalizedRecords.length || contacts.length,
     companyCount: companies.length,
     contactCount: contacts.length,
-    verifiedCount: exportReadyCount,
+    verifiedCount: verifiedContacts.length || verifiedRecords.length,
     verifiedRate: nonSuppressedContacts.length ? Math.round((verifiedContacts.length / nonSuppressedContacts.length) * 100) : 0,
     riskCount: countByGrade(contacts, "C") || countRecordsByGrade(normalizedRecords, "C"),
     invalidCount: countByGrade(contacts, "D") || countRecordsByGrade(normalizedRecords, "D"),
     suppressedCount: contacts.filter((contact) => contact.isSuppressed || contact.grade === "S").length,
     needsReviewCount: normalizedRecords.filter(needsOperatorReview).length,
-    exportReadyCount,
-    readyForSdrCount: normalizedRecords.filter((record) => record.status === "Ready for SDR").length,
+    exportReadyCount: verifiedContacts.length || verifiedRecords.length,
+    readyForSdrCount: assignmentReadyContacts.length,
     phoneReadyCount: normalizedRecords.filter((record) => Boolean(record.phone)).length || contacts.filter((contact) => Boolean(contact.phone)).length,
     enrichedCount: contacts.filter((contact) => (contact.enrichmentCoverage ?? 0) > 0).length,
     exportedCount: exportedIds.size,
-    crmHandoffCount: leadJobs.reduce((total, job) => total + job.pushedToCrm, 0),
+    crmHandoffCount: state.sdrAssignments.filter((assignment) => assignment.workspaceId === workspaceId).length,
     activeJobCount: leadJobs.filter((job) => job.status !== "Completed").length,
     queuedJobCount: leadJobs.filter((job) => job.status === "Queued").length,
     runningJobCount: leadJobs.filter((job) => job.status === "Running").length,
@@ -103,9 +107,17 @@ export function buildLeadEngineMetrics(state: AppState, workspaceId: string): Le
     actionableDuplicatePairCount: actionableMatches.length,
     duplicateGroupCount: duplicateGroups.length,
     hiddenDuplicatePairCount: Math.max(openMatches.length - actionableMatches.length, 0),
-    personalEmailCount: normalizedRecords.filter((record) => isPersonalEmailDomain(domainFromEmail(record.email))).length,
-    missingCompanyCount: normalizedRecords.filter((record) => isPlaceholderCompanyName(record.companyName)).length,
-    missingContactCount: normalizedRecords.filter((record) => isPlaceholderPersonName(record.contactName)).length
+    personalEmailCount:
+      normalizedRecords.filter((record) => isPersonalEmailDomain(domainFromEmail(record.email))).length ||
+      contacts.filter((contact) => isPersonalEmailDomain(domainFromEmail(contact.email))).length,
+    missingCompanyCount:
+      normalizedRecords.filter((record) => isPlaceholderCompanyName(record.companyName)).length ||
+      contacts.filter((contact) => contactQualityBlockers(state, contact).includes("Missing company")).length,
+    missingContactCount:
+      normalizedRecords.filter((record) => isPlaceholderPersonName(record.contactName)).length ||
+      contacts.filter((contact) => contactQualityBlockers(state, contact).includes("Missing contact name")).length,
+    missingPhoneCount: normalizedRecords.filter((record) => !record.phone).length || contacts.filter((contact) => !contact.phone).length,
+    assignmentBlockedCount: contacts.length - assignmentReadyContacts.length
   };
 }
 
@@ -154,9 +166,9 @@ export function groupOpenDedupeMatches(state: AppState, workspaceId: string): De
 export function leadReviewReason(record: NormalizedRecord) {
   if (record.status === "Suppressed" || record.grade === "S") return "Suppressed";
   if (record.grade === "D") return "Invalid email";
-  if (isPlaceholderPersonName(record.contactName)) return "Missing contact name";
-  if (isPlaceholderCompanyName(record.companyName)) return "Missing company";
   if (isPersonalEmailDomain(domainFromEmail(record.email))) return "Personal email domain";
+  if (isPlaceholderCompanyName(record.companyName)) return "Missing company";
+  if (isPlaceholderPersonName(record.contactName)) return "Missing contact name";
   if (record.grade === "C") return "Needs enrichment";
   if (!record.phone) return "Missing phone";
   return "Ready";
@@ -174,6 +186,54 @@ export function needsOperatorReview(record: NormalizedRecord) {
   );
 }
 
+export function isStrictlyVerifiedContact(contact: Pick<Contact, "grade" | "isSuppressed">) {
+  return isExportableGrade(contact.grade) && !contact.isSuppressed;
+}
+
+export function isStrictlyVerifiedRecord(record: Pick<NormalizedRecord, "grade" | "status">) {
+  return isExportableGrade(record.grade) && record.status !== "Suppressed";
+}
+
+export function normalizedRecordQualityBlockers(record: NormalizedRecord) {
+  const blockers: string[] = [];
+  if (record.status === "Suppressed" || record.grade === "S") blockers.push("Suppressed");
+  if (record.grade === "D") blockers.push("Invalid email");
+  if (isPersonalEmailDomain(domainFromEmail(record.email))) blockers.push("Personal email domain");
+  if (isPlaceholderCompanyName(record.companyName)) blockers.push("Missing company");
+  if (isPlaceholderPersonName(record.contactName)) blockers.push("Missing contact name");
+  if (record.grade === "C") blockers.push("Needs enrichment");
+  if (!record.phone) blockers.push("Missing phone");
+  return blockers;
+}
+
+export function contactQualityBlockers(state: AppState, contact: Contact, requiredFields: string[] = []) {
+  const blockers: string[] = [];
+  const required = requiredFields.map((field) => field.toLowerCase());
+  const company = state.companies.find((item) => item.id === contact.companyId && item.workspaceId === contact.workspaceId);
+
+  if (contact.isSuppressed || contact.grade === "S" || contact.priority === "S") blockers.push("Suppressed");
+  if (contact.grade === "D") blockers.push("Invalid email");
+  if (contact.grade === "C") blockers.push("Needs enrichment");
+  if (!isExportableGrade(contact.grade)) blockers.push("Not A/B verified");
+  if (!contact.email) blockers.push("Missing email");
+  if (required.some((field) => field.includes("phone")) && !contact.phone) blockers.push("Missing phone");
+  if (isPersonalEmailDomain(domainFromEmail(contact.email))) blockers.push("Personal email domain");
+  if (!isMeaningfulPersonName(contact.name)) blockers.push("Missing contact name");
+  if (!company || !isMeaningfulCompanyName(company.name)) blockers.push("Missing company");
+
+  return Array.from(new Set(blockers));
+}
+
+export function isSdrReadyContact(state: AppState, contact: Contact, requiredFields: string[] = []) {
+  return contactQualityBlockers(state, contact, requiredFields).length === 0;
+}
+
+export function displayContactLabel(contact: Pick<Contact, "name" | "email"> | undefined, fallback = "Unknown contact") {
+  if (!contact) return fallback;
+  if (isMeaningfulPersonName(contact.name)) return contact.name;
+  return contact.email || fallback;
+}
+
 function entitySummary(state: AppState, objectType: DedupeMatch["objectType"], id: string) {
   if (objectType === "company") {
     const company = state.companies.find((item) => item.id === id);
@@ -186,7 +246,7 @@ function entitySummary(state: AppState, objectType: DedupeMatch["objectType"], i
   const contact = state.contacts.find((item) => item.id === id);
   const company = state.companies.find((item) => item.id === contact?.companyId);
   return {
-    label: contact?.name ?? id,
+    label: displayContactLabel(contact, id),
     detail: [contact?.email, company?.name].filter(Boolean).join(" | ") || "No contact detail"
   };
 }

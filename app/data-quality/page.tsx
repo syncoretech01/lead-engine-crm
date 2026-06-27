@@ -20,9 +20,9 @@ import {
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
-import { StatusPill, statusTone } from "@/components/status-pill";
+import { StatusPill } from "@/components/status-pill";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
-import { buildLeadEngineMetrics, groupOpenDedupeMatches } from "@/lib/phase1/lead-engine-metrics";
+import { buildLeadEngineMetrics, displayContactLabel, groupOpenDedupeMatches } from "@/lib/phase1/lead-engine-metrics";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { AppState, LeadGrade } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
@@ -46,7 +46,7 @@ export default async function DataQualityPage() {
   );
   const metrics = buildLeadEngineMetrics(state, workspaceId);
   const duplicateGroups = groupOpenDedupeMatches(state, workspaceId);
-  const visibleDuplicateGroups = duplicateGroups.slice(0, 50);
+  const visibleDuplicateGroups = duplicateGroups.slice(0, 25);
   const suppressed = contacts.filter((contact) => contact.isSuppressed).length;
   const verified = metrics.verifiedCount;
   const risky = metrics.riskCount;
@@ -193,6 +193,9 @@ export default async function DataQualityPage() {
           <div className="panel-body signal-list">
             <RiskRow label="Catch-all domains" value={catchAll} total={verificationResults.length} tone={catchAll ? "warning" : "success"} />
             <RiskRow label="Role-based emails" value={roleEmail} total={verificationResults.length} tone={roleEmail ? "warning" : "success"} />
+            <RiskRow label="Personal email domains" value={metrics.personalEmailCount} total={contacts.length} tone={metrics.personalEmailCount ? "warning" : "success"} />
+            <RiskRow label="Missing company" value={metrics.missingCompanyCount} total={contacts.length} tone={metrics.missingCompanyCount ? "warning" : "success"} />
+            <RiskRow label="Missing contact name" value={metrics.missingContactCount} total={contacts.length} tone={metrics.missingContactCount ? "warning" : "success"} />
             <RiskRow label="Missing email" value={missingEmail} total={verificationResults.length} tone={missingEmail ? "warning" : "success"} />
             <RiskRow label="Suppressed contacts" value={suppressed} total={contacts.length} tone={suppressed ? "warning" : "success"} />
           </div>
@@ -307,7 +310,7 @@ export default async function DataQualityPage() {
             <h2 className="section-title">Verification history</h2>
             <p className="section-subtitle">Recent verification checks with grade, email, phone, checks, and expiry.</p>
           </div>
-          <StatusPill label={`${verificationResults.length} checks`} tone="info" />
+          <StatusPill label={`${formatNumber(verificationResults.length)} checks`} tone="info" />
         </div>
         <div className="table-wrap">
           <table>
@@ -322,9 +325,11 @@ export default async function DataQualityPage() {
               </tr>
             </thead>
             <tbody>
-              {latestVerification.slice(0, 40).map((result) => (
+              {latestVerification.slice(0, 25).map((result) => {
+                const contact = state.contacts.find((item) => item.id === result.contactId);
+                return (
                 <tr key={result.id}>
-                  <td>{state.contacts.find((contact) => contact.id === result.contactId)?.name ?? "Unknown"}</td>
+                  <td>{displayContactLabel(contact, result.email || "Unknown contact")}</td>
                   <td>
                     <span className={`grade ${result.grade.toLowerCase()}`}>{result.grade}</span>
                   </td>
@@ -346,7 +351,8 @@ export default async function DataQualityPage() {
                   </td>
                   <td>{formatDate(result.expiresAt)}</td>
                 </tr>
-              ))}
+              );
+              })}
               {latestVerification.length === 0 ? (
                 <tr>
                   <td colSpan={6}>No verification results have been recorded yet.</td>
