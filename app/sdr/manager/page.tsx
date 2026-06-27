@@ -55,6 +55,8 @@ export default async function SdrManagerPage() {
   }
 
   const activeTeams = teams.filter((team) => team.active);
+  const hasManualAssignments = snapshot.assignments.length > 0;
+  const canManualReassign = hasManualAssignments && users.length > 0;
   const maxActiveLoad = Math.max(...snapshot.workloads.map((workload) => workload.active), 1);
   const riskCount = snapshot.workloads.filter((workload) => workload.overdue > 0 || workload.p1 > 2).length;
   const rulePreview = snapshot.rules.slice(0, 4);
@@ -324,27 +326,39 @@ export default async function SdrManagerPage() {
           <form action={reassignSdrAssignmentAction} className="panel-body form-grid">
             <div className="field">
               <label htmlFor="assignmentId">Assignment</label>
-              <select id="assignmentId" name="assignmentId" required>
+              <select id="assignmentId" name="assignmentId" required defaultValue="" disabled={!hasManualAssignments}>
+                <option value="" disabled>
+                  {hasManualAssignments ? "Select an active assignment" : "No active assignments yet"}
+                </option>
                 {snapshot.assignments.map((assignment) => (
                   <option key={assignment.id} value={assignment.id}>
-                    {assignment.contactName} - {assignment.ownerName}
+                    {assignment.contactName} - {assignment.companyName} - currently {assignment.ownerName}
                   </option>
                 ))}
               </select>
+              {!hasManualAssignments ? (
+                <span className="field-note">
+                  Create assignments from Lead Engine first: go to Build a Lead List, finish quality checks, then use Finalize & assign.
+                </span>
+              ) : null}
             </div>
             <div className="field">
               <label htmlFor="nextSdrId">New SDR</label>
-              <select id="nextSdrId" name="nextSdrId" required>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
+              <select id="nextSdrId" name="nextSdrId" required disabled={!users.length}>
+                {users.length ? (
+                  users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No SDR users available</option>
+                )}
               </select>
             </div>
             <div className="field">
               <label htmlFor="assignmentMethod">Method</label>
-              <select id="assignmentMethod" name="assignmentMethod" defaultValue="Capacity-based">
+              <select id="assignmentMethod" name="assignmentMethod" defaultValue="Capacity-based" disabled={!canManualReassign}>
                 {assignmentMethods.map((method) => (
                   <option key={method} value={method}>
                     {method}
@@ -354,11 +368,11 @@ export default async function SdrManagerPage() {
             </div>
             <div className="field">
               <label htmlFor="reason">Reason</label>
-              <input id="reason" name="reason" placeholder="Capacity rebalance" />
+              <input id="reason" name="reason" placeholder="Capacity rebalance" disabled={!canManualReassign} />
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+              <button className="button primary" type="submit" disabled={!canManualReassign}>
                 Reassign lead
               </button>
             </div>
