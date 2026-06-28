@@ -89,88 +89,164 @@ export default async function OpportunitiesPage() {
   const wonOpportunities = opportunities.filter((opportunity) => opportunity.stage === "Closed won");
   const stageRows = stageSummary(opportunities);
   const maxStageAmount = Math.max(...stageRows.map((row) => row.amount), 1);
+  const isSdr = session.role === "SDR";
+  const linkedAccountCount = new Set(opportunities.map((opportunity) => opportunity.companyId)).size;
+  const openTaskCount = opportunities.reduce((total, opportunity) => total + opportunity.openTasks, 0);
   const focusOpportunities = [...openOpportunities]
     .sort((a, b) => b.amount - a.amount || b.probability - a.probability)
     .slice(0, 8);
 
-  const metrics = [
-    {
-      label: "Open pipeline",
-      value: formatCurrency(openPipeline),
-      note: `${formatNumber(openOpportunities.length)} open opportunities`,
-      icon: CircleDollarSign,
-      tone: "success" as const
-    },
-    {
-      label: "Weighted forecast",
-      value: formatCurrency(weightedForecast),
-      note: "Amount weighted by probability",
-      icon: TrendingUp,
-      tone: "info" as const
-    },
-    {
-      label: "Proposal stage",
-      value: formatNumber(proposalOpportunities.length),
-      note: "Late-stage active opportunities",
-      icon: Calendar,
-      tone: proposalOpportunities.length ? "warning" as const : "info" as const
-    },
-    {
-      label: "Closed won",
-      value: formatNumber(wonOpportunities.length),
-      note: `${formatCurrency(wonOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0))} retained in history`,
-      icon: CircleDollarSign,
-      tone: "success" as const
-    }
-  ];
+  const metrics = isSdr
+    ? [
+        {
+          label: "My open deals",
+          value: formatNumber(openOpportunities.length),
+          note: `${formatCurrency(openPipeline)} active value`,
+          icon: CircleDollarSign,
+          tone: openOpportunities.length ? "success" as const : "info" as const
+        },
+        {
+          label: "Weighted value",
+          value: formatCurrency(weightedForecast),
+          note: "Probability-adjusted value",
+          icon: TrendingUp,
+          tone: "info" as const
+        },
+        {
+          label: "Proposal stage",
+          value: formatNumber(proposalOpportunities.length),
+          note: "Late-stage deals to keep warm",
+          icon: Calendar,
+          tone: proposalOpportunities.length ? "warning" as const : "info" as const
+        },
+        {
+          label: "Linked accounts",
+          value: formatNumber(linkedAccountCount),
+          note: "Accounts tied to your pipeline",
+          icon: Building2,
+          tone: "info" as const
+        }
+      ]
+    : [
+        {
+          label: "Open pipeline",
+          value: formatCurrency(openPipeline),
+          note: `${formatNumber(openOpportunities.length)} open opportunities`,
+          icon: CircleDollarSign,
+          tone: "success" as const
+        },
+        {
+          label: "Weighted forecast",
+          value: formatCurrency(weightedForecast),
+          note: "Amount weighted by probability",
+          icon: TrendingUp,
+          tone: "info" as const
+        },
+        {
+          label: "Proposal stage",
+          value: formatNumber(proposalOpportunities.length),
+          note: "Late-stage active opportunities",
+          icon: Calendar,
+          tone: proposalOpportunities.length ? "warning" as const : "info" as const
+        },
+        {
+          label: "Closed won",
+          value: formatNumber(wonOpportunities.length),
+          note: `${formatCurrency(wonOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0))} retained in history`,
+          icon: CircleDollarSign,
+          tone: "success" as const
+        }
+      ];
 
-  const lanes = [
-    {
-      label: "Open deals",
-      value: openOpportunities.length,
-      note: formatCurrency(openPipeline),
-      icon: CircleDollarSign,
-      tone: "success" as const
-    },
-    {
-      label: "Proposal",
-      value: proposalOpportunities.length,
-      note: "Late stage",
-      icon: Calendar,
-      tone: proposalOpportunities.length ? "warning" as const : "info" as const
-    },
-    {
-      label: "Stage columns",
-      value: stageRows.filter((row) => row.count > 0).length,
-      note: "Active pipeline stages",
-      icon: SlidersHorizontal,
-      tone: "info" as const
-    },
-    {
-      label: "Forecast fields",
-      value: opportunityFields.length,
-      note: "Custom CRM fields",
-      icon: TrendingUp,
-      tone: "info" as const
-    }
-  ];
+  const lanes = isSdr
+    ? [
+        {
+          label: "Follow-up work",
+          value: openTaskCount,
+          note: "Open tasks on your deals",
+          icon: Calendar,
+          tone: openTaskCount ? "warning" as const : "success" as const
+        },
+        {
+          label: "Proposal",
+          value: proposalOpportunities.length,
+          note: "Late-stage deals",
+          icon: Calendar,
+          tone: proposalOpportunities.length ? "warning" as const : "info" as const
+        },
+        {
+          label: "Accounts",
+          value: linkedAccountCount,
+          note: "Account context",
+          icon: Building2,
+          tone: "info" as const
+        },
+        {
+          label: "Won",
+          value: wonOpportunities.length,
+          note: "Closed-won history",
+          icon: CircleDollarSign,
+          tone: "success" as const
+        }
+      ]
+    : [
+        {
+          label: "Open deals",
+          value: openOpportunities.length,
+          note: formatCurrency(openPipeline),
+          icon: CircleDollarSign,
+          tone: "success" as const
+        },
+        {
+          label: "Proposal",
+          value: proposalOpportunities.length,
+          note: "Late stage",
+          icon: Calendar,
+          tone: proposalOpportunities.length ? "warning" as const : "info" as const
+        },
+        {
+          label: "Stage columns",
+          value: stageRows.filter((row) => row.count > 0).length,
+          note: "Active pipeline stages",
+          icon: SlidersHorizontal,
+          tone: "info" as const
+        },
+        {
+          label: "Forecast fields",
+          value: opportunityFields.length,
+          note: "Custom CRM fields",
+          icon: TrendingUp,
+          tone: "info" as const
+        }
+      ];
 
   return (
     <>
       <PageHeader
         kicker="Sales CRM"
-        title="Opportunities"
-        copy="A focused pipeline workspace for managers and SDRs: review deal value, stage health, forecast, next activity, and move opportunities without touching backend settings."
+        title={isSdr ? "My opportunity context" : "Opportunities"}
+        copy={
+          isSdr
+            ? "A simple view of the deals tied to your assigned accounts, with stage, value, next activity, and account links."
+            : "A focused pipeline workspace for managers and SDRs: review deal value, stage health, forecast, next activity, and move opportunities without touching backend settings."
+        }
         actions={
           <>
             <Link href="/crm/accounts" className="button secondary">
               <Building2 size={17} aria-hidden="true" />
               Accounts
             </Link>
-            <a href="#create-opportunity" className="button primary">
-              <CircleDollarSign size={17} aria-hidden="true" />
-              Add opportunity
-            </a>
+            {isSdr ? (
+              <Link href="/sdr/queue" className="button primary">
+                <Users size={17} aria-hidden="true" />
+                My queue
+              </Link>
+            ) : (
+              <a href="#create-opportunity" className="button primary">
+                <CircleDollarSign size={17} aria-hidden="true" />
+                Add opportunity
+              </a>
+            )}
           </>
         }
       />
@@ -191,8 +267,12 @@ export default async function OpportunitiesPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Pipeline focus</h2>
-              <p className="section-subtitle">Highest-value open opportunities with stage, owner, and last activity.</p>
+              <h2 className="section-title">{isSdr ? "My deal focus" : "Pipeline focus"}</h2>
+              <p className="section-subtitle">
+                {isSdr
+                  ? "Assigned opportunities sorted by value and probability, with the account path one click away."
+                  : "Highest-value open opportunities with stage, owner, and last activity."}
+              </p>
             </div>
             <StatusPill label={`${focusOpportunities.length} focus`} tone="info" />
           </div>
@@ -203,7 +283,7 @@ export default async function OpportunitiesPage() {
                   <th>Opportunity</th>
                   <th>Stage</th>
                   <th>Amount</th>
-                  <th>Owner</th>
+                  {!isSdr ? <th>Owner</th> : null}
                   <th>Activity</th>
                 </tr>
               </thead>
@@ -221,10 +301,15 @@ export default async function OpportunitiesPage() {
                       <StatusPill label={opportunity.stage} tone={statusTone(opportunity.stage)} />
                     </td>
                     <td>{formatCurrency(opportunity.amount)}</td>
-                    <td>{opportunity.owner}</td>
+                    {!isSdr ? <td>{opportunity.owner}</td> : null}
                     <td>{opportunity.lastActivity}</td>
                   </tr>
                 ))}
+                {focusOpportunities.length === 0 ? (
+                  <tr>
+                    <td colSpan={isSdr ? 4 : 5}>No open opportunities are assigned right now.</td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -234,7 +319,9 @@ export default async function OpportunitiesPage() {
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Stage health</h2>
-              <p className="section-subtitle">Open and closed stages by count, value, and weighted value.</p>
+              <p className="section-subtitle">
+                {isSdr ? "Where your assigned deals sit today." : "Open and closed stages by count, value, and weighted value."}
+              </p>
             </div>
             <SlidersHorizontal size={20} aria-hidden="true" />
           </div>
@@ -259,8 +346,12 @@ export default async function OpportunitiesPage() {
       <section className="panel">
         <div className="panel-header">
           <div className="panel-title-wrap">
-            <h2 className="section-title">Stage board</h2>
-            <p className="section-subtitle">Move opportunities between stages without opening the full account record.</p>
+            <h2 className="section-title">{isSdr ? "Stage board" : "Stage board"}</h2>
+            <p className="section-subtitle">
+              {isSdr
+                ? "A read-only stage view for your assigned deals. Managers can move stages from their pipeline controls."
+                : "Move opportunities between stages without opening the full account record."}
+            </p>
           </div>
           <StatusPill label={`${formatNumber(opportunities.length)} opportunities`} tone="info" />
         </div>
@@ -290,19 +381,23 @@ export default async function OpportunitiesPage() {
                       <StatusPill label={formatCurrency(opportunity.amount)} tone="info" />
                       <StatusPill label={`${opportunity.openTasks} tasks`} tone={opportunity.openTasks ? "warning" : "success"} />
                     </div>
-                    <form action={updateOpportunityStageAction} className="inline-form">
-                      <input name="id" type="hidden" value={opportunity.id} />
-                      <select name="stage" defaultValue={opportunity.stage} aria-label="Stage">
-                        {opportunityStages.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      <button className="icon-button" type="submit" aria-label="Save stage">
-                        <Save size={16} aria-hidden="true" />
-                      </button>
-                    </form>
+                    {isSdr ? (
+                      <p className="section-subtitle">Next: {opportunity.lastActivity}</p>
+                    ) : (
+                      <form action={updateOpportunityStageAction} className="inline-form">
+                        <input name="id" type="hidden" value={opportunity.id} />
+                        <select name="stage" defaultValue={opportunity.stage} aria-label="Stage">
+                          {opportunityStages.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <button className="icon-button" type="submit" aria-label="Save stage">
+                          <Save size={16} aria-hidden="true" />
+                        </button>
+                      </form>
+                    )}
                     <Link href={`/crm/accounts/${opportunity.companyId}`} className="button secondary">
                       <ArrowRight size={16} aria-hidden="true" />
                       Account
@@ -315,6 +410,7 @@ export default async function OpportunitiesPage() {
         </div>
       </section>
 
+      {!isSdr ? (
       <section className="grid two">
         <div className="panel" id="create-opportunity">
           <div className="panel-header">
@@ -455,12 +551,17 @@ export default async function OpportunitiesPage() {
           </form>
         </div>
       </section>
+      ) : null}
 
       <section className="panel">
         <div className="panel-header">
           <div className="panel-title-wrap">
-            <h2 className="section-title">Opportunity directory</h2>
-            <p className="section-subtitle">Pipeline records with account, contact, source, owner, and custom forecast fields.</p>
+            <h2 className="section-title">{isSdr ? "My opportunity list" : "Opportunity directory"}</h2>
+            <p className="section-subtitle">
+              {isSdr
+                ? "Assigned pipeline records with the account, stage, value, close date, and latest activity."
+                : "Pipeline records with account, contact, source, owner, and custom forecast fields."}
+            </p>
           </div>
           <StatusPill label={`${formatNumber(opportunities.length)} records`} tone="info" />
         </div>
@@ -473,8 +574,8 @@ export default async function OpportunitiesPage() {
                 <th>Stage</th>
                 <th>Amount</th>
                 <th>Close</th>
-                <th>Owner</th>
-                <th>Fields</th>
+                {!isSdr ? <th>Owner</th> : null}
+                {!isSdr ? <th>Fields</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -501,19 +602,26 @@ export default async function OpportunitiesPage() {
                     </td>
                     <td>{formatCurrency(opportunity.amount)}</td>
                     <td>{opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : "Not set"}</td>
-                    <td>{opportunity.owner}</td>
-                    <td>
-                      <div className="chip-row">
-                        {opportunityFields.map((field) => (
-                          <span className="pill" key={field.id}>
-                            {field.name}: {fieldMap.get(field.id)?.value ?? "Unset"}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
+                    {!isSdr ? <td>{opportunity.owner}</td> : null}
+                    {!isSdr ? (
+                      <td>
+                        <div className="chip-row">
+                          {opportunityFields.map((field) => (
+                            <span className="pill" key={field.id}>
+                              {field.name}: {fieldMap.get(field.id)?.value ?? "Unset"}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}
+              {opportunities.length === 0 ? (
+                <tr>
+                  <td colSpan={isSdr ? 5 : 7}>No opportunities are available in this view.</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

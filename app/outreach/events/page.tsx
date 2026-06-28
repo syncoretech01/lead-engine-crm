@@ -91,6 +91,7 @@ export default async function OutreachEventsPage() {
   }
 
   const canManageOutreach = session.permissions.includes("manage_outreach");
+  const isSdr = session.role === "SDR";
 
   const emailReplies = snapshot.emailEvents.filter((event) => event.eventType === "Replied");
   const smsReplies = snapshot.smsEvents.filter((event) => event.status === "Replied");
@@ -107,83 +108,156 @@ export default async function OutreachEventsPage() {
     .filter((event) => isResponseStatus(event.status))
     .slice(0, 10);
 
-  const metrics = [
-    {
-      label: "Responses",
-      value: formatNumber(responseCount),
-      note: `${formatNumber(emailReplies.length)} email, ${formatNumber(smsReplies.length)} SMS, ${formatNumber(callWins.length)} calls`,
-      icon: Mail,
-      tone: responseCount ? "success" as const : "info" as const
-    },
-    {
-      label: "Hard stops",
-      value: formatNumber(hardStops.length),
-      note: "Bounces, unsubscribes, complaints, and SMS opt-outs",
-      icon: AlertTriangle,
-      tone: hardStops.length ? "danger" as const : "success" as const
-    },
-    {
-      label: "SMS events",
-      value: formatNumber(snapshot.smsEvents.length),
-      note: "RingCentral Local delivery and replies",
-      icon: MessageSquare,
-      tone: "info" as const
-    },
-    {
-      label: "Recorded calls",
-      value: formatNumber(snapshot.calls.length),
-      note: `${formatNumber(callsWithRecordings.length)} with recordings`,
-      icon: Phone,
-      tone: callsWithRecordings.length ? "success" as const : "info" as const
-    }
-  ];
+  const metrics = isSdr
+    ? [
+        {
+          label: "My responses",
+          value: formatNumber(responseCount),
+          note: `${formatNumber(emailReplies.length)} email, ${formatNumber(smsReplies.length)} SMS, ${formatNumber(callWins.length)} call wins`,
+          icon: Mail,
+          tone: responseCount ? "success" as const : "info" as const
+        },
+        {
+          label: "Stops",
+          value: formatNumber(hardStops.length),
+          note: "People who should not receive more outreach",
+          icon: AlertTriangle,
+          tone: hardStops.length ? "danger" as const : "success" as const
+        },
+        {
+          label: "SMS activity",
+          value: formatNumber(snapshot.smsEvents.length),
+          note: "Delivery, replies, and failures",
+          icon: MessageSquare,
+          tone: "info" as const
+        },
+        {
+          label: "Calls logged",
+          value: formatNumber(snapshot.calls.length),
+          note: `${formatNumber(callsWithRecordings.length)} with recordings`,
+          icon: Phone,
+          tone: callsWithRecordings.length ? "success" as const : "info" as const
+        }
+      ]
+    : [
+        {
+          label: "Responses",
+          value: formatNumber(responseCount),
+          note: `${formatNumber(emailReplies.length)} email, ${formatNumber(smsReplies.length)} SMS, ${formatNumber(callWins.length)} calls`,
+          icon: Mail,
+          tone: responseCount ? "success" as const : "info" as const
+        },
+        {
+          label: "Hard stops",
+          value: formatNumber(hardStops.length),
+          note: "Bounces, unsubscribes, complaints, and SMS opt-outs",
+          icon: AlertTriangle,
+          tone: hardStops.length ? "danger" as const : "success" as const
+        },
+        {
+          label: "SMS events",
+          value: formatNumber(snapshot.smsEvents.length),
+          note: "RingCentral Local delivery and replies",
+          icon: MessageSquare,
+          tone: "info" as const
+        },
+        {
+          label: "Recorded calls",
+          value: formatNumber(snapshot.calls.length),
+          note: `${formatNumber(callsWithRecordings.length)} with recordings`,
+          icon: Phone,
+          tone: callsWithRecordings.length ? "success" as const : "info" as const
+        }
+      ];
 
-  const lanes = [
-    {
-      label: "Email replies",
-      value: emailReplies.length,
-      note: "Replies to route back to SDRs",
-      icon: Mail,
-      tone: emailReplies.length ? "success" as const : "info" as const
-    },
-    {
-      label: "SMS replies",
-      value: smsReplies.length,
-      note: "Inbound SMS responses",
-      icon: MessageSquare,
-      tone: smsReplies.length ? "success" as const : "info" as const
-    },
-    {
-      label: "Call wins",
-      value: callWins.length,
-      note: "Interested or meeting booked",
-      icon: Phone,
-      tone: callWins.length ? "success" as const : "info" as const
-    },
-    {
-      label: "Suppression risk",
-      value: hardStops.length,
-      note: "Hard stops and opt-outs",
-      icon: AlertTriangle,
-      tone: hardStops.length ? "warning" as const : "success" as const
-    }
-  ];
+  const lanes = isSdr
+    ? [
+        {
+          label: "Email replies",
+          value: emailReplies.length,
+          note: "People to follow up with",
+          icon: Mail,
+          tone: emailReplies.length ? "success" as const : "info" as const
+        },
+        {
+          label: "SMS replies",
+          value: smsReplies.length,
+          note: "Inbound text responses",
+          icon: MessageSquare,
+          tone: smsReplies.length ? "success" as const : "info" as const
+        },
+        {
+          label: "Call wins",
+          value: callWins.length,
+          note: "Interested or meeting booked",
+          icon: Phone,
+          tone: callWins.length ? "success" as const : "info" as const
+        },
+        {
+          label: "Do-not-contact",
+          value: hardStops.length,
+          note: "Suppressed from future outreach",
+          icon: AlertTriangle,
+          tone: hardStops.length ? "warning" as const : "success" as const
+        }
+      ]
+    : [
+        {
+          label: "Email replies",
+          value: emailReplies.length,
+          note: "Replies to route back to SDRs",
+          icon: Mail,
+          tone: emailReplies.length ? "success" as const : "info" as const
+        },
+        {
+          label: "SMS replies",
+          value: smsReplies.length,
+          note: "Inbound SMS responses",
+          icon: MessageSquare,
+          tone: smsReplies.length ? "success" as const : "info" as const
+        },
+        {
+          label: "Call wins",
+          value: callWins.length,
+          note: "Interested or meeting booked",
+          icon: Phone,
+          tone: callWins.length ? "success" as const : "info" as const
+        },
+        {
+          label: "Suppression risk",
+          value: hardStops.length,
+          note: "Hard stops and opt-outs",
+          icon: AlertTriangle,
+          tone: hardStops.length ? "warning" as const : "success" as const
+        }
+      ];
 
   return (
     <>
       <PageHeader
         kicker="CRM outreach"
-        title="Outreach event tracking"
-        copy="A CRM-facing activity monitor for replies, bounces, opt-outs, SMS delivery, call recordings, and webhook processing. Provider configuration stays in the developer view."
+        title={isSdr ? "My outreach activity" : "Outreach event tracking"}
+        copy={
+          isSdr
+            ? "Track replies, stops, SMS activity, and call outcomes for your assigned contacts."
+            : "A CRM-facing activity monitor for replies, bounces, opt-outs, SMS delivery, call recordings, and webhook processing. Provider configuration stays in the developer view."
+        }
         actions={
           <>
-            <Link href="/outreach/campaigns" className="button secondary">
-              <ArrowRight size={17} aria-hidden="true" />
-              Campaigns
-            </Link>
+            {isSdr ? (
+              <Link href="/crm/contacts" className="button secondary">
+                <ArrowRight size={17} aria-hidden="true" />
+                Contacts
+              </Link>
+            ) : (
+              <Link href="/outreach/campaigns" className="button secondary">
+                <ArrowRight size={17} aria-hidden="true" />
+                Campaigns
+              </Link>
+            )}
             <Link href="/sdr/queue" className="button primary">
               <Send size={17} aria-hidden="true" />
-              SDR queue
+              {isSdr ? "My queue" : "SDR queue"}
             </Link>
           </>
         }
@@ -205,8 +279,12 @@ export default async function OutreachEventsPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Response stream</h2>
-              <p className="section-subtitle">Recent replies and positive call outcomes that need SDR follow-up.</p>
+              <h2 className="section-title">{isSdr ? "My response stream" : "Response stream"}</h2>
+              <p className="section-subtitle">
+                {isSdr
+                  ? "Recent replies and positive call outcomes from assigned contacts."
+                  : "Recent replies and positive call outcomes that need SDR follow-up."}
+              </p>
             </div>
             <StatusPill label={`${responseRows.length} visible`} tone={responseRows.length ? "success" : "info"} />
           </div>
@@ -235,8 +313,10 @@ export default async function OutreachEventsPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Deliverability stops</h2>
-              <p className="section-subtitle">Events that suppress or block future outreach.</p>
+              <h2 className="section-title">{isSdr ? "Do-not-contact stops" : "Deliverability stops"}</h2>
+              <p className="section-subtitle">
+                {isSdr ? "Contacts that should not receive more outreach." : "Events that suppress or block future outreach."}
+              </p>
             </div>
             <StatusPill label={`${hardStops.length} stops`} tone={hardStops.length ? "danger" : "success"} />
           </div>
@@ -279,7 +359,11 @@ export default async function OutreachEventsPage() {
         <div className="panel-header">
           <div className="panel-title-wrap">
             <h2 className="section-title">Event stream</h2>
-            <p className="section-subtitle">Combined email, SMS, and voice activity sorted by newest event timestamp.</p>
+            <p className="section-subtitle">
+              {isSdr
+                ? "Your assigned email, SMS, and call activity sorted by newest event."
+                : "Combined email, SMS, and voice activity sorted by newest event timestamp."}
+            </p>
           </div>
           <StatusPill label={`${eventRows.length} latest`} tone="info" />
         </div>
@@ -290,7 +374,7 @@ export default async function OutreachEventsPage() {
                 <th>Contact</th>
                 <th>Channel</th>
                 <th>Status</th>
-                <th>Campaign</th>
+                {!isSdr ? <th>Campaign</th> : null}
                 <th>Detail</th>
                 <th>When</th>
               </tr>
@@ -308,14 +392,14 @@ export default async function OutreachEventsPage() {
                   <td>
                     <StatusPill label={event.status} tone={statusTone(event.status)} />
                   </td>
-                  <td>{event.campaignName ?? "No campaign"}</td>
+                  {!isSdr ? <td>{event.campaignName ?? "No campaign"}</td> : null}
                   <td>{event.detail}</td>
                   <td>{formatDate(event.timestamp)}</td>
                 </tr>
               ))}
               {eventRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>No outreach events have been recorded yet.</td>
+                  <td colSpan={isSdr ? 5 : 6}>No outreach events have been recorded yet.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -328,7 +412,9 @@ export default async function OutreachEventsPage() {
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">SMS events</h2>
-              <p className="section-subtitle">RingCentral Local delivery, replies, failures, and STOP handling.</p>
+              <p className="section-subtitle">
+                {isSdr ? "Text delivery, replies, failures, and opt-outs." : "RingCentral Local delivery, replies, failures, and STOP handling."}
+              </p>
             </div>
             <MessageSquare size={20} aria-hidden="true" />
           </div>
@@ -375,7 +461,9 @@ export default async function OutreachEventsPage() {
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Call recordings</h2>
-              <p className="section-subtitle">Voice events with recording metadata, consent, summary, and next step.</p>
+              <p className="section-subtitle">
+                {isSdr ? "Logged calls with outcome, summary, recording, and next step." : "Voice events with recording metadata, consent, summary, and next step."}
+              </p>
             </div>
             <Phone size={20} aria-hidden="true" />
           </div>
