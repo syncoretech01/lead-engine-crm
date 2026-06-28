@@ -54,12 +54,14 @@ export default async function AccountsPage() {
       ? opportunityViews(readState, workspaceId).filter((opportunity) => opportunity.ownerUserId === session.user.id)
       : opportunityViews(readState, workspaceId);
   }
+  const isSdr = session.role === "SDR";
   const openOpportunities = opportunities.filter(
     (opportunity) => opportunity.stage !== "Closed won" && opportunity.stage !== "Closed lost"
   );
   const openPipeline = openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
   const taskAccounts = accounts.filter((account) => account.openTasks > 0);
   const p1Accounts = accounts.filter((account) => account.priority === "P1");
+  const totalContacts = accounts.reduce((total, account) => total + account.contacts, 0);
   const stageRows = opportunityStages
     .map((stage) => {
       const stageAccounts = accounts.filter((account) => account.stage === stage);
@@ -76,25 +78,18 @@ export default async function AccountsPage() {
 
   const metrics = [
     {
-      label: "CRM accounts",
+      label: isSdr ? "My accounts" : "CRM accounts",
       value: formatNumber(accounts.length),
-      note: `${formatNumber(accounts.reduce((total, account) => total + account.contacts, 0))} linked contacts`,
+      note: `${formatNumber(totalContacts)} linked contacts`,
       icon: Building2,
       tone: "info" as const
     },
     {
-      label: "P1 accounts",
-      value: formatNumber(p1Accounts.length),
-      note: "Highest-priority account focus",
-      icon: Target,
-      tone: p1Accounts.length ? "success" as const : "info" as const
-    },
-    {
-      label: "Open pipeline",
-      value: formatCurrency(openPipeline),
-      note: `${formatNumber(openOpportunities.length)} open opportunities`,
-      icon: CircleDollarSign,
-      tone: "success" as const
+      label: isSdr ? "Contacts" : "P1 accounts",
+      value: formatNumber(isSdr ? totalContacts : p1Accounts.length),
+      note: isSdr ? "People tied to these accounts" : "Highest-priority account focus",
+      icon: isSdr ? Users : Target,
+      tone: p1Accounts.length || isSdr ? "success" as const : "info" as const
     },
     {
       label: "Accounts with tasks",
@@ -102,6 +97,13 @@ export default async function AccountsPage() {
       note: "Open account or contact work",
       icon: ClipboardList,
       tone: taskAccounts.length ? "warning" as const : "success" as const
+    },
+    {
+      label: isSdr ? "Priority accounts" : "Open pipeline",
+      value: isSdr ? formatNumber(p1Accounts.length) : formatCurrency(openPipeline),
+      note: isSdr ? "Highest account priority" : `${formatNumber(openOpportunities.length)} open opportunities`,
+      icon: isSdr ? Target : CircleDollarSign,
+      tone: p1Accounts.length || !isSdr ? "success" as const : "info" as const
     }
   ];
 
@@ -121,11 +123,11 @@ export default async function AccountsPage() {
       tone: taskAccounts.length ? "warning" as const : "success" as const
     },
     {
-      label: "Open deals",
-      value: openOpportunities.length,
-      note: formatCurrency(openPipeline),
-      icon: CircleDollarSign,
-      tone: "success" as const
+      label: isSdr ? "Contacts" : "Open deals",
+      value: isSdr ? totalContacts : openOpportunities.length,
+      note: isSdr ? "Linked to accounts" : formatCurrency(openPipeline),
+      icon: isSdr ? Users : CircleDollarSign,
+      tone: isSdr ? "info" as const : "success" as const
     },
     {
       label: "Sources",
@@ -140,17 +142,21 @@ export default async function AccountsPage() {
     <>
       <PageHeader
         kicker="Sales CRM"
-        title="Accounts"
-        copy="A clean account workspace for SDRs and managers: spot priority companies, see pipeline stage health, and open the right account without digging through backend details."
+        title={isSdr ? "My accounts" : "Accounts"}
+        copy={
+          isSdr
+            ? "Assigned account context for the people you are working: contacts, tasks, priority, and recent activity."
+            : "A clean account workspace for SDRs and managers: spot priority companies, see pipeline stage health, and open the right account without digging through backend details."
+        }
         actions={
           <>
-            <Link href="/crm" className="button secondary">
-              <BarChart3 size={17} aria-hidden="true" />
-              CRM workspace
+            <Link href={isSdr ? "/crm/contacts" : "/crm"} className="button secondary">
+              {isSdr ? <Users size={17} aria-hidden="true" /> : <BarChart3 size={17} aria-hidden="true" />}
+              {isSdr ? "Contacts" : "CRM workspace"}
             </Link>
-            <Link href="/crm/opportunities" className="button primary">
-              <CircleDollarSign size={17} aria-hidden="true" />
-              Pipeline
+            <Link href={isSdr ? "/sdr/queue" : "/crm/opportunities"} className="button primary">
+              {isSdr ? <ClipboardList size={17} aria-hidden="true" /> : <CircleDollarSign size={17} aria-hidden="true" />}
+              {isSdr ? "My queue" : "Pipeline"}
             </Link>
           </>
         }
@@ -172,8 +178,12 @@ export default async function AccountsPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Account watchlist</h2>
-              <p className="section-subtitle">Accounts with open work, high priority, or strong score should be handled first.</p>
+              <h2 className="section-title">{isSdr ? "Account focus" : "Account watchlist"}</h2>
+              <p className="section-subtitle">
+                {isSdr
+                  ? "Accounts with assigned contacts, open work, or high priority appear first."
+                  : "Accounts with open work, high priority, or strong score should be handled first."}
+              </p>
             </div>
             <StatusPill label={`${watchlist.length} focus`} tone="info" />
           </div>
@@ -182,10 +192,10 @@ export default async function AccountsPage() {
               <thead>
                 <tr>
                   <th>Account</th>
-                  <th>Owner</th>
+                  {!isSdr ? <th>Owner</th> : null}
                   <th>Stage</th>
-                  <th>Tasks</th>
-                  <th>Score</th>
+                  <th>{isSdr ? "Contacts" : "Tasks"}</th>
+                  <th>{isSdr ? "Next action" : "Score"}</th>
                 </tr>
               </thead>
               <tbody>
@@ -198,14 +208,24 @@ export default async function AccountsPage() {
                         <span>{account.source}</span>
                       </Link>
                     </td>
-                    <td>{account.owner}</td>
+                    {!isSdr ? <td>{account.owner}</td> : null}
                     <td>
                       <StatusPill label={account.stage} tone={statusTone(account.stage)} />
                     </td>
                     <td>
-                      <StatusPill label={`${account.openTasks}`} tone={account.openTasks ? "warning" : "success"} />
+                      {isSdr ? (
+                        formatNumber(account.contacts)
+                      ) : (
+                        <StatusPill label={`${account.openTasks}`} tone={account.openTasks ? "warning" : "success"} />
+                      )}
                     </td>
-                    <td>{account.score}</td>
+                    <td>
+                      {isSdr ? (
+                        <StatusPill label={accountNextAction(account).label} tone={accountNextAction(account).tone} />
+                      ) : (
+                        account.score
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -213,78 +233,142 @@ export default async function AccountsPage() {
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Stage overview</h2>
-              <p className="section-subtitle">Account distribution by active opportunity stage.</p>
-            </div>
-            <CircleDollarSign size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
-            {stageRows.map((row) => (
-              <div className="stage-row" key={row.stage}>
-                <div className="stage-meta">
-                  <strong>{row.stage}</strong>
-                  <StatusPill label={`${formatNumber(row.count)} accounts`} tone={statusTone(row.stage)} />
-                </div>
-                <ProgressBar value={Math.round((row.count / maxStageCount) * 100)} />
-                <div className="row-meta">
-                  <span>{formatCurrency(row.amount)}</span>
-                  <span>{Math.round((row.count / accounts.length) * 100)}% of accounts</span>
-                </div>
+        {isSdr ? (
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-title-wrap">
+                <h2 className="section-title">Account coverage</h2>
+                <p className="section-subtitle">A quick split of the accounts and contacts in your current scope.</p>
               </div>
-            ))}
+              <Users size={20} aria-hidden="true" />
+            </div>
+            <div className="panel-body stage-list">
+              <div className="stage-row">
+                <div className="stage-meta">
+                  <strong>Accounts with contacts</strong>
+                  <StatusPill label={`${formatNumber(accounts.filter((account) => account.contacts > 0).length)} accounts`} tone="info" />
+                </div>
+                <ProgressBar value={accounts.length ? Math.round((accounts.filter((account) => account.contacts > 0).length / accounts.length) * 100) : 0} />
+              </div>
+              <div className="stage-row">
+                <div className="stage-meta">
+                  <strong>Open work</strong>
+                  <StatusPill label={`${formatNumber(taskAccounts.length)} accounts`} tone={taskAccounts.length ? "warning" : "success"} />
+                </div>
+                <ProgressBar value={accounts.length ? Math.round((taskAccounts.length / accounts.length) * 100) : 0} />
+              </div>
+              <div className="stage-row">
+                <div className="stage-meta">
+                  <strong>Priority focus</strong>
+                  <StatusPill label={`${formatNumber(p1Accounts.length)} accounts`} tone={p1Accounts.length ? "success" : "info"} />
+                </div>
+                <ProgressBar value={accounts.length ? Math.round((p1Accounts.length / accounts.length) * 100) : 0} />
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-title-wrap">
+                <h2 className="section-title">Stage overview</h2>
+                <p className="section-subtitle">Account distribution by active opportunity stage.</p>
+              </div>
+              <CircleDollarSign size={20} aria-hidden="true" />
+            </div>
+            <div className="panel-body stage-list">
+              {stageRows.map((row) => (
+                <div className="stage-row" key={row.stage}>
+                  <div className="stage-meta">
+                    <strong>{row.stage}</strong>
+                    <StatusPill label={`${formatNumber(row.count)} accounts`} tone={statusTone(row.stage)} />
+                  </div>
+                  <ProgressBar value={Math.round((row.count / maxStageCount) * 100)} />
+                  <div className="row-meta">
+                    <span>{formatCurrency(row.amount)}</span>
+                    <span>{Math.round((row.count / accounts.length) * 100)}% of accounts</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Source mix</h2>
-              <p className="section-subtitle">Where CRM accounts came from, kept visible for attribution and list quality review.</p>
-            </div>
-            <Target size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
-            {sourceRows.map((row) => (
-              <div className="list-row" key={row.source}>
-                <div className="row-meta">
-                  <strong>{row.source}</strong>
-                  <StatusPill label={`${formatNumber(row.count)} accounts`} tone="info" />
-                </div>
-                <p className="section-subtitle">
-                  {formatNumber(row.contacts)} contacts, average score {row.averageScore}.
-                </p>
+        {isSdr ? (
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-title-wrap">
+                <h2 className="section-title">Recent account context</h2>
+                <p className="section-subtitle">The accounts you are most likely to open while working your queue.</p>
               </div>
-            ))}
+              <Target size={20} aria-hidden="true" />
+            </div>
+            <div className="panel-body stage-list">
+              {watchlist.slice(0, 4).map((account) => (
+                <div className="list-row" key={account.id}>
+                  <div className="row-meta">
+                    <strong>{account.name}</strong>
+                    <StatusPill label={accountNextAction(account).label} tone={accountNextAction(account).tone} />
+                  </div>
+                  <p className="section-subtitle">
+                    {formatNumber(account.contacts)} contacts, score {account.score}, {account.lastActivity}.
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-title-wrap">
+                <h2 className="section-title">Source mix</h2>
+                <p className="section-subtitle">Where CRM accounts came from, kept visible for attribution and list quality review.</p>
+              </div>
+              <Target size={20} aria-hidden="true" />
+            </div>
+            <div className="panel-body stage-list">
+              {sourceRows.map((row) => (
+                <div className="list-row" key={row.source}>
+                  <div className="row-meta">
+                    <strong>{row.source}</strong>
+                    <StatusPill label={`${formatNumber(row.count)} accounts`} tone="info" />
+                  </div>
+                  <p className="section-subtitle">
+                    {formatNumber(row.contacts)} contacts, average score {row.averageScore}.
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Account actions</h2>
-              <p className="section-subtitle">Shortcuts for the CRM work around account records.</p>
+              <p className="section-subtitle">
+                {isSdr ? "Fast paths back to daily contact work." : "Shortcuts for the CRM work around account records."}
+              </p>
             </div>
             <ArrowRight size={20} aria-hidden="true" />
           </div>
-          <div className="panel-body grid three">
+          <div className={`panel-body grid ${isSdr ? "two" : "three"}`}>
             <Link href="/crm/contacts" className="item-card compact-profile-card">
               <Users size={22} aria-hidden="true" />
               <h3 className="card-title">Contacts</h3>
               <p className="section-subtitle">Open people linked to CRM accounts.</p>
             </Link>
-            <Link href="/crm/opportunities" className="item-card compact-profile-card">
-              <CircleDollarSign size={22} aria-hidden="true" />
-              <h3 className="card-title">Pipeline</h3>
-              <p className="section-subtitle">Review stage, amount, owner, and forecast.</p>
-            </Link>
+            {!isSdr ? (
+              <Link href="/crm/opportunities" className="item-card compact-profile-card">
+                <CircleDollarSign size={22} aria-hidden="true" />
+                <h3 className="card-title">Pipeline</h3>
+                <p className="section-subtitle">Review stage, amount, owner, and forecast.</p>
+              </Link>
+            ) : null}
             <Link href="/sdr/queue" className="item-card compact-profile-card">
               <ClipboardList size={22} aria-hidden="true" />
-              <h3 className="card-title">SDR queue</h3>
+              <h3 className="card-title">{isSdr ? "My queue" : "SDR queue"}</h3>
               <p className="section-subtitle">Work assigned contacts from account context.</p>
             </Link>
           </div>
@@ -295,7 +379,11 @@ export default async function AccountsPage() {
         <div className="panel-header">
           <div className="panel-title-wrap">
             <h2 className="section-title">Account directory</h2>
-            <p className="section-subtitle">A compact account table for scanning owner, stage, activity, and source context.</p>
+            <p className="section-subtitle">
+              {isSdr
+                ? "A compact list of accounts tied to your visible contacts."
+                : "A compact account table for scanning owner, stage, activity, and source context."}
+            </p>
           </div>
           <StatusPill label={`${formatNumber(accounts.length)} accounts`} tone="info" />
         </div>
@@ -304,11 +392,11 @@ export default async function AccountsPage() {
             <thead>
               <tr>
                 <th>Account</th>
-                <th>Owner</th>
+                {!isSdr ? <th>Owner</th> : null}
                 <th>Stage</th>
                 <th>Contacts</th>
                 <th>Open work</th>
-                <th>Pipeline</th>
+                {!isSdr ? <th>Pipeline</th> : null}
                 <th>Source</th>
               </tr>
             </thead>
@@ -322,7 +410,7 @@ export default async function AccountsPage() {
                       <span>{account.location || account.industry}</span>
                     </Link>
                   </td>
-                  <td>{account.owner}</td>
+                  {!isSdr ? <td>{account.owner}</td> : null}
                   <td>
                     <StatusPill label={account.stage} tone={statusTone(account.stage)} />
                   </td>
@@ -333,7 +421,7 @@ export default async function AccountsPage() {
                       <span>{account.lastActivity}</span>
                     </div>
                   </td>
-                  <td>{formatCurrency(account.amount)}</td>
+                  {!isSdr ? <td>{formatCurrency(account.amount)}</td> : null}
                   <td>{account.source}</td>
                 </tr>
               ))}
@@ -346,6 +434,22 @@ export default async function AccountsPage() {
 }
 
 type AccountView = FastCrmAccountView;
+
+function accountNextAction(account: AccountView): { label: string; tone: "success" | "info" | "warning" | "danger" } {
+  if (account.openTasks > 0) {
+    return { label: "Work task", tone: "warning" };
+  }
+
+  if (account.contacts > 0) {
+    return { label: "Open contacts", tone: "info" };
+  }
+
+  if (account.amount > 0) {
+    return { label: "Review account", tone: "info" };
+  }
+
+  return { label: "Review", tone: "warning" };
+}
 
 
 function sourceSummary(accounts: AccountView[]) {
