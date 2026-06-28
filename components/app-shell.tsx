@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { syncoreBrand } from "@/lib/brand";
-import type { Permission, Session } from "@/lib/phase1/types";
+import type { Permission, Session, WorkspaceRole } from "@/lib/phase1/types";
 import {
   canUseCrmWorkspace,
   canUseDeveloperWorkspace,
@@ -43,9 +43,11 @@ type WorkspaceViewId = "lead-generation" | "crm" | "developer";
 type NavItem = {
   href: string;
   label: string;
+  sdrLabel?: string;
   icon: LucideIcon;
   permission: Permission;
   exact?: boolean;
+  visibleForRoles?: WorkspaceRole[];
 };
 
 type WorkspaceView = {
@@ -87,14 +89,33 @@ const workspaceViews = [
     description: "Accounts, contacts, opportunities, SDR work, and outreach.",
     canAccess: canUseCrmWorkspace,
     items: [
-      { href: "/crm", label: "CRM Dashboard", icon: LayoutDashboard, permission: "view_records", exact: true },
+      {
+        href: "/crm",
+        label: "CRM Dashboard",
+        icon: LayoutDashboard,
+        permission: "view_records",
+        exact: true,
+        visibleForRoles: ["Admin", "Manager"]
+      },
       { href: "/crm/accounts", label: "Accounts", icon: Building2, permission: "view_records" },
       { href: "/crm/contacts", label: "Contacts", icon: Users, permission: "view_records" },
-      { href: "/crm/opportunities", label: "Opportunities", icon: CircleDollarSign, permission: "view_records" },
-      { href: "/sdr/queue", label: "SDR Queue", icon: ClipboardList, permission: "manage_sdr" },
+      {
+        href: "/crm/opportunities",
+        label: "Opportunities",
+        icon: CircleDollarSign,
+        permission: "view_records",
+        visibleForRoles: ["Admin", "Manager"]
+      },
+      { href: "/sdr/queue", label: "SDR Queue", sdrLabel: "My Queue", icon: ClipboardList, permission: "manage_sdr" },
       { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr_team" },
       { href: "/outreach/campaigns", label: "Campaigns", icon: Megaphone, permission: "manage_outreach" },
-      { href: "/outreach/events", label: "Outreach Events", icon: Bell, permission: "send_direct_outreach" }
+      {
+        href: "/outreach/events",
+        label: "Outreach Events",
+        icon: Bell,
+        permission: "send_direct_outreach",
+        visibleForRoles: ["Admin", "Manager"]
+      }
     ]
   },
   {
@@ -125,10 +146,12 @@ export function AppShell({ children, session }: AppShellProps) {
   const pathname = usePathname();
   const availableViews = workspaceViews.filter((view) => canAccessView(view, session));
   const activeView = resolveActiveView(pathname, availableViews);
-  const allowedNavItems = activeView.items.filter((item) => session.permissions.includes(item.permission));
+  const allowedNavItems = activeView.items.filter(
+    (item) => session.permissions.includes(item.permission) && isNavItemVisible(item, session)
+  );
   const canCreateProfile = session.permissions.includes("manage_profiles");
-  const searchPlaceholder = searchPlaceholderByView[activeView.id];
-  const primaryAction = primaryActionByView[activeView.id];
+  const searchPlaceholder = resolveSearchPlaceholder(activeView.id, session);
+  const primaryAction = resolvePrimaryAction(activeView.id, session);
   const canAccessDeveloperView = canUseDeveloperWorkspace(session);
 
   return (
@@ -161,7 +184,7 @@ export function AppShell({ children, session }: AppShellProps) {
           {availableViews.map((view) => (
             <Link
               key={view.id}
-              href={view.href}
+              href={resolveViewHref(view, session)}
               className={cn("view-tab", activeView.id === view.id && "active")}
               title={view.description}
             >
@@ -178,7 +201,7 @@ export function AppShell({ children, session }: AppShellProps) {
             return (
               <Link key={item.href} href={item.href} className={cn("nav-link", active && "active")}>
                 <Icon size={18} aria-hidden="true" />
-                <span>{item.label}</span>
+                <span>{resolveNavLabel(item, session)}</span>
               </Link>
             );
           })}
@@ -239,7 +262,7 @@ function canAccessView(view: WorkspaceView, session: Session) {
     return false;
   }
 
-  return view.items.some((item) => session.permissions.includes(item.permission));
+  return view.items.some((item) => session.permissions.includes(item.permission) && isNavItemVisible(item, session));
 }
 
 function resolveActiveView(pathname: string, views: WorkspaceView[]) {
@@ -259,6 +282,26 @@ function isNavItemActive(pathname: string, item: NavItem) {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
+function isNavItemVisible(item: NavItem, session: Session) {
+  return !item.visibleForRoles || item.visibleForRoles.includes(session.role);
+}
+
+function resolveNavLabel(item: NavItem, session: Session) {
+  if (session.role === "SDR" && item.sdrLabel) {
+    return item.sdrLabel;
+  }
+
+  return item.label;
+}
+
+function resolveViewHref(view: WorkspaceView, session: Session) {
+  if (view.id === "crm" && session.role === "SDR") {
+    return "/sdr/queue";
+  }
+
+  return view.href;
+}
+
 const searchPlaceholderByView: Record<WorkspaceViewId, string> = {
   "lead-generation": "Search profiles, jobs, staged records, exports",
   crm: "Search accounts, contacts, opportunities, SDR work",
@@ -270,3 +313,19 @@ const primaryActionByView: Record<WorkspaceViewId, { href: string; label: string
   crm: { href: "/sdr/queue", label: "Open queue" },
   developer: { href: "/integrations", label: "Provider settings" }
 };
+
+function resolveSearchPlaceholder(viewId: WorkspaceViewId, session: Session) {
+  if (viewId === "crm" && session.role === "SDR") {
+    return "Search my contacts, accounts, follow-ups";
+  }
+
+  return searchPlaceholderByView[viewId];
+}
+
+function resolvePrimaryAction(viewId: WorkspaceViewId, session: Session) {
+  if (viewId === "crm" && session.role === "SDR") {
+    return { href: "/sdr/queue", label: "My queue" };
+  }
+
+  return primaryActionByView[viewId];
+}

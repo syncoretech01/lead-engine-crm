@@ -60,6 +60,7 @@ export default async function SdrQueuePage() {
   }
 
   const canRunAssignment = session.permissions.includes("manage_sdr_team");
+  const isSdr = session.role === "SDR";
   const activeAssignments = snapshot.assignments.filter((assignment) => activeStatus(assignment.status));
   const priorityQueue = [...activeAssignments]
     .sort((a, b) => queueWeight(a) - queueWeight(b))
@@ -68,37 +69,30 @@ export default async function SdrQueuePage() {
     .filter((reminder) => reminder.status !== "Completed")
     .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt))
     .slice(0, 10);
-  const emailReady = activeAssignments.filter((assignment) => assignment.grade === "A" || assignment.grade === "B");
   const callReady = activeAssignments.filter((assignment) => assignment.phone);
   const meetingFollowUps = activeAssignments.filter((assignment) => assignment.status === "Meeting Booked");
-  const pageTitle = session.role === "SDR" ? "My SDR queue" : "SDR queue";
-  const recentlyReplied = snapshot.queueViews.find((view) => view.name === "Recently Replied")?.count ?? 0;
-  const bulkRequestId = `sdr-bulk-${session.user.id}-${randomUUID()}`;
-  const canSelectBulkOwner = session.role !== "SDR";
-  const currentSenderIdentity = resolveUserSenderIdentity(session.user);
-  const bulkSenderNote = canSelectBulkOwner
-    ? "All SDRs sends from each assigned SDR's approved sender. A single owner sends from that owner's approved sender."
-    : `From: ${currentSenderIdentity?.mailbox ?? "No approved sending email configured for this user."}`;
   const bulkEligibleAssignments = fastModel ? activeAssignments.filter(isFastEmailEligible) : activeAssignments.filter((assignment) => {
     const contact = fallbackState?.contacts.find((item) => item.id === assignment.contactId && item.workspaceId === workspaceId);
     return Boolean(contact && !directEmailBlockReason(contact));
   });
+  const emailReady = bulkEligibleAssignments;
+  const pageTitle = isSdr ? "My work queue" : "SDR queue";
+  const recentlyReplied = snapshot.queueViews.find((view) => view.name === "Recently Replied")?.count ?? 0;
+  const bulkRequestId = `sdr-bulk-${session.user.id}-${randomUUID()}`;
+  const canSelectBulkOwner = !isSdr;
+  const currentSenderIdentity = resolveUserSenderIdentity(session.user);
+  const bulkSenderNote = canSelectBulkOwner
+    ? "All SDRs sends from each assigned SDR's approved sender. A single owner sends from that owner's approved sender."
+    : `From: ${currentSenderIdentity?.mailbox ?? "No approved sending email configured for this user."}`;
   const canSubmitBulkEmail = Boolean(bulkEligibleAssignments.length) && (canSelectBulkOwner || Boolean(currentSenderIdentity));
 
   const metrics = [
     {
-      label: "Assigned leads",
+      label: isSdr ? "My active leads" : "Assigned leads",
       value: formatNumber(snapshot.metrics.assigned),
       note: "Active SDR assignments",
       icon: ListChecks,
       tone: "info" as const
-    },
-    {
-      label: "P1 leads",
-      value: formatNumber(snapshot.metrics.p1),
-      note: "Highest-priority queue items",
-      icon: BadgeCheck,
-      tone: snapshot.metrics.p1 ? "success" as const : "info" as const
     },
     {
       label: "Due today",
@@ -113,16 +107,23 @@ export default async function SdrQueuePage() {
       note: "SLA or reminder misses",
       icon: Clock,
       tone: snapshot.metrics.overdue ? "danger" as const : "success" as const
+    },
+    {
+      label: "Email-sendable",
+      value: formatNumber(emailReady.length),
+      note: "Assigned contacts allowed for SES send",
+      icon: Mail,
+      tone: emailReady.length ? "success" as const : "warning" as const
     }
   ];
 
   const lanes = [
     {
-      label: "Email-ready",
-      value: emailReady.length,
-      note: "Verified inboxes to work",
-      icon: Mail,
-      tone: "success" as const
+      label: "P1 leads",
+      value: snapshot.metrics.p1,
+      note: "Highest-priority queue items",
+      icon: BadgeCheck,
+      tone: snapshot.metrics.p1 ? "success" as const : "info" as const
     },
     {
       label: "Call-ready",
@@ -152,7 +153,11 @@ export default async function SdrQueuePage() {
       <PageHeader
         kicker="CRM execution"
         title={pageTitle}
-        copy="A focused work queue for first touches, follow-ups, overdue leads, and quick outcome logging. Managers can run routing and review team health from here."
+        copy={
+          isSdr
+            ? "Work assigned contacts, send outreach, log outcomes, and keep follow-ups moving from one focused place."
+            : "A focused work queue for first touches, follow-ups, overdue leads, and quick outcome logging. Managers can run routing and review team health from here."
+        }
         actions={
           <>
             {canRunAssignment ? (
@@ -163,9 +168,9 @@ export default async function SdrQueuePage() {
                 </button>
               </form>
             ) : null}
-            <Link href={session.role === "SDR" ? "/crm" : "/sdr/manager"} className="button primary">
+            <Link href={isSdr ? "/crm/contacts" : "/sdr/manager"} className="button primary">
               <Users size={17} aria-hidden="true" />
-              {session.role === "SDR" ? "CRM workspace" : "Manager dashboard"}
+              {isSdr ? "My contacts" : "Manager dashboard"}
             </Link>
           </>
         }
@@ -197,66 +202,81 @@ export default async function SdrQueuePage() {
               <thead>
                 <tr>
                   <th>Lead</th>
-                  <th>Owner</th>
+                  {!isSdr ? <th>Owner</th> : null}
                   <th>Status</th>
                   <th>SLA</th>
                   <th>Next due</th>
                   <th>Channel</th>
+                  <th>Next action</th>
                 </tr>
               </thead>
               <tbody>
-                {priorityQueue.map((assignment) => (
-                  <tr key={assignment.id}>
-                    <td>
-                      <Link href={`/crm/contacts/${assignment.contactId}`} className="entity">
-                        <strong>{assignment.contactName}</strong>
-                        <span>{assignment.title}</span>
-                        <span>{assignment.companyName}</span>
-                      </Link>
-                      <div className="chip-row">
-                        <StatusPill label={assignment.priority} tone={assignment.priority === "P1" ? "success" : "info"} />
-                        <span className={`grade ${assignment.grade.toLowerCase()}`}>{assignment.grade}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="entity">
-                        <strong>{assignment.ownerName}</strong>
-                        <span>{assignment.teamName}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <StatusPill label={assignment.status} tone={statusTone(assignment.status)} />
-                    </td>
-                    <td>
-                      <StatusPill label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
-                    </td>
-                    <td>
-                      <div className="entity">
-                        <strong>{assignment.dueAt ? formatDate(assignment.dueAt) : "No active SLA"}</strong>
-                        <span>{assignment.reminderTitle ?? assignment.dueLabel}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="chip-row">
-                        {assignment.grade === "A" || assignment.grade === "B" ? (
-                          <span className="pill success">
-                            <Mail size={13} aria-hidden="true" />
-                            Email
-                          </span>
-                        ) : null}
-                        {assignment.phone ? (
-                          <span className="pill info">
-                            <Phone size={13} aria-hidden="true" />
-                            Call
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {priorityQueue.map((assignment) => {
+                  const contactName = assignmentDisplayName(assignment);
+                  const nextAction = recommendedAction(assignment);
+
+                  return (
+                    <tr key={assignment.id}>
+                      <td>
+                        <Link href={`/crm/contacts/${assignment.contactId}`} className="entity">
+                          <strong>{contactName}</strong>
+                          <span>{assignment.email || assignment.title || "No email on record"}</span>
+                          <span>{assignment.companyName}</span>
+                        </Link>
+                        <div className="chip-row">
+                          <StatusPill label={assignment.priority} tone={assignment.priority === "P1" ? "success" : "info"} />
+                          <span className={`grade ${assignment.grade.toLowerCase()}`}>{assignment.grade}</span>
+                        </div>
+                      </td>
+                      {!isSdr ? (
+                        <td>
+                          <div className="entity">
+                            <strong>{assignment.ownerName}</strong>
+                            <span>{assignment.teamName}</span>
+                          </div>
+                        </td>
+                      ) : null}
+                      <td>
+                        <StatusPill label={assignment.status} tone={statusTone(assignment.status)} />
+                      </td>
+                      <td>
+                        <StatusPill label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
+                      </td>
+                      <td>
+                        <div className="entity">
+                          <strong>{assignment.dueAt ? formatDate(assignment.dueAt) : "No active SLA"}</strong>
+                          <span>{assignment.reminderTitle ?? assignment.dueLabel}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="chip-row">
+                          {assignmentEmailEligible(assignment) ? (
+                            <span className="pill success">
+                              <Mail size={13} aria-hidden="true" />
+                              Email
+                            </span>
+                          ) : null}
+                          {assignment.phone ? (
+                            <span className="pill info">
+                              <Phone size={13} aria-hidden="true" />
+                              Call
+                            </span>
+                          ) : null}
+                          {!assignmentEmailEligible(assignment) && !assignment.phone ? <span className="pill">Review</span> : null}
+                        </div>
+                      </td>
+                      <td>
+                        <Link href={`/crm/contacts/${assignment.contactId}`} className="button secondary">
+                          {nextAction}
+                          <ArrowRight size={15} aria-hidden="true" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {priorityQueue.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>No active SDR assignments need work right now.</td>
+                    <td colSpan={isSdr ? 6 : 7}>No active SDR assignments need work right now.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -278,7 +298,7 @@ export default async function SdrQueuePage() {
               <select id="assignmentId" name="assignmentId" required>
                 {activeAssignments.map((assignment) => (
                   <option key={assignment.id} value={assignment.id}>
-                    {assignment.contactName} - {assignment.companyName}
+                    {assignmentDisplayName(assignment)} - {assignment.companyName}
                   </option>
                 ))}
               </select>
@@ -431,69 +451,119 @@ export default async function SdrQueuePage() {
           <div className="panel-body">
             <div className="chip-row">
               <StatusPill label={`${bulkEligibleAssignments.length} eligible`} tone={bulkEligibleAssignments.length ? "success" : "warning"} />
-              <span className="pill">{formatNumber(emailReady.length)} A/B email-ready</span>
+              <span className="pill">SES-sendable assigned contacts</span>
               <span className="pill">{formatNumber(callReady.length)} call-ready</span>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Assignment directory</h2>
-            <p className="section-subtitle">All active and historical assignments for this queue scope.</p>
+      {!isSdr ? (
+        <section className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Assignment directory</h2>
+              <p className="section-subtitle">All active and historical assignments for this queue scope.</p>
+            </div>
+            <StatusPill label={`${formatNumber(snapshot.assignments.length)} assignments`} tone="info" />
           </div>
-          <StatusPill label={`${formatNumber(snapshot.assignments.length)} assignments`} tone="info" />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Lead</th>
-                <th>Owner</th>
-                <th>Status</th>
-                <th>SLA</th>
-                <th>Method</th>
-                <th>Touches</th>
-              </tr>
-            </thead>
-            <tbody>
-              {snapshot.assignments.map((assignment) => (
-                <tr key={assignment.id}>
-                  <td>
-                    <Link href={`/crm/contacts/${assignment.contactId}`} className="entity">
-                      <strong>{assignment.contactName}</strong>
-                      <span>{assignment.title}</span>
-                      <span>{assignment.companyName}</span>
-                    </Link>
-                  </td>
-                  <td>{assignment.ownerName}</td>
-                  <td>
-                    <StatusPill label={assignment.status} tone={statusTone(assignment.status)} />
-                  </td>
-                  <td>
-                    <StatusPill label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
-                  </td>
-                  <td>
-                    <div className="entity">
-                      <strong>{assignment.assignmentMethod}</strong>
-                      <span>{assignment.assignmentReason}</span>
-                    </div>
-                  </td>
-                  <td>{assignment.touchCount}</td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lead</th>
+                  <th>Owner</th>
+                  <th>Status</th>
+                  <th>SLA</th>
+                  <th>Method</th>
+                  <th>Touches</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {snapshot.assignments.map((assignment) => (
+                  <tr key={assignment.id}>
+                    <td>
+                      <Link href={`/crm/contacts/${assignment.contactId}`} className="entity">
+                        <strong>{assignmentDisplayName(assignment)}</strong>
+                        <span>{assignment.email || assignment.title || "No email on record"}</span>
+                        <span>{assignment.companyName}</span>
+                      </Link>
+                    </td>
+                    <td>{assignment.ownerName}</td>
+                    <td>
+                      <StatusPill label={assignment.status} tone={statusTone(assignment.status)} />
+                    </td>
+                    <td>
+                      <StatusPill label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
+                    </td>
+                    <td>
+                      <div className="entity">
+                        <strong>{assignment.assignmentMethod}</strong>
+                        <span>{assignment.assignmentReason}</span>
+                      </div>
+                    </td>
+                    <td>{assignment.touchCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }
 
 type QueueSnapshot = ReturnType<typeof sdrQueueSnapshot> | SdrQueueReadModel["snapshot"];
 type AssignmentView = QueueSnapshot["assignments"][number];
+
+function assignmentDisplayName(assignment: AssignmentView) {
+  const contactName = meaningfulName(assignment.contactName);
+
+  if (contactName) {
+    return contactName;
+  }
+
+  const emailName = displayNameFromEmail(assignment.email);
+
+  if (emailName) {
+    return emailName;
+  }
+
+  return meaningfulName(assignment.companyName) || "Contact";
+}
+
+function assignmentEmailEligible(assignment: AssignmentView) {
+  if ("emailEligible" in assignment) {
+    return assignment.emailEligible;
+  }
+
+  return Boolean(assignment.email && assignment.grade !== "D" && assignment.grade !== "S" && assignment.priority !== "S");
+}
+
+function recommendedAction(assignment: AssignmentView) {
+  if (assignment.slaStatus === "Overdue" || assignment.slaStatus === "Due soon") {
+    return "Follow up";
+  }
+
+  if (assignment.status === "Replied" || assignment.status === "Interested") {
+    return "Reply";
+  }
+
+  if (assignment.status === "Meeting Booked") {
+    return "Prep meeting";
+  }
+
+  if (assignmentEmailEligible(assignment)) {
+    return "Send email";
+  }
+
+  if (assignment.phone) {
+    return "Call";
+  }
+
+  return "Review";
+}
 
 function isFastEmailEligible(assignment: AssignmentView): assignment is SdrQueueAssignmentReadRow {
   return "emailEligible" in assignment && assignment.emailEligible;
@@ -526,4 +596,45 @@ function formatDate(value: string) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function meaningfulName(value?: string) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const normalized = trimmed.toLowerCase();
+
+  if (
+    normalized === "unknown contact" ||
+    normalized === "unknown account" ||
+    normalized === "no primary contact" ||
+    normalized === "no contact"
+  ) {
+    return "";
+  }
+
+  return trimmed;
+}
+
+function displayNameFromEmail(email?: string) {
+  const localPart = email?.split("@")[0]?.trim();
+
+  if (!localPart) {
+    return "";
+  }
+
+  const words = localPart
+    .replace(/[._-]+/g, " ")
+    .split(" ")
+    .map((word) => word.trim())
+    .filter(Boolean);
+
+  if (!words.length) {
+    return "";
+  }
+
+  return words.map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join(" ");
 }
