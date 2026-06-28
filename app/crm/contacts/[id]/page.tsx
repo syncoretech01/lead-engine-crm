@@ -48,6 +48,7 @@ import { smsEventStatuses } from "@/lib/phase1/outreach";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { readFastContactDetailModel } from "@/lib/phase1/crm-detail-read-model";
+import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { runWaterfallEnrichmentAction } from "@/lib/phase1/waterfall-enrichment-service";
@@ -114,6 +115,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   }
 
   const company = readModel.company;
+  const isSdr = session.role === "SDR";
+  const contactDisplayName = displayContactName(contact);
+  const companyDisplayName = company?.name ?? "unknown account";
   const opportunities = readState.opportunities
     .filter(
       (opportunity) =>
@@ -147,7 +151,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const canSendDirectOutreach = session.permissions.includes("send_direct_outreach");
   const canManageWaterfalls = session.permissions.includes("manage_waterfalls");
   const directSenderIdentity = resolveUserSenderIdentity(session.user);
-  const canSendEmail = Boolean(contact.email && !contact.doNotContact && !contact.isSuppressed && directSenderIdentity);
+  const directEmailRestriction = directEmailBlockReason(contact);
+  const canSendEmail = Boolean(!directEmailRestriction && directSenderIdentity);
+  const directEmailStatus = directSenderIdentity
+    ? directEmailRestriction ?? "Ready to send from your approved sender."
+    : "No approved sending email configured for this user.";
   const directEmailRequestId = `direct-${contact.id}-${randomUUID()}`;
   const activeWaterfallTemplates = waterfallTemplatesForWorkspace(state, workspaceId).filter(
     (template) => template.status === "Active"
@@ -160,7 +168,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     {
       label: "Grade",
       value: contact.grade,
-      note: contact.verification,
+      note: isSdr ? contact.verification || "Current lead quality" : contact.verification,
       icon: BadgeCheck,
       tone: contact.grade === "A" || contact.grade === "B" ? "success" as const : "warning" as const
     },
@@ -217,13 +225,48 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       tone: contact.doNotContact ? "warning" as const : "success" as const
     }
   ];
+  const nextAction = recommendedContactAction({
+    activeTasks,
+    canSendEmail,
+    phone: contact.phone,
+    isSuppressed: contact.isSuppressed,
+    doNotContact: contact.doNotContact
+  });
+  const snapshotRows = isSdr
+    ? [
+        ["Account", company?.name ?? "Unknown"],
+        ["Email", contact.email || "No email"],
+        ["Phone", contact.phone || "No phone"],
+        ["Owner", contact.owner],
+        ["Fit reason", contact.fitReason ?? "No fit reason yet"],
+        ["Source", contact.sourceLineage[0] ?? "Unknown"],
+        ["Status", contact.status],
+        ["Do not contact", contact.doNotContact ? "Yes" : "No"]
+      ]
+    : [
+        ["Account", company?.name ?? "Unknown"],
+        ["Email", contact.email],
+        ["Phone", contact.phone || "No phone"],
+        ["Owner", contact.owner],
+        ["Seniority", contact.seniority ?? "Unknown"],
+        ["Department", contact.department ?? "Unknown"],
+        ["Enrichment", `${contact.enrichmentCoverage ?? 0}% coverage`],
+        ["Fit reason", contact.fitReason ?? "No fit reason yet"],
+        ["Lawful basis", contact.lawfulBasis],
+        ["Consent", contact.consentStatus],
+        ["Do not contact", contact.doNotContact ? "Yes" : "No"]
+      ];
 
   return (
     <>
       <PageHeader
         kicker="Sales CRM"
-        title={contact.name}
-        copy={`${contact.title} at ${company?.name ?? "unknown account"}. Work the person, not the backend: channels, compliance, next task, timeline, and related pipeline.`}
+        title={contactDisplayName}
+        copy={
+          isSdr
+            ? `${companyDisplayName}. Work the next touch, send email, log outcomes, and keep the follow-up moving.`
+            : `${contact.title} at ${companyDisplayName}. Work the person, not the backend: channels, compliance, next task, timeline, and related pipeline.`
+        }
         actions={
           <>
             <Link href="/crm/contacts" className="button secondary">
@@ -252,29 +295,113 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         ))}
       </section>
 
+      {isSdr ? (
+        <section className="grid two">
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-title-wrap">
+                <h2 className="section-title">Next best action</h2>
+                <p className="section-subtitle">A compact SDR view of what should happen next.</p>
+              </div>
+              <Sparkles size={20} aria-hidden="true" />
+            </div>
+            <div className="panel-body stage-list">
+              <div className="stage-row">
+                <div className="stage-meta">
+                  <strong>{nextAction.label}</strong>
+                  <span>{nextAction.note}</span>
+                </div>
+                <div className="chip-row">
+                  <StatusPill label={contact.priority} tone={contact.priority === "P1" ? "success" : "info"} />
+                  <span className={`grade ${contact.grade.toLowerCase()}`}>{contact.grade}</span>
+                  <StatusPill label={contact.status} tone={statusTone(contact.status)} />
+                </div>
+              </div>
+              <div className="stage-row">
+                <div className="stage-meta">
+                  <strong>Email readiness</strong>
+                  <span>{directEmailStatus}</span>
+                </div>
+                <StatusPill label={canSendEmail ? "Sendable" : "Blocked"} tone={canSendEmail ? "success" : "warning"} />
+              </div>
+              <div className="chip-row">
+                <a href="#send-direct-email" className="button primary">
+                  <Mail size={16} aria-hidden="true" />
+                  Email
+                </a>
+                <a href="#add-contact-work" className="button secondary">
+                  <Calendar size={16} aria-hidden="true" />
+                  Task
+                </a>
+                <a href="#log-contact-activity" className="button secondary">
+                  <NotebookPen size={16} aria-hidden="true" />
+                  Log note
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {canSendDirectOutreach ? (
+            <div className="panel" id="send-direct-email">
+              <div className="panel-header">
+                <div className="panel-title-wrap">
+                  <h2 className="section-title">Send 1:1 email</h2>
+                  <p className="section-subtitle">Use your approved SES sender and log the touch automatically.</p>
+                </div>
+                <Mail size={20} aria-hidden="true" />
+              </div>
+              <form action={sendDirectEmailAction} className="panel-body form-grid">
+                <input name="contactId" type="hidden" value={contact.id} />
+                <input name="requestId" type="hidden" value={directEmailRequestId} />
+                <div className="surface-note">
+                  From: {directSenderIdentity?.mailbox ?? "No approved sending email configured for this user."}
+                </div>
+                <div className="field">
+                  <label htmlFor="direct-email-subject">Subject</label>
+                  <input
+                    id="direct-email-subject"
+                    name="subject"
+                    defaultValue={`Quick question for ${company?.name ?? contactDisplayName}`}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="direct-email-body">Body</label>
+                  <textarea
+                    id="direct-email-body"
+                    name="bodySnapshot"
+                    placeholder="Hi {{first_name}}, quick question about {{company}}."
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label aria-hidden="true">&nbsp;</label>
+                  <button className="button primary" type="submit" disabled={!canSendEmail}>
+                    <Mail size={16} aria-hidden="true" />
+                    Send email
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="grid two">
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Contact snapshot</h2>
-              <p className="section-subtitle">Verification, channels, enrichment, source lineage, and compliance state.</p>
+              <h2 className="section-title">{isSdr ? "Contact context" : "Contact snapshot"}</h2>
+              <p className="section-subtitle">
+                {isSdr
+                  ? "The useful context for a good first touch and follow-up."
+                  : "Verification, channels, enrichment, source lineage, and compliance state."}
+              </p>
             </div>
             <StatusPill label={contact.status} tone={statusTone(contact.status)} />
           </div>
           <div className="panel-body stage-list">
-            {[
-              ["Account", company?.name ?? "Unknown"],
-              ["Email", contact.email],
-              ["Phone", contact.phone || "No phone"],
-              ["Owner", contact.owner],
-              ["Seniority", contact.seniority ?? "Unknown"],
-              ["Department", contact.department ?? "Unknown"],
-              ["Enrichment", `${contact.enrichmentCoverage ?? 0}% coverage`],
-              ["Fit reason", contact.fitReason ?? "No fit reason yet"],
-              ["Lawful basis", contact.lawfulBasis],
-              ["Consent", contact.consentStatus],
-              ["Do not contact", contact.doNotContact ? "Yes" : "No"]
-            ].map(([label, value]) => (
+            {snapshotRows.map(([label, value]) => (
               <div className="stage-row" key={label}>
                 <div className="stage-meta">
                   <strong>{label}</strong>
@@ -319,7 +446,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         </div>
       </section>
 
-      <section className="grid two">
+      <section className={isSdr ? "grid" : "grid two"}>
+        {!isSdr ? (
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -379,6 +507,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </table>
           </div>
         </div>
+        ) : null}
 
         <div className="panel">
           <div className="panel-header">
@@ -445,7 +574,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label htmlFor="task-owner">Owner</label>
-              <select id="task-owner" name="ownerUserId" defaultValue={state.users[0]?.id}>
+              <select id="task-owner" name="ownerUserId" defaultValue={session.user.id}>
                 {state.users.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.name}
@@ -460,6 +589,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </button>
             </div>
           </form>
+          {!isSdr ? (
           <form action={createOpportunityAction} className="panel-body form-grid compact-form">
             <input name="companyId" type="hidden" value={contact.companyId} />
             <input name="contactId" type="hidden" value={contact.id} />
@@ -492,6 +622,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </button>
             </div>
           </form>
+          ) : null}
         </div>
 
         <div className="panel" id="log-contact-activity">
@@ -563,7 +694,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         </div>
       </section>
 
-      {canSendDirectOutreach ? (
+      {canSendDirectOutreach && !isSdr ? (
         <section className="grid two">
           <div className="panel" id="send-direct-email">
             <div className="panel-header">
@@ -644,6 +775,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         </section>
       ) : null}
 
+      {!isSdr ? (
       <section className="grid two">
         <div className="panel" id="contact-compliance">
           <div className="panel-header">
@@ -827,8 +959,103 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           </div>
         </div>
       </section>
+      ) : null}
     </>
   );
+}
+
+function displayContactName(contact: { name: string; email: string }) {
+  const meaningful = meaningfulName(contact.name);
+
+  if (meaningful) {
+    return meaningful;
+  }
+
+  return displayNameFromEmail(contact.email) || "Contact";
+}
+
+function recommendedContactAction(input: {
+  activeTasks: Array<{ title: string; dueAt?: string }>;
+  canSendEmail: boolean;
+  phone: string;
+  isSuppressed: boolean;
+  doNotContact: boolean;
+}) {
+  const nextTask = input.activeTasks[0];
+
+  if (input.isSuppressed || input.doNotContact) {
+    return {
+      label: "Do not contact",
+      note: "This record has a compliance stop. Review the account context instead."
+    };
+  }
+
+  if (nextTask) {
+    return {
+      label: nextTask.title,
+      note: nextTask.dueAt ? `Due ${formatDate(nextTask.dueAt)}` : "Open task on this contact."
+    };
+  }
+
+  if (input.canSendEmail) {
+    return {
+      label: "Send a focused 1:1 email",
+      note: "Start with a short, specific first touch and then set the next follow-up."
+    };
+  }
+
+  if (input.phone) {
+    return {
+      label: "Call and log outcome",
+      note: "No email send is available, but the contact has a phone number."
+    };
+  }
+
+  return {
+    label: "Review contact quality",
+    note: "This contact needs more usable channel data before outreach."
+  };
+}
+
+function meaningfulName(value?: string) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const normalized = trimmed.toLowerCase();
+
+  if (
+    normalized === "unknown contact" ||
+    normalized === "unknown account" ||
+    normalized === "no primary contact" ||
+    normalized === "no contact"
+  ) {
+    return "";
+  }
+
+  return trimmed;
+}
+
+function displayNameFromEmail(email?: string) {
+  const localPart = email?.split("@")[0]?.trim();
+
+  if (!localPart) {
+    return "";
+  }
+
+  const words = localPart
+    .replace(/[._-]+/g, " ")
+    .split(" ")
+    .map((word) => word.trim())
+    .filter(Boolean);
+
+  if (!words.length) {
+    return "";
+  }
+
+  return words.map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join(" ");
 }
 
 function CustomFieldInput({ field, value }: { field: CustomField; value: string }) {
