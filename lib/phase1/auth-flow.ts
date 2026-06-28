@@ -1,4 +1,4 @@
-import { defaultWorkspacePath } from "@/lib/phase1/auth";
+import { defaultWorkspacePath, postLoginWorkspacePath } from "@/lib/phase1/auth";
 import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
 import {
   acceptInvitePrismaFast,
@@ -51,7 +51,7 @@ export async function submitLoginForm(formData: FormData, headers: HeaderReader)
       );
 
     return {
-      redirectTo: next || defaultWorkspacePath(result.session),
+      redirectTo: postLoginWorkspacePath(result.session, next),
       sessionCookie: {
         value: result.cookieValue,
         expiresAt: result.expiresAt

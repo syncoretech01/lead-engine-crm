@@ -130,10 +130,22 @@ export function restrictsToOwnedRecords(session: Session) {
 }
 
 export function defaultWorkspacePath(session: Session) {
+  if (session.role === "SDR") return "/sdr/queue";
   if (canUseLeadGenerationWorkspace(session)) return "/";
   if (canUseCrmWorkspace(session)) return "/crm";
   if (canUseDeveloperWorkspace(session)) return "/integrations";
   return "/";
+}
+
+export function postLoginWorkspacePath(session: Session, nextPath: string) {
+  const fallbackPath = defaultWorkspacePath(session);
+  const pathname = nextPath.split(/[?#]/)[0] ?? "";
+
+  if (!nextPath || pathname === "/" || (session.role === "SDR" && pathname === "/crm")) {
+    return fallbackPath;
+  }
+
+  return nextPath;
 }
 
 export function rolePermissions(role: WorkspaceRole) {

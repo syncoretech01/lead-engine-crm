@@ -3,7 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { defaultWorkspacePath } from "@/lib/phase1/auth";
+import { defaultWorkspacePath, postLoginWorkspacePath } from "@/lib/phase1/auth";
 import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
 import {
   acceptInvitePrismaFast,
@@ -59,7 +59,7 @@ export async function loginAction(formData: FormData) {
 
   const cookieStore = await cookies();
   cookieStore.set(authSessionCookieName, result.cookieValue, authCookieOptions(result.expiresAt));
-  redirect(next || defaultWorkspacePath(result.session));
+  redirect(postLoginWorkspacePath(result.session, next));
 }
 
 export async function logoutAction() {

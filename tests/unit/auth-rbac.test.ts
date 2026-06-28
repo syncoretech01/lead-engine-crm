@@ -5,6 +5,7 @@ import {
   canUseDeveloperWorkspace,
   canUseLeadGenerationWorkspace,
   defaultWorkspacePath,
+  postLoginWorkspacePath,
   resolveSession,
   rolePermissions
 } from "@/lib/phase1/auth";
@@ -107,7 +108,10 @@ describe("auth and RBAC session resolution", () => {
     expect(canUseLeadGenerationWorkspace(sdr)).toBe(false);
     expect(canUseCrmWorkspace(sdr)).toBe(true);
     expect(canUseDeveloperWorkspace(sdr)).toBe(false);
-    expect(defaultWorkspacePath(sdr)).toBe("/crm");
+    expect(defaultWorkspacePath(sdr)).toBe("/sdr/queue");
+    expect(postLoginWorkspacePath(sdr, "/")).toBe("/sdr/queue");
+    expect(postLoginWorkspacePath(sdr, "/crm")).toBe("/sdr/queue");
+    expect(postLoginWorkspacePath(sdr, "/crm/contacts/contact-1")).toBe("/crm/contacts/contact-1");
 
     expect(manager.role).toBe("Manager");
     expect(canUseLeadGenerationWorkspace(manager)).toBe(true);
