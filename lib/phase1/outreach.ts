@@ -177,6 +177,7 @@ export function createSmsEvent(
     direction: "Outbound" | "Inbound";
     body: string;
     status: SmsEventStatus;
+    fromNumber?: string;
     occurredAt?: string;
     rawPayload?: SmsEvent["rawPayload"];
   }
@@ -201,7 +202,7 @@ export function createSmsEvent(
     sequenceStepId: input.sequenceStepId,
     sdrUserId: input.sdrUserId,
     provider: "RingCentral Local",
-    fromNumber: provider?.fromNumber ?? "+1 555 010 9000",
+    fromNumber: input.fromNumber ?? provider?.fromNumber ?? "+1 555 010 9000",
     toNumber: contact.phone,
     direction: input.direction,
     body: input.body,

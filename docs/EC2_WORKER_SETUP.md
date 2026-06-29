@@ -73,6 +73,7 @@ Use the same production values as Vercel for:
 - `SYNCORE_CREDENTIAL_KEY_ID`
 - `SYNCORE_APP_URL`
 - `SYNCORE_ENABLE_LIVE_PROVIDERS`
+- `SYNCORE_RINGCENTRAL_SAM_PHONE_NUMBER`
 - provider keys if live provider execution is enabled
 
 Start the worker:

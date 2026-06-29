@@ -52,6 +52,7 @@ import { dedupeTimelineActivities } from "@/lib/phase1/crm-display";
 import { displayContactName as formatContactDisplayName } from "@/lib/phase1/lead-data-quality";
 import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
+import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { runWaterfallEnrichmentAction } from "@/lib/phase1/waterfall-enrichment-service";
 import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
@@ -154,11 +155,20 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const canSendDirectOutreach = session.permissions.includes("send_direct_outreach");
   const canManageWaterfalls = session.permissions.includes("manage_waterfalls");
   const directSenderIdentity = resolveUserSenderIdentity(session.user);
+  const directTelephonyIdentity = resolveUserTelephonyIdentity(session.user);
   const directEmailRestriction = directEmailBlockReason(contact);
   const canSendEmail = Boolean(!directEmailRestriction && directSenderIdentity);
+  const canSendSms = Boolean(contact.phone && directTelephonyIdentity && !contact.doNotContact && !contact.isSuppressed);
   const directEmailStatus = directSenderIdentity
     ? directEmailRestriction ?? "Ready to send from your approved sender."
     : "No approved sending email configured for this user.";
+  const directSmsStatus = directTelephonyIdentity
+    ? contact.phone
+      ? contact.doNotContact || contact.isSuppressed
+        ? "Blocked by contact compliance status."
+        : `Ready from ${directTelephonyIdentity.phoneNumber}.`
+      : "Contact has no phone number."
+    : telephonyIdentityBlockReason(session.user);
   const directEmailRequestId = `direct-${contact.id}-${randomUUID()}`;
   const activeWaterfallTemplates = waterfallTemplatesForWorkspace(state, workspaceId).filter(
     (template) => template.status === "Active"
@@ -327,6 +337,13 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 </div>
                 <StatusPill label={canSendEmail ? "Sendable" : "Blocked"} tone={canSendEmail ? "success" : "warning"} />
               </div>
+              <div className="stage-row">
+                <div className="stage-meta">
+                  <strong>RingCentral line</strong>
+                  <span>{directSmsStatus}</span>
+                </div>
+                <StatusPill label={canSendSms ? "SMS ready" : "Not ready"} tone={canSendSms ? "success" : "warning"} />
+              </div>
               <div className="chip-row">
                 <a href="#send-direct-email" className="button primary">
                   <Mail size={16} aria-hidden="true" />
@@ -339,6 +356,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 <a href="#log-contact-activity" className="button secondary">
                   <NotebookPen size={16} aria-hidden="true" />
                   Log note
+                </a>
+                <a href="#send-direct-sms" className="button secondary">
+                  <Phone size={16} aria-hidden="true" />
+                  SMS
                 </a>
               </div>
             </div>
@@ -697,8 +718,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         </div>
       </section>
 
-      {canSendDirectOutreach && !isSdr ? (
+      {canSendDirectOutreach ? (
         <section className="grid two">
+          {!isSdr ? (
           <div className="panel" id="send-direct-email">
             <div className="panel-header">
               <div className="panel-title-wrap">
@@ -740,6 +762,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
             </form>
           </div>
+          ) : null}
 
           <div className="panel" id="send-direct-sms">
             <div className="panel-header">
@@ -752,9 +775,12 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             <form action={recordSmsEventAction} className="panel-body form-grid">
               <input name="contactId" type="hidden" value={contact.id} />
               <input name="direction" type="hidden" value="Outbound" />
+              <div className="surface-note">
+                From: {directTelephonyIdentity?.label ?? "No RingCentral phone number configured for this user."}
+              </div>
               <div className="field">
                 <label htmlFor="direct-sms-body">Message</label>
-                <textarea id="direct-sms-body" name="body" placeholder="Keep it short" />
+                <textarea id="direct-sms-body" name="body" placeholder="Keep it short" required />
               </div>
               <div className="field">
                 <label htmlFor="direct-sms-status">Status</label>
@@ -768,7 +794,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
               <div className="field">
                 <label aria-hidden="true">&nbsp;</label>
-                <button className="button primary" type="submit">
+                <button className="button primary" type="submit" disabled={!canSendSms}>
                   <Phone size={16} aria-hidden="true" />
                   Send SMS
                 </button>

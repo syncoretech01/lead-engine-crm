@@ -62,6 +62,7 @@ import { repairStagedLeadIdentities } from "@/lib/phase1/lead-identity-repair";
 import { applyCampaignEngagementScores } from "@/lib/phase1/engagement-scoring";
 import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/phase1/normalization";
 import { outreachBatchSize } from "@/lib/phase1/outreach-config";
+import { resolveUserTelephonyIdentity } from "@/lib/phase1/telephony-identities";
 import {
   buildCampaignSendBatch,
   recordCampaignSendResults,
@@ -1604,16 +1605,20 @@ export async function recordSmsEventAction(formData: FormData) {
     assertPermission(session, "send_direct_outreach");
     const contactId = stringValue(formData.get("contactId"));
     assertAssignedContactForOutreach(state, session, contactId);
+    const sdrUserId = stringValue(formData.get("sdrUserId"), session.user.id);
+    const sdrUser = state.users.find((user) => user.id === sdrUserId) ?? session.user;
+    const telephonyIdentity = resolveUserTelephonyIdentity(sdrUser);
     const event = createSmsEvent(state, {
       workspaceId: session.workspace.id,
       contactId,
       campaignId: stringValue(formData.get("campaignId")) || undefined,
       sequenceId: stringValue(formData.get("sequenceId")) || undefined,
       sequenceStepId: stringValue(formData.get("sequenceStepId")) || undefined,
-      sdrUserId: stringValue(formData.get("sdrUserId"), session.user.id),
+      sdrUserId,
       direction: stringValue(formData.get("direction"), "Outbound") === "Inbound" ? "Inbound" : "Outbound",
       body: stringValue(formData.get("body"), "Manual SMS event."),
-      status: smsEventStatusValue(formData.get("status"))
+      status: smsEventStatusValue(formData.get("status")),
+      fromNumber: telephonyIdentity?.phoneNumber
     });
 
     appendAudit(state, session, {

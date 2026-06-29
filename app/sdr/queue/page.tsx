@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
+import { resolveUserTelephonyIdentity } from "@/lib/phase1/telephony-identities";
 import {
   readFastSdrQueueModel,
   type SdrQueueAssignmentReadRow,
@@ -81,9 +82,13 @@ export default async function SdrQueuePage() {
   const bulkRequestId = `sdr-bulk-${session.user.id}-${randomUUID()}`;
   const canSelectBulkOwner = !isSdr;
   const currentSenderIdentity = resolveUserSenderIdentity(session.user);
+  const currentTelephonyIdentity = resolveUserTelephonyIdentity(session.user);
   const bulkSenderNote = canSelectBulkOwner
     ? "All SDRs sends from each assigned SDR's approved sender. A single owner sends from that owner's approved sender."
     : `From: ${currentSenderIdentity?.mailbox ?? "No approved sending email configured for this user."}`;
+  const telephonyNote = currentTelephonyIdentity
+    ? `RingCentral: ${currentTelephonyIdentity.phoneNumber}`
+    : "No RingCentral number configured";
   const canSubmitBulkEmail = Boolean(bulkEligibleAssignments.length) && (canSelectBulkOwner || Boolean(currentSenderIdentity));
 
   const metrics = [
@@ -128,9 +133,9 @@ export default async function SdrQueuePage() {
     {
       label: "Call-ready",
       value: callReady.length,
-      note: "Phone numbers available",
+      note: callReady.length ? telephonyNote : "Phone numbers available",
       icon: Phone,
-      tone: "info" as const
+      tone: callReady.length && !currentTelephonyIdentity ? "warning" as const : "info" as const
     },
     {
       label: "Meeting follow-up",
@@ -293,6 +298,7 @@ export default async function SdrQueuePage() {
             <Send size={20} aria-hidden="true" />
           </div>
           <form action={logFirstTouchAction} className="panel-body form-grid">
+            {isSdr ? <div className="surface-note">{telephonyNote}</div> : null}
             <div className="field">
               <label htmlFor="assignmentId">Lead</label>
               <select id="assignmentId" name="assignmentId" required>
