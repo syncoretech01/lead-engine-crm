@@ -303,7 +303,7 @@ function smsEventFromPrisma(row: PrismaSmsEventReadRow): SmsEvent {
     sequenceId: row.sequenceId ?? undefined,
     sequenceStepId: row.sequenceStepId ?? undefined,
     sdrUserId: row.sdrUserId ?? "system",
-    provider: "RingCentral Local",
+    provider: smsProviderValue(row.provider),
     fromNumber: row.fromNumber,
     toNumber: row.toNumber,
     direction: callDirectionValue(row.direction),
@@ -364,6 +364,10 @@ function emailEventTypeValue(value: string): EmailEventType {
 function smsEventStatusValue(value: string): SmsEventStatus {
   const values: SmsEventStatus[] = ["Sent", "Delivered", "Failed", "Replied", "Opt-out"];
   return values.includes(value as SmsEventStatus) ? value as SmsEventStatus : "Sent";
+}
+
+function smsProviderValue(value: string): SmsEvent["provider"] {
+  return value === "RingCentral" ? "RingCentral" : "RingCentral Local";
 }
 
 function callDirectionValue(value: string): CallDirection {

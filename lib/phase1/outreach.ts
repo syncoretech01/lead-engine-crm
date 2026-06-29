@@ -178,6 +178,7 @@ export function createSmsEvent(
     body: string;
     status: SmsEventStatus;
     fromNumber?: string;
+    provider?: SmsEvent["provider"];
     occurredAt?: string;
     rawPayload?: SmsEvent["rawPayload"];
   }
@@ -192,6 +193,7 @@ export function createSmsEvent(
 
   const now = input.occurredAt ?? new Date().toISOString();
   const provider = phoneProvider(state, input.workspaceId);
+  const providerName = input.provider ?? "RingCentral Local";
   const event: SmsEvent = {
     id: `sms-${randomUUID()}`,
     workspaceId: input.workspaceId,
@@ -201,7 +203,7 @@ export function createSmsEvent(
     sequenceId: input.sequenceId,
     sequenceStepId: input.sequenceStepId,
     sdrUserId: input.sdrUserId,
-    provider: "RingCentral Local",
+    provider: providerName,
     fromNumber: input.fromNumber ?? provider?.fromNumber ?? "+1 555 010 9000",
     toNumber: contact.phone,
     direction: input.direction,
@@ -211,7 +213,7 @@ export function createSmsEvent(
     repliedAt: input.status === "Replied" || input.status === "Opt-out" ? now : undefined,
     failedAt: input.status === "Failed" ? now : undefined,
     optOutFlag: input.status === "Opt-out",
-    rawPayload: input.rawPayload ?? { local: true, status: input.status },
+    rawPayload: input.rawPayload ?? { local: true, status: input.status, provider: providerName },
     createdAt: now
   };
 
@@ -224,7 +226,7 @@ export function createSmsEvent(
       type: "SMS opt-out",
       phone: event.toNumber,
       reason: "SMS STOP/opt-out event",
-      source: "RingCentral Local"
+      source: providerName
     });
   }
 

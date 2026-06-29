@@ -52,6 +52,11 @@ import {
   sendDirectEmailBatch,
   type BulkEmailAudience
 } from "@/lib/phase1/direct-email-send";
+import {
+  buildDirectSmsSendPlan,
+  recordDirectSmsSendResults,
+  sendDirectSmsBatch
+} from "@/lib/phase1/direct-sms-send";
 import { prepareEmailTestAssignmentContacts } from "@/lib/phase1/email-test-assignment";
 import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import { createExportRecord } from "@/lib/phase1/exporting";
@@ -1598,6 +1603,56 @@ export async function sendAssignedBulkEmailAction(formData: FormData) {
   }, { normalizedTables: outreachEmailWriteTables });
 
   revalidateOutreachPages();
+}
+
+export async function sendDirectSmsAction(formData: FormData) {
+  const contactId = stringValue(formData.get("contactId"));
+  const requestId = stringValue(formData.get("requestId"), `direct-sms-${contactId}-${randomUUID()}`);
+  const body = stringValue(formData.get("body"), "Hi {{first_name}}, quick question about {{company}}.");
+
+  const state = await readState();
+  const session = await getSession(state);
+  assertPermission(session, "send_direct_outreach");
+  assertAssignedContactForOutreach(state, session, contactId);
+  const plan = buildDirectSmsSendPlan(state, {
+    workspaceId: session.workspace.id,
+    actor: session.user,
+    requestId,
+    contactId,
+    body
+  });
+
+  const outcomes = plan.credentialOk
+    ? await sendDirectSmsBatch(plan.recipients, plan.credential, plan.workspaceId)
+    : plan.recipients.map((recipient) => ({
+        contactId: recipient.contactId,
+        status: "failed" as const,
+        reason: plan.reason
+      }));
+
+  await updateState((state, session) => {
+    assertPermission(session, "send_direct_outreach");
+    const summary = recordDirectSmsSendResults(state, {
+      workspaceId: session.workspace.id,
+      actorUserId: session.user.id,
+      recipients: plan.recipients,
+      outcomes,
+      skipped: plan.skipped
+    });
+
+    appendAudit(state, session, {
+      objectType: "sms_event",
+      objectId: requestId,
+      action: plan.credentialOk ? "direct_sms_live" : "direct_sms_not_sent",
+      newValue: {
+        ...summary,
+        totalRequested: plan.totalRequested,
+        reason: plan.credentialOk ? undefined : plan.reason
+      }
+    });
+  }, { normalizedTables: outreachSmsWriteTables });
+
+  revalidateOutreachPages([`/crm/contacts/${contactId}`]);
 }
 
 export async function recordSmsEventAction(formData: FormData) {

@@ -1082,7 +1082,7 @@ export type SmsEvent = {
   sequenceId?: string;
   sequenceStepId?: string;
   sdrUserId: string;
-  provider: "RingCentral Local";
+  provider: "RingCentral Local" | "RingCentral";
   fromNumber: string;
   toNumber: string;
   direction: "Outbound" | "Inbound";
@@ -1096,7 +1096,7 @@ export type SmsEvent = {
   createdAt: string;
 };
 
-export type WebhookProvider = "Syncore Mail Local" | "RingCentral Local";
+export type WebhookProvider = "Syncore Mail Local" | "RingCentral Local" | "RingCentral";
 export type WebhookEventStatus = "Processed" | "Duplicate" | "Rejected" | "Failed";
 export type WebhookEventTarget = "email" | "sms";
 

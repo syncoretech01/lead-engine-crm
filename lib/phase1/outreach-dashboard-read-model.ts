@@ -657,7 +657,7 @@ function smsEventFromPrisma(row: {
     sequenceId: row.sequenceId ?? undefined,
     sequenceStepId: row.sequenceStepId ?? undefined,
     sdrUserId: row.sdrUserId ?? "",
-    provider: "RingCentral Local",
+    provider: smsProviderValue(row.provider),
     fromNumber: row.fromNumber,
     toNumber: row.toNumber,
     direction: row.direction === "Inbound" ? "Inbound" : "Outbound",
@@ -716,6 +716,10 @@ function trackedCallFromPrisma(row: {
     nextStep: row.nextStep ?? undefined,
     createdAt: row.createdAt.toISOString()
   };
+}
+
+function smsProviderValue(value: string): SmsEvent["provider"] {
+  return value === "RingCentral" ? "RingCentral" : "RingCentral Local";
 }
 
 function campaignViews(input: {

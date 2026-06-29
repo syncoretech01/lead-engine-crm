@@ -23,8 +23,8 @@ import {
   createNoteAction,
   createOpportunityAction,
   createTaskAction,
-  recordSmsEventAction,
   sendDirectEmailAction,
+  sendDirectSmsAction,
   setCustomFieldValueAction,
   updateContactComplianceAction,
   updateOpportunityStageAction
@@ -44,13 +44,13 @@ import {
   stateWithCrmEventReadRows
 } from "@/lib/phase1/crm-event-read-path";
 import { consentStatuses, lawfulBases } from "@/lib/phase1/compliance";
-import { smsEventStatuses } from "@/lib/phase1/outreach";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { readFastContactDetailModel } from "@/lib/phase1/crm-detail-read-model";
 import { dedupeTimelineActivities } from "@/lib/phase1/crm-display";
 import { displayContactName as formatContactDisplayName } from "@/lib/phase1/lead-data-quality";
 import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
+import { directSmsBlockReason, directSmsLiveBlockReason } from "@/lib/phase1/direct-sms-send";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
@@ -157,19 +157,18 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const directSenderIdentity = resolveUserSenderIdentity(session.user);
   const directTelephonyIdentity = resolveUserTelephonyIdentity(session.user);
   const directEmailRestriction = directEmailBlockReason(contact);
+  const directSmsRestriction = directSmsBlockReason(contact);
+  const directSmsLiveRestriction = directTelephonyIdentity ? directSmsLiveBlockReason() : undefined;
   const canSendEmail = Boolean(!directEmailRestriction && directSenderIdentity);
-  const canSendSms = Boolean(contact.phone && directTelephonyIdentity && !contact.doNotContact && !contact.isSuppressed);
+  const canSendSms = Boolean(!directSmsRestriction && directTelephonyIdentity && !directSmsLiveRestriction);
   const directEmailStatus = directSenderIdentity
     ? directEmailRestriction ?? "Ready to send from your approved sender."
     : "No approved sending email configured for this user.";
   const directSmsStatus = directTelephonyIdentity
-    ? contact.phone
-      ? contact.doNotContact || contact.isSuppressed
-        ? "Blocked by contact compliance status."
-        : `Ready from ${directTelephonyIdentity.phoneNumber}.`
-      : "Contact has no phone number."
+    ? directSmsRestriction ?? directSmsLiveRestriction ?? `Ready from ${directTelephonyIdentity.phoneNumber}.`
     : telephonyIdentityBlockReason(session.user);
   const directEmailRequestId = `direct-${contact.id}-${randomUUID()}`;
+  const directSmsRequestId = `direct-sms-${contact.id}-${randomUUID()}`;
   const activeWaterfallTemplates = waterfallTemplatesForWorkspace(state, workspaceId).filter(
     (template) => template.status === "Active"
   );
@@ -772,9 +771,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
               <Phone size={20} aria-hidden="true" />
             </div>
-            <form action={recordSmsEventAction} className="panel-body form-grid">
+            <form action={sendDirectSmsAction} className="panel-body form-grid">
               <input name="contactId" type="hidden" value={contact.id} />
-              <input name="direction" type="hidden" value="Outbound" />
+              <input name="requestId" type="hidden" value={directSmsRequestId} />
               <div className="surface-note">
                 From: {directTelephonyIdentity?.label ?? "No RingCentral phone number configured for this user."}
               </div>
@@ -783,14 +782,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 <textarea id="direct-sms-body" name="body" placeholder="Keep it short" required />
               </div>
               <div className="field">
-                <label htmlFor="direct-sms-status">Status</label>
-                <select id="direct-sms-status" name="status" defaultValue="Delivered">
-                  {smsEventStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
+                <label>To</label>
+                <div className="surface-note">{contact.phone || "No phone number on contact."}</div>
               </div>
               <div className="field">
                 <label aria-hidden="true">&nbsp;</label>
