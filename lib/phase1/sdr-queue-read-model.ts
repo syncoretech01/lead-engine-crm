@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type { Session, SdrLeadStatus, SlaStatus, User } from "@/lib/phase1/types";
 
 export type SdrQueueAssignmentReadRow = {
@@ -191,7 +192,10 @@ export async function readFastSdrQueueModel(
       touchCount: assignment.touchCount,
       createdAt: assignment.createdAt.toISOString(),
       updatedAt: assignment.updatedAt.toISOString(),
-      contactName: leadContact?.fullName ?? crmContact?.fullName ?? "Unknown contact",
+      contactName: displayContactName({
+        name: leadContact?.fullName ?? crmContact?.fullName,
+        email
+      }),
       title: leadContact?.title ?? crmContact?.title ?? "",
       email,
       phone,
@@ -234,7 +238,10 @@ export async function readFastSdrQueueModel(
     createdAt: reminder.createdAt.toISOString(),
     completedAt: reminder.completedAt?.toISOString(),
     snoozedUntil: reminder.snoozedUntil?.toISOString(),
-    contactName: reminder.contact?.fullName ?? "Unknown contact",
+    contactName: displayContactName({
+      name: reminder.contact?.fullName,
+      email: reminder.contact?.email
+    }),
     companyName: reminder.account?.name ?? reminder.contact?.account?.name ?? "Unknown account",
     ownerName: reminder.owner?.name ?? "Unassigned",
     dueLabel: timerLabel(reminder.dueAt.toISOString())

@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type {
   AppState,
   AssignmentMethod,
@@ -185,7 +186,10 @@ export async function readFastSdrManagerModel(
       touchCount: assignment.touchCount,
       createdAt: assignment.createdAt.toISOString(),
       updatedAt: assignment.updatedAt.toISOString(),
-      contactName: leadContact?.fullName ?? crmContact?.fullName ?? "Unknown contact",
+      contactName: displayContactName({
+        name: leadContact?.fullName ?? crmContact?.fullName,
+        email: leadContact?.email ?? crmContact?.email
+      }),
       title: leadContact?.title ?? crmContact?.title ?? "",
       email: leadContact?.email ?? crmContact?.email ?? "",
       phone: leadContact?.phone ?? crmContact?.phone ?? "",

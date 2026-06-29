@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { addActivity, ownerUserIdForName, userNameForId } from "@/lib/phase1/crm";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { assertWorkspaceMember, requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import type {
   AppState,
@@ -550,7 +551,7 @@ export function assignmentViews(state: AppState, workspaceId: string) {
 
       return {
         ...assignment,
-        contactName: contact?.name ?? "Unknown contact",
+        contactName: displayContactName(contact),
         title: contact?.title ?? "",
         email: contact?.email ?? "",
         phone: contact?.phone ?? "",
@@ -585,7 +586,7 @@ export function reminderViews(state: AppState, workspaceId: string) {
 
       return {
         ...reminder,
-        contactName: contact?.name ?? "Unknown contact",
+        contactName: displayContactName(contact),
         companyName: company?.name ?? "Unknown account",
         ownerName: userNameForId(state, reminder.ownerUserId),
         dueLabel: timerLabel(reminder.dueAt)

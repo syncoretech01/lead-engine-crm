@@ -1,6 +1,7 @@
 import { findExportRule, recordIdsForExport } from "@/lib/phase1/exporting";
 import { leadReviewReason } from "@/lib/phase1/lead-engine-metrics";
 import {
+  displayContactName,
   displayNameFromEmail,
   domainFromEmail,
   isMeaningfulPersonName,
@@ -24,7 +25,6 @@ import type {
   LeadGrade,
   LeadStatus,
   NormalizedRecord,
-  OpportunityStage,
   Priority,
   Session
 } from "@/lib/phase1/types";
@@ -156,10 +156,7 @@ export function accountViewsFromRows(
     );
     const latestActivity = latestActivityForCompany(state, company.id);
     const source = company.sourceLineage[0] ?? "Unknown source";
-    const amount =
-      openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0) ||
-      primaryOpportunity?.amount ||
-      company.score * 1000;
+    const amount = openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
 
     return {
       id: company.id,
@@ -175,7 +172,7 @@ export function accountViewsFromRows(
       owner: primaryOpportunity ? userNameForId(state, primaryOpportunity.ownerUserId) : primaryContact?.owner ?? "Unassigned",
       stage: primaryOpportunity?.stage ?? stageForPriority(company.priority),
       amount,
-      probability: primaryOpportunity?.probability ?? stageProbabilityFallback(primaryOpportunity?.stage ?? stageForPriority(company.priority)),
+      probability: primaryOpportunity?.probability ?? 0,
       opportunities: opportunities.length,
       contacts: companyContacts.length,
       openTasks: openTasks.length,
@@ -211,7 +208,7 @@ export function contactViewsFromRows(
 
     return {
       id: contact.id,
-      name: contact.name,
+      name: displayContactName(contact),
       title: contact.title,
       email: contact.email,
       phone: contact.phone,
@@ -462,7 +459,7 @@ function contactFromPrismaReadRow(row: PrismaContactReadRow): Contact {
     id: row.id,
     workspaceId: row.workspaceId,
     companyId: row.companyId ?? "",
-    name: row.fullName,
+    name: displayContactName({ name: row.fullName, email: row.email }),
     title: row.title ?? "",
     seniority: row.seniority ?? undefined,
     department: row.department ?? undefined,
@@ -507,7 +504,7 @@ export function opportunityViews(state: AppState, workspaceId = state.workspaces
       ...opportunity,
       companyName: company?.name ?? "Unknown account",
       companyDomain: company?.domain ?? "",
-      contactName: contact?.name ?? "No primary contact",
+      contactName: displayContactName(contact, "No primary contact"),
       contactEmail: contact?.email ?? "",
       owner: userNameForId(state, opportunity.ownerUserId),
       openTasks: openTasks.length,
@@ -776,15 +773,6 @@ function stageForPriority(priority: Priority) {
   if (priority === "P3") return "Prospecting";
   if (priority === "S") return "Closed lost";
   return "Prospecting";
-}
-
-function stageProbabilityFallback(stage: OpportunityStage) {
-  if (stage === "Closed won") return 100;
-  if (stage === "Proposal") return 75;
-  if (stage === "Discovery") return 55;
-  if (stage === "Qualified") return 35;
-  if (stage === "Closed lost") return 0;
-  return 15;
 }
 
 function focusForOwnedContacts(contacts: { segment: string; priority: Priority }[]) {

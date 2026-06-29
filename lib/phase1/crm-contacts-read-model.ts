@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type { LeadGrade, LeadStatus, Priority, Session } from "@/lib/phase1/types";
 
 export type CrmContactListRow = {
@@ -102,7 +103,7 @@ export async function readFastCrmContactsModel(
       const latest = latestActivity.get(contact.id);
       return {
         id: contact.id,
-        name: contact.fullName,
+        name: displayContactName({ name: contact.fullName, email: contact.email }),
         title: contact.title ?? "",
         email: contact.email ?? "",
         phone: contact.phone ?? "",

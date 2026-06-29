@@ -106,6 +106,16 @@ export function displayNameFromEmail(email: string) {
     .join(" ");
 }
 
+export function displayContactName(
+  contact: { name?: string | null; fullName?: string | null; email?: string | null } | undefined,
+  fallback = "Unknown contact"
+) {
+  if (!contact) return fallback;
+  const name = contact.name ?? contact.fullName ?? "";
+  if (isMeaningfulPersonName(name)) return name.trim();
+  return contact.email ? displayNameFromEmail(contact.email) || fallback : fallback;
+}
+
 function normalizePlaceholder(value: string | undefined | null) {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }

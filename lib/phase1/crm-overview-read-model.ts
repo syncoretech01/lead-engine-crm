@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type {
   CustomField,
   CustomFieldValue,
@@ -323,10 +324,7 @@ export async function readFastCrmOverviewModel(
     const latestActivity = latestActivityByCompany.get(company.id);
     const source = firstString(company.sourceLineage) ?? "Unknown source";
     const stage = primaryOpportunity ? opportunityStageValue(primaryOpportunity.stage) : stageForPriority(priorityValue(company.priority));
-    const amount =
-      openOpportunities.reduce((total, opportunity) => total + centsToAmount(opportunity.amountCents), 0) ||
-      (primaryOpportunity ? centsToAmount(primaryOpportunity.amountCents) : 0) ||
-      company.score * 1000;
+    const amount = openOpportunities.reduce((total, opportunity) => total + centsToAmount(opportunity.amountCents), 0);
 
     return {
       id: company.id,
@@ -344,7 +342,7 @@ export async function readFastCrmOverviewModel(
         : primaryContact?.owner ?? "Unassigned",
       stage,
       amount,
-      probability: primaryOpportunity?.probability ?? stageProbabilityFallback(stage),
+      probability: primaryOpportunity?.probability ?? 0,
       opportunities: companyOpportunities.filter((opportunity) => visibleOpportunityIds.has(opportunity.id) || !scoped).length,
       contacts: companyContacts.length,
       openTasks: companyOpenTasks.length,
@@ -367,7 +365,7 @@ export async function readFastCrmOverviewModel(
 
     return {
       id: contact.id,
-      name: contact.fullName,
+      name: displayContactName({ name: contact.fullName, email: contact.email }),
       title: contact.title ?? "",
       email: contact.email ?? "",
       phone: contact.phone ?? "",
@@ -509,7 +507,7 @@ function opportunityView(
     updatedAt: opportunity.updatedAt.toISOString(),
     companyName: company?.name ?? "Unknown account",
     companyDomain: company?.rootDomain ?? "",
-    contactName: contact?.fullName ?? "No primary contact",
+    contactName: displayContactName(contact, "No primary contact"),
     contactEmail: contact?.email ?? "",
     owner: userNames.get(opportunity.ownerUserId ?? "") ?? "Syncore user",
     openTasks: openTasks.length,
@@ -590,15 +588,6 @@ function stageForPriority(priority: Priority) {
   if (priority === "P1") return "Qualified";
   if (priority === "S") return "Closed lost";
   return "Prospecting";
-}
-
-function stageProbabilityFallback(stage: OpportunityStage) {
-  if (stage === "Closed won") return 100;
-  if (stage === "Proposal") return 75;
-  if (stage === "Discovery") return 55;
-  if (stage === "Qualified") return 35;
-  if (stage === "Closed lost") return 0;
-  return 15;
 }
 
 function leadGradeValue(value: string | null): LeadGrade {

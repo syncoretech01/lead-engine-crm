@@ -6,6 +6,7 @@ import {
   suppressContact
 } from "@/lib/phase1/compliance";
 import { addActivity, ownerUserIdForName, userNameForId } from "@/lib/phase1/crm";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { assertWorkspaceMember, requireWorkspaceScopedRecord, workspaceStoragePath } from "@/lib/phase1/tenant-isolation";
 import type {
   AppState,
@@ -529,7 +530,7 @@ export function emailEventViews(state: AppState, workspaceId: string) {
       );
       return {
         ...event,
-        contactName: contact?.name ?? "Unknown contact",
+        contactName: displayContactName(contact),
         companyName: companyName(state, event.companyId, workspaceId),
         campaignName: campaign?.name ?? "No campaign"
       };
@@ -542,7 +543,9 @@ export function smsEventViews(state: AppState, workspaceId: string) {
     .filter((event) => event.workspaceId === workspaceId)
     .map((event) => ({
       ...event,
-      contactName: state.contacts.find((contact) => contact.id === event.contactId && contact.workspaceId === workspaceId)?.name ?? "Unknown contact",
+      contactName: displayContactName(
+        state.contacts.find((contact) => contact.id === event.contactId && contact.workspaceId === workspaceId)
+      ),
       companyName: companyName(state, event.companyId, workspaceId),
       sdrName: userNameForId(state, event.sdrUserId)
     }))
@@ -554,7 +557,9 @@ export function trackedCallViews(state: AppState, workspaceId: string) {
     .filter((call) => call.workspaceId === workspaceId)
     .map((call) => ({
       ...call,
-      contactName: state.contacts.find((contact) => contact.id === call.contactId && contact.workspaceId === workspaceId)?.name ?? "Unknown contact",
+      contactName: displayContactName(
+        state.contacts.find((contact) => contact.id === call.contactId && contact.workspaceId === workspaceId)
+      ),
       companyName: companyName(state, call.companyId, workspaceId),
       sdrName: userNameForId(state, call.sdrUserId)
     }))

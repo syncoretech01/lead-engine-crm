@@ -41,6 +41,7 @@ import {
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { accountDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { readFastAccountDetailModel } from "@/lib/phase1/crm-detail-read-model";
+import { dedupeTimelineActivities } from "@/lib/phase1/crm-display";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -117,10 +118,11 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   const calls = readState.callLogs
     .filter((call) => call.workspaceId === workspaceId && call.companyId === account.id)
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const activities = readState.activities
-    .filter((activity) => activity.workspaceId === workspaceId && activity.companyId === account.id)
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, 14);
+  const activities = dedupeTimelineActivities(
+    readState.activities
+      .filter((activity) => activity.workspaceId === workspaceId && activity.companyId === account.id)
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+  ).slice(0, 14);
   const companyFields = state.customFields.filter(
     (field) => field.workspaceId === workspaceId && field.objectType === "company"
   );

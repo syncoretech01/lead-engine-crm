@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { addActivity, userNameForId } from "@/lib/phase1/crm";
 import { splitList } from "@/lib/phase1/csv";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { reportingDashboardSnapshot } from "@/lib/phase1/reporting";
 import type {
   AiAutomationKind,
@@ -742,7 +743,7 @@ function aiPersonalizationViews(state: AppState, workspaceId: string) {
       const campaign = state.outreachCampaigns.find((item) => item.id === record.campaignId);
       return {
         ...record,
-        contactName: contact?.name ?? "Unknown contact",
+        contactName: displayContactName(contact),
         contactTitle: contact?.title ?? "",
         companyName: company?.name ?? "Unknown account",
         campaignName: campaign?.name ?? "No campaign"
@@ -756,7 +757,7 @@ function aiReplyClassificationViews(state: AppState, workspaceId: string) {
     .filter((record) => record.workspaceId === workspaceId)
     .map((record) => ({
       ...record,
-      contactName: state.contacts.find((contact) => contact.id === record.contactId)?.name ?? "Unknown contact",
+      contactName: displayContactName(state.contacts.find((contact) => contact.id === record.contactId)),
       companyName: state.companies.find((company) => company.id === record.companyId)?.name ?? "Unknown account",
       campaignName: state.outreachCampaigns.find((campaign) => campaign.id === record.campaignId)?.name ?? "No campaign"
     }))
@@ -768,7 +769,7 @@ function aiCallSummaryViews(state: AppState, workspaceId: string) {
     .filter((record) => record.workspaceId === workspaceId)
     .map((record) => ({
       ...record,
-      contactName: state.contacts.find((contact) => contact.id === record.contactId)?.name ?? "Unknown contact",
+      contactName: displayContactName(state.contacts.find((contact) => contact.id === record.contactId)),
       companyName: state.companies.find((company) => company.id === record.companyId)?.name ?? "Unknown account",
       sdrName: userNameForId(
         state,
@@ -783,7 +784,7 @@ function aiLeadScoreViews(state: AppState, workspaceId: string) {
     .filter((record) => record.workspaceId === workspaceId)
     .map((record) => ({
       ...record,
-      contactName: state.contacts.find((contact) => contact.id === record.contactId)?.name ?? "Unknown contact",
+      contactName: displayContactName(state.contacts.find((contact) => contact.id === record.contactId)),
       companyName: state.companies.find((company) => company.id === record.companyId)?.name ?? "Unknown account"
     }))
     .sort((a, b) => b.score - a.score || Date.parse(b.generatedAt) - Date.parse(a.generatedAt));

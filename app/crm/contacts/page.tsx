@@ -14,6 +14,7 @@ import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { readFastCrmContactsModel, type CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { contactViewsForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
@@ -225,7 +226,12 @@ export default async function ContactsPage() {
             <ShieldCheck size={20} aria-hidden="true" />
           </div>
           <div className="panel-body stage-list">
-            <ReadinessRow label="Email-ready" count={verified.length} total={contacts.length} tone="success" />
+            <ReadinessRow
+              label={isSdr ? "Email available" : "Email-ready"}
+              count={isSdr ? emailAvailable.length : verified.length}
+              total={contacts.length}
+              tone="success"
+            />
             <ReadinessRow label="Call-ready" count={callReady.length} total={contacts.length} tone="info" />
             <ReadinessRow label="Needs review" count={needsAttention.length} total={contacts.length} tone="warning" />
             <ReadinessRow
@@ -410,22 +416,7 @@ export default async function ContactsPage() {
 type ContactView = CrmContactListRow;
 
 function contactDisplayName(contact: Pick<ContactView, "name" | "email">) {
-  const name = contact.name?.trim();
-
-  if (name && name.toLowerCase() !== "unknown contact") {
-    return name;
-  }
-
-  const localPart = contact.email?.split("@")[0]?.trim();
-
-  if (!localPart) {
-    return "Unknown contact";
-  }
-
-  return localPart
-    .replace(/[._-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return displayContactName(contact);
 }
 
 function contactEmailAvailable(contact: Pick<ContactView, "email" | "isSuppressed">) {

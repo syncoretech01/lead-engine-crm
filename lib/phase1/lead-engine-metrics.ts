@@ -1,5 +1,6 @@
 import { isActionableDedupeMatch } from "@/lib/phase1/dedupe";
 import {
+  displayContactName,
   domainFromEmail,
   isMeaningfulCompanyName,
   isMeaningfulPersonName,
@@ -229,9 +230,7 @@ export function isSdrReadyContact(state: AppState, contact: Contact, requiredFie
 }
 
 export function displayContactLabel(contact: Pick<Contact, "name" | "email"> | undefined, fallback = "Unknown contact") {
-  if (!contact) return fallback;
-  if (isMeaningfulPersonName(contact.name)) return contact.name;
-  return contact.email || fallback;
+  return displayContactName(contact, fallback);
 }
 
 function entitySummary(state: AppState, objectType: DedupeMatch["objectType"], id: string) {

@@ -1,5 +1,6 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import { defaultWaterfallTemplates } from "@/lib/phase1/waterfall-templates";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type {
   Activity,
   AppState,
@@ -442,7 +443,7 @@ function contactFromPrisma(row: {
     id: row.id,
     workspaceId: row.workspaceId,
     companyId: row.companyId ?? "",
-    name: row.fullName,
+    name: displayContactName({ name: row.fullName, email: row.email }),
     title: row.title ?? "",
     seniority: row.seniority ?? undefined,
     department: row.department ?? undefined,
@@ -667,10 +668,7 @@ function accountDetailView(input: {
   const latestActivity = input.activities[0];
   const source = input.company.sourceLineage[0] ?? "Unknown source";
   const stage = primaryOpportunity?.stage ?? stageForPriority(input.company.priority);
-  const amount =
-    openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0) ||
-    primaryOpportunity?.amount ||
-    input.company.score * 1000;
+  const amount = openOpportunities.reduce((total, opportunity) => total + opportunity.amount, 0);
 
   return {
     id: input.company.id,
@@ -688,7 +686,7 @@ function accountDetailView(input: {
       : input.contacts[0]?.owner ?? "Unassigned",
     stage,
     amount,
-    probability: primaryOpportunity?.probability ?? stageProbabilityFallback(stage),
+    probability: primaryOpportunity?.probability ?? 0,
     opportunities: input.opportunities.length,
     contacts: input.contacts.length,
     openTasks: openTasks.length,
@@ -711,13 +709,4 @@ function stageForPriority(priority: Company["priority"]): OpportunityStage {
   if (priority === "P1") return "Qualified";
   if (priority === "S") return "Closed lost";
   return "Prospecting";
-}
-
-function stageProbabilityFallback(stage: OpportunityStage) {
-  if (stage === "Closed won") return 100;
-  if (stage === "Proposal") return 75;
-  if (stage === "Discovery") return 55;
-  if (stage === "Qualified") return 35;
-  if (stage === "Closed lost") return 0;
-  return 15;
 }

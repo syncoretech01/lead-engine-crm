@@ -48,6 +48,8 @@ import { smsEventStatuses } from "@/lib/phase1/outreach";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { readFastContactDetailModel } from "@/lib/phase1/crm-detail-read-model";
+import { dedupeTimelineActivities } from "@/lib/phase1/crm-display";
+import { displayContactName as formatContactDisplayName } from "@/lib/phase1/lead-data-quality";
 import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
@@ -116,7 +118,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
   const company = readModel.company;
   const isSdr = session.role === "SDR";
-  const contactDisplayName = displayContactName(contact);
+  const contactDisplayName = formatContactDisplayName(contact);
   const companyDisplayName = company?.name ?? "unknown account";
   const opportunities = readState.opportunities
     .filter(
@@ -134,10 +136,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const calls = readState.callLogs
     .filter((call) => call.workspaceId === workspaceId && call.contactId === contact.id)
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const activities = readState.activities
-    .filter((activity) => activity.workspaceId === workspaceId && activity.contactId === contact.id)
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, 14);
+  const activities = dedupeTimelineActivities(
+    readState.activities
+      .filter((activity) => activity.workspaceId === workspaceId && activity.contactId === contact.id)
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+  ).slice(0, 14);
   const contactFields = state.customFields.filter(
     (field) => field.workspaceId === workspaceId && field.objectType === "contact"
   );
@@ -595,7 +598,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             <input name="contactId" type="hidden" value={contact.id} />
             <div className="field">
               <label htmlFor="opp-name">Opportunity</label>
-              <input id="opp-name" name="name" defaultValue={`${company?.name ?? contact.name} opportunity`} />
+              <input id="opp-name" name="name" defaultValue={`${company?.name ?? contactDisplayName} opportunity`} />
             </div>
             <div className="field">
               <label htmlFor="opp-stage">Stage</label>
@@ -715,7 +718,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 <input
                   id="direct-email-subject"
                   name="subject"
-                  defaultValue={`Quick question for ${company?.name ?? contact.name}`}
+                  defaultValue={`Quick question for ${company?.name ?? contactDisplayName}`}
                   required
                 />
               </div>
@@ -964,16 +967,6 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   );
 }
 
-function displayContactName(contact: { name: string; email: string }) {
-  const meaningful = meaningfulName(contact.name);
-
-  if (meaningful) {
-    return meaningful;
-  }
-
-  return displayNameFromEmail(contact.email) || "Contact";
-}
-
 function recommendedContactAction(input: {
   activeTasks: Array<{ title: string; dueAt?: string }>;
   canSendEmail: boolean;
@@ -1015,47 +1008,6 @@ function recommendedContactAction(input: {
     label: "Review contact quality",
     note: "This contact needs more usable channel data before outreach."
   };
-}
-
-function meaningfulName(value?: string) {
-  const trimmed = value?.trim();
-
-  if (!trimmed) {
-    return "";
-  }
-
-  const normalized = trimmed.toLowerCase();
-
-  if (
-    normalized === "unknown contact" ||
-    normalized === "unknown account" ||
-    normalized === "no primary contact" ||
-    normalized === "no contact"
-  ) {
-    return "";
-  }
-
-  return trimmed;
-}
-
-function displayNameFromEmail(email?: string) {
-  const localPart = email?.split("@")[0]?.trim();
-
-  if (!localPart) {
-    return "";
-  }
-
-  const words = localPart
-    .replace(/[._-]+/g, " ")
-    .split(" ")
-    .map((word) => word.trim())
-    .filter(Boolean);
-
-  if (!words.length) {
-    return "";
-  }
-
-  return words.map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join(" ");
 }
 
 function CustomFieldInput({ field, value }: { field: CustomField; value: string }) {

@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type {
   AppState,
   CampaignSequence,
@@ -215,7 +216,10 @@ export async function readFastOutreachDashboardModel(
     const account = event.account ?? crmContact?.account;
     return {
       ...mapped,
-      contactName: leadContact?.fullName ?? crmContact?.fullName ?? "Unknown contact",
+      contactName: displayContactName({
+        name: leadContact?.fullName ?? crmContact?.fullName,
+        email: leadContact?.email ?? crmContact?.email
+      }),
       companyName: account?.name ?? "Unknown account",
       campaignName: event.campaign?.name ?? "No campaign"
     } satisfies FastEmailEventView;
@@ -227,7 +231,10 @@ export async function readFastOutreachDashboardModel(
     const account = event.account ?? crmContact?.account;
     return {
       ...mapped,
-      contactName: leadContact?.fullName ?? crmContact?.fullName ?? "Unknown contact",
+      contactName: displayContactName({
+        name: leadContact?.fullName ?? crmContact?.fullName,
+        email: leadContact?.email ?? crmContact?.email
+      }),
       companyName: account?.name ?? "Unknown account",
       sdrName: event.sdr?.name ?? userNames.get(mapped.sdrUserId) ?? "Unassigned"
     } satisfies FastSmsEventView;
@@ -239,7 +246,10 @@ export async function readFastOutreachDashboardModel(
     const account = call.account ?? crmContact?.account;
     return {
       ...mapped,
-      contactName: leadContact?.fullName ?? crmContact?.fullName ?? "Unknown contact",
+      contactName: displayContactName({
+        name: leadContact?.fullName ?? crmContact?.fullName,
+        email: leadContact?.email ?? crmContact?.email
+      }),
       companyName: account?.name ?? "Unknown account",
       sdrName: call.sdr?.name ?? userNames.get(mapped.sdrUserId) ?? "Unassigned"
     } satisfies FastTrackedCallView;
@@ -259,7 +269,7 @@ export async function readFastOutreachDashboardModel(
     id: contact.id,
     workspaceId: contact.workspaceId,
     companyId: contact.companyId ?? "",
-    name: contact.fullName,
+    name: displayContactName({ name: contact.fullName, email: contact.email }),
     title: contact.title ?? "",
     seniority: contact.seniority ?? undefined,
     department: contact.department ?? undefined,
