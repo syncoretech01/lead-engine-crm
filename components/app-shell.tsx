@@ -104,7 +104,7 @@ const workspaceViews = [
         label: "Opportunities",
         icon: CircleDollarSign,
         permission: "view_records",
-        visibleForRoles: ["Admin", "Manager"]
+        visibleForRoles: ["Admin", "Manager", "SDR"]
       },
       { href: "/sdr/queue", label: "SDR Queue", sdrLabel: "My Queue", icon: ClipboardList, permission: "manage_sdr" },
       { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr_team" },

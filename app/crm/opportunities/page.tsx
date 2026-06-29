@@ -224,10 +224,10 @@ export default async function OpportunitiesPage() {
     <>
       <PageHeader
         kicker="Sales CRM"
-        title={isSdr ? "My opportunity context" : "Opportunities"}
+        title={isSdr ? "My opportunities" : "Opportunities"}
         copy={
           isSdr
-            ? "A simple view of the deals tied to your assigned accounts, with stage, value, next activity, and account links."
+            ? "Track deal value, stage, account context, and next activity for the opportunities tied to your assigned contacts."
             : "A focused pipeline workspace for managers and SDRs: review deal value, stage health, forecast, next activity, and move opportunities without touching backend settings."
         }
         actions={
@@ -257,20 +257,22 @@ export default async function OpportunitiesPage() {
         ))}
       </section>
 
-      <section className="ops-stage-strip four-up" aria-label="Opportunity operating lanes">
-        {lanes.map((lane) => (
-          <LaneCard key={lane.label} {...lane} />
-        ))}
-      </section>
+      {!isSdr ? (
+        <section className="ops-stage-strip four-up" aria-label="Opportunity operating lanes">
+          {lanes.map((lane) => (
+            <LaneCard key={lane.label} {...lane} />
+          ))}
+        </section>
+      ) : null}
 
       <section className="grid two">
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">{isSdr ? "My deal focus" : "Pipeline focus"}</h2>
+              <h2 className="section-title">{isSdr ? "Open deals to watch" : "Pipeline focus"}</h2>
               <p className="section-subtitle">
                 {isSdr
-                  ? "Assigned opportunities sorted by value and probability, with the account path one click away."
+                  ? "Deals tied to your assigned accounts, sorted by value and probability."
                   : "Highest-value open opportunities with stage, owner, and last activity."}
               </p>
             </div>
@@ -318,7 +320,7 @@ export default async function OpportunitiesPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
-              <h2 className="section-title">Stage health</h2>
+              <h2 className="section-title">{isSdr ? "Stage snapshot" : "Stage health"}</h2>
               <p className="section-subtitle">
                 {isSdr ? "Where your assigned deals sit today." : "Open and closed stages by count, value, and weighted value."}
               </p>
@@ -343,47 +345,41 @@ export default async function OpportunitiesPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">{isSdr ? "Stage board" : "Stage board"}</h2>
-            <p className="section-subtitle">
-              {isSdr
-                ? "A read-only stage view for your assigned deals. Managers can move stages from their pipeline controls."
-                : "Move opportunities between stages without opening the full account record."}
-            </p>
+      {!isSdr ? (
+        <section className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Stage board</h2>
+              <p className="section-subtitle">Move opportunities between stages without opening the full account record.</p>
+            </div>
+            <StatusPill label={`${formatNumber(opportunities.length)} opportunities`} tone="info" />
           </div>
-          <StatusPill label={`${formatNumber(opportunities.length)} opportunities`} tone="info" />
-        </div>
-        <div className="kanban" aria-label="Opportunity pipeline">
-          {opportunityStages.map((stage) => {
-            const stageOpportunities = opportunities.filter((opportunity) => opportunity.stage === stage);
+          <div className="kanban" aria-label="Opportunity pipeline">
+            {opportunityStages.map((stage) => {
+              const stageOpportunities = opportunities.filter((opportunity) => opportunity.stage === stage);
 
-            return (
-              <div className="kanban-column" key={stage}>
-                <div className="workspace-row">
-                  <strong>{stage}</strong>
-                  <StatusPill label={`${stageOpportunities.length}`} tone={stageOpportunities.length ? statusTone(stage) : "default"} />
-                </div>
-                {stageOpportunities.map((opportunity) => (
-                  <article className="item-card compact-profile-card" key={opportunity.id}>
-                    <div className="item-card-header">
-                      <div>
-                        <h3 className="card-title">{opportunity.name}</h3>
-                        <p className="section-subtitle">{opportunity.companyName}</p>
+              return (
+                <div className="kanban-column" key={stage}>
+                  <div className="workspace-row">
+                    <strong>{stage}</strong>
+                    <StatusPill label={`${stageOpportunities.length}`} tone={stageOpportunities.length ? statusTone(stage) : "default"} />
+                  </div>
+                  {stageOpportunities.map((opportunity) => (
+                    <article className="item-card compact-profile-card" key={opportunity.id}>
+                      <div className="item-card-header">
+                        <div>
+                          <h3 className="card-title">{opportunity.name}</h3>
+                          <p className="section-subtitle">{opportunity.companyName}</p>
+                        </div>
+                        <div className="table-score-cell">
+                          <strong>{opportunity.probability}%</strong>
+                          <ProgressBar value={opportunity.probability} />
+                        </div>
                       </div>
-                      <div className="table-score-cell">
-                        <strong>{opportunity.probability}%</strong>
-                        <ProgressBar value={opportunity.probability} />
+                      <div className="chip-row">
+                        <StatusPill label={formatCurrency(opportunity.amount)} tone="info" />
+                        <StatusPill label={`${opportunity.openTasks} tasks`} tone={opportunity.openTasks ? "warning" : "success"} />
                       </div>
-                    </div>
-                    <div className="chip-row">
-                      <StatusPill label={formatCurrency(opportunity.amount)} tone="info" />
-                      <StatusPill label={`${opportunity.openTasks} tasks`} tone={opportunity.openTasks ? "warning" : "success"} />
-                    </div>
-                    {isSdr ? (
-                      <p className="section-subtitle">Next: {opportunity.lastActivity}</p>
-                    ) : (
                       <form action={updateOpportunityStageAction} className="inline-form">
                         <input name="id" type="hidden" value={opportunity.id} />
                         <select name="stage" defaultValue={opportunity.stage} aria-label="Stage">
@@ -397,18 +393,18 @@ export default async function OpportunitiesPage() {
                           <Save size={16} aria-hidden="true" />
                         </button>
                       </form>
-                    )}
-                    <Link href={`/crm/accounts/${opportunity.companyId}`} className="button secondary">
-                      <ArrowRight size={16} aria-hidden="true" />
-                      Account
-                    </Link>
-                  </article>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+                      <Link href={`/crm/accounts/${opportunity.companyId}`} className="button secondary">
+                        <ArrowRight size={16} aria-hidden="true" />
+                        Account
+                      </Link>
+                    </article>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {!isSdr ? (
       <section className="grid two">
