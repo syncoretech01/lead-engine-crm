@@ -44,7 +44,8 @@ type ResolvedTile = {
   node: ReactNode;
 };
 
-const SAVE_DEBOUNCE_MS = 600;
+const SAVE_DEBOUNCE_MS = 250;
+const TILE_LAYOUT_BEACON_URL = "/api/tile-layout";
 
 // GridStack reads geometry from `gs-*` attributes on init. React's DOM typings
 // don't include these custom attributes, so build them as a plain object and
@@ -136,6 +137,46 @@ export function TileGrid({ pageKey, canCustomize, saved, children }: TileGridPro
     saveTimer.current = setTimeout(persist, SAVE_DEBOUNCE_MS);
   }, [persist]);
 
+  // Durable flush for page-hide/unload: server actions are not reliably delivered
+  // during navigation, so beacon the current layout. Reads live grid geometry, so
+  // it captures the latest drag/resize even if a debounced save hasn't fired yet.
+  const flushBeacon = useCallback(() => {
+    if (!editingRef.current) {
+      return;
+    }
+    const items = collectItems();
+    if (!items.length || typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") {
+      return;
+    }
+    try {
+      const blob = new Blob([JSON.stringify({ pageKey, items })], { type: "application/json" });
+      navigator.sendBeacon(TILE_LAYOUT_BEACON_URL, blob);
+    } catch {
+      // best-effort; ignore
+    }
+  }, [collectItems, pageKey]);
+
+  // Keep a stable ref so the init effect's cleanup can flush without re-running.
+  const flushBeaconRef = useRef(flushBeacon);
+  useEffect(() => {
+    flushBeaconRef.current = flushBeacon;
+  }, [flushBeacon]);
+
+  useEffect(() => {
+    const onPageHide = () => flushBeaconRef.current();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        flushBeaconRef.current();
+      }
+    };
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
   useEffect(() => {
     let disposed = false;
 
@@ -176,6 +217,10 @@ export function TileGrid({ pageKey, canCustomize, saved, children }: TileGridPro
 
     return () => {
       disposed = true;
+      // Flush any in-progress edit before tearing down (covers client-side
+      // navigation, which does not fire pagehide). Beacon reads live geometry, so
+      // do it before destroying the grid.
+      flushBeaconRef.current();
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
         saveTimer.current = null;

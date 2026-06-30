@@ -25,6 +25,7 @@ import {
   updateOpportunityStageAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
+import { SubmitButton } from "@/components/submit-button";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
@@ -291,10 +292,10 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                 {task.status !== "Completed" ? (
                   <form action={completeTaskAction}>
                     <input name="id" type="hidden" value={task.id} />
-                    <button className="button secondary" type="submit">
+                    <SubmitButton className="button secondary" pendingLabel="Completing…">
                       <Check size={16} aria-hidden="true" />
                       Complete
-                    </button>
+                    </SubmitButton>
                   </form>
                 ) : null}
               </div>
@@ -534,9 +535,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+              <SubmitButton className="button primary" pendingLabel="Adding…">
                 Add task
-              </button>
+              </SubmitButton>
             </div>
           </form>
           <form action={createOpportunityAction} className="panel-body form-grid compact-form">
@@ -590,9 +591,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button secondary" type="submit">
+              <SubmitButton className="button secondary" pendingLabel="Adding…">
                 Add opportunity
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </div>
@@ -626,9 +627,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+              <SubmitButton className="button primary" pendingLabel="Adding…">
                 Add note
-              </button>
+              </SubmitButton>
             </div>
           </form>
           <form action={createCallLogAction} className="panel-body form-grid compact-form">
@@ -667,9 +668,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button secondary" type="submit">
+              <SubmitButton className="button secondary" pendingLabel="Logging…">
                 Log call
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </div>
@@ -693,10 +694,10 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                 <strong>{field.name}</strong>
                 <CustomFieldInput field={field} value={fieldValueMap.get(field.id)?.value ?? ""} />
               </div>
-              <button className="button secondary" type="submit">
+              <SubmitButton className="button secondary" pendingLabel="Saving…">
                 <Save size={16} aria-hidden="true" />
                 Save field
-              </button>
+              </SubmitButton>
             </form>
           ))}
           <form action={createCustomFieldAction} className="form-grid compact-form">
@@ -720,9 +721,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+              <SubmitButton className="button primary" pendingLabel="Creating…">
                 Create field
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </div>

@@ -32,6 +32,7 @@ import {
   updateOpportunityStageAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
+import { SubmitButton } from "@/components/submit-button";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
@@ -343,10 +344,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
               <div className="field">
                 <label aria-hidden="true">&nbsp;</label>
-                <button className="button primary" type="submit">
+                <SubmitButton className="button primary" pendingLabel="Saving…">
                   <Save size={16} aria-hidden="true" />
                   Save contact details
-                </button>
+                </SubmitButton>
               </div>
             </form>
           </div>
@@ -448,10 +449,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 </div>
                 <div className="field">
                   <label aria-hidden="true">&nbsp;</label>
-                  <button className="button primary" type="submit" disabled={!canSendEmail}>
+                  <SubmitButton className="button primary" pendingLabel="Sending…" disabled={!canSendEmail}>
                     <Mail size={16} aria-hidden="true" />
                     Send email
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
             </div>
@@ -507,10 +508,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 </div>
                 <form action={completeTaskAction}>
                   <input name="id" type="hidden" value={task.id} />
-                  <button className="button secondary" type="submit">
+                  <SubmitButton className="button secondary" pendingLabel="Completing…">
                     <Check size={16} aria-hidden="true" />
                     Complete
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             ))}
@@ -659,9 +660,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+              <SubmitButton className="button primary" pendingLabel="Adding…">
                 Add task
-              </button>
+              </SubmitButton>
             </div>
           </form>
           {!isSdr ? (
@@ -692,9 +693,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button secondary" type="submit">
+              <SubmitButton className="button secondary" pendingLabel="Adding…">
                 Add opportunity
-              </button>
+              </SubmitButton>
             </div>
           </form>
           ) : null}
@@ -719,9 +720,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+              <SubmitButton className="button primary" pendingLabel="Adding…">
                 Add note
-              </button>
+              </SubmitButton>
             </div>
           </form>
           <form action={createCallLogAction} className="panel-body form-grid compact-form">
@@ -751,9 +752,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button secondary" type="submit">
+              <SubmitButton className="button secondary" pendingLabel="Logging…">
                 Log call
-              </button>
+              </SubmitButton>
             </div>
           </form>
           <div className="panel-body stage-list">
@@ -807,10 +808,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
               <div className="field">
                 <label aria-hidden="true">&nbsp;</label>
-                <button className="button primary" type="submit" disabled={!canSendEmail}>
+                <SubmitButton className="button primary" pendingLabel="Sending…" disabled={!canSendEmail}>
                   <Mail size={16} aria-hidden="true" />
                   Send email
-                </button>
+                </SubmitButton>
               </div>
             </form>
           </div>
@@ -843,10 +844,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
               <div className="field">
                 <label aria-hidden="true">&nbsp;</label>
-                <button className="button primary" type="submit" disabled={!canSendSms}>
+                <SubmitButton className="button primary" pendingLabel="Sending…" disabled={!canSendSms}>
                   <Phone size={16} aria-hidden="true" />
                   Send SMS
-                </button>
+                </SubmitButton>
               </div>
             </form>
           </div>

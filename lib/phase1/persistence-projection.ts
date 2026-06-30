@@ -93,6 +93,8 @@ export type ProjectionRow = {
 export type NormalizedPersistenceProjection = Record<ProjectionTableName, ProjectionRow[]>;
 export type SyncNormalizedProjectionOptions = {
   tables?: ProjectionTableName[];
+  /** Skip the normalized projection entirely (snapshot-only write). */
+  skip?: boolean;
 };
 
 const projectionTables: ProjectionTableName[] = [
@@ -1525,6 +1527,15 @@ export async function syncNormalizedProjectionToPrisma(
   client: PrismaMirrorClient,
   options: SyncNormalizedProjectionOptions = {}
 ) {
+  if (options.skip) {
+    // Snapshot-only write: don't build the projection or touch any table.
+    return {
+      tables: {} as Record<ProjectionTableName, number>,
+      hash: "",
+      syncedTables: [] as ProjectionTableName[],
+      skippedTables: [] as ProjectionTableName[]
+    };
+  }
   const totalTimer = startPerformanceTimer("projection.sync.total", {
     requestedTables: projectionTablesLabel(options.tables)
   });

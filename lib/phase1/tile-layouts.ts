@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import { readState, stateSnapshotId } from "@/lib/phase1/store";
+import { readState, stateSnapshotId, updateState } from "@/lib/phase1/store";
 import type { Session, TileLayoutItem, UserTileLayout } from "@/lib/phase1/types";
 
 // Pages that support per-user, draggable/resizable tile layouts. Detail pages
@@ -80,4 +81,57 @@ async function readUserTileLayoutsRaw(): Promise<UserTileLayout[]> {
 
   const state = await readState();
   return Array.isArray(state.userTileLayouts) ? state.userTileLayouts : [];
+}
+
+// Persists the current request user's layout for a page. Shared by the server
+// action and the sendBeacon API route. Writes ONLY the JSON snapshot
+// (skipNormalizedProjection) — userTileLayouts is not a normalized table, so a
+// tile save must never re-sync the projection (that timed out on Neon).
+export async function saveUserTileLayout(pageKey: string, items: TileLayoutItem[]) {
+  if (!isTilePageKey(pageKey)) {
+    return;
+  }
+  const clean = sanitizeTileItems(items);
+  await updateState(
+    (state, session) => {
+      if (!Array.isArray(state.userTileLayouts)) {
+        state.userTileLayouts = [];
+      }
+      const userId = session.user.id;
+      const existing = state.userTileLayouts.find(
+        (layout) => layout.userId === userId && layout.pageKey === pageKey
+      );
+      if (existing) {
+        existing.items = clean;
+        existing.updatedAt = new Date().toISOString();
+      } else {
+        state.userTileLayouts.push({
+          id: randomUUID(),
+          userId,
+          pageKey,
+          items: clean,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    },
+    { skipNormalizedProjection: true }
+  );
+}
+
+export async function resetUserTileLayout(pageKey: string) {
+  if (!isTilePageKey(pageKey)) {
+    return;
+  }
+  await updateState(
+    (state, session) => {
+      if (!Array.isArray(state.userTileLayouts)) {
+        state.userTileLayouts = [];
+        return;
+      }
+      state.userTileLayouts = state.userTileLayouts.filter(
+        (layout) => !(layout.userId === session.user.id && layout.pageKey === pageKey)
+      );
+    },
+    { skipNormalizedProjection: true }
+  );
 }

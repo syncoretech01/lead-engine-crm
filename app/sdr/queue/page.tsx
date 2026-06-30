@@ -20,6 +20,7 @@ import {
 } from "@/app/actions";
 import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { PageHeader } from "@/components/page-header";
+import { SubmitButton } from "@/components/submit-button";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
@@ -346,10 +347,10 @@ export default async function SdrQueuePage() {
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+              <SubmitButton className="button primary" pendingLabel="Saving…">
                 <Send size={17} aria-hidden="true" />
                 Save touch
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </div>
@@ -381,9 +382,9 @@ export default async function SdrQueuePage() {
                   </Link>
                   <form action={completeFollowUpReminderAction}>
                     <input name="id" type="hidden" value={reminder.id} />
-                    <button className="button primary" type="submit">
+                    <SubmitButton className="button primary" pendingLabel="Completing…">
                       Complete
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
               </div>
@@ -457,10 +458,10 @@ export default async function SdrQueuePage() {
             </div>
             <div className="field">
               <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit" disabled={!canSubmitBulkEmail}>
+              <SubmitButton className="button primary" pendingLabel="Sending…" disabled={!canSubmitBulkEmail}>
                 <Mail size={16} aria-hidden="true" />
                 Send bulk email
-              </button>
+              </SubmitButton>
             </div>
           </form>
           <div className="panel-body">
