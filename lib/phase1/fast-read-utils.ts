@@ -47,6 +47,7 @@ export function createFastState(session: Session, input: FastStateInput = {}): A
     authAccounts: input.authAccounts ?? [],
     authSessions: input.authSessions ?? [],
     userInvites: input.userInvites ?? [],
+    userTileLayouts: input.userTileLayouts ?? [],
     passwordResetTokens: input.passwordResetTokens ?? [],
     providerConnections: input.providerConnections ?? [],
     providerCredentialAudits: input.providerCredentialAudits ?? [],

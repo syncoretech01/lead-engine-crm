@@ -32,6 +32,8 @@ import {
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
 
@@ -153,6 +155,9 @@ export default async function SdrQueuePage() {
     }
   ];
 
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "sdr-queue");
+
   return (
     <>
       <PageHeader
@@ -181,19 +186,19 @@ export default async function SdrQueuePage() {
         }
       />
 
-      <section className="stat-grid" aria-label="SDR queue metrics">
-        {metrics.map((metric) => (
-          <StatCard key={metric.label} {...metric} />
+      <TileGrid pageKey="sdr-queue" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard {...metric} />
+          </TileItem>
         ))}
-      </section>
-
-      <section className="ops-stage-strip four-up" aria-label="SDR work lanes">
-        {lanes.map((lane) => (
-          <LaneCard key={lane.label} {...lane} />
+        {lanes.map((lane, index) => (
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+            <LaneCard {...lane} />
+          </TileItem>
         ))}
-      </section>
 
-      <section className="grid two">
+        <TileItem id="priority-work" x={0} y={4} w={7} h={8} minW={4} minH={4}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -288,7 +293,9 @@ export default async function SdrQueuePage() {
             </table>
           </div>
         </div>
+        </TileItem>
 
+        <TileItem id="log-touch" x={7} y={4} w={5} h={8} minW={3} minH={4}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -346,9 +353,9 @@ export default async function SdrQueuePage() {
             </div>
           </form>
         </div>
-      </section>
+        </TileItem>
 
-      <section className="grid two">
+        <TileItem id="follow-up-reminders" x={0} y={12} w={7} h={7} minW={4} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -389,7 +396,9 @@ export default async function SdrQueuePage() {
             ) : null}
           </div>
         </div>
+        </TileItem>
 
+        <TileItem id="bulk-email" x={7} y={12} w={5} h={7} minW={3} minH={4}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -462,10 +471,11 @@ export default async function SdrQueuePage() {
             </div>
           </div>
         </div>
-      </section>
+        </TileItem>
 
-      {!isSdr ? (
-        <section className="panel">
+        {!isSdr ? (
+        <TileItem id="assignment-directory" x={0} y={19} w={12} h={7} minW={6} minH={3}>
+        <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
               <h2 className="section-title">Assignment directory</h2>
@@ -514,8 +524,10 @@ export default async function SdrQueuePage() {
               </tbody>
             </table>
           </div>
-        </section>
+        </div>
+        </TileItem>
       ) : null}
+      </TileGrid>
     </>
   );
 }

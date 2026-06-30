@@ -61,6 +61,8 @@ import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
 
@@ -272,6 +274,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         ["Do not contact", contact.doNotContact ? "Yes" : "No"]
       ];
 
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "crm-contact-detail");
+
   return (
     <>
       <PageHeader
@@ -298,20 +303,20 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         }
       />
 
-      <section className="stat-grid" aria-label="Contact metrics">
-        {metrics.map((metric) => (
-          <StatCard key={metric.label} {...metric} />
+      <TileGrid pageKey="crm-contact-detail" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard {...metric} />
+          </TileItem>
         ))}
-      </section>
-
-      <section className="ops-stage-strip four-up" aria-label="Contact work lanes">
-        {lanes.map((lane) => (
-          <LaneCard key={lane.label} {...lane} />
+        {lanes.map((lane, index) => (
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+            <LaneCard {...lane} />
+          </TileItem>
         ))}
-      </section>
 
-      {canEditContactDetails ? (
-        <section className="grid">
+        {canEditContactDetails ? (
+        <TileItem id="edit-contact-details" x={0} y={4} w={12} h={5} minW={6} minH={3}>
           <div className="panel" id="edit-contact-details">
             <div className="panel-header">
               <div className="panel-title-wrap">
@@ -345,11 +350,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
             </form>
           </div>
-        </section>
+        </TileItem>
       ) : null}
 
       {isSdr ? (
-        <section className="grid two">
+        <TileItem id="sdr-next-action" x={0} y={9} w={6} h={7} minW={4} minH={4}>
           <div className="panel">
             <div className="panel-header">
               <div className="panel-title-wrap">
@@ -404,8 +409,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
             </div>
           </div>
+        </TileItem>
+        ) : null}
 
-          {canSendDirectOutreach ? (
+        {isSdr && canSendDirectOutreach ? (
+        <TileItem id="sdr-direct-email" x={6} y={9} w={6} h={7} minW={3} minH={4}>
             <div className="panel" id="send-direct-email">
               <div className="panel-header">
                 <div className="panel-title-wrap">
@@ -447,11 +455,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                 </div>
               </form>
             </div>
-          ) : null}
-        </section>
-      ) : null}
+        </TileItem>
+        ) : null}
 
-      <section className="grid two">
+      <TileItem id="contact-snapshot" x={0} y={16} w={7} h={7} minW={4} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -475,7 +482,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             ))}
           </div>
         </div>
+      </TileItem>
 
+      <TileItem id="current-work" x={7} y={16} w={5} h={7} minW={3} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -508,10 +517,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             {activeTasks.length === 0 ? <p className="section-subtitle">No open contact tasks right now.</p> : null}
           </div>
         </div>
-      </section>
+      </TileItem>
 
-      <section className={isSdr ? "grid" : "grid two"}>
-        {!isSdr ? (
+      {!isSdr ? (
+      <TileItem id="related-opportunities" x={0} y={23} w={7} h={7} minW={4} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -571,8 +580,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </table>
           </div>
         </div>
-        ) : null}
+      </TileItem>
+      ) : null}
 
+      <TileItem id="contact-timeline" x={7} y={23} w={5} h={9} minW={3} minH={4}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -604,9 +615,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             {activities.length === 0 ? <p className="section-subtitle">No contact activity has been recorded yet.</p> : null}
           </div>
         </div>
-      </section>
+      </TileItem>
 
-      <section className="grid two">
+      <TileItem id="add-contact-work" x={0} y={32} w={7} h={11} minW={4} minH={5}>
         <div className="panel" id="add-contact-work">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -688,7 +699,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           </form>
           ) : null}
         </div>
+      </TileItem>
 
+      <TileItem id="log-contact-activity" x={7} y={32} w={5} h={11} minW={3} minH={5}>
         <div className="panel" id="log-contact-activity">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -756,11 +769,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             {recentInteractions.length === 0 ? <p className="section-subtitle">No notes or calls have been logged yet.</p> : null}
           </div>
         </div>
-      </section>
+      </TileItem>
 
-      {canSendDirectOutreach ? (
-        <section className="grid two">
-          {!isSdr ? (
+      {canSendDirectOutreach && !isSdr ? (
+        <TileItem id="direct-email" x={0} y={43} w={6} h={8} minW={3} minH={4}>
           <div className="panel" id="send-direct-email">
             <div className="panel-header">
               <div className="panel-title-wrap">
@@ -802,8 +814,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
             </form>
           </div>
-          ) : null}
+        </TileItem>
+        ) : null}
 
+        {canSendDirectOutreach ? (
+        <TileItem id="direct-sms" x={6} y={43} w={6} h={8} minW={3} minH={4}>
           <div className="panel" id="send-direct-sms">
             <div className="panel-header">
               <div className="panel-title-wrap">
@@ -835,11 +850,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               </div>
             </form>
           </div>
-        </section>
-      ) : null}
+        </TileItem>
+        ) : null}
 
       {!isSdr ? (
-      <section className="grid two">
+      <TileItem id="contact-compliance" x={0} y={51} w={4} h={8} minW={3} minH={4}>
         <div className="panel" id="contact-compliance">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -906,7 +921,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </div>
           )}
         </div>
+      </TileItem>
+      ) : null}
 
+      {!isSdr ? (
+      <TileItem id="contact-field-provenance" x={4} y={51} w={4} h={9} minW={3} minH={4}>
         <div className="panel" id="contact-field-provenance">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -969,7 +988,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </form>
           ) : null}
         </div>
+      </TileItem>
+      ) : null}
 
+      {!isSdr ? (
+      <TileItem id="contact-custom-fields" x={8} y={51} w={4} h={9} minW={3} minH={4}>
         <div className="panel" id="contact-custom-fields">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -1021,8 +1044,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </form>
           </div>
         </div>
-      </section>
+      </TileItem>
       ) : null}
+      </TileGrid>
     </>
   );
 }
