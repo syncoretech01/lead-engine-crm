@@ -54,6 +54,8 @@ export const stateSnapshotId = "syncore-primary-state";
 type PrismaStoreClient = PrismaClient | Prisma.TransactionClient;
 type UpdateStateOptions = {
   normalizedTables?: ProjectionTableName[];
+  /** Persist only the JSON snapshot; skip the normalized projection sync. */
+  skipNormalizedProjection?: boolean;
 };
 
 export const sessionCookieNames = {
@@ -100,7 +102,7 @@ export async function updateState<T>(
           await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
           return result;
         },
-        { maxWait: 5_000, timeout: 20_000 }
+        { maxWait: 10_000, timeout: 30_000 }
       );
     }
 
@@ -127,7 +129,7 @@ export async function updateAuthState<T>(
           await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
           return result;
         },
-        { maxWait: 5_000, timeout: 20_000 }
+        { maxWait: 10_000, timeout: 30_000 }
       );
     }
 
@@ -612,6 +614,9 @@ async function writeStateToPrisma(
 }
 
 function normalizedSyncOptions(options: UpdateStateOptions): SyncNormalizedProjectionOptions {
+  if (options.skipNormalizedProjection) {
+    return { skip: true };
+  }
   return options.normalizedTables?.length ? { tables: options.normalizedTables } : {};
 }
 
