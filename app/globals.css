@@ -3377,3 +3377,118 @@ tbody tr:hover {
     display: none;
   }
 }
+
+/* ----------------------------------------------------------------------------
+   Magnetic (iOS-style) draggable/resizable tile grid (GridStack)
+   ------------------------------------------------------------------------- */
+.tile-grid-wrap {
+  position: relative;
+}
+
+.tile-grid-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tile-grid-wrap .grid-stack {
+  margin: 0 -8px;
+  opacity: 0;
+  transition: opacity 0.18s var(--ease-out);
+}
+
+/* Reveal only once GridStack has positioned the tiles, to avoid a flash of
+   un-positioned (overlapping) tiles before the client grid initializes. */
+.tile-grid-wrap.ready .grid-stack {
+  opacity: 1;
+}
+
+/* Tile content fills its cell; the content box itself does not scroll (keeps the
+   drag handle pinned) — long tables/forms scroll inside the panel instead. */
+.grid-stack-item-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.grid-stack-item-content > .panel,
+.grid-stack-item-content > .stat-card,
+.grid-stack-item-content > .ops-stage-card {
+  flex: 1 1 auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.grid-stack-item-content > .panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.grid-stack-item-content > .panel .table-wrap,
+.grid-stack-item-content > .panel .panel-body,
+.grid-stack-item-content > .panel .stage-list {
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Drag handle — only visible/interactive in edit mode. */
+.tile-drag-handle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm);
+  color: var(--fg2);
+  cursor: grab;
+}
+
+.grid-stack.editing .tile-drag-handle {
+  display: flex;
+}
+
+.grid-stack.editing .tile-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* In edit mode, stop clicks inside tiles from firing links/buttons while
+   rearranging; keep the drag/resize handles interactive. */
+.grid-stack.editing .grid-stack-item-content {
+  pointer-events: none;
+  outline: 2px dashed var(--border-subtle);
+  outline-offset: -2px;
+  border-radius: var(--radius-lg);
+}
+
+.grid-stack.editing .tile-drag-handle,
+.grid-stack.editing .ui-resizable-handle {
+  pointer-events: auto;
+}
+
+/* iOS-style jiggle. GridStack positions items via left/top/width/height, so a
+   rotate transform here is safe and does not affect placement. */
+@keyframes tileJiggle {
+  0% {
+    transform: rotate(-0.45deg);
+  }
+  50% {
+    transform: rotate(0.45deg);
+  }
+  100% {
+    transform: rotate(-0.45deg);
+  }
+}
+
+.grid-stack.editing
+  > .grid-stack-item:not(.ui-draggable-dragging):not(.ui-resizable-resizing) {
+  animation: tileJiggle 0.32s ease-in-out infinite;
+}

@@ -135,6 +135,22 @@ export type WorkspaceMember = {
   role: WorkspaceRole;
 };
 
+export type TileLayoutItem = {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+export type UserTileLayout = {
+  id: string;
+  userId: string;
+  pageKey: string;
+  items: TileLayoutItem[];
+  updatedAt: string;
+};
+
 export type Session = {
   user: User;
   workspace: Workspace;
@@ -1555,6 +1571,7 @@ export type AppState = {
   authAccounts: AuthAccount[];
   authSessions: AuthSessionRecord[];
   userInvites: UserInvite[];
+  userTileLayouts: UserTileLayout[];
   passwordResetTokens: PasswordResetToken[];
   providerConnections: ProviderConnection[];
   providerCredentialAudits: ProviderCredentialAudit[];

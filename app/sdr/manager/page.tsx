@@ -29,6 +29,8 @@ import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/st
 import type { AppState } from "@/lib/phase1/types";
 import { formatNumber, formatPercent } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
 
@@ -123,6 +125,9 @@ export default async function SdrManagerPage() {
     }
   ];
 
+  const canCustomize = canCustomizeTiles(sessionContext.session);
+  const savedLayout = await readUserTileLayout(sessionContext.session.user.id, "sdr-manager");
+
   return (
     <>
       <PageHeader
@@ -145,19 +150,19 @@ export default async function SdrManagerPage() {
         }
       />
 
-      <section className="stat-grid" aria-label="SDR manager metrics">
-        {metrics.map((metric) => (
-          <StatCard key={metric.label} {...metric} />
+      <TileGrid pageKey="sdr-manager" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard {...metric} />
+          </TileItem>
         ))}
-      </section>
-
-      <section className="ops-stage-strip four-up" aria-label="SDR manager lanes">
-        {lanes.map((lane) => (
-          <LaneCard key={lane.label} {...lane} />
+        {lanes.map((lane, index) => (
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+            <LaneCard {...lane} />
+          </TileItem>
         ))}
-      </section>
 
-      <section className="grid two">
+        <TileItem id="team-workload" x={0} y={4} w={7} h={8} minW={4} minH={4}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -216,7 +221,9 @@ export default async function SdrManagerPage() {
             </table>
           </div>
         </div>
+        </TileItem>
 
+        <TileItem id="routing-coverage" x={7} y={4} w={5} h={8} minW={3} minH={4}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -248,9 +255,10 @@ export default async function SdrManagerPage() {
             {teams.length === 0 ? <p className="section-subtitle">No routing teams have been configured yet.</p> : null}
           </div>
         </div>
-      </section>
+        </TileItem>
 
-      <section className="panel">
+        <TileItem id="reassignment-recommendations" x={0} y={12} w={12} h={7} minW={6} minH={3}>
+        <div className="panel">
         <div className="panel-header">
           <div className="panel-title-wrap">
             <h2 className="section-title">Reassignment recommendations</h2>
@@ -312,9 +320,10 @@ export default async function SdrManagerPage() {
             </tbody>
           </table>
         </div>
-      </section>
+        </div>
+        </TileItem>
 
-      <section className="grid two">
+        <TileItem id="manual-reassignment" x={0} y={19} w={7} h={9} minW={4} minH={4}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -378,7 +387,9 @@ export default async function SdrManagerPage() {
             </div>
           </form>
         </div>
+        </TileItem>
 
+        <TileItem id="reassignment-rules" x={7} y={19} w={5} h={9} minW={3} minH={4}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -457,7 +468,8 @@ export default async function SdrManagerPage() {
             ) : null}
           </div>
         </div>
-      </section>
+        </TileItem>
+      </TileGrid>
     </>
   );
 }

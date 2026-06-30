@@ -137,6 +137,7 @@ import {
   sdrLeadStatuses
 } from "@/lib/phase1/sdr";
 import { ownedCrmRecordScope } from "@/lib/phase1/queries";
+import { isTilePageKey, sanitizeTileItems } from "@/lib/phase1/tile-layouts";
 import { createSeedState } from "@/lib/phase1/seed";
 import { appendAudit, getSession, getWorkspaceSessionContext, readState, updateState } from "@/lib/phase1/store";
 import { requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
@@ -169,6 +170,7 @@ import type {
   SdrLeadStatus,
   SmsEventStatus,
   SuppressionRecord,
+  TileLayoutItem,
   ComplianceChecklistStatus,
   ConsentStatus,
   DataSubjectRequestType,
@@ -2821,4 +2823,51 @@ function applySuppressionToContacts(state: Parameters<typeof runWorkspaceVerific
   }
 
   return affected;
+}
+
+// Persists the current user's tile layout for a customizable page. Each user
+// owns their own layout per page; no revalidation so the live client layout is
+// not disturbed (the next server render reads the saved layout).
+export async function saveTileLayoutAction(pageKey: string, items: TileLayoutItem[]) {
+  if (!isTilePageKey(pageKey)) {
+    return;
+  }
+  const clean = sanitizeTileItems(items);
+  await updateState((state, session) => {
+    if (!Array.isArray(state.userTileLayouts)) {
+      state.userTileLayouts = [];
+    }
+    const userId = session.user.id;
+    const existing = state.userTileLayouts.find(
+      (layout) => layout.userId === userId && layout.pageKey === pageKey
+    );
+    if (existing) {
+      existing.items = clean;
+      existing.updatedAt = new Date().toISOString();
+    } else {
+      state.userTileLayouts.push({
+        id: randomUUID(),
+        userId,
+        pageKey,
+        items: clean,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  });
+}
+
+// Removes the current user's saved layout for a page, returning it to defaults.
+export async function resetTileLayoutAction(pageKey: string) {
+  if (!isTilePageKey(pageKey)) {
+    return;
+  }
+  await updateState((state, session) => {
+    if (!Array.isArray(state.userTileLayouts)) {
+      state.userTileLayouts = [];
+      return;
+    }
+    state.userTileLayouts = state.userTileLayouts.filter(
+      (layout) => !(layout.userId === session.user.id && layout.pageKey === pageKey)
+    );
+  });
 }

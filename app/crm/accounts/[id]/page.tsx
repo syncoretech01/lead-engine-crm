@@ -46,6 +46,8 @@ import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/st
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, LaneCard } from "@/components/ui-metrics";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
 
@@ -199,6 +201,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
     }
   ];
 
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "crm-account-detail");
+
   return (
     <>
       <PageHeader
@@ -219,19 +224,19 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         }
       />
 
-      <section className="stat-grid" aria-label="Account metrics">
-        {metrics.map((metric) => (
-          <StatCard key={metric.label} {...metric} />
+      <TileGrid pageKey="crm-account-detail" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard {...metric} />
+          </TileItem>
         ))}
-      </section>
-
-      <section className="ops-stage-strip four-up" aria-label="Account work lanes">
-        {lanes.map((lane) => (
-          <LaneCard key={lane.label} {...lane} />
+        {lanes.map((lane, index) => (
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+            <LaneCard {...lane} />
+          </TileItem>
         ))}
-      </section>
 
-      <section className="grid two">
+        <TileItem id="account-snapshot" x={0} y={4} w={7} h={7} minW={4} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -260,7 +265,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             ))}
           </div>
         </div>
+        </TileItem>
 
+        <TileItem id="current-work" x={7} y={4} w={5} h={7} minW={3} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -295,9 +302,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             {focusTasks.length === 0 ? <p className="section-subtitle">No open account tasks right now.</p> : null}
           </div>
         </div>
-      </section>
+        </TileItem>
 
-      <section className="grid two">
+        <TileItem id="pipeline" x={0} y={11} w={7} h={7} minW={4} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -364,7 +371,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </table>
           </div>
         </div>
+        </TileItem>
 
+        <TileItem id="contacts" x={7} y={11} w={5} h={7} minW={3} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -413,9 +422,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </table>
           </div>
         </div>
-      </section>
+        </TileItem>
 
-      <section className="grid two">
+        <TileItem id="activity-timeline" x={0} y={18} w={7} h={7} minW={4} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -447,7 +456,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             {activities.length === 0 ? <p className="section-subtitle">No activity has been recorded yet.</p> : null}
           </div>
         </div>
+        </TileItem>
 
+        <TileItem id="recent-notes-calls" x={7} y={18} w={5} h={7} minW={3} minH={3}>
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -469,9 +480,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             {recentInteractions.length === 0 ? <p className="section-subtitle">No notes or calls have been logged yet.</p> : null}
           </div>
         </div>
-      </section>
+        </TileItem>
 
-      <section className="grid two">
+        <TileItem id="add-account-work" x={0} y={25} w={7} h={12} minW={4} minH={5}>
         <div className="panel" id="add-account-work">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -585,7 +596,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </div>
           </form>
         </div>
+        </TileItem>
 
+        <TileItem id="log-activity" x={7} y={25} w={5} h={12} minW={3} minH={5}>
         <div className="panel" id="log-account-activity">
           <div className="panel-header">
             <div className="panel-title-wrap">
@@ -660,9 +673,10 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </div>
           </form>
         </div>
-      </section>
+        </TileItem>
 
-      <section className="panel" id="account-custom-fields">
+        <TileItem id="custom-fields" x={0} y={37} w={12} h={7} minW={6} minH={3}>
+        <div className="panel" id="account-custom-fields">
         <div className="panel-header">
           <div className="panel-title-wrap">
             <h2 className="section-title">Custom fields</h2>
@@ -712,7 +726,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </div>
           </form>
         </div>
-      </section>
+        </div>
+        </TileItem>
+      </TileGrid>
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -405,7 +405,12 @@ function readStateFromFile(): AppState {
 
 function writeStateToFile(state: AppState) {
   mkdirSync(dataDir, { recursive: true });
-  writeFileSync(dataFile, JSON.stringify(state, null, 2));
+  // Write to a per-process temp file then atomically rename, so concurrent
+  // writers (e.g. parallel build/test workers) can never leave a torn or empty
+  // store.json behind.
+  const tempFile = `${dataFile}.${process.pid}.tmp`;
+  writeFileSync(tempFile, JSON.stringify(state, null, 2));
+  renameSync(tempFile, dataFile);
 }
 
 function ensureFileStore() {
@@ -413,7 +418,9 @@ function ensureFileStore() {
     mkdirSync(dataDir, { recursive: true });
   }
 
-  if (!existsSync(dataFile)) {
+  // Reseed when the store is missing OR empty. An empty file would otherwise
+  // make JSON.parse throw "Unexpected end of JSON input" on every request.
+  if (!existsSync(dataFile) || readFileSync(dataFile, "utf8").trim() === "") {
     writeStateToFile(createSeedState());
   }
 }
@@ -685,6 +692,11 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
 
   if (!Array.isArray(state.userInvites)) {
     state.userInvites = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.userTileLayouts)) {
+    state.userTileLayouts = [];
     changed = true;
   }
 
