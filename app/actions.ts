@@ -38,6 +38,7 @@ import {
   stageProbability,
   taskPriorities
 } from "@/lib/phase1/crm";
+import { updateContactDetailsForWorkspace } from "@/lib/phase1/contact-details";
 import { splitList } from "@/lib/phase1/csv";
 import {
   detectWorkspaceDuplicates,
@@ -798,6 +799,58 @@ export async function createOpportunityAction(formData: FormData) {
   }, { normalizedTables: crmWriteTables });
 
   revalidateCrmPages(crmDetailPathsFromForm(formData));
+}
+
+export async function updateContactDetailsAction(formData: FormData) {
+  const contactId = stringValue(formData.get("contactId"));
+  let companyId = "";
+
+  await updateState((state, session) => {
+    if (session.role !== "Admin" && session.role !== "Manager") {
+      throw new Error("Only managers and owners can edit contact details.");
+    }
+
+    const result = updateContactDetailsForWorkspace(state, {
+      workspaceId: session.workspace.id,
+      contactId,
+      name: stringValue(formData.get("name")),
+      email: stringValue(formData.get("email")),
+      phone: stringValue(formData.get("phone"))
+    });
+
+    companyId = result.companyId;
+
+    if (result.changedFields.length > 0) {
+      addActivity(state, {
+        workspaceId: session.workspace.id,
+        companyId: result.companyId,
+        contactId: result.contactId,
+        type: "Status change",
+        title: "Contact details updated",
+        body: result.changedFields.map((field) => `${field} changed`).join(", "),
+        actorUserId: session.user.id,
+        metadata: {
+          changedFields: result.changedFields.join(","),
+          normalizedRecordsUpdated: result.normalizedRecordsUpdated
+        }
+      });
+
+      appendAudit(state, session, {
+        objectType: "contact",
+        objectId: result.contactId,
+        action: "details_updated",
+        oldValue: result.before,
+        newValue: {
+          ...result.after,
+          normalizedRecordsUpdated: result.normalizedRecordsUpdated
+        },
+        reason: "Manager contact detail edit"
+      });
+    }
+  }, { normalizedTables: [...new Set([...crmWriteTables, ...leadGenerationWriteTables])] });
+
+  revalidateCrmPages([`/crm/contacts/${contactId}`, companyId ? `/crm/accounts/${companyId}` : ""]);
+  revalidateLeadEnginePages(["/staging", "/data-quality", "/enrichment", "/exports"]);
 }
 
 export async function updateOpportunityStageAction(formData: FormData) {

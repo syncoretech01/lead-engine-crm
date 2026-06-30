@@ -11,6 +11,7 @@ import {
   Mail,
   NotebookPen,
   Phone,
+  Pencil,
   Save,
   ShieldCheck,
   Sparkles,
@@ -27,6 +28,7 @@ import {
   sendDirectSmsAction,
   setCustomFieldValueAction,
   updateContactComplianceAction,
+  updateContactDetailsAction,
   updateOpportunityStageAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
@@ -119,6 +121,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
   const company = readModel.company;
   const isSdr = session.role === "SDR";
+  const canEditContactDetails = session.role === "Admin" || session.role === "Manager";
   const contactDisplayName = formatContactDisplayName(contact);
   const companyDisplayName = company?.name ?? "unknown account";
   const opportunities = readState.opportunities
@@ -306,6 +309,44 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           <LaneCard key={lane.label} {...lane} />
         ))}
       </section>
+
+      {canEditContactDetails ? (
+        <section className="grid">
+          <div className="panel" id="edit-contact-details">
+            <div className="panel-header">
+              <div className="panel-title-wrap">
+                <h2 className="section-title">Edit contact details</h2>
+                <p className="section-subtitle">
+                  Update the canonical name, email, and phone used across CRM and Lead Engine views.
+                </p>
+              </div>
+              <Pencil size={20} aria-hidden="true" />
+            </div>
+            <form action={updateContactDetailsAction} className="panel-body form-grid">
+              <input name="contactId" type="hidden" value={contact.id} />
+              <div className="field">
+                <label htmlFor="contact-edit-name">Name</label>
+                <input id="contact-edit-name" name="name" defaultValue={contact.name} required />
+              </div>
+              <div className="field">
+                <label htmlFor="contact-edit-email">Email</label>
+                <input id="contact-edit-email" name="email" type="email" defaultValue={contact.email} />
+              </div>
+              <div className="field">
+                <label htmlFor="contact-edit-phone">Phone</label>
+                <input id="contact-edit-phone" name="phone" type="tel" defaultValue={contact.phone} />
+              </div>
+              <div className="field">
+                <label aria-hidden="true">&nbsp;</label>
+                <button className="button primary" type="submit">
+                  <Save size={16} aria-hidden="true" />
+                  Save contact details
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+      ) : null}
 
       {isSdr ? (
         <section className="grid two">
