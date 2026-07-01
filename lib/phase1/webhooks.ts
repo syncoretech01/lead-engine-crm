@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
-import { isProductionBuildPhase } from "@/lib/phase1/auth-security";
+import { requireSecret } from "@/lib/phase1/require-secret";
 import { createEmailEvent, createSmsEvent } from "@/lib/phase1/outreach";
 import {
   assertWorkspaceExists,
@@ -62,15 +62,7 @@ type ProcessResult = {
 };
 
 export function webhookSecret(env: WebhookSecretEnv = process.env as WebhookSecretEnv) {
-  const secret = env.SYNCORE_WEBHOOK_SECRET?.trim();
-  if (secret) {
-    return secret;
-  }
-  if (env.NODE_ENV === "production" && !isProductionBuildPhase(env)) {
-    throw new Error("SYNCORE_WEBHOOK_SECRET is required in production.");
-  }
-
-  return defaultWebhookSecret;
+  return requireSecret("SYNCORE_WEBHOOK_SECRET", defaultWebhookSecret, env);
 }
 
 export function signWebhookPayload(body: string, secret = webhookSecret()) {

@@ -7,7 +7,7 @@ import {
   randomUUID,
   timingSafeEqual
 } from "node:crypto";
-import { isProductionBuildPhase } from "@/lib/phase1/auth-security";
+import { requireSecret } from "@/lib/phase1/require-secret";
 import type { AppState, ProviderConnection, ProviderEncryptedSecret } from "@/lib/phase1/types";
 import type { ProviderId } from "@/lib/providers/types";
 
@@ -22,15 +22,7 @@ type CredentialKeyEnv = {
 };
 
 export function resolveCredentialKeyMaterial(env: CredentialKeyEnv = process.env as CredentialKeyEnv) {
-  const key = env.SYNCORE_CREDENTIAL_ENCRYPTION_KEY?.trim();
-  if (key) {
-    return key;
-  }
-  if (env.NODE_ENV === "production" && !isProductionBuildPhase(env)) {
-    throw new Error("SYNCORE_CREDENTIAL_ENCRYPTION_KEY is required in production.");
-  }
-
-  return localDevelopmentKey;
+  return requireSecret("SYNCORE_CREDENTIAL_ENCRYPTION_KEY", localDevelopmentKey, env);
 }
 
 export type StoreProviderSecretInput = {

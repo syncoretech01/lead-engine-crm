@@ -89,11 +89,19 @@ change it on first login. The script refuses to overwrite existing state without
    | `SYNCORE_WEBHOOK_SECRET` | from Step 2 |
    | `SYNCORE_CREDENTIAL_ENCRYPTION_KEY` | from Step 2 |
    | `SYNCORE_CREDENTIAL_KEY_ID` | from Step 2 |
+   | `SYNCORE_UNSUBSCRIBE_SECRET` | a long random secret (HMAC key for unsubscribe tokens) |
+
+   **Required prod secrets that fail closed** (a missing value throws at runtime, never
+   falls back to a guessable default): `SYNCORE_AUTH_SECRET`, `SYNCORE_WEBHOOK_SECRET`,
+   `SYNCORE_CREDENTIAL_ENCRYPTION_KEY`, and `SYNCORE_UNSUBSCRIBE_SECRET`. Setting the
+   unsubscribe secret is mandatory — without it, one-click unsubscribe tokens would be
+   forgeable.
 
    Use the **pooled** URL here (serverless functions + `pgbouncer=true`). **Do NOT** add
-   `SYNCORE_ALLOW_DEMO_SESSION`. Vercel sets `NODE_ENV=production` automatically, which
-   also makes session cookies `secure` and activates the production secret guards
-   (a missing secret fails the request loudly rather than falling back to a dev default).
+   `SYNCORE_ALLOW_DEMO_SESSION` (it is force-disabled in production regardless, but keep
+   it unset). Vercel sets `NODE_ENV=production` automatically, which also makes session
+   cookies `secure` and activates the production secret guards (a missing secret fails
+   the request loudly rather than falling back to a dev default).
 3. **Deploy.**
 
 ## Step 5 — Lock access to your team

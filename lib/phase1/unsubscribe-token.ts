@@ -1,9 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { requireSecret } from "@/lib/phase1/require-secret";
 
 type UnsubscribeEnv = Record<string, string | undefined>;
 
 function secret(env: UnsubscribeEnv = process.env): string {
-  return env.SYNCORE_UNSUBSCRIBE_SECRET?.trim() || "syncore-dev-unsubscribe-secret-change-me";
+  return requireSecret("SYNCORE_UNSUBSCRIBE_SECRET", "syncore-dev-unsubscribe-secret-change-me", env);
 }
 
 function b64url(value: Buffer | string): string {
