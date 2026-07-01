@@ -59,4 +59,43 @@ describe.skipIf(!enabled)("real-Postgres persistence round-trip (P1.3)", () => {
     const projectedContactCount = await prisma.contact.count({ where: { workspaceId } });
     expect(projectedContactCount).toBe(snapshotContactCount);
   });
+
+  // P2.5: top-level CRM overview KPIs must be counted at the DB, not derived from
+  // the `tasks` array capped at 2000, which silently undercounts large workspaces.
+  it("counts open-task KPIs beyond the read-model fetch cap", async () => {
+    const { resetStore, readState } = await import("@/lib/phase1/store");
+    const { getDemoSession } = await import("@/lib/phase1/auth");
+    const { readFastCrmOverviewModel } = await import("@/lib/phase1/crm-overview-read-model");
+    const { prisma } = await import("@/lib/prisma");
+
+    await resetStore();
+    const state = await readState();
+    const session = getDemoSession(state);
+    const workspaceId = session.workspace.id;
+
+    // Insert more open tasks than the read model's 2000-row fetch cap, all due today.
+    const bulkCount = 2100;
+    await prisma.task.createMany({
+      data: Array.from({ length: bulkCount }, (_, index) => ({
+        workspaceId,
+        title: `bulk-open-task-${index}`,
+        status: "Open",
+        dueAt: new Date()
+      }))
+    });
+
+    const openStatusOr = [
+      { status: { equals: "open", mode: "insensitive" as const } },
+      { status: { equals: "overdue", mode: "insensitive" as const } }
+    ];
+    const dbOpen = await prisma.task.count({ where: { workspaceId, OR: openStatusOr } });
+    expect(dbOpen).toBeGreaterThan(2000);
+
+    const fast = await readFastCrmOverviewModel(session, workspaceId);
+    expect(fast).toBeDefined();
+    // The KPI reflects the true DB count, not the capped array (which would be <= 2000).
+    expect(fast?.openTaskCount).toBe(dbOpen);
+    expect(fast?.openTaskCount).toBeGreaterThan(2000);
+    expect(fast?.dueToday ?? 0).toBeGreaterThanOrEqual(bulkCount);
+  });
 });
