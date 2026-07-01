@@ -15,6 +15,7 @@
     "postinstall": "prisma generate",
     "db:bootstrap": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run db:seed",
     "db:seed": "tsx scripts/seed-prisma.ts",
+    "db:reproject": "tsx scripts/reproject.ts",
     "db:provision": "tsx scripts/provision-workspace.ts",
     "generate-secrets": "tsx scripts/generate-secrets.ts",
     "worker:provider": "tsx scripts/run-provider-worker.ts",

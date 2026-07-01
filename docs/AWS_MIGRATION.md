@@ -103,26 +103,26 @@ Target resources (region **us-east-1**, to match the existing SES identity):
 
 ---
 
-## Phase 2 — Schema + data migrate  [YOU] run (commands provided)
+## Phase 2 — Schema + data migrate  [YOU] run (one script)
 
-Neon stays live and writable throughout (rollback safety).
+Neon stays live and writable throughout (rollback safety). This is turnkey via
+`deploy/aws/migrate-data.sh` (run on the instance after Phase 1's `deploy-app.sh`):
 
-1. Build + deploy the app to the instance (Phase 1 bootstrap handles this).
-2. Create the schema on RDS:
-   ```
-   DATABASE_URL="postgresql://APPUSER:PW@RDS_ENDPOINT:5432/syncore?sslmode=require" \
-     npx prisma migrate deploy
-   ```
-3. Copy the single source-of-truth row from Neon → RDS, then rebuild projections:
-   ```
-   # Dump just the snapshot from Neon (direct, non-pooled URL):
-   pg_dump -Fc --no-owner --table='"AppStateSnapshot"' "$NEON_DIRECT_URL" -f snapshot.dump
-   # Restore into RDS:
-   pg_restore --no-owner -d "$RDS_URL" snapshot.dump
-   ```
-   Then trigger one no-op `updateState` (any tiny admin action, or a one-off
-   script) so `syncNormalizedProjectionToPrisma` rebuilds all ~74 tables freshly
-   on RDS — avoids cross-table FK/enum ordering issues from a full dump.
+```bash
+NEON_URL='postgresql://…neon direct (non-pooled) URL…' \
+RDS_URL='postgresql://USER:PW@RDS_ENDPOINT:5432/syncore?sslmode=require' \
+  sudo -E bash /opt/syncore/app/deploy/aws/migrate-data.sh
+```
+
+It (1) runs `prisma migrate deploy` to build the RDS schema, (2) `pg_dump`s just
+the `AppStateSnapshot` row from Neon and restores it into RDS (data-only), and
+(3) runs `scripts/reproject.ts` (`npm run db:reproject`) to rebuild all ~74
+normalized tables from that snapshot in one pass — avoiding cross-table FK/enum
+ordering issues from a full dump. The reproject step was validated end-to-end
+against a real Postgres (seed → empty a table → reproject → repopulated).
+
+> Get the Neon **direct/non-pooled** URL from the Neon console (the host without
+> `-pooler`). Install a `pg_dump` client whose major ≥ the Neon server's.
 
 ---
 
