@@ -6,9 +6,12 @@ import {
   authSessionCookieName,
   expiredAuthCookieOptions
 } from "@/lib/phase1/auth-security";
+import { resolvePublicUrl } from "@/lib/phase1/request-url";
+
+export { resolvePublicUrl };
 
 export function authRedirect(request: NextRequest, outcome: AuthFormOutcome) {
-  const response = NextResponse.redirect(new URL(outcome.redirectTo, request.url), 303);
+  const response = NextResponse.redirect(resolvePublicUrl(request, outcome.redirectTo), 303);
 
   if (outcome.sessionCookie) {
     response.cookies.set(
