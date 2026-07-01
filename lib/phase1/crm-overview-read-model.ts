@@ -1,5 +1,4 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type {
   CustomField,
@@ -177,6 +176,20 @@ export async function readFastCrmOverviewModel(
     : { workspaceId };
   const activityWhere = taskWhere;
 
+  // Top-level task KPIs are counted at the DB (respecting the same scope) rather
+  // than derived from the capped `tasks` array, which silently undercounts once a
+  // workspace exceeds the fetch cap. Status is a free-form string with mixed
+  // casing, so match case-insensitively; "due today" uses the UTC day (P2.5).
+  const openTaskStatusOr = [
+    { status: { equals: "open", mode: "insensitive" as const } },
+    { status: { equals: "overdue", mode: "insensitive" as const } }
+  ];
+  const nowForDueToday = new Date();
+  const startOfUtcDay = new Date(
+    Date.UTC(nowForDueToday.getUTCFullYear(), nowForDueToday.getUTCMonth(), nowForDueToday.getUTCDate())
+  );
+  const endOfUtcDay = new Date(startOfUtcDay.getTime() + 24 * 60 * 60 * 1000);
+
   const [
     companies,
     contacts,
@@ -187,7 +200,10 @@ export async function readFastCrmOverviewModel(
     memberRows,
     activeCampaigns,
     opportunityFields,
-    customFieldValues
+    customFieldValues,
+    openTaskCount,
+    overdueCount,
+    dueTodayCount
   ] = await Promise.all([
     prisma.company.findMany({
       where: companyWhere,
@@ -291,6 +307,11 @@ export async function readFastCrmOverviewModel(
         value: true,
         updatedAt: true
       }
+    }),
+    prisma.task.count({ where: { AND: [taskWhere, { OR: openTaskStatusOr }] } }),
+    prisma.task.count({ where: { AND: [taskWhere, { status: { equals: "overdue", mode: "insensitive" } }] } }),
+    prisma.task.count({
+      where: { AND: [taskWhere, { OR: openTaskStatusOr }, { dueAt: { gte: startOfUtcDay, lt: endOfUtcDay } }] }
     })
   ]);
 
@@ -407,9 +428,9 @@ export async function readFastCrmOverviewModel(
     accountOptions: accounts.map((account) => ({ id: account.id, name: account.name })),
     contactOptions: contactSummaries.map((contact) => ({ id: contact.id, name: contact.name })),
     users,
-    openTaskCount: openTasks.length,
-    dueToday: openTasks.filter((task) => task.dueAt && isUtcToday(task.dueAt)).length,
-    overdue: openTasks.filter((task) => task.status === "Overdue").length
+    openTaskCount,
+    dueToday: dueTodayCount,
+    overdue: overdueCount
   };
 }
 
