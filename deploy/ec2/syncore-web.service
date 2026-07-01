@@ -1,0 +1,33 @@
+[Unit]
+Description=Syncore web (Next.js standalone)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+Group=__SERVICE_USER__
+# APP_DIR is the Next.js standalone output directory (contains server.js),
+# i.e. the deployed copy of `.next/standalone`.
+WorkingDirectory=__APP_DIR__
+Environment=NODE_ENV=production
+Environment=HOME=/tmp
+Environment=XDG_CACHE_HOME=/tmp/syncore-web-cache
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# Next standalone server honors PORT/HOSTNAME. Bind localhost and let Caddy/Nginx
+# terminate TLS in front, or set HOSTNAME=0.0.0.0 if fronted by a load balancer.
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+EnvironmentFile=/etc/syncore/web.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/tmp /var/tmp
+
+[Install]
+WantedBy=multi-user.target
