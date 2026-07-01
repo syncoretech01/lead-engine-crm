@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { addActivity, ownerUserIdForName, userNameForId } from "@/lib/phase1/crm";
+import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { assertWorkspaceMember, requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import type {
@@ -225,7 +226,7 @@ export function sdrQueueSnapshot(state: AppState, workspaceId: string, ownerUser
     metrics: {
       assigned: activeAssignments.length,
       p1: activeAssignments.filter((assignment) => assignment.priority === "P1").length,
-      dueToday: reminders.filter((reminder) => isSameDay(reminder.dueAt, new Date().toISOString())).length,
+      dueToday: reminders.filter((reminder) => isUtcToday(reminder.dueAt)).length,
       overdue: assignments.filter((assignment) => assignment.slaStatus === "Overdue").length + reminders.filter((reminder) => reminder.status === "Overdue").length
     },
     queueViews: [
@@ -237,7 +238,7 @@ export function sdrQueueSnapshot(state: AppState, workspaceId: string, ownerUser
       {
         name: "Due Today",
         purpose: "Tasks and follow-ups due today",
-        count: reminders.filter((reminder) => isSameDay(reminder.dueAt, new Date().toISOString())).length
+        count: reminders.filter((reminder) => isUtcToday(reminder.dueAt)).length
       },
       {
         name: "Overdue",
@@ -990,11 +991,6 @@ function offsetDate(value: string, days: number, hour: number) {
   return date.toISOString();
 }
 
-function isSameDay(left: string, right: string) {
-  const a = new Date(left);
-  const b = new Date(right);
-  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate();
-}
 
 function timerLabel(value?: string) {
   if (!value) return "No SLA";

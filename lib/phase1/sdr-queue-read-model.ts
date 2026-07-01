@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type { Session, SdrLeadStatus, SlaStatus, User } from "@/lib/phase1/types";
 
@@ -246,7 +247,7 @@ export async function readFastSdrQueueModel(
     ownerName: reminder.owner?.name ?? "Unassigned",
     dueLabel: timerLabel(reminder.dueAt.toISOString())
   } satisfies SdrQueueReminderReadRow));
-  const dueToday = reminderRows.filter((reminder) => isSameDay(reminder.dueAt, new Date().toISOString())).length;
+  const dueToday = reminderRows.filter((reminder) => isUtcToday(reminder.dueAt)).length;
   const overdue = assignmentRows.filter((assignment) => assignment.slaStatus === "Overdue").length +
     reminderRows.filter((reminder) => reminder.status === "Overdue").length;
 
@@ -321,11 +322,6 @@ function timerLabel(value?: string) {
   return `${Math.round(absHours / 24)}d left`;
 }
 
-function isSameDay(left: string, right: string) {
-  const a = new Date(left);
-  const b = new Date(right);
-  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate();
-}
 
 function sdrLeadStatusValue(value: string): SdrLeadStatus {
   const statuses: SdrLeadStatus[] = [
