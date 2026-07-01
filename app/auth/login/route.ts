@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { authRedirect } from "@/app/auth/route-response";
+import { authRedirect, resolvePublicUrl } from "@/app/auth/route-response";
 import { submitLoginForm } from "@/lib/phase1/auth-flow";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const redirectUrl = new URL("/login", request.url);
+  const redirectUrl = resolvePublicUrl(request, "/login");
   const next = request.nextUrl.searchParams.get("next");
   if (next) {
     redirectUrl.searchParams.set("next", next);

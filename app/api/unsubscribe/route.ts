@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { resolvePublicUrl } from "@/app/auth/route-response";
 import { suppressContact } from "@/lib/phase1/compliance";
 import { outreachEmailWriteTables } from "@/lib/phase1/normalized-write-tables";
 import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
   }, { normalizedTables: outreachEmailWriteTables });
 
   if (shouldRedirect) {
-    const redirectUrl = new URL(`/unsubscribe/${encodeURIComponent(verified.contactId)}`, request.url);
+    const redirectUrl = resolvePublicUrl(request, `/unsubscribe/${encodeURIComponent(verified.contactId)}`);
     if (verified.tokenType === "legacy") {
       redirectUrl.searchParams.set("t", token);
     } else {
