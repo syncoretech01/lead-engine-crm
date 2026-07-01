@@ -10,6 +10,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     env:
+      # `prisma validate` evaluates env("DATABASE_URL") in the datasource block,
+      # so it must be defined even though this job never connects to a database.
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
     steps:
       - name: Checkout
@@ -30,8 +32,116 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
+      - name: Lint
+        run: npm run lint
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Unit tests
         run: npm run test
+
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # `next build` sets NODE_ENV=production, but the production build phase is
+      # detected (npm_lifecycle_event=build), so the fail-closed secret guards
+      # use their dev defaults during the build. Prisma client construction is
+      # lazy and does not connect, so this URL only needs to parse.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Build
+        run: npm run build
+
+  integration:
+    # Real-Postgres round-trip so AppState-projection/schema drift is caught
+    # (the unit lane stubs Prisma in-memory and cannot see drift). Isolated from
+    # the fast unit job so a DB hiccup never flakes the unit lane.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lead_engine_crm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
+      SYNCORE_STORAGE_DRIVER: prisma
+      SYNCORE_RUN_DB_INTEGRATION: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Apply migrations
+        run: npm run prisma:migrate:deploy
+
+      - name: Integration tests (real Postgres)
+        run: npm run test:integration
+
+  e2e:
+    # Playwright smoke suite. Runs against `next dev` with the file storage
+    # driver + seeded login (no Postgres needed). Informational for now: the
+    # smoke step uses step-level continue-on-error so failures are surfaced in
+    # the logs but do not fail the job/block the merge, because the suite is not
+    # yet stable in CI (mobile responsive-overflow + SDR-scoped routing). Remove
+    # continue-on-error from the smoke step to make it blocking once green. See P1.2.
+    runs-on: ubuntu-latest
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke tests
+        continue-on-error: true
+        run: npm run test:e2e

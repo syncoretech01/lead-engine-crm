@@ -5,6 +5,11 @@ import {
   scryptSync,
   timingSafeEqual
 } from "node:crypto";
+import { requireSecret } from "@/lib/phase1/require-secret";
+
+// Re-exported so existing importers (store.ts, webhooks.ts, provider-secret-vault.ts)
+// keep resolving `isProductionBuildPhase` from here after it moved to require-secret.
+export { isProductionBuildPhase } from "@/lib/phase1/require-secret";
 
 export const authSessionCookieName = "syncore_auth_session";
 export const legacyDemoSessionCookieNames = {
@@ -117,21 +122,8 @@ export function expiredAuthCookieOptions() {
   };
 }
 
-export function isProductionBuildPhase(env: AuthSecretEnv = process.env as AuthSecretEnv) {
-  return env.NEXT_PHASE === "phase-production-build" || env.npm_lifecycle_event === "build";
-}
-
 function resolveAuthSecret(env: AuthSecretEnv) {
-  const secret = env.SYNCORE_AUTH_SECRET?.trim();
-  if (secret) {
-    return secret;
-  }
-
-  if (env.NODE_ENV === "production" && !isProductionBuildPhase(env)) {
-    throw new Error("SYNCORE_AUTH_SECRET is required in production.");
-  }
-
-  return "syncore-local-development-auth-secret";
+  return requireSecret("SYNCORE_AUTH_SECRET", "syncore-local-development-auth-secret", env);
 }
 
 function sign(encodedPayload: string, secret: string) {

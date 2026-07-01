@@ -399,8 +399,22 @@ async function readSessionSelection(state: AppState): Promise<SessionSelection> 
   throw new Error("Authentication required.");
 }
 
-function allowLegacyDemoSession() {
-  return process.env.SYNCORE_ALLOW_DEMO_SESSION === "true";
+/**
+ * Legacy demo sessions authenticate from unsigned `syncore_user_id` /
+ * `syncore_workspace_id` cookies (or the matching `SYNCORE_SESSION_*` env vars)
+ * with no password, signature, or HMAC — a full-impersonation path intended
+ * only for local development. It is force-disabled whenever `NODE_ENV` is
+ * `production`, regardless of `SYNCORE_ALLOW_DEMO_SESSION`, so the flag can
+ * never open a backdoor on a live deployment (fail closed, not merely
+ * off-by-default). See P0.2 in docs/REMEDIATION_LOG.md.
+ */
+export function allowLegacyDemoSession(
+  env: { NODE_ENV?: string; SYNCORE_ALLOW_DEMO_SESSION?: string } = process.env
+) {
+  if (env.NODE_ENV === "production") {
+    return false;
+  }
+  return env.SYNCORE_ALLOW_DEMO_SESSION === "true";
 }
 
 function isAuthRequiredError(error: unknown) {
