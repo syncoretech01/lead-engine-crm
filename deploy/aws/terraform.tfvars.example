@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and fill in. Do NOT commit terraform.tfvars.
+region           = "us-east-1"
+app_domain       = "app.your-domain.com"
+ssh_ingress_cidr = "203.0.113.4/32" # your public IP /32 (whatismyip) — keep tight
+key_pair_name    = "syncore-key"    # an existing EC2 key pair name
+
+# Optional: if app_domain is in Route53, set the zone id to auto-create the A record.
+# hosted_zone_id = "Z0123456789ABCDEFGHIJ"
+
+# Optional overrides (defaults are the lean, cheap sizes):
+# instance_type      = "t4g.small"
+# db_instance_class  = "db.t4g.micro"
+# db_engine_version  = "16"
