@@ -1,6 +1,12 @@
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import { providerError } from "@/lib/providers/adapters/http";
+import { SES_WORKSPACE_TAG_NAME } from "@/lib/providers/ses-tags";
 import type { ProviderRequestContext, ProviderResult } from "@/lib/providers/types";
+
+/** SES message-tag values allow only [A-Za-z0-9_.-] and max 256 chars. */
+function sanitizeTagValue(value: string): string {
+  return value.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 256);
+}
 
 /**
  * Amazon SES send adapter (M3). Reads its credential from the connection vault as
@@ -84,12 +90,16 @@ export async function amazonSesSendEmail(
       return providerError(providerId, requestId, "Amazon SES send requires a From address.");
     }
     const headers = send.headers && Object.keys(send.headers).length > 0 ? send.headers : undefined;
+    const emailTags = context.workspaceId
+      ? [{ Name: SES_WORKSPACE_TAG_NAME, Value: sanitizeTagValue(context.workspaceId) }]
+      : undefined;
     const response = await client.send(
       new SendEmailCommand({
         FromEmailAddress: from,
         Destination: { ToAddresses: [send.to] },
         ReplyToAddresses: headers ? undefined : send.replyTo ? [send.replyTo] : undefined,
         ConfigurationSetName: credential.configurationSet,
+        EmailTags: emailTags,
         Content: headers
           ? { Raw: { Data: buildMimeMessage(send, from) } }
           : {
