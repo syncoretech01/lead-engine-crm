@@ -108,3 +108,35 @@ jobs:
 
       - name: Integration tests (real Postgres)
         run: npm run test:integration
+
+  e2e:
+    # Playwright smoke suite. Runs against `next dev` with the file storage
+    # driver + seeded login (no Postgres needed). Non-blocking for now
+    # (continue-on-error) because it is the heaviest/most flake-prone gate and
+    # has not yet been proven stable in CI — flip to blocking once it is
+    # consistently green. See P1.2.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke tests
+        run: npm run test:e2e
