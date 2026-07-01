@@ -16,8 +16,19 @@ the code; you run it.
 4. Confirm your **SES identity is verified in us-east-1** (it already is).
 
 ## Step 1 — Add the app SECRETS to SSM (kept out of Terraform state)
-Generate fresh secrets locally: `npm run generate-secrets` (do NOT reuse Neon/Vercel
-values). Then put each under the prefix `/syncore/prod` as SecureString. Example:
+> **REUSE the current production values — do NOT generate fresh ones for a
+> migration.** The migrated database contains provider API keys AES-encrypted with
+> `SYNCORE_CREDENTIAL_ENCRYPTION_KEY` (see `provider-secret-vault.ts`); a new key
+> can't decrypt them → live providers break after cutover. Likewise reuse
+> `SYNCORE_UNSUBSCRIBE_SECRET` (signs already-sent unsubscribe links),
+> `SYNCORE_AUTH_SECRET` (keeps sessions valid), and `SYNCORE_WEBHOOK_SECRET`
+> (keeps inbound webhooks verifying). Copy them from **Vercel → Settings →
+> Environment Variables (Production)** or the current worker's
+> `/etc/syncore/worker.env`. `npm run generate-secrets` is only for a brand-new
+> (greenfield) deploy with no existing encrypted data; rotate later as a separate
+> step if desired.
+
+Put each under the prefix `/syncore/prod` as SecureString. Example:
 ```bash
 REGION=us-east-1
 put() { aws ssm put-parameter --region $REGION --type SecureString --overwrite --name "/syncore/prod/$1" --value "$2"; }

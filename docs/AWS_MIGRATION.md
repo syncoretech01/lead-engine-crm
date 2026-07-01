@@ -96,10 +96,17 @@ Target resources (region **us-east-1**, to match the existing SES identity):
 > becomes: set a few Terraform variables → `terraform apply` → copy the outputs
 > (EC2 IP, RDS endpoint). Exact commands land with that PR.
 
-**Generate FRESH credentials** (do not reuse Neon/Vercel secrets): new RDS master
-+ app password, and regenerate `SYNCORE_AUTH_SECRET` / `SYNCORE_WEBHOOK_SECRET` /
-`SYNCORE_CREDENTIAL_ENCRYPTION_KEY` / `SYNCORE_UNSUBSCRIBE_SECRET`
-(`npm run generate-secrets`). This also closes the open "rotate Neon password" item.
+**Credentials — REUSE the current production app secrets (do NOT regenerate for a
+migration).** The migrated database holds provider API keys AES-encrypted with
+`SYNCORE_CREDENTIAL_ENCRYPTION_KEY` (`provider-secret-vault.ts`), so a fresh key
+makes every live provider undecryptable after cutover. Reuse `SYNCORE_AUTH_SECRET`,
+`SYNCORE_WEBHOOK_SECRET`, `SYNCORE_CREDENTIAL_ENCRYPTION_KEY`,
+`SYNCORE_CREDENTIAL_KEY_ID`, and `SYNCORE_UNSUBSCRIBE_SECRET` from Vercel /
+`worker.env`. The **RDS master password** is the one credential that IS newly
+generated (by Terraform, into SSM) — that's safe because it's not tied to any
+migrated data. Rotating the app secrets, if desired, is a deliberate step *after*
+the migration is stable (re-encrypt the vault first). This supersedes the earlier
+"rotate Neon password" item (Neon goes away at Phase 6).
 
 ---
 
