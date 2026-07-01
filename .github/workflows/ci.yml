@@ -9,6 +9,10 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      # `prisma validate` evaluates env("DATABASE_URL") in the datasource block,
+      # so it must be defined even though this job never connects to a database.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -111,12 +115,12 @@ jobs:
 
   e2e:
     # Playwright smoke suite. Runs against `next dev` with the file storage
-    # driver + seeded login (no Postgres needed). Non-blocking for now
-    # (continue-on-error) because it is the heaviest/most flake-prone gate and
-    # has not yet been proven stable in CI — flip to blocking once it is
-    # consistently green. See P1.2.
+    # driver + seeded login (no Postgres needed). Informational for now: the
+    # smoke step uses step-level continue-on-error so failures are surfaced in
+    # the logs but do not fail the job/block the merge, because the suite is not
+    # yet stable in CI (mobile responsive-overflow + SDR-scoped routing). Remove
+    # continue-on-error from the smoke step to make it blocking once green. See P1.2.
     runs-on: ubuntu-latest
-    continue-on-error: true
     env:
       CI: "true"
     steps:
@@ -139,4 +143,5 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Smoke tests
+        continue-on-error: true
         run: npm run test:e2e
