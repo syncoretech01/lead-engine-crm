@@ -76,6 +76,33 @@ export function exportCsvForRecord(state: AppState, exportRecord: ExportRecord) 
   return toCsv(rows, exportRecord.columns);
 }
 
+/**
+ * Whether a contact is suppressed *right now*. Export eligibility is frozen at
+ * creation time (recordIds), so a contact suppressed after an export is created
+ * would still stream in the CSV. `rowsForExport` re-checks this at download time
+ * so suppressed/DNC contacts are never emitted (P2.2). Consults both the
+ * per-contact flag (set by every suppression path) and workspace suppression
+ * records matched by email/phone, in case a suppression was recorded without
+ * the contact flag.
+ */
+export function isContactCurrentlySuppressed(state: AppState, contact: Contact): boolean {
+  if (contact.isSuppressed || contact.doNotContact) {
+    return true;
+  }
+
+  const email = contact.email?.toLowerCase();
+  const phone = contact.phone;
+  if (!email && !phone) {
+    return false;
+  }
+
+  return state.suppressionRecords.some(
+    (record) =>
+      record.workspaceId === contact.workspaceId &&
+      ((email && record.email?.toLowerCase() === email) || (phone && record.phone === phone))
+  );
+}
+
 export function rowsForExport(state: AppState, exportRecord: ExportRecord) {
   if (exportRecord.type === "companies") {
     return state.companies
@@ -95,7 +122,12 @@ export function rowsForExport(state: AppState, exportRecord: ExportRecord) {
 
   if (exportRecord.type === "sdr_assignments") {
     return state.contacts
-      .filter((contact) => contact.workspaceId === exportRecord.workspaceId && exportRecord.recordIds.includes(contact.id))
+      .filter(
+        (contact) =>
+          contact.workspaceId === exportRecord.workspaceId &&
+          exportRecord.recordIds.includes(contact.id) &&
+          !isContactCurrentlySuppressed(state, contact)
+      )
       .map((contact) => {
         const company = state.companies.find(
           (item) => item.id === contact.companyId && item.workspaceId === exportRecord.workspaceId
@@ -114,7 +146,12 @@ export function rowsForExport(state: AppState, exportRecord: ExportRecord) {
 
   if (exportRecord.type === "phone_leads") {
     return state.contacts
-      .filter((contact) => contact.workspaceId === exportRecord.workspaceId && exportRecord.recordIds.includes(contact.id))
+      .filter(
+        (contact) =>
+          contact.workspaceId === exportRecord.workspaceId &&
+          exportRecord.recordIds.includes(contact.id) &&
+          !isContactCurrentlySuppressed(state, contact)
+      )
       .map((contact) => {
         const company = state.companies.find(
           (item) => item.id === contact.companyId && item.workspaceId === exportRecord.workspaceId
@@ -136,7 +173,12 @@ export function rowsForExport(state: AppState, exportRecord: ExportRecord) {
   }
 
   return state.contacts
-    .filter((contact) => contact.workspaceId === exportRecord.workspaceId && exportRecord.recordIds.includes(contact.id))
+    .filter(
+      (contact) =>
+        contact.workspaceId === exportRecord.workspaceId &&
+        exportRecord.recordIds.includes(contact.id) &&
+        !isContactCurrentlySuppressed(state, contact)
+    )
     .map((contact) => {
       const company = state.companies.find(
         (item) => item.id === contact.companyId && item.workspaceId === exportRecord.workspaceId

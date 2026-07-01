@@ -61,3 +61,13 @@ FLAG: none. This is a read-only display-metric consistency bugfix (no writes, no
 FILES: new `lib/phase1/date-utils.ts` (`isSameUtcDay`, `isUtcToday`) — one UTC basis for all surfaces. Routed all four call sites through it: crm-overview-read-model.ts + queries.ts (local→UTC, the actual fix); sdr-queue-read-model.ts + sdr.ts (already UTC → behavior-preserving). Removed the four duplicated local helpers.
 TESTS: new `tests/unit/date-utils.test.ts` (same-UTC-day, cross-UTC-midnight = different day, Date/string inputs, isUtcToday vs a fixed now). Full suite 65 files / 292 tests green; lint + tsc clean.
 FOLLOW-UP: add a per-workspace `Workspace.timezone` column later and thread it through these helpers so "due today" reflects the workspace's local day rather than UTC (P2.6 stretch; needs an additive schema migration).
+
+---
+
+## P2.2 — Re-check suppression at export download/stream time
+STATUS: done
+VERIFIED: `exporting.ts` `createExportRecord` freezes `recordIds` at creation (filtering `!isSuppressed` via `recordIdsForExport`), but `rowsForExport` (which `exportCsvForRecord` and the download route `app/api/exports/[id]/route.ts:17` use) filtered only by `workspaceId` + `recordIds.includes(contact.id)` with no suppression re-check. So a contact suppressed AFTER the export was created still streamed in the CSV. Confirmed both suppression paths (`compliance.ts suppressContact`, `outreach.ts applyHardSuppression`) set `contact.isSuppressed`, so the per-contact flag is canonical.
+FLAG: none — a compliance safety fix that only removes now-suppressed rows from a download; strictly more restrictive, no risk of leaking additional data.
+FILES: `lib/phase1/exporting.ts` — new exported `isContactCurrentlySuppressed(state, contact)` (checks `isSuppressed`/`doNotContact` plus workspace `suppressionRecords` matched by email/phone, per the thoroughness gotcha) and added `&& !isContactCurrentlySuppressed(...)` to all three contact-based `rowsForExport` branches (contacts/verified_email_leads, phone_leads, sdr_assignments). Companies branch unchanged.
+TESTS: new `tests/unit/export-suppression-recheck.test.ts` — create→suppress→download drops the row (2→1, email absent, other contact kept) [fails before fix]; suppression-record email match without the contact flag also drops it; companies export unaffected. Full suite 66 files / 295 tests green; lint + tsc clean.
+FOLLOW-UP: stored `recordCount`/`blockedCount` on the ExportRecord are creation-time snapshots and now can exceed the streamed row count; left as historical values (they describe eligibility at creation). Recompute-for-display is a possible later UX polish.
