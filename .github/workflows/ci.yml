@@ -9,8 +9,6 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,8 +28,38 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
+      - name: Lint
+        run: npm run lint
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Unit tests
         run: npm run test
+
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # `next build` sets NODE_ENV=production, but the production build phase is
+      # detected (npm_lifecycle_event=build), so the fail-closed secret guards
+      # use their dev defaults during the build. Prisma client construction is
+      # lazy and does not connect, so this URL only needs to parse.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Build
+        run: npm run build
