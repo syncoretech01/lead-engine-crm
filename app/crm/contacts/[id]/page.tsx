@@ -33,6 +33,7 @@ import {
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/submit-button";
+import { directSendOutboxEnabled, readOpenDirectSendClaimsForContact } from "@/lib/phase1/direct-send-outbox";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
 import {
@@ -277,6 +278,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
   const canCustomize = canCustomizeTiles(session);
   const savedLayout = await readUserTileLayout(session.user.id, "crm-contact-detail");
+  const openSendClaims = directSendOutboxEnabled()
+    ? await readOpenDirectSendClaimsForContact(workspaceId, contact.id)
+    : [];
 
   return (
     <>
@@ -303,6 +307,23 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           </>
         }
       />
+
+      {openSendClaims.length > 0 ? (
+        <section className="panel">
+          <div className="panel-header">
+            <div className="panel-title-wrap">
+              <h2 className="section-title">Unconfirmed send</h2>
+              <p className="section-subtitle">
+                A previous{" "}
+                {openSendClaims.length === 1 ? "send" : `${openSendClaims.length} sends`} to this contact did
+                not confirm (status: Sending) — it may or may not have reached the prospect. Verify before
+                resending to avoid a duplicate.
+              </p>
+            </div>
+            <ShieldCheck size={20} aria-hidden="true" />
+          </div>
+        </section>
+      ) : null}
 
       <TileGrid pageKey="crm-contact-detail" canCustomize={canCustomize} saved={savedLayout}>
         {metrics.map((metric, index) => (

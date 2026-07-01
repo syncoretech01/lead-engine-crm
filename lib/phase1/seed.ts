@@ -325,6 +325,7 @@ export function createSeedState(): AppState {
     authSessions: [],
     userInvites: [],
     userTileLayouts: [],
+    directSendClaims: [],
     passwordResetTokens: [],
     providerConnections: createDefaultProviderConnections({
       workspaceId,

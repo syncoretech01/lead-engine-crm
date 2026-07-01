@@ -21,6 +21,8 @@ import { phase4JobDefaults } from "@/lib/phase1/lead-planning";
 import { ensureMoneyLedgerDefaults } from "@/lib/phase1/money";
 import { ensureOutreachDefaults } from "@/lib/phase1/outreach";
 import {
+  captureProjectionRowStrings,
+  createNormalizedPersistenceProjection,
   syncNormalizedProjectionToPrisma,
   type ProjectionTableName,
   type SyncNormalizedProjectionOptions
@@ -98,8 +100,19 @@ export async function updateState<T>(
         async (tx) => {
           const state = await readStateFromPrisma(tx);
           const session = await resolveCurrentRequestSession(state, tx);
+          const syncOptions = normalizedSyncOptions(options);
+          // Capture the pre-mutation baseline for the scoped tables so the diff
+          // write path can upsert only the rows this mutation changes.
+          const previousRowStrings =
+            projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
+              ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
+              : undefined;
           const result = mutator(state, session);
-          await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
+          await writeStateToPrisma(
+            state,
+            tx,
+            previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions
+          );
           return result;
         },
         { maxWait: 10_000, timeout: 30_000 }
@@ -620,6 +633,14 @@ function normalizedSyncOptions(options: UpdateStateOptions): SyncNormalizedProje
   return options.normalizedTables?.length ? { tables: options.normalizedTables } : {};
 }
 
+// Opt-in fast write path: with SYNCORE_PROJECTION_MODE=diff, scoped writes upsert
+// only the rows that actually changed (baseline captured pre-mutation), instead
+// of re-upserting every row of the scoped tables. Default (unset) keeps the
+// full, self-healing sync. Only applies to scoped (normalizedTables) writes.
+function projectionDiffEnabled() {
+  return (process.env.SYNCORE_PROJECTION_MODE ?? "").trim().toLowerCase() === "diff";
+}
+
 function normalizedTablesLabel(tables: ProjectionTableName[] | undefined) {
   return tables?.length ? tables.join(",") : "all";
 }
@@ -702,6 +723,11 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
 
   if (!Array.isArray(state.userTileLayouts)) {
     state.userTileLayouts = [];
+    changed = true;
+  }
+
+  if (!Array.isArray(state.directSendClaims)) {
+    state.directSendClaims = [];
     changed = true;
   }
 

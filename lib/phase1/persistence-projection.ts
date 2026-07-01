@@ -91,10 +91,23 @@ export type ProjectionRow = {
 };
 
 export type NormalizedPersistenceProjection = Record<ProjectionTableName, ProjectionRow[]>;
+
+// Stable per-row string of a previous projection, by table then row id. Used by
+// the diff write path to skip upserting rows that did not change.
+export type ProjectionRowStrings = Map<ProjectionTableName, Map<string, string>>;
+
 export type SyncNormalizedProjectionOptions = {
   tables?: ProjectionTableName[];
   /** Skip the normalized projection entirely (snapshot-only write). */
   skip?: boolean;
+  /**
+   * Per-row stable strings captured BEFORE the mutation. When provided, only
+   * rows whose stable string changed (or are new) are upserted — turning the
+   * per-action write cost from O(all rows) into O(changed rows). Must be
+   * captured pre-mutation (see captureProjectionRowStrings) so in-place mutation
+   * of shared references cannot corrupt the baseline.
+   */
+  previousRowStrings?: ProjectionRowStrings;
 };
 
 const projectionTables: ProjectionTableName[] = [
@@ -1522,6 +1535,22 @@ export function normalizedProjectionHash(projection: NormalizedPersistenceProjec
   return createHash("sha256").update(stableStringify(projection)).digest("hex");
 }
 
+// Captures stable per-row strings for the given tables. MUST be called on the
+// pre-mutation projection so the diff write path has an accurate baseline; the
+// strings are materialized immediately, so later in-place mutation of shared
+// references cannot corrupt them.
+export function captureProjectionRowStrings(
+  projection: NormalizedPersistenceProjection,
+  tables: ProjectionTableName[]
+): ProjectionRowStrings {
+  const result: ProjectionRowStrings = new Map();
+  for (const table of tables) {
+    const rows = projection[table] ?? [];
+    result.set(table, new Map(rows.map((row) => [row.id, stableStringify(row)])));
+  }
+  return result;
+}
+
 export async function syncNormalizedProjectionToPrisma(
   state: AppState,
   client: PrismaMirrorClient,
@@ -1573,7 +1602,9 @@ export async function syncNormalizedProjectionToPrisma(
     requestedTables: projectionTablesLabel(options.tables)
   });
 
+  let upsertedRows = 0;
   await timeAsync("projection.sync.upsert", async () => {
+    const previousRowStrings = options.previousRowStrings;
     for (const spec of selectedUpsertOrder) {
       const delegate = client[spec.delegate];
       if (!delegate?.upsert) {
@@ -1581,13 +1612,22 @@ export async function syncNormalizedProjectionToPrisma(
         continue;
       }
 
+      const previousForTable = previousRowStrings?.get(spec.table);
       for (const row of projection[spec.table]) {
+        if (previousForTable) {
+          const prior = previousForTable.get(row.id);
+          // Skip rows that are byte-identical to the pre-mutation baseline.
+          if (prior !== undefined && prior === stableStringify(row)) {
+            continue;
+          }
+        }
         const data = stripUndefined(row);
         await delegate.upsert({
           where: { id: row.id },
           update: data,
           create: data
         });
+        upsertedRows += 1;
       }
     }
   }, {
@@ -1604,6 +1644,8 @@ export async function syncNormalizedProjectionToPrisma(
   totalTimer.end({
     selectedTables: selectedUpsertOrder.length,
     selectedRows,
+    upsertedRows,
+    diff: options.previousRowStrings ? "on" : "off",
     skippedTables: result.skippedTables.length
   });
   return result;

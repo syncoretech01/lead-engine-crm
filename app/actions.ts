@@ -58,6 +58,11 @@ import {
   recordDirectSmsSendResults,
   sendDirectSmsBatch
 } from "@/lib/phase1/direct-sms-send";
+import {
+  claimDirectSends,
+  directSendOutboxEnabled,
+  finalizeDirectSendClaims
+} from "@/lib/phase1/direct-send-outbox";
 import { prepareEmailTestAssignmentContacts } from "@/lib/phase1/email-test-assignment";
 import { runWorkspaceEnrichment } from "@/lib/phase1/enrichment";
 import { createExportRecord } from "@/lib/phase1/exporting";
@@ -1558,9 +1563,30 @@ export async function sendDirectEmailAction(formData: FormData) {
     body
   });
 
+  // Durable outbox (opt-in): claim recipients before the live send so a retry
+  // with the same requestId cannot double-send. Only newly-claimed recipients
+  // are sent; already-claimed ones stay "Sending" for manual follow-up.
+  const useEmailOutbox = directSendOutboxEnabled() && plan.credentialOk;
+  let recipients = plan.recipients;
+  if (useEmailOutbox) {
+    const claim = await updateState(
+      (state, session) =>
+        claimDirectSends(state, {
+          workspaceId: session.workspace.id,
+          channel: "Email",
+          requestId,
+          actorUserId: session.user.id,
+          contactIds: plan.recipients.map((recipient) => recipient.contactId)
+        }),
+      { skipNormalizedProjection: true }
+    );
+    const claimed = new Set(claim.toSend);
+    recipients = plan.recipients.filter((recipient) => claimed.has(recipient.contactId));
+  }
+
   const outcomes = plan.credentialOk
-    ? await sendDirectEmailBatch(plan.recipients, plan.credential, plan.workspaceId)
-    : plan.recipients.map((recipient) => ({
+    ? await sendDirectEmailBatch(recipients, plan.credential, plan.workspaceId)
+    : recipients.map((recipient) => ({
         contactId: recipient.contactId,
         status: "failed" as const,
         reason: plan.reason
@@ -1571,10 +1597,18 @@ export async function sendDirectEmailAction(formData: FormData) {
     const summary = recordDirectEmailSendResults(state, {
       workspaceId: session.workspace.id,
       actorUserId: session.user.id,
-      recipients: plan.recipients,
+      recipients,
       outcomes,
       skipped: plan.skipped
     });
+    if (useEmailOutbox) {
+      finalizeDirectSendClaims(state, {
+        workspaceId: session.workspace.id,
+        channel: "Email",
+        requestId,
+        outcomes
+      });
+    }
 
     appendAudit(state, session, {
       objectType: "email_event",
@@ -1677,9 +1711,29 @@ export async function sendDirectSmsAction(formData: FormData) {
     body
   });
 
+  // Durable outbox (opt-in): claim before the live send so a retry can't
+  // double-send; only newly-claimed recipients are sent.
+  const useSmsOutbox = directSendOutboxEnabled() && plan.credentialOk;
+  let recipients = plan.recipients;
+  if (useSmsOutbox) {
+    const claim = await updateState(
+      (state, session) =>
+        claimDirectSends(state, {
+          workspaceId: session.workspace.id,
+          channel: "SMS",
+          requestId,
+          actorUserId: session.user.id,
+          contactIds: plan.recipients.map((recipient) => recipient.contactId)
+        }),
+      { skipNormalizedProjection: true }
+    );
+    const claimed = new Set(claim.toSend);
+    recipients = plan.recipients.filter((recipient) => claimed.has(recipient.contactId));
+  }
+
   const outcomes = plan.credentialOk
-    ? await sendDirectSmsBatch(plan.recipients, plan.credential, plan.workspaceId)
-    : plan.recipients.map((recipient) => ({
+    ? await sendDirectSmsBatch(recipients, plan.credential, plan.workspaceId)
+    : recipients.map((recipient) => ({
         contactId: recipient.contactId,
         status: "failed" as const,
         reason: plan.reason
@@ -1690,10 +1744,18 @@ export async function sendDirectSmsAction(formData: FormData) {
     const summary = recordDirectSmsSendResults(state, {
       workspaceId: session.workspace.id,
       actorUserId: session.user.id,
-      recipients: plan.recipients,
+      recipients,
       outcomes,
       skipped: plan.skipped
     });
+    if (useSmsOutbox) {
+      finalizeDirectSendClaims(state, {
+        workspaceId: session.workspace.id,
+        channel: "SMS",
+        requestId,
+        outcomes
+      });
+    }
 
     appendAudit(state, session, {
       objectType: "sms_event",

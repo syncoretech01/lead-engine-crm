@@ -334,6 +334,27 @@ export type JobIdempotencyRecord = {
   updatedAt: string;
 };
 
+export type DirectSendChannel = "Email" | "SMS";
+export type DirectSendClaimStatus = "Sending" | "Sent" | "Failed";
+
+// Durable "outbox" claim written BEFORE a live 1:1 email/SMS send, keyed by
+// (channel, requestId, contactId). It lets a retry detect an already-attempted
+// send and skip re-sending (at-most-once), and leaves a visible "Sending" record
+// if the process is interrupted between the send and the result recording.
+export type DirectSendClaim = {
+  id: string;
+  workspaceId: string;
+  channel: DirectSendChannel;
+  requestId: string;
+  contactId: string;
+  status: DirectSendClaimStatus;
+  actorUserId: string;
+  providerMessageId?: string;
+  reason?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProviderConnectionStatus = "Not configured" | "Connected" | "Needs attention" | "Disabled";
 export type ProviderSecretStorage = "Not configured" | "Encrypted database" | "Managed secret store" | "Environment";
 export type ProviderConnectionTestStatus = "Not tested" | "Passed" | "Failed" | "Skipped";
@@ -1613,6 +1634,7 @@ export type AppState = {
   sequenceSteps: SequenceStep[];
   emailEvents: EmailEvent[];
   smsEvents: SmsEvent[];
+  directSendClaims: DirectSendClaim[];
   webhookEvents: WebhookEvent[];
   trackedCalls: TrackedCall[];
   reportSnapshots: ReportSnapshot[];
