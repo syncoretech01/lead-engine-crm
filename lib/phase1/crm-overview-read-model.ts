@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type {
   CustomField,
@@ -407,7 +408,7 @@ export async function readFastCrmOverviewModel(
     contactOptions: contactSummaries.map((contact) => ({ id: contact.id, name: contact.name })),
     users,
     openTaskCount: openTasks.length,
-    dueToday: openTasks.filter((task) => task.dueAt && isToday(task.dueAt.toISOString())).length,
+    dueToday: openTasks.filter((task) => task.dueAt && isUtcToday(task.dueAt)).length,
     overdue: openTasks.filter((task) => task.status === "Overdue").length
   };
 }
@@ -640,8 +641,3 @@ function customFieldTypeValue(value: string): CustomField["fieldType"] {
   return "text";
 }
 
-function isToday(value: string) {
-  const input = new Date(value);
-  const now = new Date();
-  return input.getFullYear() === now.getFullYear() && input.getMonth() === now.getMonth() && input.getDate() === now.getDate();
-}

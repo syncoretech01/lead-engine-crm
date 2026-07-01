@@ -1,4 +1,5 @@
 import { findExportRule, recordIdsForExport } from "@/lib/phase1/exporting";
+import { isUtcToday } from "@/lib/phase1/date-utils";
 import { leadReviewReason } from "@/lib/phase1/lead-engine-metrics";
 import {
   displayContactName,
@@ -629,7 +630,7 @@ export function sdrQueues(state: AppState, workspaceId = state.workspaces[0].id)
     const assignments = assignmentViews(state, workspaceId);
     return sdrWorkloads(state, workspaceId).map((workload) => {
       const owned = assignments.filter((assignment) => assignment.assignedSdrId === workload.userId);
-      const dueToday = owned.filter((assignment) => assignment.dueAt && isToday(assignment.dueAt)).length;
+      const dueToday = owned.filter((assignment) => assignment.dueAt && isUtcToday(assignment.dueAt)).length;
       const focus = owned.find((assignment) => assignment.priority === "P1")?.segment ?? owned[0]?.segment ?? "General outbound";
 
       return {
@@ -781,11 +782,6 @@ function focusForOwnedContacts(contacts: { segment: string; priority: Priority }
   return `${segment}${p1 ? `, ${p1} P1` : ""}`;
 }
 
-function isToday(value: string) {
-  const input = new Date(value);
-  const now = new Date();
-  return input.getFullYear() === now.getFullYear() && input.getMonth() === now.getMonth() && input.getDate() === now.getDate();
-}
 
 function stringArray(value: unknown) {
   if (!Array.isArray(value)) {

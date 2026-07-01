@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { outreachEmailWriteTables } from "@/lib/phase1/normalized-write-tables";
-import { parseSesEvent } from "@/lib/phase1/ses-events";
+import { matchSesSuppressionContact, parseSesEvent } from "@/lib/phase1/ses-events";
 import { isValidSnsUrl, verifySnsMessage, type SnsMessage } from "@/lib/phase1/sns-message";
 import { updateAuthState } from "@/lib/phase1/store";
 import { appendWorkspaceAudit, systemActorForWorkspace } from "@/lib/phase1/tenant-isolation";
@@ -69,15 +69,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "no-op" });
   }
 
+  // When a notification cannot be attributed to a workspace (no SES tag), the
+  // default keeps the legacy cross-workspace first-match so existing bounce
+  // handling is not regressed. Set SYNCORE_SES_QUARANTINE_UNSCOPED=true to
+  // quarantine untagged events instead of guessing a tenant. Tagged events are
+  // always matched strictly within their own workspace.
+  const quarantineUnscoped = process.env.SYNCORE_SES_QUARANTINE_UNSCOPED === "true";
+
   try {
     const results = await updateAuthState(
       (state) =>
         actions.map((action) => {
-          const contact = state.contacts.find((item) => item.email.toLowerCase() === action.email);
-          if (!contact) {
+          const match = matchSesSuppressionContact(state, action, { quarantineUnscoped });
+          if (match.status === "quarantined") {
+            return { email: action.email, status: "quarantined" as const };
+          }
+          if (match.status === "no-contact") {
             return { email: action.email, status: "no-contact" as const };
           }
 
+          const contact = match.contact;
           const actor = systemActorForWorkspace(state, contact.workspaceId);
           const processed = processEmailWebhook(
             state,
