@@ -63,3 +63,48 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  integration:
+    # Real-Postgres round-trip so AppState-projection/schema drift is caught
+    # (the unit lane stubs Prisma in-memory and cannot see drift). Isolated from
+    # the fast unit job so a DB hiccup never flakes the unit lane.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lead_engine_crm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
+      SYNCORE_STORAGE_DRIVER: prisma
+      SYNCORE_RUN_DB_INTEGRATION: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Apply migrations
+        run: npm run prisma:migrate:deploy
+
+      - name: Integration tests (real Postgres)
+        run: npm run test:integration

@@ -31,3 +31,13 @@ FLAG: n/a (CI config).
 FILES: `.github/workflows/ci.yml` — added a `Lint` step to the `validate` job and a new `build` job (`next build`). Build job sets a parse-only `DATABASE_URL` (Prisma client construction is lazy; build phase is detected so fail-closed secret guards use dev defaults — no live DB needed for build). Dropped the unused job-level `DATABASE_URL` from `validate` (it pointed at a non-existent DB and the DB-free unit lane never used it).
 TESTS: existing gates cover this (lint + build now run in CI). Verified locally: `next build` exit 0, `eslint .` clean, `tsc --noEmit` clean.
 FOLLOW-UP: none. `next build` is higher-value than typecheck alone — it catches App Router/RSC boundary errors tsc misses.
+
+---
+
+## P1.3 — Real-Postgres round-trip integration test
+STATUS: done
+VERIFIED: All existing tests use an in-memory Prisma Proxy stub (no test imports @prisma/client / PrismaClient); persistence-projection.test.ts asserts delegate call counts against a fake client, and read-model tests set the file driver and assert the fast path returns undefined. CI defined `DATABASE_URL` but no `services: postgres`, and only ran `prisma:generate` (never `migrate deploy`). So an AppState-projection ↔ schema/query mismatch or a missing migration would pass CI unseen.
+FLAG: n/a. Test self-skips unless `SYNCORE_RUN_DB_INTEGRATION=1` (only the CI integration job sets it), so the fast unit lane and local dev never require a database.
+FILES: new `tests/integration/persistence-roundtrip.test.ts` (writeState → syncNormalizedProjectionToPrisma → readFastCrmOverviewModel; asserts projected Company/Contact counts == snapshot counts and fast model == projected); new `vitest.integration.config.ts` (includes tests/integration/**, no fileParallelism); `package.json` `test:integration` script; `.github/workflows/ci.yml` new `integration` job (postgres:16 service + `prisma migrate deploy` + `test:integration`), isolated from the unit lane.
+TESTS: verified locally against a real Postgres 16 container — `prisma migrate deploy` applied all 3 migrations cleanly; `test:integration` green. Acceptance check: temporarily broke the Company projection mapper (`state.companies.slice(1)`) → test went RED; reverted → green. tsc + lint clean over the new files.
+FOLLOW-UP: extend to the $queryRaw-based read models (dev/lead dashboards) and to an updateState-mutation round-trip (not just the seed write) in a later pass. CI job green must still be confirmed on the first PR run (cannot execute GitHub Actions locally).
