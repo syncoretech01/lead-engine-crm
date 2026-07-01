@@ -91,3 +91,25 @@ FLAG: none — a read-only KPI accuracy fix.
 FILES: `lib/phase1/crm-overview-read-model.ts` — compute `openTaskCount`, `overdue`, and `dueToday` via three `prisma.task.count` queries that reuse the existing scoped `taskWhere` (so row-level ACL still applies) instead of the capped array. Status is a free-form string with mixed casing → matched case-insensitively (`mode: "insensitive"`); "due today" uses a `[startOfUtcDay, nextUtcDay)` range consistent with P2.6's UTC basis. Removed the now-unused `isUtcToday` import. The capped `tasks`/`activities` arrays are still fetched for per-account display (unchanged).
 TESTS: extended `tests/integration/persistence-roundtrip.test.ts` — insert 2100 open tasks (> the 2000 fetch cap) directly, then assert `model.openTaskCount === prisma.task.count(open)` AND `> 2000` AND `dueToday >= 2100`. A revert to the array-derived KPI (≤2000) turns it red. Verified against a real Postgres 16 container. Unit suite 66 files / 300 green; lint + tsc + `next build` clean.
 FOLLOW-UP: per-account rollups (`companyOpenTasks`, per-account amount/contacts/opportunities) and the list caps (companies/contacts 500, opps 1000) are still array-bounded — accurate list pagination + per-account DB aggregates are a larger follow-up that also touches the RSC page components (deferred). sdr-manager-read-model has similar 1000-row caps worth the same treatment.
+
+---
+
+## P2.3 — SMS TCPA/consent/quiet-hours + send-side throttle
+STATUS: skipped (user decision, 2026-07-01)
+VERIFIED: (already confirmed in plan review) `direct-sms-send.ts` gates only on `isSuppressed`/`doNotContact`/phone; no consent, quiet-hours, or send-side rate limiting.
+FOLLOW-UP: deferred by request — it needs a policy decision (which `consentStatus` values are SMS-eligible) and a recipient-timezone source (no `Workspace`/`Contact` timezone column today; would need NPA→tz inference or a new column). Legal-risk item; prefer over-blocking and a log-only rollout first.
+
+## P2.4 — Distributed rate limiter
+STATUS: deferred (user decision, 2026-07-01) — blocked on infrastructure.
+VERIFIED: (already confirmed) `rate-limit.ts` is an in-memory module `Map`, a no-op across Vercel serverless instances; account lockout is the only cross-instance backstop.
+FOLLOW-UP: needs Redis/Upstash provisioning + connection env before implementing. Prefer `@upstash/redis` (HTTP) for serverless; preserve the `rateLimitingEnabled()` dev/test bypass. Not started until infra exists.
+
+---
+
+## P6 — Observability foundation (infra-free slice)
+STATUS: partial (foundation done; Sentry/OTel + alerting deferred — infra-dependent)
+VERIFIED: no `sentry`/`opentelemetry`/`datadog` in deps or code (confirmed). Errors were handled ad hoc — some returned as JSON with no capture (SES webhook catch), some silent. Note: most empty `catch {}` blocks are deliberate parse/verify fallbacks (JSON.parse, SNS signature, token verify) and are control flow, NOT errors — deliberately left untouched.
+FLAG: none (additive, non-behavioral).
+FILES: new `lib/phase1/observability.ts` — a capture seam (`captureError`/`recordEvent`) with a structured-JSON default sink and a settable sink so a Sentry/OTel-backed sink drops in via `setObservabilitySink()` with no call-site changes. Wired into two genuine paths: the SES webhook unexpected-error catch (`app/api/webhooks/ses/route.ts` → `captureError`) and transactional email send failures (`transactional-email-service.ts` → `recordEvent("transactional_email_send_failed")`).
+TESTS: new `tests/unit/observability.test.ts` — sink forwarding, reset-to-default, never-throws-when-sink-throws, and default sink emits structured JSON. Full suite 67 files / 304 green; lint + tsc + `next build` clean.
+FOLLOW-UP (infra-deferred, like P2.4): register a real Sentry/OTel sink once a DSN/collector is provisioned (drop-in via `setObservabilitySink`); add plan→invoke→apply tracing; export metrics (provider spend from money.ts, lockout rate, job age/queue depth, projection-sync duration); worker-liveness + queue-backlog alerting. Broaden `captureError`/`recordEvent` wiring to the provider worker and direct send paths.

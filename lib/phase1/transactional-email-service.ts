@@ -1,4 +1,5 @@
 import { resolveLiveProviderCredential } from "@/lib/phase1/provider-live-execution";
+import { recordEvent } from "@/lib/phase1/observability";
 import { readState } from "@/lib/phase1/store";
 import { amazonSesSendEmail } from "@/lib/providers/adapters/amazon-ses";
 import { resolveProviderExecutionMode } from "@/lib/providers/live-adapters";
@@ -101,7 +102,10 @@ export async function sendTransactionalEmailForState(
   if (result.status === "ok" && result.data[0]?.status === "sent") {
     return { status: "sent", providerMessageId: result.data[0].providerMessageId };
   }
-  return { status: "failed", reason: result.errorMessage ?? "Amazon SES send failed." };
+
+  const reason = result.errorMessage ?? "Amazon SES send failed.";
+  recordEvent("transactional_email_send_failed", { workspaceId: connection.workspaceId, reason });
+  return { status: "failed", reason };
 }
 
 export async function sendTransactionalEmail(input: {

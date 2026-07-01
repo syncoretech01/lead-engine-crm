@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { outreachEmailWriteTables } from "@/lib/phase1/normalized-write-tables";
+import { captureError } from "@/lib/phase1/observability";
 import { matchSesSuppressionContact, parseSesEvent } from "@/lib/phase1/ses-events";
 import { isValidSnsUrl, verifySnsMessage, type SnsMessage } from "@/lib/phase1/sns-message";
 import { updateAuthState } from "@/lib/phase1/store";
@@ -119,6 +120,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ status: "processed", results });
   } catch (error) {
+    captureError(error, { route: "webhooks/ses", messageId: message.MessageId });
     return NextResponse.json({ error: error instanceof Error ? error.message : "SES webhook failed." }, { status: 400 });
   }
 }
