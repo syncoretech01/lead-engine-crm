@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  captureProjectionRowStrings,
   createNormalizedPersistenceProjection,
   normalizedProjectionHash,
   normalizedProjectionSummary,
@@ -328,5 +329,63 @@ describe("normalized persistence projection", () => {
       "providerUsageLedger.upsert",
       "auditLog.upsert"
     ]));
+  });
+
+  it("diff write path upserts only the rows that changed", async () => {
+    const state = createSeedState();
+    expect(state.contacts.length).toBeGreaterThan(1);
+    const previousRowStrings = captureProjectionRowStrings(
+      createNormalizedPersistenceProjection(state),
+      ["contacts"]
+    );
+    state.contacts[0].consentSource = "Changed for diff test";
+
+    const upserts: Array<{ delegate: string; id: string }> = [];
+    const client = new Proxy({}, {
+      get(_target, property) {
+        return {
+          deleteMany: async () => {},
+          upsert: async (args: { where: { id: string } }) => {
+            upserts.push({ delegate: String(property), id: args.where.id });
+          }
+        };
+      }
+    });
+
+    await syncNormalizedProjectionToPrisma(state, client, {
+      tables: ["contacts"],
+      previousRowStrings
+    });
+
+    // Only the mutated contact is upserted; the other (unchanged) contacts are skipped.
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].id).toBe(state.contacts[0].id);
+  });
+
+  it("diff write path upserts nothing when no scoped rows changed", async () => {
+    const state = createSeedState();
+    const previousRowStrings = captureProjectionRowStrings(
+      createNormalizedPersistenceProjection(state),
+      ["contacts", "auditLogs"]
+    );
+
+    let upserts = 0;
+    const client = new Proxy({}, {
+      get() {
+        return {
+          deleteMany: async () => {},
+          upsert: async () => {
+            upserts += 1;
+          }
+        };
+      }
+    });
+
+    await syncNormalizedProjectionToPrisma(state, client, {
+      tables: ["contacts", "auditLogs"],
+      previousRowStrings
+    });
+
+    expect(upserts).toBe(0);
   });
 });

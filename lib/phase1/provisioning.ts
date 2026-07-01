@@ -137,6 +137,7 @@ export function createProvisionedState(input: CreateProvisionedStateInput): AppS
     authSessions: [],
     userInvites: [],
     userTileLayouts: [],
+    directSendClaims: [],
     passwordResetTokens: [],
     providerConnections: createDefaultProviderConnections({ workspaceId, now, actorUserId: ownerUserId }),
     providerCredentialAudits: [],
