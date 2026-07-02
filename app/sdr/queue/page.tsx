@@ -21,7 +21,7 @@ import {
 import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/submit-button";
-import { StatusPill, statusTone } from "@/components/status-pill";
+import { statusTone } from "@/components/status-pill";
 import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import { resolveUserTelephonyIdentity } from "@/lib/phase1/telephony-identities";
@@ -32,9 +32,18 @@ import {
 } from "@/lib/phase1/sdr-queue-read-model";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
-import { StatCard, LaneCard } from "@/components/ui-metrics";
-import { TileGrid, TileItem } from "@/components/tile-grid";
-import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Panel } from "@/components/ui/panel";
+import { StatCard, ToneIcon } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 
 export const dynamic = "force-dynamic";
 
@@ -156,9 +165,6 @@ export default async function SdrQueuePage() {
     }
   ];
 
-  const canCustomize = canCustomizeTiles(session);
-  const savedLayout = await readUserTileLayout(session.user.id, "sdr-queue");
-
   return (
     <>
       <PageHeader
@@ -173,142 +179,152 @@ export default async function SdrQueuePage() {
           <>
             {canRunAssignment ? (
               <form action={runSdrAssignmentAction}>
-                <button className="button secondary" type="submit">
-                  <RefreshCw size={17} aria-hidden="true" />
+                <Button type="submit" variant="outline">
+                  <RefreshCw aria-hidden="true" />
                   Run assignment
-                </button>
+                </Button>
               </form>
             ) : null}
-            <Link href={isSdr ? "/crm/contacts" : "/sdr/manager"} className="button primary">
-              <Users size={17} aria-hidden="true" />
-              {isSdr ? "My contacts" : "Manager dashboard"}
-            </Link>
+            <Button asChild>
+              <Link href={isSdr ? "/crm/contacts" : "/sdr/manager"}>
+                <Users aria-hidden="true" />
+                {isSdr ? "My contacts" : "Manager dashboard"}
+              </Link>
+            </Button>
           </>
         }
       />
 
-      <TileGrid pageKey="sdr-queue" canCustomize={canCustomize} saved={savedLayout}>
-        {metrics.map((metric, index) => (
-          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
-            <StatCard {...metric} />
-          </TileItem>
+      <section aria-label="Queue metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => (
+          <StatCard
+            key={metric.label}
+            icon={metric.icon}
+            label={metric.label}
+            value={metric.value}
+            note={metric.note}
+            tone={metric.tone}
+          />
         ))}
-        {lanes.map((lane, index) => (
-          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
-            <LaneCard {...lane} />
-          </TileItem>
-        ))}
+      </section>
 
-        <TileItem id="priority-work" x={0} y={4} w={7} h={8} minW={4} minH={4}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Priority work</h2>
-              <p className="section-subtitle">Sorted by overdue status, P1 priority, due date, and available channel.</p>
+      <section aria-label="Queue lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {lanes.map((lane) => (
+          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
+            <ToneIcon icon={lane.icon} tone={lane.tone} />
+            <div className="min-w-0">
+              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {lane.label} · {lane.note}
+              </div>
             </div>
-            <StatusPill label={`${priorityQueue.length} visible`} tone="info" />
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Lead</th>
-                  {!isSdr ? <th>Owner</th> : null}
-                  <th>Status</th>
-                  <th>SLA</th>
-                  <th>Next due</th>
-                  <th>Channel</th>
-                  <th>Next action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {priorityQueue.map((assignment) => {
-                  const contactName = assignmentDisplayName(assignment);
-                  const nextAction = recommendedAction(assignment);
+        ))}
+      </section>
 
-                  return (
-                    <tr key={assignment.id}>
-                      <td>
-                        <Link href={`/crm/contacts/${assignment.contactId}`} className="entity">
-                          <strong>{contactName}</strong>
-                          <span>{assignment.email || assignment.title || "No email on record"}</span>
-                          <span>{assignment.companyName}</span>
-                        </Link>
-                        <div className="chip-row">
-                          <StatusPill label={assignment.priority} tone={assignment.priority === "P1" ? "success" : "info"} />
-                          <span className={`grade ${assignment.grade.toLowerCase()}`}>{assignment.grade}</span>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Panel
+          title="Priority work"
+          subtitle="Sorted by overdue status, P1 priority, due date, and available channel."
+          action={<StatusBadge label={`${priorityQueue.length} visible`} tone="info" />}
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Lead</TableHead>
+                {!isSdr ? <TableHead>Owner</TableHead> : null}
+                <TableHead>Status</TableHead>
+                <TableHead>SLA</TableHead>
+                <TableHead>Next due</TableHead>
+                <TableHead>Channel</TableHead>
+                <TableHead>Next action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {priorityQueue.map((assignment) => {
+                const contactName = assignmentDisplayName(assignment);
+                const nextAction = recommendedAction(assignment);
+
+                return (
+                  <TableRow key={assignment.id}>
+                    <TableCell>
+                      <Link href={`/crm/contacts/${assignment.contactId}`} className="flex flex-col">
+                        <span className="font-medium text-foreground">{contactName}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {assignment.email || assignment.title || "No email on record"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{assignment.companyName}</span>
+                      </Link>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <StatusBadge label={assignment.priority} tone={assignment.priority === "P1" ? "success" : "info"} />
+                        <StatusBadge label={assignment.grade} />
+                      </div>
+                    </TableCell>
+                    {!isSdr ? (
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-foreground">{assignment.ownerName}</span>
+                          <span className="text-xs text-muted-foreground">{assignment.teamName}</span>
                         </div>
-                      </td>
-                      {!isSdr ? (
-                        <td>
-                          <div className="entity">
-                            <strong>{assignment.ownerName}</strong>
-                            <span>{assignment.teamName}</span>
-                          </div>
-                        </td>
-                      ) : null}
-                      <td>
-                        <StatusPill label={assignment.status} tone={statusTone(assignment.status)} />
-                      </td>
-                      <td>
-                        <StatusPill label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
-                      </td>
-                      <td>
-                        <div className="entity">
-                          <strong>{assignment.dueAt ? formatDate(assignment.dueAt) : "No active SLA"}</strong>
-                          <span>{assignment.reminderTitle ?? assignment.dueLabel}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="chip-row">
-                          {assignmentEmailEligible(assignment) ? (
-                            <span className="pill success">
-                              <Mail size={13} aria-hidden="true" />
-                              Email
-                            </span>
-                          ) : null}
-                          {assignment.phone ? (
-                            <span className="pill info">
-                              <Phone size={13} aria-hidden="true" />
-                              Call
-                            </span>
-                          ) : null}
-                          {!assignmentEmailEligible(assignment) && !assignment.phone ? <span className="pill">Review</span> : null}
-                        </div>
-                      </td>
-                      <td>
-                        <Link href={`/crm/contacts/${assignment.contactId}`} className="button secondary">
+                      </TableCell>
+                    ) : null}
+                    <TableCell>
+                      <StatusBadge label={assignment.status} tone={statusTone(assignment.status)} />
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">
+                          {assignment.dueAt ? formatDate(assignment.dueAt) : "No active SLA"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {assignment.reminderTitle ?? assignment.dueLabel}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {assignmentEmailEligible(assignment) ? <StatusBadge label="Email" tone="success" /> : null}
+                        {assignment.phone ? <StatusBadge label="Call" tone="info" /> : null}
+                        {!assignmentEmailEligible(assignment) && !assignment.phone ? <StatusBadge label="Review" /> : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/crm/contacts/${assignment.contactId}`}>
                           {nextAction}
-                          <ArrowRight size={15} aria-hidden="true" />
+                          <ArrowRight aria-hidden="true" />
                         </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {priorityQueue.length === 0 ? (
-                  <tr>
-                    <td colSpan={isSdr ? 6 : 7}>No active SDR assignments need work right now.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </TileItem>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {priorityQueue.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={isSdr ? 6 : 7} className="text-muted-foreground">
+                    No active SDR assignments need work right now.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
 
-        <TileItem id="log-touch" x={7} y={4} w={5} h={8} minW={3} minH={4}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Log touch</h2>
-              <p className="section-subtitle">Record an outcome, set the next follow-up, and update the assignment timeline.</p>
-            </div>
-            <Send size={20} aria-hidden="true" />
-          </div>
-          <form action={logFirstTouchAction} className="panel-body form-grid">
-            {isSdr ? <div className="surface-note">{telephonyNote}</div> : null}
-            <div className="field">
-              <label htmlFor="assignmentId">Lead</label>
+        <Panel
+          title="Log touch"
+          subtitle="Record an outcome, set the next follow-up, and update the assignment timeline."
+          action={<ToneIcon icon={Send} tone="info" />}
+        >
+          <form action={logFirstTouchAction} className="flex flex-col gap-4">
+            {isSdr ? (
+              <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{telephonyNote}</div>
+            ) : null}
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="assignmentId" className="text-xs font-medium text-muted-foreground">Lead</label>
               <select id="assignmentId" name="assignmentId" required>
                 {activeAssignments.map((assignment) => (
                   <option key={assignment.id} value={assignment.id}>
@@ -317,8 +333,8 @@ export default async function SdrQueuePage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="channel">Channel</label>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="channel" className="text-xs font-medium text-muted-foreground">Channel</label>
               <select id="channel" name="channel" defaultValue="Email">
                 {outreachChannels.map((channel) => (
                   <option key={channel} value={channel}>
@@ -327,8 +343,8 @@ export default async function SdrQueuePage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="outcome">Outcome</label>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="outcome" className="text-xs font-medium text-muted-foreground">Outcome</label>
               <select id="outcome" name="outcome" defaultValue="Contacted">
                 {touchStatuses.map((status) => (
                   <option key={status} value={status}>
@@ -337,52 +353,50 @@ export default async function SdrQueuePage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="followUpDueAt">Follow-up due</label>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="followUpDueAt" className="text-xs font-medium text-muted-foreground">Follow-up due</label>
               <input id="followUpDueAt" name="followUpDueAt" type="datetime-local" />
             </div>
-            <div className="field">
-              <label htmlFor="notes">Notes</label>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="notes" className="text-xs font-medium text-muted-foreground">Notes</label>
               <textarea id="notes" name="notes" placeholder="Call outcome, objection, next step, or reply summary" />
             </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <SubmitButton className="button primary" pendingLabel="Saving…">
-                <Send size={17} aria-hidden="true" />
+            <div>
+              <SubmitButton className={buttonVariants()} pendingLabel="Saving…">
+                <Send aria-hidden="true" />
                 Save touch
               </SubmitButton>
             </div>
           </form>
-        </div>
-        </TileItem>
+        </Panel>
+      </section>
 
-        <TileItem id="follow-up-reminders" x={0} y={12} w={7} h={7} minW={4} minH={3}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Follow-up reminders</h2>
-              <p className="section-subtitle">Open reminders sorted by due date.</p>
-            </div>
-            <Clock size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Panel
+          title="Follow-up reminders"
+          subtitle="Open reminders sorted by due date."
+          action={<ToneIcon icon={Clock} tone="info" />}
+        >
+          <div className="flex flex-col gap-4">
             {openReminders.map((reminder) => (
-              <div className="list-row" key={reminder.id}>
-                <div className="row-meta">
-                  <strong>{reminder.title}</strong>
-                  <StatusPill label={reminder.status} tone={statusTone(reminder.status)} />
+              <div key={reminder.id} className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">{reminder.title}</span>
+                  <StatusBadge label={reminder.status} tone={statusTone(reminder.status)} />
                 </div>
-                <p className="section-subtitle">
+                <p className="text-xs text-muted-foreground">
                   {reminder.companyName} - {reminder.channel} - {formatDate(reminder.dueAt)} ({reminder.dueLabel})
                 </p>
-                <div className="item-card-actions">
-                  <Link href={`/crm/contacts/${reminder.contactId}`} className="button secondary">
-                    <ArrowRight size={16} aria-hidden="true" />
-                    Contact
-                  </Link>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/crm/contacts/${reminder.contactId}`}>
+                      <ArrowRight aria-hidden="true" />
+                      Contact
+                    </Link>
+                  </Button>
                   <form action={completeFollowUpReminderAction}>
                     <input name="id" type="hidden" value={reminder.id} />
-                    <SubmitButton className="button primary" pendingLabel="Completing…">
+                    <SubmitButton className={buttonVariants({ size: "sm" })} pendingLabel="Completing…">
                       Complete
                     </SubmitButton>
                   </form>
@@ -390,145 +404,139 @@ export default async function SdrQueuePage() {
               </div>
             ))}
             {openReminders.length === 0 ? (
-              <div className="empty-state">
-                <Clock size={24} aria-hidden="true" />
+              <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+                <Clock className="size-6" aria-hidden="true" />
                 <span>No open follow-up reminders.</span>
               </div>
             ) : null}
           </div>
-        </div>
-        </TileItem>
+        </Panel>
 
-        <TileItem id="bulk-email" x={7} y={12} w={5} h={7} minW={3} minH={4}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Bulk email assigned contacts</h2>
-              <p className="section-subtitle">Send one SES-backed email to eligible active assignments in this queue scope.</p>
-            </div>
-            <Mail size={20} aria-hidden="true" />
-          </div>
-          <form action={sendAssignedBulkEmailAction} className="panel-body form-grid">
-            <input name="requestId" type="hidden" value={bulkRequestId} />
-            <div className="surface-note">{bulkSenderNote}</div>
-            {canSelectBulkOwner ? (
-              <div className="field">
-                <label htmlFor="bulk-owner">Owner</label>
-                <select id="bulk-owner" name="ownerUserId" defaultValue="all">
-                  <option value="all">All SDRs</option>
-                  {bulkOwnerUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name}
-                    </option>
-                  ))}
+        <Panel
+          title="Bulk email assigned contacts"
+          subtitle="Send one SES-backed email to eligible active assignments in this queue scope."
+          action={<ToneIcon icon={Mail} tone="info" />}
+        >
+          <div className="flex flex-col gap-4">
+            <form action={sendAssignedBulkEmailAction} className="flex flex-col gap-4">
+              <input name="requestId" type="hidden" value={bulkRequestId} />
+              <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{bulkSenderNote}</div>
+              {canSelectBulkOwner ? (
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="bulk-owner" className="text-xs font-medium text-muted-foreground">Owner</label>
+                  <select id="bulk-owner" name="ownerUserId" defaultValue="all">
+                    <option value="all">All SDRs</option>
+                    {bulkOwnerUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="bulk-audience" className="text-xs font-medium text-muted-foreground">Audience</label>
+                <select id="bulk-audience" name="audience" defaultValue="all_assigned">
+                  <option value="all_assigned">All eligible assigned</option>
+                  <option value="p1">P1 assigned</option>
+                  <option value="due_or_overdue">Due or overdue</option>
                 </select>
               </div>
-            ) : null}
-            <div className="field">
-              <label htmlFor="bulk-audience">Audience</label>
-              <select id="bulk-audience" name="audience" defaultValue="all_assigned">
-                <option value="all_assigned">All eligible assigned</option>
-                <option value="p1">P1 assigned</option>
-                <option value="due_or_overdue">Due or overdue</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="bulk-limit">Max sends</label>
-              <input
-                id="bulk-limit"
-                name="limit"
-                type="number"
-                min="1"
-                max="50"
-                defaultValue={Math.min(Math.max(bulkEligibleAssignments.length, 1), 25)}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="bulk-limit" className="text-xs font-medium text-muted-foreground">Max sends</label>
+                <input
+                  id="bulk-limit"
+                  name="limit"
+                  type="number"
+                  min="1"
+                  max="50"
+                  defaultValue={Math.min(Math.max(bulkEligibleAssignments.length, 1), 25)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="bulk-subject" className="text-xs font-medium text-muted-foreground">Subject</label>
+                <input id="bulk-subject" name="subject" defaultValue="Quick question about {{company}}" required />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="bulk-body" className="text-xs font-medium text-muted-foreground">Body</label>
+                <textarea
+                  id="bulk-body"
+                  name="bodySnapshot"
+                  placeholder="Hi {{first_name}}, quick question about {{company}}."
+                  required
+                />
+              </div>
+              <div>
+                <SubmitButton className={buttonVariants()} pendingLabel="Sending…" disabled={!canSubmitBulkEmail}>
+                  <Mail aria-hidden="true" />
+                  Send bulk email
+                </SubmitButton>
+              </div>
+            </form>
+            <div className="flex flex-wrap items-center gap-1.5 border-t pt-4">
+              <StatusBadge
+                label={`${bulkEligibleAssignments.length} eligible`}
+                tone={bulkEligibleAssignments.length ? "success" : "warning"}
               />
-            </div>
-            <div className="field">
-              <label htmlFor="bulk-subject">Subject</label>
-              <input id="bulk-subject" name="subject" defaultValue="Quick question about {{company}}" required />
-            </div>
-            <div className="field">
-              <label htmlFor="bulk-body">Body</label>
-              <textarea
-                id="bulk-body"
-                name="bodySnapshot"
-                placeholder="Hi {{first_name}}, quick question about {{company}}."
-                required
-              />
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <SubmitButton className="button primary" pendingLabel="Sending…" disabled={!canSubmitBulkEmail}>
-                <Mail size={16} aria-hidden="true" />
-                Send bulk email
-              </SubmitButton>
-            </div>
-          </form>
-          <div className="panel-body">
-            <div className="chip-row">
-              <StatusPill label={`${bulkEligibleAssignments.length} eligible`} tone={bulkEligibleAssignments.length ? "success" : "warning"} />
-              <span className="pill">SES-sendable assigned contacts</span>
-              <span className="pill">{formatNumber(callReady.length)} call-ready</span>
+              <StatusBadge label="SES-sendable assigned contacts" />
+              <StatusBadge label={`${formatNumber(callReady.length)} call-ready`} />
             </div>
           </div>
-        </div>
-        </TileItem>
+        </Panel>
+      </section>
 
-        {!isSdr ? (
-        <TileItem id="assignment-directory" x={0} y={19} w={12} h={7} minW={6} minH={3}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Assignment directory</h2>
-              <p className="section-subtitle">All active and historical assignments for this queue scope.</p>
-            </div>
-            <StatusPill label={`${formatNumber(snapshot.assignments.length)} assignments`} tone="info" />
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Lead</th>
-                  <th>Owner</th>
-                  <th>Status</th>
-                  <th>SLA</th>
-                  <th>Method</th>
-                  <th>Touches</th>
-                </tr>
-              </thead>
-              <tbody>
+      {!isSdr ? (
+        <section aria-label="Assignment directory">
+          <Panel
+            title="Assignment directory"
+            subtitle="All active and historical assignments for this queue scope."
+            action={<StatusBadge label={`${formatNumber(snapshot.assignments.length)} assignments`} tone="info" />}
+            flush
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Lead</TableHead>
+                  <TableHead>Owner</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>SLA</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Touches</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {snapshot.assignments.map((assignment) => (
-                  <tr key={assignment.id}>
-                    <td>
-                      <Link href={`/crm/contacts/${assignment.contactId}`} className="entity">
-                        <strong>{assignmentDisplayName(assignment)}</strong>
-                        <span>{assignment.email || assignment.title || "No email on record"}</span>
-                        <span>{assignment.companyName}</span>
+                  <TableRow key={assignment.id}>
+                    <TableCell>
+                      <Link href={`/crm/contacts/${assignment.contactId}`} className="flex flex-col">
+                        <span className="font-medium text-foreground">{assignmentDisplayName(assignment)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {assignment.email || assignment.title || "No email on record"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{assignment.companyName}</span>
                       </Link>
-                    </td>
-                    <td>{assignment.ownerName}</td>
-                    <td>
-                      <StatusPill label={assignment.status} tone={statusTone(assignment.status)} />
-                    </td>
-                    <td>
-                      <StatusPill label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
-                    </td>
-                    <td>
-                      <div className="entity">
-                        <strong>{assignment.assignmentMethod}</strong>
-                        <span>{assignment.assignmentReason}</span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{assignment.ownerName}</TableCell>
+                    <TableCell>
+                      <StatusBadge label={assignment.status} tone={statusTone(assignment.status)} />
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">{assignment.assignmentMethod}</span>
+                        <span className="text-xs text-muted-foreground">{assignment.assignmentReason}</span>
                       </div>
-                    </td>
-                    <td>{assignment.touchCount}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{assignment.touchCount}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </TileItem>
+              </TableBody>
+            </Table>
+          </Panel>
+        </section>
       ) : null}
-      </TileGrid>
     </>
   );
 }
@@ -600,7 +608,7 @@ function queueWeight(assignment: AssignmentView) {
   return overdueWeight * 10 + priority + due;
 }
 
-function slaTone(status: string) {
+function slaTone(status: string): "default" | "info" | "success" | "warning" | "danger" {
   if (status === "Overdue") return "danger";
   if (status === "Due soon") return "warning";
   if (status === "On track") return "success";

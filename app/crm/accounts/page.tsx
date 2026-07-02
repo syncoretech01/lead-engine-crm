@@ -9,8 +9,19 @@ import {
   Users
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { ProgressBar } from "@/components/progress-bar";
-import { StatusPill, statusTone } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
+import { MeterBar } from "@/components/ui/meter-bar";
+import { Panel } from "@/components/ui/panel";
+import { StatCard, ToneIcon } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import {
   crmEventReadRowsForWorkspace,
   stateWithCrmEventReadRows
@@ -25,9 +36,6 @@ import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { accountViewsForWorkspace, opportunityViews, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
-import { StatCard, LaneCard } from "@/components/ui-metrics";
-import { TileGrid, TileItem } from "@/components/tile-grid";
-import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
 
@@ -140,9 +148,6 @@ export default async function AccountsPage() {
     }
   ];
 
-  const canCustomize = canCustomizeTiles(session);
-  const savedLayout = await readUserTileLayout(session.user.id, "crm-accounts");
-
   return (
     <>
       <PageHeader
@@ -155,292 +160,293 @@ export default async function AccountsPage() {
         }
         actions={
           <>
-            <Link href={isSdr ? "/crm/contacts" : "/crm"} className="button secondary">
-              {isSdr ? <Users size={17} aria-hidden="true" /> : <BarChart3 size={17} aria-hidden="true" />}
-              {isSdr ? "Contacts" : "CRM workspace"}
-            </Link>
-            <Link href={isSdr ? "/sdr/queue" : "/crm/opportunities"} className="button primary">
-              {isSdr ? <ClipboardList size={17} aria-hidden="true" /> : <CircleDollarSign size={17} aria-hidden="true" />}
-              {isSdr ? "My queue" : "Pipeline"}
-            </Link>
+            <Button asChild variant="outline">
+              <Link href={isSdr ? "/crm/contacts" : "/crm"}>
+                {isSdr ? <Users aria-hidden="true" /> : <BarChart3 aria-hidden="true" />}
+                {isSdr ? "Contacts" : "CRM workspace"}
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href={isSdr ? "/sdr/queue" : "/crm/opportunities"}>
+                {isSdr ? <ClipboardList aria-hidden="true" /> : <CircleDollarSign aria-hidden="true" />}
+                {isSdr ? "My queue" : "Pipeline"}
+              </Link>
+            </Button>
           </>
         }
       />
 
-      <TileGrid pageKey="crm-accounts" canCustomize={canCustomize} saved={savedLayout}>
-        {metrics.map((metric, index) => (
-          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
-            <StatCard {...metric} />
-          </TileItem>
+      <section aria-label="Account metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => (
+          <StatCard
+            key={metric.label}
+            icon={metric.icon}
+            label={metric.label}
+            value={metric.value}
+            note={metric.note}
+            tone={metric.tone}
+          />
         ))}
-        {lanes.map((lane, index) => (
-          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
-            <LaneCard {...lane} />
-          </TileItem>
-        ))}
+      </section>
 
-        <TileItem id="account-watchlist" x={0} y={4} w={7} h={8} minW={4} minH={4}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">{isSdr ? "Account focus" : "Account watchlist"}</h2>
-              <p className="section-subtitle">
-                {isSdr
-                  ? "Accounts with assigned contacts, open work, or high priority appear first."
-                  : "Accounts with open work, high priority, or strong score should be handled first."}
-              </p>
+      <section aria-label="Account lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {lanes.map((lane) => (
+          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
+            <ToneIcon icon={lane.icon} tone={lane.tone} />
+            <div className="min-w-0">
+              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {lane.label} · {lane.note}
+              </div>
             </div>
-            <StatusPill label={`${watchlist.length} focus`} tone="info" />
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  {!isSdr ? <th>Owner</th> : null}
-                  <th>Stage</th>
-                  <th>{isSdr ? "Contacts" : "Tasks"}</th>
-                  <th>{isSdr ? "Next action" : "Score"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {watchlist.map((account) => (
-                  <tr key={account.id}>
-                    <td>
-                      <Link href={`/crm/accounts/${account.id}`} className="entity">
-                        <strong>{account.name}</strong>
-                        <span>{account.domain}</span>
-                        <span>{account.source}</span>
-                      </Link>
-                    </td>
-                    {!isSdr ? <td>{account.owner}</td> : null}
-                    <td>
-                      <StatusPill label={account.stage} tone={statusTone(account.stage)} />
-                    </td>
-                    <td>
-                      {isSdr ? (
-                        formatNumber(account.contacts)
-                      ) : (
-                        <StatusPill label={`${account.openTasks}`} tone={account.openTasks ? "warning" : "success"} />
-                      )}
-                    </td>
-                    <td>
-                      {isSdr ? (
-                        <StatusPill label={accountNextAction(account).label} tone={accountNextAction(account).tone} />
-                      ) : (
-                        account.score
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </TileItem>
+        ))}
+      </section>
 
-        <TileItem id="watchlist-side" x={7} y={4} w={5} h={8} minW={3} minH={4}>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title={isSdr ? "Account focus" : "Account watchlist"}
+          subtitle={
+            isSdr
+              ? "Accounts with assigned contacts, open work, or high priority appear first."
+              : "Accounts with open work, high priority, or strong score should be handled first."
+          }
+          action={<StatusBadge label={`${watchlist.length} focus`} tone="info" />}
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Account</TableHead>
+                {!isSdr ? <TableHead>Owner</TableHead> : null}
+                <TableHead>Stage</TableHead>
+                <TableHead>{isSdr ? "Contacts" : "Tasks"}</TableHead>
+                <TableHead>{isSdr ? "Next action" : "Score"}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {watchlist.map((account) => (
+                <TableRow key={account.id}>
+                  <TableCell>
+                    <Link href={`/crm/accounts/${account.id}`} className="flex flex-col">
+                      <span className="font-medium text-foreground">{account.name}</span>
+                      <span className="text-xs text-muted-foreground">{account.domain}</span>
+                      <span className="text-xs text-muted-foreground">{account.source}</span>
+                    </Link>
+                  </TableCell>
+                  {!isSdr ? <TableCell className="text-muted-foreground">{account.owner}</TableCell> : null}
+                  <TableCell>
+                    <StatusBadge label={account.stage} />
+                  </TableCell>
+                  <TableCell>
+                    {isSdr ? (
+                      <span className="text-muted-foreground">{formatNumber(account.contacts)}</span>
+                    ) : (
+                      <StatusBadge label={`${account.openTasks}`} tone={account.openTasks ? "warning" : "success"} />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {isSdr ? (
+                      <StatusBadge label={accountNextAction(account).label} tone={accountNextAction(account).tone} />
+                    ) : (
+                      <span className="text-muted-foreground">{account.score}</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Panel>
+
         {isSdr ? (
-          <div className="panel">
-            <div className="panel-header">
-              <div className="panel-title-wrap">
-                <h2 className="section-title">Account coverage</h2>
-                <p className="section-subtitle">A quick split of the accounts and contacts in your current scope.</p>
+          <Panel
+            title="Account coverage"
+            subtitle="A quick split of the accounts and contacts in your current scope."
+            action={<ToneIcon icon={Users} tone="info" />}
+          >
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">Accounts with contacts</span>
+                  <StatusBadge
+                    label={`${formatNumber(accounts.filter((account) => account.contacts > 0).length)} accounts`}
+                    tone="info"
+                  />
+                </div>
+                <MeterBar value={accounts.length ? Math.round((accounts.filter((account) => account.contacts > 0).length / accounts.length) * 100) : 0} />
               </div>
-              <Users size={20} aria-hidden="true" />
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">Open work</span>
+                  <StatusBadge label={`${formatNumber(taskAccounts.length)} accounts`} tone={taskAccounts.length ? "warning" : "success"} />
+                </div>
+                <MeterBar value={accounts.length ? Math.round((taskAccounts.length / accounts.length) * 100) : 0} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">Priority focus</span>
+                  <StatusBadge label={`${formatNumber(p1Accounts.length)} accounts`} tone={p1Accounts.length ? "success" : "info"} />
+                </div>
+                <MeterBar value={accounts.length ? Math.round((p1Accounts.length / accounts.length) * 100) : 0} />
+              </div>
             </div>
-            <div className="panel-body stage-list">
-              <div className="stage-row">
-                <div className="stage-meta">
-                  <strong>Accounts with contacts</strong>
-                  <StatusPill label={`${formatNumber(accounts.filter((account) => account.contacts > 0).length)} accounts`} tone="info" />
-                </div>
-                <ProgressBar value={accounts.length ? Math.round((accounts.filter((account) => account.contacts > 0).length / accounts.length) * 100) : 0} />
-              </div>
-              <div className="stage-row">
-                <div className="stage-meta">
-                  <strong>Open work</strong>
-                  <StatusPill label={`${formatNumber(taskAccounts.length)} accounts`} tone={taskAccounts.length ? "warning" : "success"} />
-                </div>
-                <ProgressBar value={accounts.length ? Math.round((taskAccounts.length / accounts.length) * 100) : 0} />
-              </div>
-              <div className="stage-row">
-                <div className="stage-meta">
-                  <strong>Priority focus</strong>
-                  <StatusPill label={`${formatNumber(p1Accounts.length)} accounts`} tone={p1Accounts.length ? "success" : "info"} />
-                </div>
-                <ProgressBar value={accounts.length ? Math.round((p1Accounts.length / accounts.length) * 100) : 0} />
-              </div>
-            </div>
-          </div>
+          </Panel>
         ) : (
-          <div className="panel">
-            <div className="panel-header">
-              <div className="panel-title-wrap">
-                <h2 className="section-title">Stage overview</h2>
-                <p className="section-subtitle">Account distribution by active opportunity stage.</p>
-              </div>
-              <CircleDollarSign size={20} aria-hidden="true" />
-            </div>
-            <div className="panel-body stage-list">
+          <Panel
+            title="Stage overview"
+            subtitle="Account distribution by active opportunity stage."
+            action={<ToneIcon icon={CircleDollarSign} tone="info" />}
+          >
+            <div className="flex flex-col gap-4">
               {stageRows.map((row) => (
-                <div className="stage-row" key={row.stage}>
-                  <div className="stage-meta">
-                    <strong>{row.stage}</strong>
-                    <StatusPill label={`${formatNumber(row.count)} accounts`} tone={statusTone(row.stage)} />
+                <div className="flex flex-col gap-1.5" key={row.stage}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{row.stage}</span>
+                    <StatusBadge label={`${formatNumber(row.count)} accounts`} />
                   </div>
-                  <ProgressBar value={Math.round((row.count / maxStageCount) * 100)} />
-                  <div className="row-meta">
+                  <MeterBar value={Math.round((row.count / maxStageCount) * 100)} />
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>{formatCurrency(row.amount)}</span>
                     <span>{Math.round((row.count / accounts.length) * 100)}% of accounts</span>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Panel>
         )}
-        </TileItem>
+      </section>
 
-        <TileItem id="secondary-left" x={0} y={12} w={7} h={6} minW={4} minH={3}>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {isSdr ? (
-          <div className="panel">
-            <div className="panel-header">
-              <div className="panel-title-wrap">
-                <h2 className="section-title">Recent account context</h2>
-                <p className="section-subtitle">The accounts you are most likely to open while working your queue.</p>
-              </div>
-              <Target size={20} aria-hidden="true" />
-            </div>
-            <div className="panel-body stage-list">
+          <Panel
+            title="Recent account context"
+            subtitle="The accounts you are most likely to open while working your queue."
+            action={<ToneIcon icon={Target} tone="info" />}
+          >
+            <div className="flex flex-col gap-4">
               {watchlist.slice(0, 4).map((account) => (
-                <div className="list-row" key={account.id}>
-                  <div className="row-meta">
-                    <strong>{account.name}</strong>
-                    <StatusPill label={accountNextAction(account).label} tone={accountNextAction(account).tone} />
+                <div key={account.id} className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{account.name}</span>
+                    <StatusBadge label={accountNextAction(account).label} tone={accountNextAction(account).tone} />
                   </div>
-                  <p className="section-subtitle">
+                  <p className="text-xs text-muted-foreground">
                     {formatNumber(account.contacts)} contacts, score {account.score}, {account.lastActivity}.
                   </p>
                 </div>
               ))}
             </div>
-          </div>
+          </Panel>
         ) : (
-          <div className="panel">
-            <div className="panel-header">
-              <div className="panel-title-wrap">
-                <h2 className="section-title">Source mix</h2>
-                <p className="section-subtitle">Where CRM accounts came from, kept visible for attribution and list quality review.</p>
-              </div>
-              <Target size={20} aria-hidden="true" />
-            </div>
-            <div className="panel-body stage-list">
+          <Panel
+            title="Source mix"
+            subtitle="Where CRM accounts came from, kept visible for attribution and list quality review."
+            action={<ToneIcon icon={Target} tone="info" />}
+          >
+            <div className="flex flex-col gap-4">
               {sourceRows.map((row) => (
-                <div className="list-row" key={row.source}>
-                  <div className="row-meta">
-                    <strong>{row.source}</strong>
-                    <StatusPill label={`${formatNumber(row.count)} accounts`} tone="info" />
+                <div key={row.source} className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{row.source}</span>
+                    <StatusBadge label={`${formatNumber(row.count)} accounts`} tone="info" />
                   </div>
-                  <p className="section-subtitle">
+                  <p className="text-xs text-muted-foreground">
                     {formatNumber(row.contacts)} contacts, average score {row.averageScore}.
                   </p>
                 </div>
               ))}
             </div>
-          </div>
+          </Panel>
         )}
-        </TileItem>
 
-        <TileItem id="account-actions" x={7} y={12} w={5} h={6} minW={3} minH={3}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Account actions</h2>
-              <p className="section-subtitle">
-                {isSdr ? "Fast paths back to daily contact work." : "Shortcuts for the CRM work around account records."}
-              </p>
-            </div>
-            <ArrowRight size={20} aria-hidden="true" />
-          </div>
-          <div className={`panel-body grid ${isSdr ? "two" : "three"}`}>
-            <Link href="/crm/contacts" className="item-card compact-profile-card">
-              <Users size={22} aria-hidden="true" />
-              <h3 className="card-title">Contacts</h3>
-              <p className="section-subtitle">Open people linked to CRM accounts.</p>
+        <Panel
+          title="Account actions"
+          subtitle={isSdr ? "Fast paths back to daily contact work." : "Shortcuts for the CRM work around account records."}
+          action={<ToneIcon icon={ArrowRight} tone="info" />}
+        >
+          <div className={`grid gap-4 ${isSdr ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+            <Link
+              href="/crm/contacts"
+              className="group bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
+            >
+              <ToneIcon icon={Users} tone="info" />
+              <h3 className="text-sm font-semibold text-foreground">Contacts</h3>
+              <p className="text-xs text-muted-foreground">Open people linked to CRM accounts.</p>
             </Link>
             {!isSdr ? (
-              <Link href="/crm/opportunities" className="item-card compact-profile-card">
-                <CircleDollarSign size={22} aria-hidden="true" />
-                <h3 className="card-title">Pipeline</h3>
-                <p className="section-subtitle">Review stage, amount, owner, and forecast.</p>
+              <Link
+                href="/crm/opportunities"
+                className="group bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
+              >
+                <ToneIcon icon={CircleDollarSign} tone="info" />
+                <h3 className="text-sm font-semibold text-foreground">Pipeline</h3>
+                <p className="text-xs text-muted-foreground">Review stage, amount, owner, and forecast.</p>
               </Link>
             ) : null}
-            <Link href="/sdr/queue" className="item-card compact-profile-card">
-              <ClipboardList size={22} aria-hidden="true" />
-              <h3 className="card-title">{isSdr ? "My queue" : "SDR queue"}</h3>
-              <p className="section-subtitle">Work assigned contacts from account context.</p>
+            <Link
+              href="/sdr/queue"
+              className="group bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
+            >
+              <ToneIcon icon={ClipboardList} tone="info" />
+              <h3 className="text-sm font-semibold text-foreground">{isSdr ? "My queue" : "SDR queue"}</h3>
+              <p className="text-xs text-muted-foreground">Work assigned contacts from account context.</p>
             </Link>
           </div>
-        </div>
-        </TileItem>
+        </Panel>
+      </section>
 
-        <TileItem id="account-directory" x={0} y={18} w={12} h={7} minW={6} minH={3}>
-        <div className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Account directory</h2>
-            <p className="section-subtitle">
-              {isSdr
-                ? "A compact list of accounts tied to your visible contacts."
-                : "A compact account table for scanning owner, stage, activity, and source context."}
-            </p>
-          </div>
-          <StatusPill label={`${formatNumber(accounts.length)} accounts`} tone="info" />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Account</th>
-                {!isSdr ? <th>Owner</th> : null}
-                <th>Stage</th>
-                <th>Contacts</th>
-                <th>Open work</th>
-                {!isSdr ? <th>Pipeline</th> : null}
-                <th>Source</th>
-              </tr>
-            </thead>
-            <tbody>
+      <section aria-label="Account directory">
+        <Panel
+          title="Account directory"
+          subtitle={
+            isSdr
+              ? "A compact list of accounts tied to your visible contacts."
+              : "A compact account table for scanning owner, stage, activity, and source context."
+          }
+          action={<StatusBadge label={`${formatNumber(accounts.length)} accounts`} tone="info" />}
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Account</TableHead>
+                {!isSdr ? <TableHead>Owner</TableHead> : null}
+                <TableHead>Stage</TableHead>
+                <TableHead>Contacts</TableHead>
+                <TableHead>Open work</TableHead>
+                {!isSdr ? <TableHead>Pipeline</TableHead> : null}
+                <TableHead>Source</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {accounts.map((account) => (
-                <tr key={account.id}>
-                  <td>
-                    <Link href={`/crm/accounts/${account.id}`} className="entity">
-                      <strong>{account.name}</strong>
-                      <span>{account.domain}</span>
-                      <span>{account.location || account.industry}</span>
+                <TableRow key={account.id}>
+                  <TableCell>
+                    <Link href={`/crm/accounts/${account.id}`} className="flex flex-col">
+                      <span className="font-medium text-foreground">{account.name}</span>
+                      <span className="text-xs text-muted-foreground">{account.domain}</span>
+                      <span className="text-xs text-muted-foreground">{account.location || account.industry}</span>
                     </Link>
-                  </td>
-                  {!isSdr ? <td>{account.owner}</td> : null}
-                  <td>
-                    <StatusPill label={account.stage} tone={statusTone(account.stage)} />
-                  </td>
-                  <td>{formatNumber(account.contacts)}</td>
-                  <td>
-                    <div className="entity">
-                      <strong>{formatNumber(account.openTasks)} tasks</strong>
-                      <span>{account.lastActivity}</span>
+                  </TableCell>
+                  {!isSdr ? <TableCell className="text-muted-foreground">{account.owner}</TableCell> : null}
+                  <TableCell>
+                    <StatusBadge label={account.stage} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{formatNumber(account.contacts)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{formatNumber(account.openTasks)} tasks</span>
+                      <span className="text-xs text-muted-foreground">{account.lastActivity}</span>
                     </div>
-                  </td>
-                  {!isSdr ? <td>{formatCurrency(account.amount)}</td> : null}
-                  <td>{account.source}</td>
-                </tr>
+                  </TableCell>
+                  {!isSdr ? <TableCell className="text-muted-foreground">{formatCurrency(account.amount)}</TableCell> : null}
+                  <TableCell className="text-muted-foreground">{account.source}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-        </div>
-        </TileItem>
-      </TileGrid>
+            </TableBody>
+          </Table>
+        </Panel>
+      </section>
     </>
   );
 }
