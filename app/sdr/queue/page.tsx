@@ -44,6 +44,8 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
 
@@ -165,6 +167,9 @@ export default async function SdrQueuePage() {
     }
   ];
 
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "sdr-queue");
+
   return (
     <>
       <PageHeader
@@ -195,39 +200,40 @@ export default async function SdrQueuePage() {
         }
       />
 
-      <section aria-label="Queue metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <StatCard
-            key={metric.label}
-            icon={metric.icon}
-            label={metric.label}
-            value={metric.value}
-            note={metric.note}
-            tone={metric.tone}
-          />
+      <TileGrid pageKey="sdr-queue" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+              note={metric.note}
+              tone={metric.tone}
+              fill
+            />
+          </TileItem>
         ))}
-      </section>
-
-      <section aria-label="Queue lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {lanes.map((lane) => (
-          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
-            <ToneIcon icon={lane.icon} tone={lane.tone} />
-            <div className="min-w-0">
-              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {lane.label} · {lane.note}
+        {lanes.map((lane, index) => (
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+            <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
+              <ToneIcon icon={lane.icon} tone={lane.tone} />
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {lane.label} · {lane.note}
+                </div>
               </div>
             </div>
-          </div>
+          </TileItem>
         ))}
-      </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <TileItem id="priority-work" x={0} y={4} w={7} h={8} minW={4} minH={4}>
         <Panel
           title="Priority work"
           subtitle="Sorted by overdue status, P1 priority, due date, and available channel."
           action={<StatusBadge label={`${priorityQueue.length} visible`} tone="info" />}
           flush
+          fill
         >
           <Table>
             <TableHeader>
@@ -313,11 +319,14 @@ export default async function SdrQueuePage() {
             </TableBody>
           </Table>
         </Panel>
+        </TileItem>
 
+        <TileItem id="log-touch" x={7} y={4} w={5} h={8} minW={3} minH={4}>
         <Panel
           title="Log touch"
           subtitle="Record an outcome, set the next follow-up, and update the assignment timeline."
           action={<ToneIcon icon={Send} tone="info" />}
+          fill
         >
           <form action={logFirstTouchAction} className="flex flex-col gap-4">
             {isSdr ? (
@@ -369,13 +378,14 @@ export default async function SdrQueuePage() {
             </div>
           </form>
         </Panel>
-      </section>
+        </TileItem>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <TileItem id="follow-up-reminders" x={0} y={12} w={7} h={7} minW={4} minH={3}>
         <Panel
           title="Follow-up reminders"
           subtitle="Open reminders sorted by due date."
           action={<ToneIcon icon={Clock} tone="info" />}
+          fill
         >
           <div className="flex flex-col gap-4">
             {openReminders.map((reminder) => (
@@ -411,11 +421,14 @@ export default async function SdrQueuePage() {
             ) : null}
           </div>
         </Panel>
+        </TileItem>
 
+        <TileItem id="bulk-email" x={7} y={12} w={5} h={7} minW={3} minH={4}>
         <Panel
           title="Bulk email assigned contacts"
           subtitle="Send one SES-backed email to eligible active assignments in this queue scope."
           action={<ToneIcon icon={Mail} tone="info" />}
+          fill
         >
           <div className="flex flex-col gap-4">
             <form action={sendAssignedBulkEmailAction} className="flex flex-col gap-4">
@@ -483,15 +496,16 @@ export default async function SdrQueuePage() {
             </div>
           </div>
         </Panel>
-      </section>
+        </TileItem>
 
-      {!isSdr ? (
-        <section aria-label="Assignment directory">
+        {!isSdr ? (
+        <TileItem id="assignment-directory" x={0} y={19} w={12} h={7} minW={6} minH={3}>
           <Panel
             title="Assignment directory"
             subtitle="All active and historical assignments for this queue scope."
             action={<StatusBadge label={`${formatNumber(snapshot.assignments.length)} assignments`} tone="info" />}
             flush
+            fill
           >
             <Table>
               <TableHeader>
@@ -535,8 +549,9 @@ export default async function SdrQueuePage() {
               </TableBody>
             </Table>
           </Panel>
-        </section>
+        </TileItem>
       ) : null}
+      </TileGrid>
     </>
   );
 }

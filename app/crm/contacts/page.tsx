@@ -30,6 +30,8 @@ import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { contactViewsForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
 
@@ -128,6 +130,9 @@ export default async function ContactsPage() {
     }
   ];
 
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "crm-contacts");
+
   return (
     <>
       <PageHeader
@@ -156,34 +161,34 @@ export default async function ContactsPage() {
         }
       />
 
-      <section aria-label="Contact metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <StatCard
-            key={metric.label}
-            icon={metric.icon}
-            label={metric.label}
-            value={metric.value}
-            note={metric.note}
-            tone={metric.tone}
-          />
+      <TileGrid pageKey="crm-contacts" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard
+              fill
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+              note={metric.note}
+              tone={metric.tone}
+            />
+          </TileItem>
         ))}
-      </section>
-
-      <section aria-label="Contact lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {lanes.map((lane) => (
-          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
-            <ToneIcon icon={lane.icon} tone={lane.tone} />
-            <div className="min-w-0">
-              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {lane.label} · {lane.note}
+        {lanes.map((lane, index) => (
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+            <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
+              <ToneIcon icon={lane.icon} tone={lane.tone} />
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {lane.label} · {lane.note}
+                </div>
               </div>
             </div>
-          </div>
+          </TileItem>
         ))}
-      </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[7fr_5fr]">
+        <TileItem id="priority-contacts" x={0} y={4} w={7} h={8} minW={4} minH={4}>
         <Panel
           title={isSdr ? "Next contacts" : "Priority contacts"}
           subtitle={
@@ -193,6 +198,7 @@ export default async function ContactsPage() {
           }
           action={<StatusBadge label={`${priorityContacts.length} focus`} tone="info" />}
           flush
+          fill
         >
           <Table>
             <TableHeader>
@@ -247,11 +253,14 @@ export default async function ContactsPage() {
             </TableBody>
           </Table>
         </Panel>
+        </TileItem>
 
+        <TileItem id="channel-readiness" x={7} y={4} w={5} h={8} minW={3} minH={4}>
         <Panel
           title="Channel readiness"
           subtitle="How the contact database breaks down for email, phone, review, and compliance blocks."
           action={<ToneIcon icon={ShieldCheck} tone="info" />}
+          fill
         >
           <div className="flex flex-col gap-4">
             <ReadinessRow
@@ -265,14 +274,15 @@ export default async function ContactsPage() {
             <ReadinessRow label="Suppressed" count={suppressed.length} total={contacts.length} tone="danger" />
           </div>
         </Panel>
-      </section>
+        </TileItem>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[7fr_5fr]">
+        <TileItem id="secondary-left" x={0} y={12} w={7} h={6} minW={4} minH={3}>
         {isSdr ? (
           <Panel
             title="Work focus"
             subtitle="Queue items, account context, and reachable contacts stay in one path."
             action={<ToneIcon icon={Calendar} tone="info" />}
+            fill
           >
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5 border-b pb-4">
@@ -303,6 +313,7 @@ export default async function ContactsPage() {
             title="Owner coverage"
             subtitle="Contact load and quality by owner."
             action={<ToneIcon icon={Users} tone="info" />}
+            fill
           >
             <div className="flex flex-col gap-4">
               {ownerRows.map((row) => (
@@ -319,7 +330,9 @@ export default async function ContactsPage() {
             </div>
           </Panel>
         )}
+        </TileItem>
 
+        <TileItem id="contact-actions" x={7} y={12} w={5} h={6} minW={3} minH={3}>
         <Panel
           title="Contact actions"
           subtitle={
@@ -328,6 +341,7 @@ export default async function ContactsPage() {
               : "Common places SDRs and managers go from the contact list."
           }
           action={<ToneIcon icon={ArrowRight} tone="info" />}
+          fill
         >
           <div className={`grid grid-cols-1 gap-4 ${isSdr ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
             <Link
@@ -358,9 +372,9 @@ export default async function ContactsPage() {
             </Link>
           </div>
         </Panel>
-      </section>
+        </TileItem>
 
-      <section aria-label="Contact directory">
+        <TileItem id="contact-directory" x={0} y={18} w={12} h={7} minW={6} minH={3}>
         <Panel
           title="Contact directory"
           subtitle={
@@ -370,6 +384,7 @@ export default async function ContactsPage() {
           }
           action={<StatusBadge label={`${formatNumber(contacts.length)} contacts`} tone="info" />}
           flush
+          fill
         >
           <Table>
             <TableHeader>
@@ -428,7 +443,8 @@ export default async function ContactsPage() {
             </TableBody>
           </Table>
         </Panel>
-      </section>
+        </TileItem>
+      </TileGrid>
     </>
   );
 }

@@ -14,6 +14,7 @@ export function Panel({
   action,
   children,
   flush = false,
+  fill = false,
   className
 }: {
   title: React.ReactNode;
@@ -21,10 +22,12 @@ export function Panel({
   action?: React.ReactNode;
   children: React.ReactNode;
   flush?: boolean;
+  /** Fill the parent's height and scroll the body — used inside GridStack tiles. */
+  fill?: boolean;
   className?: string;
 }) {
   return (
-    <Card className={cn("gap-0 overflow-hidden p-0", className)}>
+    <Card className={cn("gap-0 overflow-hidden p-0", fill && "h-full", className)}>
       <div className="flex items-start justify-between gap-3 border-b p-5">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-foreground">{title}</h2>
@@ -32,7 +35,7 @@ export function Panel({
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div className={flush ? "" : "p-5"}>{children}</div>
+      <div className={cn(flush ? "" : "p-5", fill && "min-h-0 flex-1 overflow-auto")}>{children}</div>
     </Card>
   );
 }

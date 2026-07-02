@@ -40,6 +40,8 @@ import { readFastSdrManagerModel } from "@/lib/phase1/sdr-manager-read-model";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { AppState } from "@/lib/phase1/types";
 import { formatNumber, formatPercent } from "@/lib/utils";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
 
@@ -134,6 +136,9 @@ export default async function SdrManagerPage() {
     }
   ];
 
+  const canCustomize = canCustomizeTiles(sessionContext.session);
+  const savedLayout = await readUserTileLayout(sessionContext.session.user.id, "sdr-manager");
+
   return (
     <>
       <PageHeader
@@ -158,40 +163,40 @@ export default async function SdrManagerPage() {
         }
       />
 
-      <section aria-label="SDR manager metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <StatCard
-            key={metric.label}
-            icon={metric.icon}
-            label={metric.label}
-            value={metric.value}
-            note={metric.note}
-            tone={metric.tone}
-          />
+      <TileGrid pageKey="sdr-manager" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+              note={metric.note}
+              tone={metric.tone}
+              fill
+            />
+          </TileItem>
         ))}
-      </section>
-
-      <section aria-label="SDR manager lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {lanes.map((lane) => (
-          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
-            <ToneIcon icon={lane.icon} tone={lane.tone} />
-            <div className="min-w-0">
-              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {lane.label} · {lane.note}
+        {lanes.map((lane, index) => (
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+            <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
+              <ToneIcon icon={lane.icon} tone={lane.tone} />
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {lane.label} · {lane.note}
+                </div>
               </div>
             </div>
-          </div>
+          </TileItem>
         ))}
-      </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <TileItem id="team-workload" x={0} y={4} w={7} h={8} minW={4} minH={4}>
         <Panel
           title="Team workload"
           subtitle="Active load, P1 pressure, meetings, and SLA adherence by rep."
           action={<ToneIcon icon={BarChart3} tone="info" />}
-          className="xl:col-span-7"
           flush
+          fill
         >
           <Table>
             <TableHeader>
@@ -247,12 +252,14 @@ export default async function SdrManagerPage() {
             </TableBody>
           </Table>
         </Panel>
+        </TileItem>
 
+        <TileItem id="routing-coverage" x={7} y={4} w={5} h={8} minW={3} minH={4}>
         <Panel
           title="Routing coverage"
           subtitle="Territory and industry pods used by the assignment engine."
           action={<ToneIcon icon={GitBranch} tone="info" />}
-          className="xl:col-span-5"
+          fill
         >
           <div className="flex flex-col gap-4">
             {teams.map((team) => (
@@ -281,9 +288,9 @@ export default async function SdrManagerPage() {
             ) : null}
           </div>
         </Panel>
-      </section>
+        </TileItem>
 
-      <section>
+        <TileItem id="reassignment-recommendations" x={0} y={12} w={12} h={7} minW={6} minH={3}>
         <Panel
           title="Reassignment recommendations"
           subtitle="Overdue SLA and P1 load-balance recommendations generated from current assignments."
@@ -294,6 +301,7 @@ export default async function SdrManagerPage() {
             />
           }
           flush
+          fill
         >
           <Table>
             <TableHeader>
@@ -347,14 +355,14 @@ export default async function SdrManagerPage() {
             </TableBody>
           </Table>
         </Panel>
-      </section>
+        </TileItem>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <TileItem id="manual-reassignment" x={0} y={19} w={7} h={9} minW={4} minH={4}>
         <Panel
           title="Manual reassignment"
           subtitle="Move any active assignment to another SDR with a manager reason."
           action={<ToneIcon icon={Users} tone="info" />}
-          className="xl:col-span-7"
+          fill
         >
           <form action={reassignSdrAssignmentAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5 sm:col-span-2">
@@ -443,12 +451,14 @@ export default async function SdrManagerPage() {
             </div>
           </form>
         </Panel>
+        </TileItem>
 
+        <TileItem id="reassignment-rules" x={7} y={19} w={5} h={9} minW={3} minH={4}>
         <Panel
           title="Reassignment rules"
           subtitle="Rules define when manager recommendations should move work."
           action={<StatusBadge label={`${snapshot.rules.length} rules`} tone="info" />}
-          className="xl:col-span-5"
+          fill
         >
           <div className="flex flex-col gap-5">
             <form action={createReassignmentRuleAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -559,7 +569,8 @@ export default async function SdrManagerPage() {
             </div>
           </div>
         </Panel>
-      </section>
+        </TileItem>
+      </TileGrid>
     </>
   );
 }

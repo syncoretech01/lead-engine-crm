@@ -42,6 +42,7 @@ export function StatCard({
   value,
   note,
   tone = "info",
+  fill = false,
   className
 }: {
   icon: LucideIcon;
@@ -49,12 +50,15 @@ export function StatCard({
   value: React.ReactNode;
   note?: React.ReactNode;
   tone?: StatTone;
+  /** Fill the parent's height — used inside GridStack tiles. */
+  fill?: boolean;
   className?: string;
 }) {
   return (
     <div
       className={cn(
         "bg-card text-card-foreground flex flex-col gap-3 rounded-xl border p-5 shadow-sm",
+        fill && "h-full",
         className
       )}
     >

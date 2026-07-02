@@ -36,6 +36,8 @@ import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { accountViewsForWorkspace, opportunityViews, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
 
@@ -148,6 +150,9 @@ export default async function AccountsPage() {
     }
   ];
 
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "crm-accounts");
+
   return (
     <>
       <PageHeader
@@ -176,34 +181,34 @@ export default async function AccountsPage() {
         }
       />
 
-      <section aria-label="Account metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <StatCard
-            key={metric.label}
-            icon={metric.icon}
-            label={metric.label}
-            value={metric.value}
-            note={metric.note}
-            tone={metric.tone}
-          />
+      <TileGrid pageKey="crm-accounts" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+              note={metric.note}
+              tone={metric.tone}
+              fill
+            />
+          </TileItem>
         ))}
-      </section>
-
-      <section aria-label="Account lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {lanes.map((lane) => (
-          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
-            <ToneIcon icon={lane.icon} tone={lane.tone} />
-            <div className="min-w-0">
-              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {lane.label} · {lane.note}
+        {lanes.map((lane, index) => (
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+            <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
+              <ToneIcon icon={lane.icon} tone={lane.tone} />
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {lane.label} · {lane.note}
+                </div>
               </div>
             </div>
-          </div>
+          </TileItem>
         ))}
-      </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <TileItem id="account-watchlist" x={0} y={4} w={7} h={8} minW={4} minH={4}>
         <Panel
           title={isSdr ? "Account focus" : "Account watchlist"}
           subtitle={
@@ -213,6 +218,7 @@ export default async function AccountsPage() {
           }
           action={<StatusBadge label={`${watchlist.length} focus`} tone="info" />}
           flush
+          fill
         >
           <Table>
             <TableHeader>
@@ -257,12 +263,15 @@ export default async function AccountsPage() {
             </TableBody>
           </Table>
         </Panel>
+        </TileItem>
 
+        <TileItem id="watchlist-side" x={7} y={4} w={5} h={8} minW={3} minH={4}>
         {isSdr ? (
           <Panel
             title="Account coverage"
             subtitle="A quick split of the accounts and contacts in your current scope."
             action={<ToneIcon icon={Users} tone="info" />}
+            fill
           >
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
@@ -296,6 +305,7 @@ export default async function AccountsPage() {
             title="Stage overview"
             subtitle="Account distribution by active opportunity stage."
             action={<ToneIcon icon={CircleDollarSign} tone="info" />}
+            fill
           >
             <div className="flex flex-col gap-4">
               {stageRows.map((row) => (
@@ -314,14 +324,15 @@ export default async function AccountsPage() {
             </div>
           </Panel>
         )}
-      </section>
+        </TileItem>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <TileItem id="secondary-left" x={0} y={12} w={7} h={6} minW={4} minH={3}>
         {isSdr ? (
           <Panel
             title="Recent account context"
             subtitle="The accounts you are most likely to open while working your queue."
             action={<ToneIcon icon={Target} tone="info" />}
+            fill
           >
             <div className="flex flex-col gap-4">
               {watchlist.slice(0, 4).map((account) => (
@@ -342,6 +353,7 @@ export default async function AccountsPage() {
             title="Source mix"
             subtitle="Where CRM accounts came from, kept visible for attribution and list quality review."
             action={<ToneIcon icon={Target} tone="info" />}
+            fill
           >
             <div className="flex flex-col gap-4">
               {sourceRows.map((row) => (
@@ -358,11 +370,14 @@ export default async function AccountsPage() {
             </div>
           </Panel>
         )}
+        </TileItem>
 
+        <TileItem id="account-actions" x={7} y={12} w={5} h={6} minW={3} minH={3}>
         <Panel
           title="Account actions"
           subtitle={isSdr ? "Fast paths back to daily contact work." : "Shortcuts for the CRM work around account records."}
           action={<ToneIcon icon={ArrowRight} tone="info" />}
+          fill
         >
           <div className={`grid gap-4 ${isSdr ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
             <Link
@@ -393,9 +408,9 @@ export default async function AccountsPage() {
             </Link>
           </div>
         </Panel>
-      </section>
+        </TileItem>
 
-      <section aria-label="Account directory">
+        <TileItem id="account-directory" x={0} y={18} w={12} h={7} minW={6} minH={3}>
         <Panel
           title="Account directory"
           subtitle={
@@ -405,6 +420,7 @@ export default async function AccountsPage() {
           }
           action={<StatusBadge label={`${formatNumber(accounts.length)} accounts`} tone="info" />}
           flush
+          fill
         >
           <Table>
             <TableHeader>
@@ -446,7 +462,8 @@ export default async function AccountsPage() {
             </TableBody>
           </Table>
         </Panel>
-      </section>
+        </TileItem>
+      </TileGrid>
     </>
   );
 }
