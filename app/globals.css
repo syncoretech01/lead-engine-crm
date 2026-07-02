@@ -17,6 +17,8 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
 
+@custom-variant dark (&:is(.dark *));
+
 @theme inline {
   --color-background: var(--ui-background);
   --color-foreground: var(--ui-foreground);
@@ -83,19 +85,40 @@
   --ui-border: var(--border-default);
   --ui-input: var(--border-default);
   --ui-ring: var(--syn-primary);
-  --ui-chart-1: var(--syn-primary);
-  --ui-chart-2: var(--syn-secondary);
-  --ui-chart-3: var(--blue-300);
-  --ui-chart-4: var(--teal-300);
-  --ui-chart-5: var(--ink-400);
-  --ui-sidebar: var(--syn-dark);
-  --ui-sidebar-foreground: var(--fg-on-dark);
+  /* Vibrant multi-hue chart palette (Flexio data-viz): blue, teal, violet, amber, pink */
+  --ui-chart-1: #0076fe;
+  --ui-chart-2: #05dac3;
+  --ui-chart-3: #6d5cff;
+  --ui-chart-4: #ffb020;
+  --ui-chart-5: #f6519d;
+
+  /* Light sidebar (Flexio-style, Phase B): white surface, muted-gray inactive
+     text, blue-tinted active/hover pill with blue text + icon. Brand stays blue.
+     Consumed by the shadcn Sidebar via @theme inline (--color-sidebar*). */
+  --ui-sidebar: var(--bg-surface);
+  --ui-sidebar-foreground: var(--fg2);
   --ui-sidebar-primary: var(--syn-primary);
   --ui-sidebar-primary-foreground: #ffffff;
-  --ui-sidebar-accent: var(--ink-800);
-  --ui-sidebar-accent-foreground: var(--fg-on-dark);
-  --ui-sidebar-border: var(--ink-800);
+  --ui-sidebar-accent: var(--blue-50);
+  --ui-sidebar-accent-foreground: var(--syn-primary);
+  --ui-sidebar-border: var(--border-subtle);
   --ui-sidebar-ring: var(--syn-primary);
+}
+
+/* Border defaults for Tailwind utilities WITHOUT full Preflight. shadcn
+   components use the bare `border` utility, which relies on Preflight for
+   border-style:solid + border-width:0 + a default color. We supply just those
+   in @layer base — lower cascade priority than the unlayered legacy CSS, so
+   existing borders are untouched; only elements Tailwind's width utilities
+   target (i.e. shadcn components) get a solid --ui-border edge. Full Preflight
+   is enabled in the final cleanup phase. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop {
+    border: 0 solid var(--ui-border);
+  }
 }
 
 :root {

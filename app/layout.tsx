@@ -7,7 +7,7 @@ import "@fontsource/poppins/400.css";
 import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
 import "./globals.css";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { syncoreBrand } from "@/lib/brand";
 import { isPublicAuthPath, isPublicUnsubscribePath } from "@/lib/phase1/auth-routes";
@@ -38,11 +38,17 @@ export default async function RootLayout({
   }
 
   const session = await getSession();
+  // Restore the sidebar collapsed/expanded state from the cookie shadcn sets,
+  // so the first server render matches the user's last choice (no flash).
+  const cookieStore = await cookies();
+  const defaultSidebarOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
   return (
     <html lang="en">
       <body>
-        <AppShell session={session}>{children}</AppShell>
+        <AppShell session={session} defaultSidebarOpen={defaultSidebarOpen}>
+          {children}
+        </AppShell>
       </body>
     </html>
   );
