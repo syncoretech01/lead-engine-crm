@@ -25,10 +25,10 @@ export function AuthCard({
         <Image
           src={syncoreBrand.logo.wordmark}
           alt={syncoreBrand.shortName}
-          width={200}
-          height={62}
+          width={280}
+          height={87}
           priority
-          className="h-12 w-auto"
+          className="h-auto w-56"
         />
         {kicker ? (
           <p className="text-xs font-medium tracking-wide text-muted-foreground">{kicker}</p>
