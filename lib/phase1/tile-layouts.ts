@@ -20,11 +20,11 @@ export function isTilePageKey(value: string): value is TilePageKey {
   return (TILE_PAGE_KEYS as readonly string[]).includes(value);
 }
 
-// Tile customization is scoped to the SDR team (reps and their managers) — the
-// SDR queue is used by both, and the manager dashboard is manager-only. Kept as
-// a single helper so the gate is trivial to widen to other roles later.
+// Tile customization is available to the SDR team (reps + managers) and to
+// Admins (the workspace owner), who reach the same accounts/contacts/SDR pages.
+// Kept as a single helper so the gate is trivial to widen to other roles later.
 export function canCustomizeTiles(session: Pick<Session, "role">): boolean {
-  return session.role === "SDR" || session.role === "Manager";
+  return session.role === "SDR" || session.role === "Manager" || session.role === "Admin";
 }
 
 function clampTileInt(value: unknown, min: number, max: number): number {

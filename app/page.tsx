@@ -17,8 +17,21 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { ProgressBar } from "@/components/progress-bar";
-import { StatusPill, statusTone } from "@/components/status-pill";
+import { statusTone } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { MeterBar } from "@/components/ui/meter-bar";
+import { Panel } from "@/components/ui/panel";
+import { StatCard, ToneIcon } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { contactRowsForStaging, exportTemplates, sourceHealth } from "@/lib/phase1/queries";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { buildLeadEngineMetrics } from "@/lib/phase1/lead-engine-metrics";
@@ -28,7 +41,6 @@ import { canUseLeadGenerationWorkspace, defaultWorkspacePath } from "@/lib/phase
 import type { Contact, LeadJob, Priority, SearchProfile } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 import { redirect } from "next/navigation";
-import { StatCard } from "@/components/ui-metrics";
 
 type StagedRow = ReturnType<typeof contactRowsForStaging>[number];
 type SegmentSummary = {
@@ -207,311 +219,330 @@ export default async function DashboardPage() {
         actions={
           <>
             {canImport ? (
-              <Link href="/staging#import-csv" className="button secondary">
-                <Upload size={17} aria-hidden="true" />
-                Import CSV
-              </Link>
+              <Button asChild variant="outline">
+                <Link href="/staging#import-csv">
+                  <Upload aria-hidden="true" />
+                  Import CSV
+                </Link>
+              </Button>
             ) : null}
             {canManageProfiles ? (
-              <Link href="/search-profiles#create-profile" className="button primary">
-                <Target size={17} aria-hidden="true" />
-                New profile
-              </Link>
+              <Button asChild>
+                <Link href="/search-profiles#create-profile">
+                  <Target aria-hidden="true" />
+                  New profile
+                </Link>
+              </Button>
             ) : null}
           </>
         }
       />
 
-      <section className="stat-grid" aria-label="Lead generation metrics">
+      <section aria-label="Lead generation metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
-          <StatCard key={stat.label} {...stat} />
+          <StatCard
+            key={stat.label}
+            icon={stat.icon}
+            label={stat.label}
+            value={stat.value}
+            note={stat.note}
+            tone={stat.tone}
+          />
         ))}
       </section>
 
-      <section className="grid lead-dashboard-main" aria-label="Lead engine overview">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <div className="page-kicker">This week</div>
-              <h2 className="section-title">From raw data to SDR-ready</h2>
-              <p className="section-subtitle">Every record passes the staging pipeline before it can reach CRM or export.</p>
-            </div>
-            <Link href="/staging" className="button subtle">
-              Open staging
-              <ArrowRight size={16} aria-hidden="true" />
-            </Link>
-          </div>
-          <div className="panel-body funnel-list">
+      <section aria-label="Lead engine overview" className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title="From raw data to SDR-ready"
+          subtitle="Every record passes the staging pipeline before it can reach CRM or export."
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/staging">
+                Open staging
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-4">
             {funnelStages.map((stage) => (
               <FunnelRow key={stage.label} max={funnelMax} {...stage} />
             ))}
           </div>
-        </div>
+        </Panel>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <div className="page-kicker">Live</div>
-              <h2 className="section-title">Top segments</h2>
-              <p className="section-subtitle">High-volume groups and the next operator action.</p>
-            </div>
-            <Users size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body segment-list">
+        <Panel
+          title="Top segments"
+          subtitle="High-volume groups and the next operator action."
+          action={<ToneIcon icon={Users} tone="info" />}
+        >
+          <div className="flex flex-col gap-4">
             {topSegments.length ? (
               topSegments.map((segment) => (
-                <div className="segment-row" key={segment.name}>
-                  <div className="segment-copy">
-                    <strong>{segment.name}</strong>
-                    <span>{segment.action}</span>
+                <div
+                  key={segment.name}
+                  className="flex items-start justify-between gap-3 border-b pb-4 last:border-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-foreground">{segment.name}</div>
+                    <p className="text-xs text-muted-foreground">{segment.action}</p>
                   </div>
-                  <div className="segment-metrics">
+                  <div className="flex shrink-0 items-center gap-2">
                     <PriorityBadge priority={segment.priority} />
-                    <strong>{formatNumber(segment.count)}</strong>
+                    <span className="font-semibold text-foreground tabular-nums">{formatNumber(segment.count)}</span>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="empty-state">
-                <Layers3 size={24} aria-hidden="true" />
-                <span>No segments calculated yet.</span>
+              <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground">
+                <Layers3 className="size-6" aria-hidden="true" />
+                <span className="text-sm">No segments calculated yet.</span>
               </div>
             )}
           </div>
-        </div>
+        </Panel>
       </section>
 
-      <section className="lead-action-grid" aria-label="Lead generation workflow">
+      <section aria-label="Lead generation workflow" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {workflow.map((step) => {
           const Icon = step.icon;
           return (
-            <Link href={step.href} className="lead-action-card card-hover" key={step.title}>
-              <span className="lead-action-icon">
-                <Icon size={18} aria-hidden="true" />
-              </span>
-              <div className="lead-action-copy">
-                <strong>{step.title}</strong>
-                <span>{step.copy}</span>
+            <Link
+              key={step.title}
+              href={step.href}
+              className="group bg-card flex flex-col gap-4 rounded-xl border p-5 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-foreground">{step.title}</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">{step.copy}</p>
+                </div>
+                <ToneIcon icon={Icon} tone="info" />
               </div>
-              <div className="lead-action-meta">
-                <StatusPill label={`${formatNumber(step.count)} ${step.label}`} tone={step.count ? "info" : "default"} />
-                <ArrowRight size={17} aria-hidden="true" />
+              <div className="mt-auto flex items-center justify-between">
+                <StatusBadge label={`${formatNumber(step.count)} ${step.label}`} tone={step.count ? "info" : "default"} />
+                <ArrowRight
+                  className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                  aria-hidden="true"
+                />
               </div>
             </Link>
           );
         })}
       </section>
 
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Recent lead jobs</h2>
-              <p className="section-subtitle">Extraction and processing runs with source mix, progress, records, and cost.</p>
-            </div>
-            <Link href="/lead-jobs" className="button secondary">
-              View all
-            </Link>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Job</th>
-                  <th>Sources</th>
-                  <th>Status</th>
-                  <th>Progress</th>
-                  <th>Records</th>
-                  <th>Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentJobRows.map((job) => (
-                  <tr key={job.id}>
-                    <td>
-                      <div className="entity">
-                        <strong>{job.name}</strong>
-                        <span>{formatDate(job.updatedAt)}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <SourceDots sources={job.sources} />
-                    </td>
-                    <td>
-                      <StatusPill label={job.status} tone={statusTone(job.status)} />
-                    </td>
-                    <td className="progress-cell">
-                      <ProgressBar value={job.progress} />
-                      <span>{job.progress}%</span>
-                    </td>
-                    <td>
-                      <div className="entity">
-                        <strong>{formatNumber(job.normalized || job.raw)}</strong>
-                        <span>{formatNumber(job.verified)} A/B verified</span>
-                      </div>
-                    </td>
-                    <td>{formatCurrencyCompact(job.actualCost)}</td>
-                  </tr>
-                ))}
-                {recentJobRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}>No lead jobs yet.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title="Recent lead jobs"
+          subtitle="Extraction and processing runs with source mix, progress, records, and cost."
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/lead-jobs">View all</Link>
+            </Button>
+          }
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Job</TableHead>
+                <TableHead>Sources</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Progress</TableHead>
+                <TableHead>Records</TableHead>
+                <TableHead>Cost</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recentJobRows.map((job) => (
+                <TableRow key={job.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{job.name}</span>
+                      <span className="text-xs text-muted-foreground">{formatDate(job.updatedAt)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <SourceDots sources={job.sources} />
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge label={job.status} tone={statusTone(job.status)} />
+                  </TableCell>
+                  <TableCell>
+                    <MeterBar value={job.progress} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{formatNumber(job.normalized || job.raw)}</span>
+                      <span className="text-xs text-muted-foreground">{formatNumber(job.verified)} A/B verified</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{formatCurrencyCompact(job.actualCost)}</TableCell>
+                </TableRow>
+              ))}
+              {recentJobRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-muted-foreground">
+                    No lead jobs yet.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Source readiness</h2>
-              <p className="section-subtitle">Selected acquisition sources and the fields each lane is expected to contribute.</p>
-            </div>
-            <ShieldCheck size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title="Source readiness"
+          subtitle="Selected acquisition sources and the fields each lane is expected to contribute."
+          action={<ToneIcon icon={ShieldCheck} tone="info" />}
+        >
+          <div className="flex flex-col gap-4">
             {sourceHealth.map((source) => (
-              <div className="stage-row" key={source.source}>
-                <div className="stage-meta">
-                  <strong>{source.source}</strong>
-                  <StatusPill label={source.status} tone={statusTone(source.status)} />
+              <div key={source.source} className="flex flex-col gap-2 border-b pb-4 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">{source.source}</span>
+                  <StatusBadge label={source.status} tone={statusTone(source.status)} />
                 </div>
-                <ProgressBar value={source.trust} />
-                <div className="row-meta">
+                <MeterBar value={source.trust} />
+                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                   <span>{source.trust}% trust score</span>
                   <span>{source.credits}</span>
                 </div>
-                <div className="chip-row">
+                <div className="flex flex-wrap gap-2">
                   {source.fields.map((field) => (
-                    <span className="source-chip" key={field}>
-                      {field}
-                    </span>
+                    <StatusBadge key={field} label={field} tone="default" />
                   ))}
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
       </section>
 
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Staging quality queue</h2>
-              <p className="section-subtitle">Records operators should inspect before export or CRM handoff.</p>
-            </div>
-            <Link href="/staging" className="button secondary">
-              Open staging
-            </Link>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Lead</th>
-                  <th>Source</th>
-                  <th>Grade</th>
-                  <th>Score</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(needsReviewRows.length ? needsReviewRows : stagedRows).slice(0, 8).map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <div className="entity">
-                        <strong>{displayStagedLeadName(row)}</strong>
-                        <span>{row.title}</span>
-                        <span>{displayStagedAccountName(row)}</span>
-                      </div>
-                    </td>
-                    <td>{row.source}</td>
-                    <td>
-                      <span className={`grade ${row.emailGrade.toLowerCase()}`}>{row.emailGrade}</span>
-                    </td>
-                    <td>{row.score}</td>
-                    <td>
-                      <StatusPill label={row.status} tone={statusTone(row.status)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title="Staging quality queue"
+          subtitle="Records operators should inspect before export or CRM handoff."
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/staging">Open staging</Link>
+            </Button>
+          }
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Lead</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Grade</TableHead>
+                <TableHead>Score</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(needsReviewRows.length ? needsReviewRows : stagedRows).slice(0, 8).map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{displayStagedLeadName(row)}</span>
+                      <span className="text-xs text-muted-foreground">{row.title}</span>
+                      <span className="text-xs text-muted-foreground">{displayStagedAccountName(row)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{row.source}</TableCell>
+                  <TableCell>
+                    <StatusBadge label={row.emailGrade} tone={gradeTone(row.emailGrade)} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{row.score}</TableCell>
+                  <TableCell>
+                    <StatusBadge label={row.status} tone={statusTone(row.status)} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Panel>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Export readiness</h2>
-              <p className="section-subtitle">Output templates with counts after verification and suppression gates.</p>
-            </div>
-            <Link href="/exports" className="button secondary">
-              Generate export
-            </Link>
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title="Export readiness"
+          subtitle="Output templates with counts after verification and suppression gates."
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/exports">Generate export</Link>
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-4">
             {templates.map((template) => (
-              <div className="list-row" key={template.id}>
-                <div className="row-meta">
-                  <strong>{template.name}</strong>
-                  <StatusPill label={`${formatNumber(template.eligible)} eligible`} tone={template.eligible ? "success" : "warning"} />
+              <div key={template.id} className="flex flex-col gap-2 border-b pb-4 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">{template.name}</span>
+                  <StatusBadge
+                    label={`${formatNumber(template.eligible)} eligible`}
+                    tone={template.eligible ? "success" : "warning"}
+                  />
                 </div>
-                <p className="section-subtitle">{template.description}</p>
-                <div className="chip-row">
+                <p className="text-xs text-muted-foreground">{template.description}</p>
+                <div className="flex flex-wrap gap-2">
                   {template.columns.slice(0, 5).map((column) => (
-                    <span className="pill" key={column}>
-                      {column}
-                    </span>
+                    <StatusBadge key={column} label={column} tone="default" />
                   ))}
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Saved ICP profiles</h2>
-            <p className="section-subtitle">Reusable list-building definitions with source mix, required fields, routing, and compliance notes.</p>
-          </div>
-          <Link href="/search-profiles" className="button secondary">
-            Manage profiles
-          </Link>
-        </div>
-        <div className="grid three panel-body">
+      <Panel
+        title="Saved ICP profiles"
+        subtitle="Reusable list-building definitions with source mix, required fields, routing, and compliance notes."
+        action={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/search-profiles">Manage profiles</Link>
+          </Button>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {profiles.slice(0, 6).map((profile) => (
             <ProfileSummaryCard key={profile.id} profile={profile} />
           ))}
         </div>
-      </section>
+      </Panel>
 
-      <section className="grid three">
-        <div className="item-card">
-          <FileText size={22} aria-hidden="true" />
-          <h2 className="card-title">No CRM clutter</h2>
-          <p className="section-subtitle">SDR queues, opportunities, and revenue attribution now belong in the CRM workspace.</p>
-        </div>
-        <div className="item-card">
-          <GitMerge size={22} aria-hidden="true" />
-          <h2 className="card-title">Quality first</h2>
-          <p className="section-subtitle">Dedupe, suppression, verification, and enrichment stay visible before records move downstream.</p>
-        </div>
-        <div className="item-card">
-          <ShieldCheck size={22} aria-hidden="true" />
-          <h2 className="card-title">Export gates</h2>
-          <p className="section-subtitle">Operators see eligible counts before producing CSV output or SDR assignment files.</p>
-        </div>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="gap-3 p-5">
+          <ToneIcon icon={FileText} tone="info" />
+          <h2 className="text-sm font-semibold text-foreground">No CRM clutter</h2>
+          <p className="text-xs text-muted-foreground">
+            SDR queues, opportunities, and revenue attribution now belong in the CRM workspace.
+          </p>
+        </Card>
+        <Card className="gap-3 p-5">
+          <ToneIcon icon={GitMerge} tone="info" />
+          <h2 className="text-sm font-semibold text-foreground">Quality first</h2>
+          <p className="text-xs text-muted-foreground">
+            Dedupe, suppression, verification, and enrichment stay visible before records move downstream.
+          </p>
+        </Card>
+        <Card className="gap-3 p-5">
+          <ToneIcon icon={ShieldCheck} tone="info" />
+          <h2 className="text-sm font-semibold text-foreground">Export gates</h2>
+          <p className="text-xs text-muted-foreground">
+            Operators see eligible counts before producing CSV output or SDR assignment files.
+          </p>
+        </Card>
       </section>
     </>
   );
 }
 
+const funnelFillTone: Record<"blue" | "teal" | "warn", string> = {
+  blue: "bg-[var(--syn-primary)]",
+  teal: "bg-[var(--teal-600)]",
+  warn: "bg-[#b45309]"
+};
 
 function FunnelRow({
   icon: Icon,
@@ -531,36 +562,49 @@ function FunnelRow({
   const percent = max ? Math.max(value > 0 ? 2 : 0, Math.round((value / max) * 100)) : 0;
 
   return (
-    <div className="funnel-row">
-      <div className="funnel-name">
-        <Icon size={16} aria-hidden="true" />
-        <span>{label}</span>
+    <div className="flex items-center gap-3">
+      <div className="flex w-28 shrink-0 items-center gap-2 text-sm text-foreground">
+        <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+        <span className="truncate">{label}</span>
       </div>
-      <div className="funnel-track">
-        <span className={`funnel-fill ${tone}`} style={{ width: `${Math.min(percent, 100)}%` }} />
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--ink-100)]">
+        <span
+          className={`block h-full rounded-full ${funnelFillTone[tone]}`}
+          style={{ width: `${Math.min(percent, 100)}%` }}
+        />
       </div>
-      <div className="funnel-value">
-        <strong>{formatNumber(value)}</strong>
-        <span>{note}</span>
+      <div className="flex w-40 shrink-0 flex-col text-right">
+        <span className="font-semibold text-foreground tabular-nums">{formatNumber(value)}</span>
+        <span className="text-xs text-muted-foreground">{note}</span>
       </div>
     </div>
   );
 }
 
+function gradeTone(grade: string): "success" | "info" | "warning" | "danger" | "default" {
+  const normalized = grade.toUpperCase();
+  if (normalized === "A") return "success";
+  if (normalized === "B") return "info";
+  if (normalized === "C") return "warning";
+  if (normalized === "D") return "danger";
+  return "default";
+}
+
 function PriorityBadge({ priority }: { priority: Priority }) {
-  return (
-    <span className={`tier-badge tier-${priority.toLowerCase()}`}>
-      <span />
-      {priority}
-    </span>
-  );
+  const tone = priority === "P1" ? "success" : priority === "P2" ? "info" : "default";
+  return <StatusBadge label={priority} tone={tone} />;
 }
 
 function SourceDots({ sources }: { sources: string[] }) {
   return (
-    <span className="source-dot-row">
+    <span className="flex items-center gap-1">
       {sources.map((source) => (
-        <span className="source-dot" key={source} style={{ background: sourceColor(source) }} title={source}>
+        <span
+          key={source}
+          title={source}
+          className="flex size-5 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+          style={{ background: sourceColor(source) }}
+        >
           {source.slice(0, 1).toUpperCase()}
         </span>
       ))}
@@ -570,33 +614,31 @@ function SourceDots({ sources }: { sources: string[] }) {
 
 function ProfileSummaryCard({ profile }: { profile: SearchProfile }) {
   return (
-    <article className="item-card compact-profile-card">
-      <div className="item-card-header">
-        <div>
-          <h3 className="card-title">{profile.name}</h3>
-          <p className="section-subtitle">{profile.targetMarket}</p>
+    <article className="bg-card flex flex-col gap-3 rounded-xl border p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">{profile.name}</h3>
+          <p className="text-xs text-muted-foreground">{profile.targetMarket}</p>
         </div>
-        <StatusPill label={`${formatNumber(profile.estimatedVolume)} est.`} tone="info" />
+        <StatusBadge label={`${formatNumber(profile.estimatedVolume)} est.`} tone="info" />
       </div>
-      <div className="chip-row">
+      <div className="flex flex-wrap gap-2">
         {profile.sources.slice(0, 4).map((source) => (
-          <span className="source-chip" key={source}>
-            {source}
-          </span>
+          <StatusBadge key={source} label={source} tone="default" />
         ))}
       </div>
-      <div className="chip-row">
+      <div className="flex flex-wrap gap-2">
         {profile.geographies.slice(0, 4).map((geo) => (
-          <span className="pill" key={geo}>
-            {geo}
-          </span>
+          <StatusBadge key={geo} label={geo} tone="default" />
         ))}
       </div>
-      <p className="section-subtitle">{profile.complianceNote}</p>
-      <Link href="/lead-jobs" className="button secondary">
-        <Play size={16} aria-hidden="true" />
-        Run profile
-      </Link>
+      <p className="text-xs text-muted-foreground">{profile.complianceNote}</p>
+      <Button asChild variant="outline" size="sm" className="self-start">
+        <Link href="/lead-jobs">
+          <Play aria-hidden="true" />
+          Run profile
+        </Link>
+      </Button>
     </article>
   );
 }

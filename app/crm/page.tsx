@@ -13,8 +13,20 @@ import {
   Users
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { ProgressBar } from "@/components/progress-bar";
-import { StatusPill, statusTone } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { MeterBar } from "@/components/ui/meter-bar";
+import { Panel } from "@/components/ui/panel";
+import { StatCard, ToneIcon } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import {
   crmEventReadRowsForWorkspace,
   stateWithCrmEventReadRows
@@ -33,7 +45,6 @@ import { readFastSdrQueueModel, type SdrQueueReadModel } from "@/lib/phase1/sdr-
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { OpportunityStage } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
-import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -216,6 +227,24 @@ export default async function CrmDashboardPage() {
     }
   ];
 
+  const infoCards = [
+    {
+      icon: Target,
+      title: "No backend controls",
+      copy: "Provider settings, compliance admin, reports, and automation stay in the Admin view."
+    },
+    {
+      icon: Users,
+      title: "SDR focused",
+      copy: "SDRs land on assigned work, contact context, due dates, and outreach lanes."
+    },
+    {
+      icon: BarChart3,
+      title: "Manager ready",
+      copy: "Managers can jump from this workspace into queue health, reassignment, and pipeline views."
+    }
+  ];
+
   return (
     <>
       <PageHeader
@@ -225,251 +254,291 @@ export default async function CrmDashboardPage() {
         actions={
           <>
             {canManageSdr ? (
-              <Link href="/sdr/queue" className="button secondary">
-                <ClipboardList size={17} aria-hidden="true" />
-                Open queue
-              </Link>
+              <Button asChild variant="outline">
+                <Link href="/sdr/queue">
+                  <ClipboardList aria-hidden="true" />
+                  Open queue
+                </Link>
+              </Button>
             ) : null}
-            <Link href="/crm/opportunities" className="button primary">
-              <CircleDollarSign size={17} aria-hidden="true" />
-              Pipeline
-            </Link>
+            <Button asChild>
+              <Link href="/crm/opportunities">
+                <CircleDollarSign aria-hidden="true" />
+                Pipeline
+              </Link>
+            </Button>
           </>
         }
       />
 
-      <section className="stat-grid" aria-label="CRM metrics">
+      <section aria-label="CRM metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
-          <StatCard key={metric.label} {...metric} />
+          <StatCard
+            key={metric.label}
+            icon={metric.icon}
+            label={metric.label}
+            value={metric.value}
+            note={metric.note}
+            tone={metric.tone}
+          />
         ))}
       </section>
 
-      <section className="ops-stage-strip four-up" aria-label="CRM workspace lanes">
+      <section aria-label="CRM workspace lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {lanes.map((lane) => (
-          <LaneCard key={lane.label} {...lane} />
+          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
+            <ToneIcon icon={lane.icon} tone={lane.tone} />
+            <div className="min-w-0">
+              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {lane.label} · {lane.note}
+              </div>
+            </div>
+          </div>
         ))}
       </section>
 
-      <section className="grid five" aria-label="CRM workspace shortcuts">
-        {workspaceCards.filter((card) => card.visible).map((card) => {
-          const Icon = card.icon;
-          return (
-            <Link href={card.href} className="item-card workflow-card" key={card.title}>
-              <div className="item-card-header">
-                <div>
-                  <h2 className="card-title">{card.title}</h2>
-                  <p className="section-subtitle">{card.copy}</p>
+      <section aria-label="CRM workspace shortcuts" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {workspaceCards
+          .filter((card) => card.visible)
+          .map((card) => {
+            const Icon = card.icon;
+            return (
+              <Link
+                key={card.title}
+                href={card.href}
+                className="group bg-card flex flex-col gap-4 rounded-xl border p-5 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-foreground">{card.title}</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">{card.copy}</p>
+                  </div>
+                  <ToneIcon icon={Icon} tone="info" />
                 </div>
-                <Icon size={20} aria-hidden="true" />
-              </div>
-              <div className="row-meta">
-                <StatusPill label={`${formatNumber(card.count)} ${card.label}`} tone={card.count ? "info" : "default"} />
-                <ArrowRight size={17} aria-hidden="true" />
-              </div>
-            </Link>
-          );
-        })}
+                <div className="mt-auto flex items-center justify-between">
+                  <StatusBadge label={`${formatNumber(card.count)} ${card.label}`} tone={card.count ? "info" : "default"} />
+                  <ArrowRight
+                    className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                    aria-hidden="true"
+                  />
+                </div>
+              </Link>
+            );
+          })}
       </section>
 
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">{session.role === "SDR" ? "My priority work" : "Priority SDR work"}</h2>
-              <p className="section-subtitle">Highest-priority assigned leads, SLA status, recommended channel, and next due date.</p>
-            </div>
-            <Link href="/sdr/queue" className="icon-button" aria-label="Open SDR queue">
-              <ArrowRight size={18} aria-hidden="true" />
-            </Link>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Lead</th>
-                  <th>Owner</th>
-                  <th>Priority</th>
-                  <th>SLA</th>
-                  <th>Next action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {priorityAssignments.map((assignment) => (
-                  <tr key={assignment.id}>
-                    <td>
-                      <Link href={`/crm/contacts/${assignment.contactId}`} className="entity">
-                        <strong>{assignment.contactName}</strong>
-                        <span>{assignment.title}</span>
-                        <span>{assignment.companyName}</span>
-                      </Link>
-                    </td>
-                    <td>{assignment.ownerName}</td>
-                    <td>
-                      <StatusPill label={assignment.priority} tone={assignment.priority === "P1" ? "success" : "info"} />
-                    </td>
-                    <td>
-                      <StatusPill label={assignment.slaStatus} tone={statusTone(assignment.slaStatus)} />
-                    </td>
-                    <td>
-                      <div className="entity">
-                        <strong>{assignment.reminderTitle ?? "First touch"}</strong>
-                        <span>{assignment.dueAt ? formatDate(assignment.dueAt) : assignment.dueLabel}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {priorityAssignments.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>No active SDR assignments are waiting right now.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title={session.role === "SDR" ? "My priority work" : "Priority SDR work"}
+          subtitle="Highest-priority assigned leads, SLA status, recommended channel, and next due date."
+          action={
+            <Button asChild variant="ghost" size="icon" aria-label="Open SDR queue">
+              <Link href="/sdr/queue">
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          }
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Lead</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>SLA</TableHead>
+                <TableHead>Next action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {priorityAssignments.map((assignment) => (
+                <TableRow key={assignment.id}>
+                  <TableCell>
+                    <Link href={`/crm/contacts/${assignment.contactId}`} className="flex flex-col">
+                      <span className="font-medium text-foreground">{assignment.contactName}</span>
+                      <span className="text-xs text-muted-foreground">{assignment.title}</span>
+                      <span className="text-xs text-muted-foreground">{assignment.companyName}</span>
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{assignment.ownerName}</TableCell>
+                  <TableCell>
+                    <StatusBadge label={assignment.priority} tone={assignment.priority === "P1" ? "success" : "info"} />
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge label={assignment.slaStatus} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{assignment.reminderTitle ?? "First touch"}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {assignment.dueAt ? formatDate(assignment.dueAt) : assignment.dueLabel}
+                      </span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {priorityAssignments.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    No active SDR assignments are waiting right now.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Pipeline snapshot</h2>
-              <p className="section-subtitle">Open opportunities sorted by value, with stage and latest activity context.</p>
-            </div>
-            <Link href="/crm/opportunities" className="button secondary">
-              Open pipeline
-            </Link>
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title="Pipeline snapshot"
+          subtitle="Open opportunities sorted by value, with stage and latest activity context."
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/crm/opportunities">Open pipeline</Link>
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-4">
             {pipelineWatchlist.map((opportunity) => (
-              <div className="list-row" key={opportunity.id}>
-                <div className="row-meta">
-                  <strong>{opportunity.name}</strong>
-                  <StatusPill label={formatCurrency(opportunity.amount)} tone="info" />
+              <div key={opportunity.id} className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">{opportunity.name}</span>
+                  <StatusBadge label={formatCurrency(opportunity.amount)} tone="info" />
                 </div>
-                <div className="row-meta">
-                  <span>{opportunity.companyName}</span>
-                  <StatusPill label={opportunity.stage} tone={statusTone(opportunity.stage)} />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-muted-foreground">{opportunity.companyName}</span>
+                  <StatusBadge label={opportunity.stage} />
                 </div>
-                <ProgressBar value={opportunity.probability} />
-                <p className="section-subtitle">{opportunity.lastActivity}</p>
+                <MeterBar value={opportunity.probability} />
+                <p className="text-xs text-muted-foreground">{opportunity.lastActivity}</p>
               </div>
             ))}
+            {pipelineWatchlist.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No open opportunities right now.</p>
+            ) : null}
           </div>
-        </div>
+        </Panel>
       </section>
 
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Account watchlist</h2>
-              <p className="section-subtitle">Accounts with active tasks or high scores that managers and SDRs should keep close.</p>
-            </div>
-            <Link href="/crm/accounts" className="button secondary">
-              Open accounts
-            </Link>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th>Owner</th>
-                  <th>Stage</th>
-                  <th>Tasks</th>
-                  <th>Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accountWatchlist.map((account) => (
-                  <tr key={account.id}>
-                    <td>
-                      <Link href={`/crm/accounts/${account.id}`} className="entity">
-                        <strong>{account.name}</strong>
-                        <span>{account.domain}</span>
-                        <span>{account.source}</span>
-                      </Link>
-                    </td>
-                    <td>{account.owner}</td>
-                    <td>
-                      <StatusPill label={account.stage} tone={statusTone(account.stage)} />
-                    </td>
-                    <td>{account.openTasks}</td>
-                    <td>{account.score}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Outreach lanes</h2>
-              <p className="section-subtitle">CRM execution by available channel and active campaign state.</p>
-            </div>
-            <Mail size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
-            <div className="list-row">
-              <div className="row-meta">
-                <strong>Email-ready contacts</strong>
-                <StatusPill label={`${formatNumber(contacts.filter((contact) => contact.grade === "A" || contact.grade === "B").length)}`} tone="success" />
-              </div>
-              <p className="section-subtitle">A/B grade contacts can move into controlled outbound sequences.</p>
-            </div>
-            <div className="list-row">
-              <div className="row-meta">
-                <strong>Call-ready contacts</strong>
-                <StatusPill label={`${formatNumber(contacts.filter((contact) => Boolean(contact.phone)).length)}`} tone="info" />
-              </div>
-              <p className="section-subtitle">Phone-present contacts remain available for manual calling and RingCentral workflows later.</p>
-            </div>
-            <div className="list-row">
-              <div className="row-meta">
-                <strong>Active campaigns</strong>
-                <StatusPill label={`${formatNumber(activeCampaigns.length)}`} tone={activeCampaigns.length ? "info" : "default"} />
-              </div>
-              <div className="chip-row">
-                {activeCampaigns.slice(0, 5).map((campaign) => (
-                  <span className="pill" key={campaign.id}>
-                    {campaign.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="item-card-actions">
-              {canManageOutreach ? (
-                <Link href="/outreach/campaigns" className="button secondary">
-                  <Megaphone size={16} aria-hidden="true" />
-                  Campaigns
-                </Link>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title="Account watchlist"
+          subtitle="Accounts with active tasks or high scores that managers and SDRs should keep close."
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/crm/accounts">Open accounts</Link>
+            </Button>
+          }
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Account</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Tasks</TableHead>
+                <TableHead>Score</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {accountWatchlist.map((account) => (
+                <TableRow key={account.id}>
+                  <TableCell>
+                    <Link href={`/crm/accounts/${account.id}`} className="flex flex-col">
+                      <span className="font-medium text-foreground">{account.name}</span>
+                      <span className="text-xs text-muted-foreground">{account.domain}</span>
+                      <span className="text-xs text-muted-foreground">{account.source}</span>
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{account.owner}</TableCell>
+                  <TableCell>
+                    <StatusBadge label={account.stage} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{account.openTasks}</TableCell>
+                  <TableCell className="text-muted-foreground">{account.score}</TableCell>
+                </TableRow>
+              ))}
+              {accountWatchlist.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    No accounts on the watchlist yet.
+                  </TableCell>
+                </TableRow>
               ) : null}
-              <Link href="/outreach/events" className="button secondary">
-                <Phone size={16} aria-hidden="true" />
-                Events
-              </Link>
+            </TableBody>
+          </Table>
+        </Panel>
+
+        <Panel
+          title="Outreach lanes"
+          subtitle="CRM execution by available channel and active campaign state."
+          action={<ToneIcon icon={Mail} tone="info" />}
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5 border-b pb-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium text-foreground">Email-ready contacts</span>
+                <StatusBadge
+                  label={formatNumber(contacts.filter((contact) => contact.grade === "A" || contact.grade === "B").length)}
+                  tone="success"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A/B grade contacts can move into controlled outbound sequences.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5 border-b pb-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium text-foreground">Call-ready contacts</span>
+                <StatusBadge label={formatNumber(contacts.filter((contact) => Boolean(contact.phone)).length)} tone="info" />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Phone-present contacts remain available for manual calling and RingCentral workflows later.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium text-foreground">Active campaigns</span>
+                <StatusBadge label={formatNumber(activeCampaigns.length)} tone={activeCampaigns.length ? "info" : "default"} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {activeCampaigns.slice(0, 5).map((campaign) => (
+                  <StatusBadge key={campaign.id} label={campaign.name} tone="default" />
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {canManageOutreach ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/outreach/campaigns">
+                    <Megaphone aria-hidden="true" />
+                    Campaigns
+                  </Link>
+                </Button>
+              ) : null}
+              <Button asChild variant="outline" size="sm">
+                <Link href="/outreach/events">
+                  <Phone aria-hidden="true" />
+                  Events
+                </Link>
+              </Button>
             </div>
           </div>
-        </div>
+        </Panel>
       </section>
 
-      <section className="grid three">
-        <div className="item-card">
-          <Target size={22} aria-hidden="true" />
-          <h2 className="card-title">No backend controls</h2>
-          <p className="section-subtitle">Provider settings, compliance admin, reports, and automation stay in the Developer view.</p>
-        </div>
-        <div className="item-card">
-          <Users size={22} aria-hidden="true" />
-          <h2 className="card-title">SDR focused</h2>
-          <p className="section-subtitle">SDRs land on assigned work, contact context, due dates, and outreach lanes.</p>
-        </div>
-        <div className="item-card">
-          <BarChart3 size={22} aria-hidden="true" />
-          <h2 className="card-title">Manager ready</h2>
-          <p className="section-subtitle">Managers can jump from this workspace into queue health, reassignment, and pipeline views.</p>
-        </div>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {infoCards.map((info) => {
+          const Icon = info.icon;
+          return (
+            <Card key={info.title} className="gap-3 p-5">
+              <ToneIcon icon={Icon} tone="info" />
+              <h2 className="text-sm font-semibold text-foreground">{info.title}</h2>
+              <p className="text-xs text-muted-foreground">{info.copy}</p>
+            </Card>
+          );
+        })}
       </section>
     </>
   );
@@ -480,7 +549,6 @@ type DashboardQueueSnapshot = ReturnType<typeof sdrQueueSnapshot> | SdrQueueRead
 function isClosedStage(stage: OpportunityStage) {
   return stage === "Closed won" || stage === "Closed lost";
 }
-
 
 function openTasksDueToday(tasks: { workspaceId: string; status: string; dueAt?: string }[], workspaceId: string) {
   return tasks.filter((task) => task.workspaceId === workspaceId && task.status !== "Completed" && task.dueAt && isToday(task.dueAt)).length;

@@ -16,8 +16,20 @@ import {
   reassignSdrAssignmentAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
-import { ProgressBar } from "@/components/progress-bar";
-import { StatusPill, statusTone } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
+import { MeterBar } from "@/components/ui/meter-bar";
+import { Panel } from "@/components/ui/panel";
+import { StatCard, ToneIcon } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import { statusTone } from "@/components/status-pill";
 import {
   assignmentMethods,
   managerDashboardSnapshot,
@@ -28,7 +40,6 @@ import { readFastSdrManagerModel } from "@/lib/phase1/sdr-manager-read-model";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { AppState } from "@/lib/phase1/types";
 import { formatNumber, formatPercent } from "@/lib/utils";
-import { StatCard, LaneCard } from "@/components/ui-metrics";
 import { TileGrid, TileItem } from "@/components/tile-grid";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
@@ -137,15 +148,17 @@ export default async function SdrManagerPage() {
         actions={
           <>
             <form action={applyReassignmentRulesAction}>
-              <button className="button secondary" type="submit">
-                <RefreshCw size={17} aria-hidden="true" />
+              <Button type="submit" variant="outline">
+                <RefreshCw aria-hidden="true" />
                 Apply recommendations
-              </button>
+              </Button>
             </form>
-            <Link href="/sdr/queue" className="button primary">
-              <ListChecks size={17} aria-hidden="true" />
-              SDR queue
-            </Link>
+            <Button asChild>
+              <Link href="/sdr/queue">
+                <ListChecks aria-hidden="true" />
+                SDR queue
+              </Link>
+            </Button>
           </>
         }
       />
@@ -153,189 +166,217 @@ export default async function SdrManagerPage() {
       <TileGrid pageKey="sdr-manager" canCustomize={canCustomize} saved={savedLayout}>
         {metrics.map((metric, index) => (
           <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
-            <StatCard {...metric} />
+            <StatCard
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+              note={metric.note}
+              tone={metric.tone}
+              fill
+            />
           </TileItem>
         ))}
         {lanes.map((lane, index) => (
           <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
-            <LaneCard {...lane} />
+            <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
+              <ToneIcon icon={lane.icon} tone={lane.tone} />
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {lane.label} · {lane.note}
+                </div>
+              </div>
+            </div>
           </TileItem>
         ))}
 
         <TileItem id="team-workload" x={0} y={4} w={7} h={8} minW={4} minH={4}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Team workload</h2>
-              <p className="section-subtitle">Active load, P1 pressure, meetings, and SLA adherence by rep.</p>
-            </div>
-            <BarChart3 size={20} aria-hidden="true" />
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>SDR</th>
-                  <th>Load</th>
-                  <th>Risk</th>
-                  <th>Meetings</th>
-                  <th>SLA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {snapshot.workloads.map((workload) => (
-                  <tr key={workload.userId}>
-                    <td>
-                      <div className="entity">
-                        <strong>{workload.name}</strong>
-                        <span>{teamForUser(teams, workload.userId)?.name ?? "No team"}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="entity">
-                        <strong>{workload.active}/{workload.assigned} active</strong>
-                        <ProgressBar value={Math.round((workload.active / maxActiveLoad) * 100)} />
-                      </div>
-                    </td>
-                    <td>
-                      <div className="chip-row">
-                        <StatusPill label={`${workload.p1} P1`} tone={workload.p1 ? "warning" : "success"} />
-                        <StatusPill label={`${workload.overdue} overdue`} tone={workload.overdue ? "danger" : "success"} />
-                      </div>
-                    </td>
-                    <td>{formatNumber(workload.meetings)}</td>
-                    <td>
-                      <div className="entity">
-                        <strong>{formatPercent(workload.slaAdherence)}</strong>
-                        <ProgressBar value={workload.slaAdherence} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {snapshot.workloads.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>No SDR workload data is available yet.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Panel
+          title="Team workload"
+          subtitle="Active load, P1 pressure, meetings, and SLA adherence by rep."
+          action={<ToneIcon icon={BarChart3} tone="info" />}
+          flush
+          fill
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>SDR</TableHead>
+                <TableHead>Load</TableHead>
+                <TableHead>Risk</TableHead>
+                <TableHead>Meetings</TableHead>
+                <TableHead>SLA</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {snapshot.workloads.map((workload) => (
+                <TableRow key={workload.userId}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{workload.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {teamForUser(teams, workload.userId)?.name ?? "No team"}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-medium text-foreground">
+                        {workload.active}/{workload.assigned} active
+                      </span>
+                      <MeterBar value={Math.round((workload.active / maxActiveLoad) * 100)} />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-2">
+                      <StatusBadge label={`${workload.p1} P1`} tone={workload.p1 ? "warning" : "success"} />
+                      <StatusBadge label={`${workload.overdue} overdue`} tone={workload.overdue ? "danger" : "success"} />
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{formatNumber(workload.meetings)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-medium text-foreground">{formatPercent(workload.slaAdherence)}</span>
+                      <MeterBar value={workload.slaAdherence} />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {snapshot.workloads.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    No SDR workload data is available yet.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
         </TileItem>
 
         <TileItem id="routing-coverage" x={7} y={4} w={5} h={8} minW={3} minH={4}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Routing coverage</h2>
-              <p className="section-subtitle">Territory and industry pods used by the assignment engine.</p>
-            </div>
-            <GitBranch size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title="Routing coverage"
+          subtitle="Territory and industry pods used by the assignment engine."
+          action={<ToneIcon icon={GitBranch} tone="info" />}
+          fill
+        >
+          <div className="flex flex-col gap-4">
             {teams.map((team) => (
-              <div className="stage-row" key={team.id}>
-                <div className="stage-meta">
-                  <strong>{team.name}</strong>
-                  <StatusPill label={team.active ? "Active" : "Paused"} tone={team.active ? "success" : "warning"} />
+              <div key={team.id} className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">{team.name}</span>
+                  <StatusBadge label={team.active ? "Active" : "Paused"} tone={team.active ? "success" : "warning"} />
                 </div>
-                <div className="chip-row">
+                <div className="flex flex-wrap gap-2">
                   {team.memberUserIds.map((userId) => (
-                    <span className="pill" key={userId}>
-                      {state.users.find((user) => user.id === userId)?.name ?? userId}
-                    </span>
+                    <StatusBadge
+                      key={userId}
+                      label={state.users.find((user) => user.id === userId)?.name ?? userId}
+                      tone="default"
+                    />
                   ))}
                 </div>
-                <p className="section-subtitle">
+                <p className="text-xs text-muted-foreground">
                   Manager: {state.users.find((user) => user.id === team.managerUserId)?.name ?? "Unassigned"}. Territories:{" "}
                   {team.territories.join(", ")}. Industries: {team.industries.join(", ")}.
                 </p>
               </div>
             ))}
-            {teams.length === 0 ? <p className="section-subtitle">No routing teams have been configured yet.</p> : null}
+            {teams.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No routing teams have been configured yet.</p>
+            ) : null}
           </div>
-        </div>
+        </Panel>
         </TileItem>
 
         <TileItem id="reassignment-recommendations" x={0} y={12} w={12} h={7} minW={6} minH={3}>
-        <div className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Reassignment recommendations</h2>
-            <p className="section-subtitle">Overdue SLA and P1 load-balance recommendations generated from current assignments.</p>
-          </div>
-          <StatusPill
-            label={`${snapshot.recommendations.length} recommended`}
-            tone={snapshot.recommendations.length ? "warning" : "success"}
-          />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Lead</th>
-                <th>Current</th>
-                <th>Recommended</th>
-                <th>Reason</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Panel
+          title="Reassignment recommendations"
+          subtitle="Overdue SLA and P1 load-balance recommendations generated from current assignments."
+          action={
+            <StatusBadge
+              label={`${snapshot.recommendations.length} recommended`}
+              tone={snapshot.recommendations.length ? "warning" : "success"}
+            />
+          }
+          flush
+          fill
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Lead</TableHead>
+                <TableHead>Current</TableHead>
+                <TableHead>Recommended</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {snapshot.recommendations.map((recommendation) => (
-                <tr key={recommendation.assignmentId}>
-                  <td>
-                    <div className="entity">
-                      <strong>{recommendation.contactName}</strong>
-                      <span>{recommendation.companyName}</span>
+                <TableRow key={recommendation.assignmentId}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{recommendation.contactName}</span>
+                      <span className="text-xs text-muted-foreground">{recommendation.companyName}</span>
                     </div>
-                  </td>
-                  <td>{recommendation.currentOwner}</td>
-                  <td>{recommendation.recommendedOwner}</td>
-                  <td>
-                    <div className="entity">
-                      <strong>{recommendation.reason}</strong>
-                      <span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{recommendation.currentOwner}</TableCell>
+                  <TableCell className="text-muted-foreground">{recommendation.recommendedOwner}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{recommendation.reason}</span>
+                      <span className="text-xs text-muted-foreground">
                         {recommendation.method} - {recommendation.slaStatus}
                       </span>
                     </div>
-                  </td>
-                  <td>
-                    <form action={reassignSdrAssignmentAction} className="item-card-actions">
+                  </TableCell>
+                  <TableCell>
+                    <form action={reassignSdrAssignmentAction} className="flex items-center gap-2">
                       <input name="assignmentId" type="hidden" value={recommendation.assignmentId} />
                       <input name="nextSdrId" type="hidden" value={recommendation.recommendedSdrId} />
                       <input name="assignmentMethod" type="hidden" value={recommendation.method} />
                       <input name="reason" type="hidden" value={recommendation.reason} />
-                      <button className="button primary" type="submit">
+                      <Button type="submit" size="sm">
                         Reassign
-                      </button>
+                      </Button>
                     </form>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
               {snapshot.recommendations.length === 0 ? (
-                <tr>
-                  <td colSpan={5}>No reassignment recommendations right now.</td>
-                </tr>
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    No reassignment recommendations right now.
+                  </TableCell>
+                </TableRow>
               ) : null}
-            </tbody>
-          </table>
-        </div>
-        </div>
+            </TableBody>
+          </Table>
+        </Panel>
         </TileItem>
 
         <TileItem id="manual-reassignment" x={0} y={19} w={7} h={9} minW={4} minH={4}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Manual reassignment</h2>
-              <p className="section-subtitle">Move any active assignment to another SDR with a manager reason.</p>
-            </div>
-            <Users size={20} aria-hidden="true" />
-          </div>
-          <form action={reassignSdrAssignmentAction} className="panel-body form-grid">
-            <div className="field">
-              <label htmlFor="assignmentId">Assignment</label>
-              <select id="assignmentId" name="assignmentId" required defaultValue="" disabled={!hasManualAssignments}>
+        <Panel
+          title="Manual reassignment"
+          subtitle="Move any active assignment to another SDR with a manager reason."
+          action={<ToneIcon icon={Users} tone="info" />}
+          fill
+        >
+          <form action={reassignSdrAssignmentAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
+              <label htmlFor="assignmentId" className="text-xs font-medium text-muted-foreground">
+                Assignment
+              </label>
+              <select
+                id="assignmentId"
+                name="assignmentId"
+                required
+                defaultValue=""
+                disabled={!hasManualAssignments}
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+              >
                 <option value="" disabled>
                   {hasManualAssignments ? "Select an active assignment" : "No active assignments yet"}
                 </option>
@@ -346,14 +387,22 @@ export default async function SdrManagerPage() {
                 ))}
               </select>
               {!hasManualAssignments ? (
-                <span className="field-note">
+                <span className="text-xs text-muted-foreground">
                   Create assignments from Lead Engine first: go to Build a Lead List, finish quality checks, then use Finalize & assign.
                 </span>
               ) : null}
             </div>
-            <div className="field">
-              <label htmlFor="nextSdrId">New SDR</label>
-              <select id="nextSdrId" name="nextSdrId" required disabled={!users.length}>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="nextSdrId" className="text-xs font-medium text-muted-foreground">
+                New SDR
+              </label>
+              <select
+                id="nextSdrId"
+                name="nextSdrId"
+                required
+                disabled={!users.length}
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+              >
                 {users.length ? (
                   users.map((user) => (
                     <option key={user.id} value={user.id}>
@@ -365,9 +414,17 @@ export default async function SdrManagerPage() {
                 )}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="assignmentMethod">Method</label>
-              <select id="assignmentMethod" name="assignmentMethod" defaultValue="Capacity-based" disabled={!canManualReassign}>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="assignmentMethod" className="text-xs font-medium text-muted-foreground">
+                Method
+              </label>
+              <select
+                id="assignmentMethod"
+                name="assignmentMethod"
+                defaultValue="Capacity-based"
+                disabled={!canManualReassign}
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+              >
                 {assignmentMethods.map((method) => (
                   <option key={method} value={method}>
                     {method}
@@ -375,105 +432,148 @@ export default async function SdrManagerPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="reason">Reason</label>
-              <input id="reason" name="reason" placeholder="Capacity rebalance" disabled={!canManualReassign} />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="reason" className="text-xs font-medium text-muted-foreground">
+                Reason
+              </label>
+              <input
+                id="reason"
+                name="reason"
+                placeholder="Capacity rebalance"
+                disabled={!canManualReassign}
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+              />
             </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit" disabled={!canManualReassign}>
+            <div className="flex items-end">
+              <Button type="submit" disabled={!canManualReassign}>
                 Reassign lead
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
+        </Panel>
         </TileItem>
 
         <TileItem id="reassignment-rules" x={7} y={19} w={5} h={9} minW={3} minH={4}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Reassignment rules</h2>
-              <p className="section-subtitle">Rules define when manager recommendations should move work.</p>
-            </div>
-            <StatusPill label={`${snapshot.rules.length} rules`} tone="info" />
-          </div>
-          <form action={createReassignmentRuleAction} className="panel-body form-grid">
-            <div className="field">
-              <label htmlFor="name">Rule name</label>
-              <input id="name" name="name" placeholder="Overdue rescue" />
-            </div>
-            <div className="field">
-              <label htmlFor="trigger">Trigger</label>
-              <select id="trigger" name="trigger" defaultValue="SLA overdue">
-                {reassignmentTriggers.map((trigger) => (
-                  <option key={trigger} value={trigger}>
-                    {trigger}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="rule-method">Method</label>
-              <select id="rule-method" name="assignmentMethod" defaultValue="Capacity-based">
-                {assignmentMethods.map((method) => (
-                  <option key={method} value={method}>
-                    {method}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="thresholdHours">Threshold hours</label>
-              <input id="thresholdHours" name="thresholdHours" type="number" min="1" defaultValue="4" />
-            </div>
-            <div className="field">
-              <label htmlFor="targetTeamId">Target team</label>
-              <select id="targetTeamId" name="targetTeamId" defaultValue="">
-                <option value="">Any available team</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
-                Create rule
-              </button>
-            </div>
-          </form>
-          <div className="panel-body stage-list">
-            {rulePreview.map((rule) => (
-              <div className="list-row" key={rule.id}>
-                <div className="row-meta">
-                  <strong>{rule.name}</strong>
-                  <StatusPill label={rule.trigger} tone={statusTone(rule.trigger)} />
-                </div>
-                <p className="section-subtitle">
-                  {rule.assignmentMethod}, threshold {rule.thresholdHours}h
-                </p>
-                <form action={deleteReassignmentRuleAction}>
-                  <input name="id" type="hidden" value={rule.id} />
-                  <button className="button danger" type="submit">
-                    Delete
-                  </button>
-                </form>
+        <Panel
+          title="Reassignment rules"
+          subtitle="Rules define when manager recommendations should move work."
+          action={<StatusBadge label={`${snapshot.rules.length} rules`} tone="info" />}
+          fill
+        >
+          <div className="flex flex-col gap-5">
+            <form action={createReassignmentRuleAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label htmlFor="name" className="text-xs font-medium text-muted-foreground">
+                  Rule name
+                </label>
+                <input
+                  id="name"
+                  name="name"
+                  placeholder="Overdue rescue"
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                />
               </div>
-            ))}
-            {snapshot.rules.length > rulePreview.length ? (
-              <p className="section-subtitle">{snapshot.rules.length - rulePreview.length} more rules are configured.</p>
-            ) : null}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="trigger" className="text-xs font-medium text-muted-foreground">
+                  Trigger
+                </label>
+                <select
+                  id="trigger"
+                  name="trigger"
+                  defaultValue="SLA overdue"
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                >
+                  {reassignmentTriggers.map((trigger) => (
+                    <option key={trigger} value={trigger}>
+                      {trigger}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="rule-method" className="text-xs font-medium text-muted-foreground">
+                  Method
+                </label>
+                <select
+                  id="rule-method"
+                  name="assignmentMethod"
+                  defaultValue="Capacity-based"
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                >
+                  {assignmentMethods.map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="thresholdHours" className="text-xs font-medium text-muted-foreground">
+                  Threshold hours
+                </label>
+                <input
+                  id="thresholdHours"
+                  name="thresholdHours"
+                  type="number"
+                  min="1"
+                  defaultValue="4"
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="targetTeamId" className="text-xs font-medium text-muted-foreground">
+                  Target team
+                </label>
+                <select
+                  id="targetTeamId"
+                  name="targetTeamId"
+                  defaultValue=""
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="">Any available team</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end sm:col-span-2">
+                <Button type="submit">Create rule</Button>
+              </div>
+            </form>
+
+            <div className="flex flex-col gap-4 border-t pt-5">
+              {rulePreview.map((rule) => (
+                <div key={rule.id} className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{rule.name}</span>
+                    <StatusBadge label={rule.trigger} tone={statusTone(rule.trigger)} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {rule.assignmentMethod}, threshold {rule.thresholdHours}h
+                  </p>
+                  <form action={deleteReassignmentRuleAction}>
+                    <input name="id" type="hidden" value={rule.id} />
+                    <Button type="submit" variant="destructive" size="sm">
+                      Delete
+                    </Button>
+                  </form>
+                </div>
+              ))}
+              {snapshot.rules.length > rulePreview.length ? (
+                <p className="text-xs text-muted-foreground">
+                  {snapshot.rules.length - rulePreview.length} more rules are configured.
+                </p>
+              ) : null}
+            </div>
           </div>
-        </div>
+        </Panel>
         </TileItem>
       </TileGrid>
     </>
   );
 }
-
 
 function teamForUser(teams: AppState["sdrTeams"], userId: string) {
   return teams.find((team) => team.memberUserIds.includes(userId));
