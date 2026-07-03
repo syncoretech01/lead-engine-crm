@@ -1,8 +1,9 @@
-import { KeyRound, Link2, ShieldCheck, UserMinus, UserPlus } from "lucide-react";
+import { KeyRound, Link2, Phone, ShieldCheck, UserMinus, UserPlus } from "lucide-react";
 import {
   createUserInviteAction,
   deactivateUserAction,
-  updateMemberRoleAction
+  updateMemberRoleAction,
+  updateUserTelephonyAction
 } from "@/app/auth/actions";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
@@ -197,6 +198,64 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
                       <button className="button danger" type="submit" disabled={member.userId === session.user.id || member.account?.status === "Disabled"}>
                         <UserMinus size={16} aria-hidden="true" />
                         Disable
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="section-title">RingCentral lines</h2>
+            <p className="section-subtitle">
+              Each SDR dials from their own RingCentral number. Enter the direct number in E.164 form
+              (e.g. +13035551234) and, if placing calls on the user&apos;s behalf, their RingCentral
+              extension id. Leave blank to disable calling for that user.
+            </p>
+          </div>
+          <Phone size={20} aria-hidden="true" />
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>RingCentral line</th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((member) => (
+                <tr key={`tel-${member.id}`}>
+                  <td>
+                    <div className="entity">
+                      <strong>{member.user?.name}</strong>
+                      <span>{member.user?.email}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <form action={updateUserTelephonyAction} className="inline-form">
+                      <input type="hidden" name="userId" value={member.userId} />
+                      <input
+                        name="phoneNumber"
+                        type="tel"
+                        placeholder="+13035551234"
+                        defaultValue={member.user?.ringCentralPhoneNumber ?? ""}
+                        aria-label={`RingCentral number for ${member.user?.name ?? "user"}`}
+                      />
+                      <input
+                        name="extensionId"
+                        type="text"
+                        placeholder="Extension id (optional)"
+                        defaultValue={member.user?.ringCentralExtensionId ?? ""}
+                        aria-label={`RingCentral extension for ${member.user?.name ?? "user"}`}
+                      />
+                      <button className="button subtle" type="submit">
+                        Save
                       </button>
                     </form>
                   </td>

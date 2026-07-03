@@ -58,18 +58,24 @@ export function createSeedState(): AppState {
       id: "user-nora",
       name: "Nora West",
       email: "nora@syncore.tech",
+      ringCentralPhoneNumber: "+13035550100",
+      ringCentralExtensionId: "100",
       createdAt: now
     },
     {
       id: "user-ari",
       name: "Ari Patel",
       email: "ari@syncore.tech",
+      ringCentralPhoneNumber: "+13035550142",
+      ringCentralExtensionId: "142",
       createdAt: now
     },
     {
       id: "user-mina",
       name: "Mina Brooks",
       email: "mina@syncore.tech",
+      ringCentralPhoneNumber: "+13035550118",
+      ringCentralExtensionId: "118",
       createdAt: now
     },
     {

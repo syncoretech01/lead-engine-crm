@@ -125,6 +125,10 @@ export type User = {
   id: string;
   name: string;
   email: string;
+  /** RingCentral direct number this user dials from (E.164). */
+  ringCentralPhoneNumber?: string;
+  /** RingCentral extension id used to place RingOut on this user's behalf. */
+  ringCentralExtensionId?: string;
   createdAt: string;
 };
 
