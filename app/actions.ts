@@ -73,7 +73,12 @@ import { repairStagedLeadIdentities } from "@/lib/phase1/lead-identity-repair";
 import { applyCampaignEngagementScores } from "@/lib/phase1/engagement-scoring";
 import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/phase1/normalization";
 import { outreachBatchSize } from "@/lib/phase1/outreach-config";
-import { resolveUserTelephonyIdentity } from "@/lib/phase1/telephony-identities";
+import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
+import { ringCentralRingOut } from "@/lib/providers/adapters/ringcentral-ringout";
+import {
+  ringCentralCredentialFromEnv,
+  ringCentralSmsLiveBlockReason
+} from "@/lib/providers/adapters/ringcentral-sms";
 import {
   buildCampaignSendBatch,
   recordCampaignSendResults,
@@ -181,6 +186,7 @@ import type {
   DataSubjectRequestType,
   LawfulBasis,
   RecordingConsentStatus,
+  TrackedCallLiveState,
   TrackedCallStatus
 } from "@/lib/phase1/types";
 import type { ProviderCapability, ProviderId } from "@/lib/providers/types";
@@ -1834,6 +1840,100 @@ export async function recordTrackedCallAction(formData: FormData) {
   }, { normalizedTables: outreachTrackedCallWriteTables });
 
   revalidateOutreachPages(crmDetailPathsFromForm(formData));
+}
+
+// Click-to-call: places a RingOut from the SDR's own RingCentral line to the
+// contact (or an ad-hoc dialed number), and records a TrackedCall to track the
+// live lifecycle + (Milestone C) the recording. When live providers are disabled
+// or unconfigured, it records a completed simulated call so the flow + call log
+// still render end-to-end. Returns the new call id for the dialer to poll.
+export async function placeCallAction(
+  formData: FormData
+): Promise<{ callId: string; liveState: TrackedCallLiveState; error?: string }> {
+  const contactId = stringValue(formData.get("contactId"));
+  const requestId = stringValue(formData.get("requestId"), `call-${contactId}-${randomUUID()}`);
+  const overrideNumber = normalizePhone(stringValue(formData.get("toNumber")));
+  const recordingConsent = recordingConsentValue(formData.get("recordingConsent"));
+
+  const state = await readState();
+  const session = await getSession(state);
+  assertPermission(session, "send_direct_outreach");
+  assertAssignedContactForOutreach(state, session, contactId);
+
+  const contact = state.contacts.find(
+    (item) => item.id === contactId && item.workspaceId === session.workspace.id
+  );
+  if (!contact) {
+    throw new Error("Contact not found.");
+  }
+  const sdrUser = state.users.find((user) => user.id === session.user.id) ?? session.user;
+  const identity = resolveUserTelephonyIdentity(sdrUser);
+  if (!identity) {
+    throw new Error(telephonyIdentityBlockReason(sdrUser));
+  }
+  const toNumber = overrideNumber || contact.phone;
+  if (!toNumber) {
+    throw new Error("This contact has no phone number to dial.");
+  }
+
+  // Live gate: only place a real RingOut when live providers + credentials are on.
+  const liveBlocked = ringCentralSmsLiveBlockReason();
+  const credential = ringCentralCredentialFromEnv();
+  let providerCallId: string | undefined;
+  let liveState: TrackedCallLiveState;
+  let placeError: string | undefined;
+  let callSummary: string | undefined;
+
+  if (!liveBlocked && credential) {
+    try {
+      const result = await ringCentralRingOut(
+        { fromNumber: identity.phoneNumber, toNumber, extensionId: identity.extensionId },
+        credential
+      );
+      providerCallId = result.ringOutId || undefined;
+      liveState = "ringing";
+    } catch (error) {
+      liveState = "failed";
+      placeError = error instanceof Error ? error.message : "RingOut failed.";
+      callSummary = `RingOut failed: ${placeError}`;
+    }
+  } else {
+    // Offline/dev: no real dial — record a completed placeholder so the dialer
+    // flow and /crm/calls render; the SDR logs the real outcome afterwards.
+    liveState = "completed";
+    callSummary = "Simulated call — live calling is disabled in this environment.";
+  }
+
+  const callId = await updateState(
+    (state, session) => {
+      assertPermission(session, "send_direct_outreach");
+      const call = createTrackedCall(state, {
+        workspaceId: session.workspace.id,
+        contactId,
+        sdrUserId: session.user.id,
+        direction: "Outbound",
+        callStatus: "Dialed",
+        disposition: "No answer",
+        durationSeconds: 0,
+        recordingConsent,
+        recordingConsentSource: "Dialer disclosure",
+        providerCallId,
+        liveState,
+        callSummary
+      });
+      appendAudit(state, session, {
+        objectType: "tracked_call",
+        objectId: call.id,
+        action: placeError ? "call_failed" : "call_placed",
+        newValue: { providerCallId, liveState, toNumber, requestId }
+      });
+      return call.id;
+    },
+    { normalizedTables: outreachTrackedCallWriteTables }
+  );
+
+  revalidateOutreachPages([`/crm/contacts/${contactId}`, "/crm/calls", "/crm/my-contacts", "/sdr/queue"]);
+  return { callId, liveState, error: placeError };
 }
 
 export async function updateOutreachProviderStatusAction(formData: FormData) {

@@ -1540,9 +1540,13 @@ model TrackedCall {
   recordingConsentCapturedAt DateTime?
   recordingUrl               String?
   recordingStoragePath       String?
+  recordingId                String?
   transcript                 String?
   callSummary                String?
   nextStep                   String?
+  providerCallId             String?
+  telephonySessionId         String?
+  liveState                  String?
   createdAt                  DateTime    @default(now())
   workspace                  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   account                    Account?    @relation(fields: [accountId], references: [id], onDelete: Cascade)

@@ -69,6 +69,7 @@ import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { directSmsBlockReason, directSmsLiveBlockReason } from "@/lib/phase1/direct-sms-send";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
+import { CallButton } from "@/components/call-button";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { runWaterfallEnrichmentAction } from "@/lib/phase1/waterfall-enrichment-service";
 import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
@@ -306,6 +307,19 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         }
         actions={
           <>
+            <CallButton
+              contactId={contact.id}
+              contactName={contactDisplayName}
+              phone={contact.phone}
+              callerLabel={
+                directTelephonyIdentity
+                  ? `${directTelephonyIdentity.displayName} · ${directTelephonyIdentity.phoneNumber}`
+                  : undefined
+              }
+              blockReason={directTelephonyIdentity ? undefined : telephonyIdentityBlockReason(session.user)}
+              variant="outline"
+              size="default"
+            />
             <Button asChild variant="outline">
               <Link href="/crm/contacts">
                 <ArrowRight aria-hidden="true" />

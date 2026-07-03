@@ -24,7 +24,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { statusTone } from "@/components/status-pill";
 import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
-import { resolveUserTelephonyIdentity } from "@/lib/phase1/telephony-identities";
+import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
+import { CallButton } from "@/components/call-button";
 import {
   readFastSdrQueueModel,
   type SdrQueueAssignmentReadRow,
@@ -300,12 +301,30 @@ export default async function SdrQueuePage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={`/crm/contacts/${assignment.contactId}`}>
-                          {nextAction}
-                          <ArrowRight aria-hidden="true" />
-                        </Link>
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        {assignment.phone ? (
+                          <CallButton
+                            contactId={assignment.contactId}
+                            contactName={meaningfulName(assignment.contactName)}
+                            phone={assignment.phone}
+                            callerLabel={
+                              currentTelephonyIdentity
+                                ? `${currentTelephonyIdentity.displayName} · ${currentTelephonyIdentity.phoneNumber}`
+                                : undefined
+                            }
+                            blockReason={
+                              currentTelephonyIdentity ? undefined : telephonyIdentityBlockReason(session.user)
+                            }
+                            iconOnly
+                          />
+                        ) : null}
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/crm/contacts/${assignment.contactId}`}>
+                            {nextAction}
+                            <ArrowRight aria-hidden="true" />
+                          </Link>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

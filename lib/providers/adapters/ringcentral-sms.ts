@@ -114,7 +114,7 @@ export async function sendRingCentralSms(
   };
 }
 
-async function requestRingCentralAccessToken(
+export async function requestRingCentralAccessToken(
   serverUrl: string,
   credential: RingCentralSmsCredential,
   fetchImpl: RingCentralFetch
@@ -161,7 +161,7 @@ function parseCredential(context: ProviderRequestContext): RingCentralSmsCredent
   }
 }
 
-function normalizeServerUrl(value: string) {
+export function normalizeServerUrl(value: string) {
   return (value || defaultServerUrl).replace(/\/+$/, "");
 }
 

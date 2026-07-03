@@ -1277,9 +1277,13 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       recordingConsentCapturedAt: call.recordingConsentCapturedAt,
       recordingUrl: call.recordingUrl,
       recordingStoragePath: call.recordingStoragePath,
+      recordingId: call.recordingId ?? null,
       transcript: call.transcript,
       callSummary: call.callSummary,
       nextStep: call.nextStep,
+      providerCallId: call.providerCallId ?? null,
+      telephonySessionId: call.telephonySessionId ?? null,
+      liveState: call.liveState ?? null,
       createdAt: call.createdAt
     }))),
     reportSnapshots: sortRows(state.reportSnapshots.map((snapshot) => ({
