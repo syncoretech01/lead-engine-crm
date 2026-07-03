@@ -68,10 +68,10 @@ export function AppShell({ children, session, defaultSidebarOpen = true }: AppSh
               priority
             />
             <span className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
-              <span className="truncate text-sm font-semibold leading-tight text-foreground">
+              <span className="truncate text-sm font-semibold leading-tight text-white">
                 {syncoreBrand.shortName}
               </span>
-              <span className="truncate text-xs text-muted-foreground">{session.workspace.name}</span>
+              <span className="truncate text-xs text-white/70">{session.workspace.name}</span>
             </span>
           </Link>
         </SidebarHeader>

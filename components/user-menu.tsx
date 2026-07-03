@@ -35,15 +35,15 @@ export function UserMenu({ session }: { session: Session }) {
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
         >
           <Avatar className="size-8 rounded-lg">
-            <AvatarFallback className="rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
+            <AvatarFallback className="rounded-lg bg-white text-xs font-semibold text-[var(--syn-primary)]">
               {initials(session.user.name)}
             </AvatarFallback>
           </Avatar>
           <div className="grid flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-medium text-foreground">{session.user.name}</span>
-            <span className="truncate text-xs text-muted-foreground">{workspaceRoleLabel(session.role)}</span>
+            <span className="truncate font-medium text-white">{session.user.name}</span>
+            <span className="truncate text-xs text-white/70">{workspaceRoleLabel(session.role)}</span>
           </div>
-          <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
+          <ChevronsUpDown className="ml-auto size-4 text-white/70" />
         </SidebarMenuButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent
