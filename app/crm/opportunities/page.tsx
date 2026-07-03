@@ -16,6 +16,7 @@ import {
   updateOpportunityStageAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
+import { TileGrid, TileItem } from "@/components/tile-grid";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fieldClass, fieldLabelClass } from "@/components/ui/field";
@@ -45,6 +46,7 @@ import { opportunityStages } from "@/lib/phase1/crm";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { opportunityViews, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import type { CustomField, CustomFieldValue, User } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
@@ -108,6 +110,8 @@ export default async function OpportunitiesPage() {
   const focusOpportunities = [...openOpportunities]
     .sort((a, b) => b.amount - a.amount || b.probability - a.probability)
     .slice(0, 8);
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "crm-opportunities");
 
   const metrics = isSdr
     ? [
@@ -270,113 +274,118 @@ export default async function OpportunitiesPage() {
         }
       />
 
-      <section aria-label="Opportunity metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <StatCard
-            key={metric.label}
-            icon={metric.icon}
-            label={metric.label}
-            value={metric.value}
-            note={metric.note}
-            tone={metric.tone}
-          />
+      <TileGrid pageKey="crm-opportunities" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard
+              fill
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+              note={metric.note}
+              tone={metric.tone}
+            />
+          </TileItem>
         ))}
-      </section>
 
-      {!isSdr ? (
-        <section aria-label="Opportunity operating lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {lanes.map((lane) => (
-            <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
-              <ToneIcon icon={lane.icon} tone={lane.tone} />
-              <div className="min-w-0">
-                <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {lane.label} · {lane.note}
+        {!isSdr
+          ? lanes.map((lane, index) => (
+              <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+                <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
+                  <ToneIcon icon={lane.icon} tone={lane.tone} />
+                  <div className="min-w-0">
+                    <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {lane.label} · {lane.note}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
-        </section>
-      ) : null}
+              </TileItem>
+            ))
+          : null}
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Panel
-          title={isSdr ? "Open deals to watch" : "Pipeline focus"}
-          subtitle={
-            isSdr
-              ? "Deals tied to your assigned accounts, sorted by value and probability."
-              : "Highest-value open opportunities with stage, owner, and last activity."
-          }
-          action={<StatusBadge label={`${focusOpportunities.length} focus`} tone="info" />}
-          flush
-        >
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Opportunity</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Amount</TableHead>
-                {!isSdr ? <TableHead>Owner</TableHead> : null}
-                <TableHead>Activity</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {focusOpportunities.map((opportunity) => (
-                <TableRow key={opportunity.id}>
-                  <TableCell>
-                    <Link href={`/crm/accounts/${opportunity.companyId}`} className="flex flex-col">
-                      <span className="font-medium text-foreground">{opportunity.name}</span>
-                      <span className="text-xs text-muted-foreground">{opportunity.companyName}</span>
-                      <span className="text-xs text-muted-foreground">{opportunity.contactName}</span>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge label={opportunity.stage} tone={statusTone(opportunity.stage)} />
-                  </TableCell>
-                  <TableCell className="text-foreground">{formatCurrency(opportunity.amount)}</TableCell>
-                  {!isSdr ? <TableCell className="text-muted-foreground">{opportunity.owner}</TableCell> : null}
-                  <TableCell className="text-muted-foreground">{opportunity.lastActivity}</TableCell>
-                </TableRow>
-              ))}
-              {focusOpportunities.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isSdr ? 4 : 5} className="text-muted-foreground">
-                    No open opportunities are assigned right now.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </Panel>
-
-        <Panel
-          title={isSdr ? "Stage snapshot" : "Stage health"}
-          subtitle={
-            isSdr ? "Where your assigned deals sit today." : "Open and closed stages by count, value, and weighted value."
-          }
-          action={<ToneIcon icon={SlidersHorizontal} tone="info" />}
-        >
-          <div className="flex flex-col gap-4">
-            {stageRows.map((row) => (
-              <div key={row.stage} className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-foreground">{row.stage}</span>
-                  <StatusBadge label={`${formatNumber(row.count)} opps`} tone={statusTone(row.stage)} />
-                </div>
-                <MeterBar value={Math.round((row.amount / maxStageAmount) * 100)} />
-                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                  <span>{formatCurrency(row.amount)}</span>
-                  <span>{formatCurrency(row.weighted)} weighted</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      </section>
-
-      {!isSdr ? (
-        <section>
+        <TileItem id="pipeline-focus" x={0} y={4} w={7} h={8} minW={4} minH={4}>
           <Panel
+            fill
+            flush
+            title={isSdr ? "Open deals to watch" : "Pipeline focus"}
+            subtitle={
+              isSdr
+                ? "Deals tied to your assigned accounts, sorted by value and probability."
+                : "Highest-value open opportunities with stage, owner, and last activity."
+            }
+            action={<StatusBadge label={`${focusOpportunities.length} focus`} tone="info" />}
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Opportunity</TableHead>
+                  <TableHead>Stage</TableHead>
+                  <TableHead>Amount</TableHead>
+                  {!isSdr ? <TableHead>Owner</TableHead> : null}
+                  <TableHead>Activity</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {focusOpportunities.map((opportunity) => (
+                  <TableRow key={opportunity.id}>
+                    <TableCell>
+                      <Link href={`/crm/accounts/${opportunity.companyId}`} className="flex flex-col">
+                        <span className="font-medium text-foreground">{opportunity.name}</span>
+                        <span className="text-xs text-muted-foreground">{opportunity.companyName}</span>
+                        <span className="text-xs text-muted-foreground">{opportunity.contactName}</span>
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge label={opportunity.stage} tone={statusTone(opportunity.stage)} />
+                    </TableCell>
+                    <TableCell className="text-foreground">{formatCurrency(opportunity.amount)}</TableCell>
+                    {!isSdr ? <TableCell className="text-muted-foreground">{opportunity.owner}</TableCell> : null}
+                    <TableCell className="text-muted-foreground">{opportunity.lastActivity}</TableCell>
+                  </TableRow>
+                ))}
+                {focusOpportunities.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isSdr ? 4 : 5} className="text-muted-foreground">
+                      No open opportunities are assigned right now.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </Panel>
+        </TileItem>
+
+        <TileItem id="stage-health" x={7} y={4} w={5} h={8} minW={3} minH={4}>
+          <Panel
+            fill
+            title={isSdr ? "Stage snapshot" : "Stage health"}
+            subtitle={
+              isSdr ? "Where your assigned deals sit today." : "Open and closed stages by count, value, and weighted value."
+            }
+            action={<ToneIcon icon={SlidersHorizontal} tone="info" />}
+          >
+            <div className="flex flex-col gap-4">
+              {stageRows.map((row) => (
+                <div key={row.stage} className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{row.stage}</span>
+                    <StatusBadge label={`${formatNumber(row.count)} opps`} tone={statusTone(row.stage)} />
+                  </div>
+                  <MeterBar value={Math.round((row.amount / maxStageAmount) * 100)} />
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span>{formatCurrency(row.amount)}</span>
+                    <span>{formatCurrency(row.weighted)} weighted</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </TileItem>
+
+        <TileItem id="stage-board" x={0} y={12} w={12} h={9} minW={6} minH={4}>
+          <Panel
+            fill
             title="Stage board"
             subtitle="Move opportunities between stages without opening the full account record."
             action={<StatusBadge label={`${formatNumber(opportunities.length)} opportunities`} tone="info" />}
@@ -439,263 +448,270 @@ export default async function OpportunitiesPage() {
               })}
             </div>
           </Panel>
-        </section>
-      ) : null}
+        </TileItem>
 
-      {!isSdr ? (
-        <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <div id="create-opportunity">
-            <Panel
-              title="Create opportunity"
-              subtitle="Create a deal from any CRM account and optional primary contact."
-              action={<ToneIcon icon={CircleDollarSign} tone="info" />}
-            >
-              <form action={createOpportunityAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="companyId" className={fieldLabelClass}>
-                    Account
-                  </label>
-                  <select id="companyId" name="companyId" required className={fieldClass}>
-                    {accountOptions.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="contactId" className={fieldLabelClass}>
-                    Contact
-                  </label>
-                  <select id="contactId" name="contactId" defaultValue="" className={fieldClass}>
-                    <option value="">No primary contact</option>
-                    {contactOptions.map((contact) => (
-                      <option key={contact.id} value={contact.id}>
-                        {contact.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="name" className={fieldLabelClass}>
-                    Name
-                  </label>
-                  <input id="name" name="name" placeholder="New outbound opportunity" className={fieldClass} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="stage" className={fieldLabelClass}>
-                    Stage
-                  </label>
-                  <select id="stage" name="stage" defaultValue="Prospecting" className={fieldClass}>
-                    {opportunityStages.map((stage) => (
-                      <option key={stage} value={stage}>
-                        {stage}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="amount" className={fieldLabelClass}>
-                    Amount
-                  </label>
-                  <input
-                    id="amount"
-                    name="amount"
-                    type="number"
-                    min="0"
-                    step="500"
-                    defaultValue="25000"
-                    className={fieldClass}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="expectedCloseDate" className={fieldLabelClass}>
-                    Expected close
-                  </label>
-                  <input id="expectedCloseDate" name="expectedCloseDate" type="date" className={fieldClass} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="ownerUserId" className={fieldLabelClass}>
-                    Owner
-                  </label>
-                  <select id="ownerUserId" name="ownerUserId" defaultValue={ownerOptions[0]?.id} className={fieldClass}>
-                    {ownerOptions.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-end">
-                  <Button type="submit" className="w-full">
-                    Add opportunity
-                  </Button>
-                </div>
-              </form>
-            </Panel>
-          </div>
-
-          <Panel
-            title="Forecast fields"
-            subtitle="Optional custom forecast fields managed by the CRM team."
-            action={<StatusBadge label={`${opportunityFields.length} fields`} tone="info" />}
-          >
-            <div className="flex flex-col gap-6">
-              <form action={setCustomFieldValueAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="field-opportunity" className={fieldLabelClass}>
-                    Opportunity
-                  </label>
-                  <select id="field-opportunity" name="objectId" required className={fieldClass}>
-                    {opportunities.map((opportunity) => (
-                      <option key={opportunity.id} value={opportunity.id}>
-                        {opportunity.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="customFieldId" className={fieldLabelClass}>
-                    Field
-                  </label>
-                  <select id="customFieldId" name="customFieldId" required className={fieldClass}>
-                    {opportunityFields.map((field) => (
-                      <option key={field.id} value={field.id}>
-                        {field.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="field-value" className={fieldLabelClass}>
-                    Value
-                  </label>
-                  <input id="field-value" name="value" placeholder="Best case" className={fieldClass} />
-                </div>
-                <div className="flex items-end">
-                  <Button type="submit" variant="outline" className="w-full">
-                    Save value
-                  </Button>
-                </div>
-              </form>
-              <form action={createCustomFieldAction} className="grid grid-cols-1 gap-4 border-t pt-6 sm:grid-cols-2">
-                <input name="objectType" type="hidden" value="opportunity" />
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="field-name" className={fieldLabelClass}>
-                    Field name
-                  </label>
-                  <input id="field-name" name="name" placeholder="Decision process" className={fieldClass} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="field-type" className={fieldLabelClass}>
-                    Type
-                  </label>
-                  <select id="field-type" name="fieldType" defaultValue="text" className={fieldClass}>
-                    <option value="text">Text</option>
-                    <option value="number">Number</option>
-                    <option value="date">Date</option>
-                    <option value="select">Select</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="field-options" className={fieldLabelClass}>
-                    Options
-                  </label>
-                  <input
-                    id="field-options"
-                    name="options"
-                    placeholder="Pipeline, Best case, Commit"
-                    className={fieldClass}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <Button type="submit" className="w-full">
-                    Create field
-                  </Button>
-                </div>
-              </form>
+        {!isSdr ? (
+          <TileItem id="create-opportunity-tile" x={0} y={21} w={7} h={10} minW={4} minH={4}>
+            <div id="create-opportunity" className="h-full">
+              <Panel
+                fill
+                title="Create opportunity"
+                subtitle="Create a deal from any CRM account and optional primary contact."
+                action={<ToneIcon icon={CircleDollarSign} tone="info" />}
+              >
+                <form action={createOpportunityAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="companyId" className={fieldLabelClass}>
+                      Account
+                    </label>
+                    <select id="companyId" name="companyId" required className={fieldClass}>
+                      {accountOptions.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="contactId" className={fieldLabelClass}>
+                      Contact
+                    </label>
+                    <select id="contactId" name="contactId" defaultValue="" className={fieldClass}>
+                      <option value="">No primary contact</option>
+                      {contactOptions.map((contact) => (
+                        <option key={contact.id} value={contact.id}>
+                          {contact.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="name" className={fieldLabelClass}>
+                      Name
+                    </label>
+                    <input id="name" name="name" placeholder="New outbound opportunity" className={fieldClass} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="stage" className={fieldLabelClass}>
+                      Stage
+                    </label>
+                    <select id="stage" name="stage" defaultValue="Prospecting" className={fieldClass}>
+                      {opportunityStages.map((stage) => (
+                        <option key={stage} value={stage}>
+                          {stage}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="amount" className={fieldLabelClass}>
+                      Amount
+                    </label>
+                    <input
+                      id="amount"
+                      name="amount"
+                      type="number"
+                      min="0"
+                      step="500"
+                      defaultValue="25000"
+                      className={fieldClass}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="expectedCloseDate" className={fieldLabelClass}>
+                      Expected close
+                    </label>
+                    <input id="expectedCloseDate" name="expectedCloseDate" type="date" className={fieldClass} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="ownerUserId" className={fieldLabelClass}>
+                      Owner
+                    </label>
+                    <select id="ownerUserId" name="ownerUserId" defaultValue={ownerOptions[0]?.id} className={fieldClass}>
+                      {ownerOptions.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="submit" className="w-full">
+                      Add opportunity
+                    </Button>
+                  </div>
+                </form>
+              </Panel>
             </div>
-          </Panel>
-        </section>
-      ) : null}
+          </TileItem>
+        ) : null}
 
-      <section>
-        <Panel
-          title={isSdr ? "My opportunity list" : "Opportunity directory"}
-          subtitle={
-            isSdr
-              ? "Assigned pipeline records with the account, stage, value, close date, and latest activity."
-              : "Pipeline records with account, contact, source, owner, and custom forecast fields."
-          }
-          action={<StatusBadge label={`${formatNumber(opportunities.length)} records`} tone="info" />}
-          flush
-        >
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Opportunity</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Close</TableHead>
-                {!isSdr ? <TableHead>Owner</TableHead> : null}
-                {!isSdr ? <TableHead>Fields</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {opportunities.map((opportunity) => {
-                const fieldMap = customFieldValuesForObject(customFieldValues, opportunity.id);
+        {!isSdr ? (
+          <TileItem id="forecast-fields" x={7} y={21} w={5} h={10} minW={3} minH={4}>
+            <Panel
+              fill
+              title="Forecast fields"
+              subtitle="Optional custom forecast fields managed by the CRM team."
+              action={<StatusBadge label={`${opportunityFields.length} fields`} tone="info" />}
+            >
+              <div className="flex flex-col gap-6">
+                <form action={setCustomFieldValueAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="field-opportunity" className={fieldLabelClass}>
+                      Opportunity
+                    </label>
+                    <select id="field-opportunity" name="objectId" required className={fieldClass}>
+                      {opportunities.map((opportunity) => (
+                        <option key={opportunity.id} value={opportunity.id}>
+                          {opportunity.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="customFieldId" className={fieldLabelClass}>
+                      Field
+                    </label>
+                    <select id="customFieldId" name="customFieldId" required className={fieldClass}>
+                      {opportunityFields.map((field) => (
+                        <option key={field.id} value={field.id}>
+                          {field.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="field-value" className={fieldLabelClass}>
+                      Value
+                    </label>
+                    <input id="field-value" name="value" placeholder="Best case" className={fieldClass} />
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="submit" variant="outline" className="w-full">
+                      Save value
+                    </Button>
+                  </div>
+                </form>
+                <form action={createCustomFieldAction} className="grid grid-cols-1 gap-4 border-t pt-6 sm:grid-cols-2">
+                  <input name="objectType" type="hidden" value="opportunity" />
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="field-name" className={fieldLabelClass}>
+                      Field name
+                    </label>
+                    <input id="field-name" name="name" placeholder="Decision process" className={fieldClass} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="field-type" className={fieldLabelClass}>
+                      Type
+                    </label>
+                    <select id="field-type" name="fieldType" defaultValue="text" className={fieldClass}>
+                      <option value="text">Text</option>
+                      <option value="number">Number</option>
+                      <option value="date">Date</option>
+                      <option value="select">Select</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="field-options" className={fieldLabelClass}>
+                      Options
+                    </label>
+                    <input
+                      id="field-options"
+                      name="options"
+                      placeholder="Pipeline, Best case, Commit"
+                      className={fieldClass}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="submit" className="w-full">
+                      Create field
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </Panel>
+          </TileItem>
+        ) : null}
 
-                return (
-                  <TableRow key={opportunity.id}>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-foreground">{opportunity.name}</span>
-                        <span className="text-xs text-muted-foreground">{opportunity.source}</span>
-                        <span className="text-xs text-muted-foreground">{opportunity.lastActivity}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Link href={`/crm/accounts/${opportunity.companyId}`} className="flex flex-col">
-                        <span className="font-medium text-foreground">{opportunity.companyName}</span>
-                        <span className="text-xs text-muted-foreground">{opportunity.contactName}</span>
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge label={opportunity.stage} tone={statusTone(opportunity.stage)} />
-                    </TableCell>
-                    <TableCell className="text-foreground">{formatCurrency(opportunity.amount)}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : "Not set"}
-                    </TableCell>
-                    {!isSdr ? <TableCell className="text-muted-foreground">{opportunity.owner}</TableCell> : null}
-                    {!isSdr ? (
+        <TileItem id="opportunity-directory" x={0} y={31} w={12} h={7} minW={6} minH={3}>
+          <Panel
+            fill
+            flush
+            title={isSdr ? "My opportunity list" : "Opportunity directory"}
+            subtitle={
+              isSdr
+                ? "Assigned pipeline records with the account, stage, value, close date, and latest activity."
+                : "Pipeline records with account, contact, source, owner, and custom forecast fields."
+            }
+            action={<StatusBadge label={`${formatNumber(opportunities.length)} records`} tone="info" />}
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Opportunity</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Stage</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Close</TableHead>
+                  {!isSdr ? <TableHead>Owner</TableHead> : null}
+                  {!isSdr ? <TableHead>Fields</TableHead> : null}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {opportunities.map((opportunity) => {
+                  const fieldMap = customFieldValuesForObject(customFieldValues, opportunity.id);
+
+                  return (
+                    <TableRow key={opportunity.id}>
                       <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          {opportunityFields.map((field) => (
-                            <StatusBadge
-                              key={field.id}
-                              label={`${field.name}: ${fieldMap.get(field.id)?.value ?? "Unset"}`}
-                              tone="default"
-                            />
-                          ))}
+                        <div className="flex flex-col">
+                          <span className="font-medium text-foreground">{opportunity.name}</span>
+                          <span className="text-xs text-muted-foreground">{opportunity.source}</span>
+                          <span className="text-xs text-muted-foreground">{opportunity.lastActivity}</span>
                         </div>
                       </TableCell>
-                    ) : null}
+                      <TableCell>
+                        <Link href={`/crm/accounts/${opportunity.companyId}`} className="flex flex-col">
+                          <span className="font-medium text-foreground">{opportunity.companyName}</span>
+                          <span className="text-xs text-muted-foreground">{opportunity.contactName}</span>
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge label={opportunity.stage} tone={statusTone(opportunity.stage)} />
+                      </TableCell>
+                      <TableCell className="text-foreground">{formatCurrency(opportunity.amount)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : "Not set"}
+                      </TableCell>
+                      {!isSdr ? <TableCell className="text-muted-foreground">{opportunity.owner}</TableCell> : null}
+                      {!isSdr ? (
+                        <TableCell>
+                          <div className="flex flex-wrap gap-2">
+                            {opportunityFields.map((field) => (
+                              <StatusBadge
+                                key={field.id}
+                                label={`${field.name}: ${fieldMap.get(field.id)?.value ?? "Unset"}`}
+                                tone="default"
+                              />
+                            ))}
+                          </div>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  );
+                })}
+                {opportunities.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isSdr ? 5 : 7} className="text-muted-foreground">
+                      No opportunities are available in this view.
+                    </TableCell>
                   </TableRow>
-                );
-              })}
-              {opportunities.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isSdr ? 5 : 7} className="text-muted-foreground">
-                    No opportunities are available in this view.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </Panel>
-      </section>
+                ) : null}
+              </TableBody>
+            </Table>
+          </Panel>
+        </TileItem>
+      </TileGrid>
     </>
   );
 }
