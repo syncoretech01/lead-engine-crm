@@ -213,10 +213,10 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
           <div>
             <h2 className="section-title">RingCentral lines</h2>
             <p className="section-subtitle">
-              Each SDR dials from their own RingCentral number. Enter the direct number in E.164 form
-              (e.g. +13035551234) and their RingCentral extension number (e.g. 102 — the short number
-              shown in RingCentral admin; it&apos;s resolved automatically). Leave blank to disable
-              calling for that user.
+              Each SDR dials from their own RingCentral number: RingCentral rings this number first,
+              then bridges to the lead. Enter the direct number in E.164 form (e.g. +13035551234) —
+              this is what&apos;s required. The extension field is optional. Leave the number blank to
+              disable calling for that user.
             </p>
           </div>
           <Phone size={20} aria-hidden="true" />
