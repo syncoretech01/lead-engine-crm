@@ -1,5 +1,6 @@
-import Image from "next/image";
-import { syncoreBrand } from "@/lib/brand";
+import { AuthAlert, AuthCard } from "@/components/auth-card";
+import { Button } from "@/components/ui/button";
+import { fieldClass, fieldLabelClass } from "@/components/ui/field";
 
 export const dynamic = "force-dynamic";
 
@@ -13,30 +14,25 @@ export default async function ResetPasswordTokenPage({ params, searchParams }: R
   const query = await searchParams;
 
   return (
-    <main className="auth-page">
-      <section className="auth-panel">
-        <div className="auth-brand">
-          <Image src={syncoreBrand.logo.wordmark} alt={syncoreBrand.shortName} width={260} height={80} priority />
-          <p>Password recovery</p>
-        </div>
-        <div className="auth-copy">
-          <h1>Set new password</h1>
-          <p>Choose a new password. Existing sessions for this account will be revoked.</p>
-        </div>
+    <AuthCard
+      kicker="Password recovery"
+      title="Set new password"
+      subtitle="Choose a new password. Existing sessions for this account will be revoked."
+    >
+      {query?.error ? <AuthAlert tone="danger">{query.error}</AuthAlert> : null}
 
-        {query?.error ? <p className="form-alert danger">{query.error}</p> : null}
-
-        <form action="/auth/reset-password" method="post" className="auth-form">
-          <input type="hidden" name="token" value={token} />
-          <div className="field">
-            <label htmlFor="password">New password</label>
-            <input id="password" name="password" type="password" minLength={10} required />
-          </div>
-          <button className="button primary" type="submit">
-            Update password
-          </button>
-        </form>
-      </section>
-    </main>
+      <form action="/auth/reset-password" method="post" className="flex flex-col gap-4">
+        <input type="hidden" name="token" value={token} />
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="password" className={fieldLabelClass}>
+            New password
+          </label>
+          <input id="password" name="password" type="password" minLength={10} required className={fieldClass} />
+        </div>
+        <Button type="submit" className="mt-1 w-full">
+          Update password
+        </Button>
+      </form>
+    </AuthCard>
   );
 }

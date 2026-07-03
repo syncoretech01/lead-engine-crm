@@ -1,6 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
-import { syncoreBrand } from "@/lib/brand";
+
+import { AuthAlert, AuthCard } from "@/components/auth-card";
+import { Button } from "@/components/ui/button";
+import { fieldClass, fieldLabelClass } from "@/components/ui/field";
 
 export const dynamic = "force-dynamic";
 
@@ -18,45 +20,44 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const next = params?.next ?? "/";
 
   return (
-    <main className="auth-page">
-      <section className="auth-panel">
-        <div className="auth-brand">
-          <Image
-            src={syncoreBrand.logo.wordmark}
-            alt={syncoreBrand.shortName}
-            width={260}
-            height={80}
-            priority
+    <AuthCard title="Sign in">
+      {params?.error ? <AuthAlert tone="danger">{params.error}</AuthAlert> : null}
+      {params?.loggedOut ? <AuthAlert tone="success">You have been signed out.</AuthAlert> : null}
+      {params?.reset ? (
+        <AuthAlert tone="success">Password updated. Sign in with your new password.</AuthAlert>
+      ) : null}
+
+      <form action="/auth/login" method="post" className="flex flex-col gap-4" autoComplete="off">
+        <input type="hidden" name="next" value={next} />
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="email" className={fieldLabelClass}>
+            Email
+          </label>
+          <input id="email" name="email" type="email" autoComplete="off" required className={fieldClass} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="password" className={fieldLabelClass}>
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            required
+            className={fieldClass}
           />
         </div>
+        <Button type="submit" className="mt-1 w-full">
+          Sign in
+        </Button>
+      </form>
 
-        <div className="auth-copy">
-          <h1>Sign in</h1>
-        </div>
-
-        {params?.error ? <p className="form-alert danger">{params.error}</p> : null}
-        {params?.loggedOut ? <p className="form-alert success">You have been signed out.</p> : null}
-        {params?.reset ? <p className="form-alert success">Password updated. Sign in with your new password.</p> : null}
-
-        <form action="/auth/login" method="post" className="auth-form" autoComplete="off">
-          <input type="hidden" name="next" value={next} />
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input id="email" name="email" type="email" autoComplete="off" required />
-          </div>
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <input id="password" name="password" type="password" autoComplete="new-password" required />
-          </div>
-          <button className="button primary" type="submit">
-            Sign in
-          </button>
-        </form>
-
-        <div className="auth-links">
-          <Link href="/reset-password">Reset password</Link>
-        </div>
-      </section>
-    </main>
+      <div className="mt-4 text-center text-sm">
+        <Link href="/reset-password" className="font-medium hover:underline" style={{ color: "var(--syn-primary)" }}>
+          Reset password
+        </Link>
+      </div>
+    </AuthCard>
   );
 }

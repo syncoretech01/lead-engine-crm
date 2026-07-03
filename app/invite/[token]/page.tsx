@@ -1,5 +1,6 @@
-import Image from "next/image";
-import { syncoreBrand } from "@/lib/brand";
+import { AuthAlert, AuthCard } from "@/components/auth-card";
+import { Button } from "@/components/ui/button";
+import { fieldClass, fieldLabelClass } from "@/components/ui/field";
 
 export const dynamic = "force-dynamic";
 
@@ -13,34 +14,31 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
   const query = await searchParams;
 
   return (
-    <main className="auth-page">
-      <section className="auth-panel">
-        <div className="auth-brand">
-          <Image src={syncoreBrand.logo.wordmark} alt={syncoreBrand.shortName} width={260} height={80} priority />
-          <p>Workspace invitation</p>
-        </div>
-        <div className="auth-copy">
-          <h1>Accept invite</h1>
-          <p>Create your verified Syncore login and join the workspace with the role assigned by the owner.</p>
-        </div>
+    <AuthCard
+      kicker="Workspace invitation"
+      title="Accept invite"
+      subtitle="Create your verified Syncore login and join the workspace with the role assigned by the owner."
+    >
+      {query?.error ? <AuthAlert tone="danger">{query.error}</AuthAlert> : null}
 
-        {query?.error ? <p className="form-alert danger">{query.error}</p> : null}
-
-        <form action="/auth/accept-invite" method="post" className="auth-form">
-          <input type="hidden" name="token" value={token} />
-          <div className="field">
-            <label htmlFor="name">Name</label>
-            <input id="name" name="name" required />
-          </div>
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <input id="password" name="password" type="password" minLength={10} required />
-          </div>
-          <button className="button primary" type="submit">
-            Create account
-          </button>
-        </form>
-      </section>
-    </main>
+      <form action="/auth/accept-invite" method="post" className="flex flex-col gap-4">
+        <input type="hidden" name="token" value={token} />
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="name" className={fieldLabelClass}>
+            Name
+          </label>
+          <input id="name" name="name" required className={fieldClass} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="password" className={fieldLabelClass}>
+            Password
+          </label>
+          <input id="password" name="password" type="password" minLength={10} required className={fieldClass} />
+        </div>
+        <Button type="submit" className="mt-1 w-full">
+          Create account
+        </Button>
+      </form>
+    </AuthCard>
   );
 }
