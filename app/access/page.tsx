@@ -214,8 +214,9 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
             <h2 className="section-title">RingCentral lines</h2>
             <p className="section-subtitle">
               Each SDR dials from their own RingCentral number. Enter the direct number in E.164 form
-              (e.g. +13035551234) and, if placing calls on the user&apos;s behalf, their RingCentral
-              extension id. Leave blank to disable calling for that user.
+              (e.g. +13035551234) and their RingCentral extension number (e.g. 102 — the short number
+              shown in RingCentral admin; it&apos;s resolved automatically). Leave blank to disable
+              calling for that user.
             </p>
           </div>
           <Phone size={20} aria-hidden="true" />
@@ -250,7 +251,7 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
                       <input
                         name="extensionId"
                         type="text"
-                        placeholder="Extension id (optional)"
+                        placeholder="Extension number (e.g. 102)"
                         defaultValue={member.user?.ringCentralExtensionId ?? ""}
                         aria-label={`RingCentral extension for ${member.user?.name ?? "user"}`}
                       />
