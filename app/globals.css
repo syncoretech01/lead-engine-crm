@@ -92,17 +92,17 @@
   --ui-chart-4: #ffb020;
   --ui-chart-5: #f6519d;
 
-  /* Light sidebar (Flexio-style, Phase B): white surface, muted-gray inactive
-     text, blue-tinted active/hover pill with blue text + icon. Brand stays blue.
-     Consumed by the shadcn Sidebar via @theme inline (--color-sidebar*). */
-  --ui-sidebar: var(--bg-surface);
-  --ui-sidebar-foreground: var(--fg2);
-  --ui-sidebar-primary: var(--syn-primary);
-  --ui-sidebar-primary-foreground: #ffffff;
-  --ui-sidebar-accent: var(--blue-50);
-  --ui-sidebar-accent-foreground: var(--syn-primary);
-  --ui-sidebar-border: var(--border-subtle);
-  --ui-sidebar-ring: var(--syn-primary);
+  /* Syncore-blue sidebar: brand-blue gradient surface (see [data-slot=sidebar-inner]
+     below), light/white text, translucent-white hover, solid-white active pill
+     (blue text). Consumed by the shadcn Sidebar via @theme inline (--color-sidebar*). */
+  --ui-sidebar: var(--syn-primary);
+  --ui-sidebar-foreground: rgba(255, 255, 255, 0.78);
+  --ui-sidebar-primary: #ffffff;
+  --ui-sidebar-primary-foreground: var(--syn-primary);
+  --ui-sidebar-accent: rgba(255, 255, 255, 0.16);
+  --ui-sidebar-accent-foreground: #ffffff;
+  --ui-sidebar-border: rgba(255, 255, 255, 0.16);
+  --ui-sidebar-ring: rgba(255, 255, 255, 0.65);
 }
 
 /* Border defaults for Tailwind utilities WITHOUT full Preflight. shadcn
@@ -2240,6 +2240,31 @@ table[data-slot="table"] th {
   font-weight: 500;
   letter-spacing: normal;
   text-transform: none;
+}
+
+/* Syncore-blue sidebar: brand-blue vertical gradient for depth. The bg-sidebar
+   utility only sets background-color; this adds a background-image on top, so the
+   gradient shows on both the desktop panel and the mobile drawer without fighting
+   the utility. Text/hover/active tones come from the --ui-sidebar* tokens. */
+[data-slot="sidebar-inner"],
+[data-slot="sidebar"][data-mobile="true"] {
+  background-image: linear-gradient(180deg, var(--syn-primary) 0%, var(--blue-700) 100%);
+}
+
+/* Overrides for the unlayered legacy element styles above, scoped to the sidebar
+   so the rest of the app is untouched:
+   - `a { color: inherit }` (line ~508) would drag the active pill's blue text back
+     to white; the [data-active] selector's higher specificity re-asserts blue.
+   - No Preflight means the shadcn <ul>/<li> menus render default disc bullets. */
+[data-slot="sidebar-inner"] :is(ul, ol),
+[data-slot="sidebar"][data-mobile="true"] :is(ul, ol) {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+[data-slot="sidebar-inner"] [data-slot="sidebar-menu-button"][data-active="true"],
+[data-slot="sidebar"][data-mobile="true"] [data-slot="sidebar-menu-button"][data-active="true"] {
+  color: var(--syn-primary);
 }
 
 tbody tr {
