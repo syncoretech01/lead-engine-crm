@@ -2221,6 +2221,27 @@ tr:last-child td {
   border-bottom: 0;
 }
 
+/* Reskinned (shadcn) tables — the legacy element-level th/td rules above are
+   unlayered and outrank the component's utility classes: td{overflow-wrap:
+   anywhere} breaks numbers mid-digit (e.g. "$85,610" -> "$85,61"/"0"), th is
+   uppercase/heavy, and cells are top-aligned. Restore the intended Flexio look
+   at higher specificity, scoped to tables the reskin renders (data-slot).
+   overflow-wrap:normal stops no-space numbers from breaking while spaced prose
+   still wraps normally. */
+table[data-slot="table"] :is(th, td) {
+  overflow-wrap: normal;
+  vertical-align: middle;
+}
+table[data-slot="table"] th {
+  background: transparent;
+  color: var(--fg2);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 tbody tr {
   transition: background var(--dur-fast) var(--ease-out);
 }
