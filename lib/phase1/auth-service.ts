@@ -433,6 +433,45 @@ export function deactivateUserAccount(state: AppState, session: Session, userId:
   return account;
 }
 
+// Admin-provisioned RingCentral line for a workspace member. Blank values clear
+// the line. Requires manage_workspace; the member must belong to the actor's
+// workspace even though the User record itself is workspace-agnostic.
+export function updateUserTelephony(
+  state: AppState,
+  session: Session,
+  input: { userId: string; phoneNumber: string; extensionId: string }
+) {
+  assertPermission(session, "manage_workspace");
+  const member = state.workspaceMembers.find(
+    (record) => record.workspaceId === session.workspace.id && record.userId === input.userId
+  );
+  if (!member) {
+    throw new Error("Workspace member not found.");
+  }
+  const user = state.users.find((record) => record.id === input.userId);
+  if (!user) {
+    throw new Error("User not found.");
+  }
+  const oldValue = {
+    ringCentralPhoneNumber: user.ringCentralPhoneNumber,
+    ringCentralExtensionId: user.ringCentralExtensionId
+  };
+  user.ringCentralPhoneNumber = input.phoneNumber.trim() || undefined;
+  user.ringCentralExtensionId = input.extensionId.trim() || undefined;
+  appendAuthAudit(state, {
+    workspaceId: session.workspace.id,
+    actorUserId: session.user.id,
+    objectType: "user",
+    objectId: user.id,
+    action: "telephony_updated",
+    oldValue,
+    newValue: {
+      ringCentralPhoneNumber: user.ringCentralPhoneNumber,
+      ringCentralExtensionId: user.ringCentralExtensionId
+    }
+  });
+}
+
 function createAuthSession(
   state: AppState,
   input: { userId: string; workspaceId: string; now: string; ipAddress?: string; userAgent?: string }

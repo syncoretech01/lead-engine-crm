@@ -21,7 +21,8 @@ import {
   resetPasswordWithToken,
   revokeAuthSession,
   switchAuthWorkspace,
-  updateMemberRole
+  updateMemberRole,
+  updateUserTelephony
 } from "@/lib/phase1/auth-service";
 import {
   authCookieOptions,
@@ -230,6 +231,18 @@ export async function updateMemberRoleAction(formData: FormData) {
 export async function deactivateUserAction(formData: FormData) {
   await updateState((state, session) => {
     deactivateUserAccount(state, session, stringValue(formData.get("userId")));
+  }, { normalizedTables: authWriteTables });
+
+  revalidatePath("/access");
+}
+
+export async function updateUserTelephonyAction(formData: FormData) {
+  await updateState((state, session) => {
+    updateUserTelephony(state, session, {
+      userId: stringValue(formData.get("userId")),
+      phoneNumber: stringValue(formData.get("phoneNumber")),
+      extensionId: stringValue(formData.get("extensionId"))
+    });
   }, { normalizedTables: authWriteTables });
 
   revalidatePath("/access");

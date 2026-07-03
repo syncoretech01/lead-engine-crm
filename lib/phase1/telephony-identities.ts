@@ -5,8 +5,14 @@ export type TelephonyIdentity = {
   email: string;
   provider: "RingCentral";
   phoneNumber: string;
+  /** RingCentral extension id used to place RingOut on this user's behalf. */
+  extensionId?: string;
   label: string;
 };
+
+/** The user shape the resolver reads — full User works, so does a name/email pick. */
+type TelephonyUser = Pick<User, "name" | "email"> &
+  Partial<Pick<User, "ringCentralPhoneNumber" | "ringCentralExtensionId">>;
 
 type KnownTelephonyIdentity = {
   displayName: string;
@@ -27,9 +33,24 @@ const knownTelephonyIdentities: KnownTelephonyIdentity[] = [
 ];
 
 export function resolveUserTelephonyIdentity(
-  user: Pick<User, "name" | "email">,
+  user: TelephonyUser,
   env: NodeJS.ProcessEnv = process.env
 ): TelephonyIdentity | undefined {
+  // Prefer the user's own provisioned RingCentral line (the multi-SDR path).
+  const perUserNumber = normalizePhoneNumber(user.ringCentralPhoneNumber);
+  if (perUserNumber) {
+    return {
+      displayName: user.name,
+      email: user.email,
+      provider: "RingCentral",
+      phoneNumber: perUserNumber,
+      extensionId: user.ringCentralExtensionId?.trim() || undefined,
+      label: `${user.name} <${user.email}> via RingCentral ${perUserNumber}`
+    };
+  }
+
+  // Fall back to the legacy hardcoded env identity (keeps Sam Carter working
+  // until every user is provisioned with their own number).
   const normalizedEmail = normalizeEmail(user.email);
   const normalizedName = normalizeName(user.name);
   const known = knownTelephonyIdentities.find(
