@@ -27,6 +27,7 @@ import type {
   SmsEventStatus,
   SuppressionRecord,
   TrackedCall,
+  TrackedCallLiveState,
   TrackedCallStatus
 } from "@/lib/phase1/types";
 
@@ -259,9 +260,13 @@ export function createTrackedCall(
     recordingConsent?: RecordingConsentStatus;
     recordingConsentSource?: string;
     recordingUrl?: string;
+    recordingId?: string;
     transcript?: string;
     callSummary?: string;
     nextStep?: string;
+    providerCallId?: string;
+    telephonySessionId?: string;
+    liveState?: TrackedCallLiveState;
   }
 ) {
   const contact = state.contacts.find((item) => item.id === input.contactId && item.workspaceId === input.workspaceId);
@@ -273,7 +278,9 @@ export function createTrackedCall(
 
   const now = new Date().toISOString();
   const recordingRequested = Boolean(input.recordingUrl || input.transcript);
-  const recordingConsent = recordingRequested ? input.recordingConsent ?? "Unknown" : "Not recorded";
+  // Respect an explicit consent decision (e.g. captured in the dialer before the
+  // recording exists); otherwise default from whether a recording is present.
+  const recordingConsent = input.recordingConsent ?? (recordingRequested ? "Unknown" : "Not recorded");
   const canStoreRecording = recordingConsent === "Granted";
   const call: TrackedCall = {
     id: `tracked-call-${randomUUID()}`,
@@ -288,14 +295,18 @@ export function createTrackedCall(
     durationSeconds: input.durationSeconds,
     recordingConsent,
     recordingConsentSource: input.recordingConsentSource ?? (recordingConsent === "Not recorded" ? "No recording captured" : "Manual disclosure"),
-    recordingConsentCapturedAt: recordingRequested ? now : undefined,
+    recordingConsentCapturedAt: recordingConsent !== "Not recorded" ? now : undefined,
     recordingUrl: canStoreRecording ? input.recordingUrl : undefined,
     recordingStoragePath: canStoreRecording && input.recordingUrl
       ? workspaceStoragePath(input.workspaceId, "recordings", contact.id, `${Date.now()}.mp3`)
       : undefined,
+    recordingId: input.recordingId,
     transcript: canStoreRecording ? input.transcript : undefined,
     callSummary: input.callSummary,
     nextStep: input.nextStep,
+    providerCallId: input.providerCallId,
+    telephonySessionId: input.telephonySessionId,
+    liveState: input.liveState,
     createdAt: now
   };
 

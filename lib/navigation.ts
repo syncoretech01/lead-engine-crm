@@ -12,6 +12,7 @@ import {
   Layers,
   LayoutDashboard,
   Megaphone,
+  PhoneCall,
   PlugZap,
   ShieldCheck,
   Sparkles,
@@ -115,6 +116,7 @@ export const navGroups: NavGroup[] = [
         icon: UserCheck,
         permission: "manage_sdr"
       },
+      { href: "/crm/calls", label: "Call Log", sdrLabel: "My Calls", icon: PhoneCall, permission: "manage_sdr" },
       { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr_team" },
       { href: "/outreach/campaigns", label: "Campaigns", icon: Megaphone, permission: "manage_outreach" },
       {

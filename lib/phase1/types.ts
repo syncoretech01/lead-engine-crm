@@ -338,7 +338,7 @@ export type JobIdempotencyRecord = {
   updatedAt: string;
 };
 
-export type DirectSendChannel = "Email" | "SMS";
+export type DirectSendChannel = "Email" | "SMS" | "Call";
 export type DirectSendClaimStatus = "Sending" | "Sent" | "Failed";
 
 // Durable "outbox" claim written BEFORE a live 1:1 email/SMS send, keyed by
@@ -988,6 +988,9 @@ export type EmailEventType =
 export type SmsEventStatus = "Sent" | "Delivered" | "Failed" | "Replied" | "Opt-out";
 export type CallDirection = "Outbound" | "Inbound";
 export type TrackedCallStatus = "Dialed" | "Connected" | "No answer" | "Voicemail" | "Busy" | "Failed";
+// Live lifecycle of a click-to-call session, distinct from the SDR-logged
+// callStatus/disposition. Drives the dialer's live UI + "recording processing".
+export type TrackedCallLiveState = "initiated" | "ringing" | "connected" | "completed" | "failed";
 export type RecordingConsentStatus = "Granted" | "Denied" | "Unknown" | "Not recorded";
 export type CallDisposition =
   | "Interested"
@@ -1173,9 +1176,16 @@ export type TrackedCall = {
   recordingConsentCapturedAt?: string;
   recordingUrl?: string;
   recordingStoragePath?: string;
+  recordingId?: string;
   transcript?: string;
   callSummary?: string;
   nextStep?: string;
+  /** RingCentral RingOut id used to correlate completion + recording. */
+  providerCallId?: string;
+  /** RingCentral telephony session id from webhook events. */
+  telephonySessionId?: string;
+  /** Live call lifecycle (see TrackedCallLiveState). */
+  liveState?: TrackedCallLiveState;
   createdAt: string;
 };
 

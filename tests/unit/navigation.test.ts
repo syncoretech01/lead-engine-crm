@@ -35,6 +35,7 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
       "Opportunities",
       "SDR Queue",
       "Assigned Contacts",
+      "Call Log",
       "Manager Dashboard",
       "Campaigns",
       "Outreach Events"
@@ -67,13 +68,14 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
       "Opportunities",
       "SDR Queue",
       "Assigned Contacts",
+      "Call Log",
       "Manager Dashboard",
       "Campaigns",
       "Outreach Events"
     ]
   },
   SDR: {
-    crm: ["Accounts", "Contacts", "Opportunities", "My Queue", "My Contacts"]
+    crm: ["Accounts", "Contacts", "Opportunities", "My Queue", "My Contacts", "My Calls"]
   },
   "Data Operator": {
     "lead-generation": [

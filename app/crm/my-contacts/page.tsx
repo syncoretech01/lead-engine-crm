@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, Building2, ClipboardList, Flame, Mail, Phone, UserCheck } from "lucide-react";
 
+import { CallButton } from "@/components/call-button";
 import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { fieldClass } from "@/components/ui/field";
@@ -18,6 +19,10 @@ import {
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
 import { assignedContactsSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
+import {
+  resolveUserTelephonyIdentity,
+  telephonyIdentityBlockReason
+} from "@/lib/phase1/telephony-identities";
 import { cn, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -77,6 +82,13 @@ export default async function MyContactsPage({
   const overdue = rows.filter((row) => row.slaStatus === "Overdue").length;
   const p1 = rows.filter((row) => row.priority === "P1").length;
   const activeSdrName = sdrFilter ? roster.find((user) => user.id === sdrFilter)?.name : undefined;
+
+  // Caller line for the dialer: the current user's own RingCentral number.
+  const callerIdentity = resolveUserTelephonyIdentity(session.user);
+  const callerLabel = callerIdentity
+    ? `${callerIdentity.displayName} · ${callerIdentity.phoneNumber}`
+    : undefined;
+  const callBlockReason = callerIdentity ? undefined : telephonyIdentityBlockReason(session.user);
 
   return (
     <>
@@ -166,6 +178,7 @@ export default async function MyContactsPage({
               <TableHead>Assigned</TableHead>
               <TableHead>Last touch</TableHead>
               {!isSdr ? <TableHead>Owner</TableHead> : null}
+              <TableHead className="text-right">Call</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -217,11 +230,21 @@ export default async function MyContactsPage({
                   {row.touchCount > 0 ? ` · ${row.touchCount}` : ""}
                 </TableCell>
                 {!isSdr ? <TableCell className="text-muted-foreground">{row.ownerName}</TableCell> : null}
+                <TableCell className="text-right">
+                  <CallButton
+                    contactId={row.contactId}
+                    contactName={row.contactName}
+                    phone={row.phone}
+                    callerLabel={callerLabel}
+                    blockReason={callBlockReason}
+                    iconOnly
+                  />
+                </TableCell>
               </TableRow>
             ))}
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isSdr ? 8 : 9} className="text-muted-foreground">
+                <TableCell colSpan={isSdr ? 9 : 10} className="text-muted-foreground">
                   {isSdr
                     ? "No contacts are assigned to you yet."
                     : sdrFilter
