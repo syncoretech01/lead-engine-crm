@@ -26,8 +26,21 @@ import {
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/submit-button";
-import { ProgressBar } from "@/components/progress-bar";
-import { StatusPill, statusTone } from "@/components/status-pill";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { MeterBar } from "@/components/ui/meter-bar";
+import { Panel } from "@/components/ui/panel";
+import { StatCard, ToneIcon } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import { fieldClass, fieldLabelClass, fieldTextareaClass } from "@/components/ui/field";
+import { statusTone } from "@/components/status-pill";
 import {
   callOutcomes,
   customFieldValuesForObject,
@@ -46,7 +59,6 @@ import { dedupeTimelineActivities } from "@/lib/phase1/crm-display";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
-import { StatCard, LaneCard } from "@/components/ui-metrics";
 import { TileGrid, TileItem } from "@/components/tile-grid";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
@@ -213,14 +225,18 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         copy="Account workspace for SDRs and managers: current health, contacts, pipeline, open work, and recent activity without backend configuration."
         actions={
           <>
-            <Link href="/crm/accounts" className="button secondary">
-              <ArrowRight size={17} aria-hidden="true" />
-              Accounts
-            </Link>
-            <Link href="/crm/contacts" className="button primary">
-              <Users size={17} aria-hidden="true" />
-              Contacts
-            </Link>
+            <Button asChild variant="outline">
+              <Link href="/crm/accounts">
+                <ArrowRight aria-hidden="true" />
+                Accounts
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/crm/contacts">
+                <Users aria-hidden="true" />
+                Contacts
+              </Link>
+            </Button>
           </>
         }
       />
@@ -228,25 +244,38 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
       <TileGrid pageKey="crm-account-detail" canCustomize={canCustomize} saved={savedLayout}>
         {metrics.map((metric, index) => (
           <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
-            <StatCard {...metric} />
+            <StatCard
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+              note={metric.note}
+              tone={metric.tone}
+              fill
+            />
           </TileItem>
         ))}
         {lanes.map((lane, index) => (
           <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
-            <LaneCard {...lane} />
+            <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
+              <ToneIcon icon={lane.icon} tone={lane.tone} />
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {lane.label} · {lane.note}
+                </div>
+              </div>
+            </div>
           </TileItem>
         ))}
 
         <TileItem id="account-snapshot" x={0} y={4} w={7} h={7} minW={4} minH={3}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Account snapshot</h2>
-              <p className="section-subtitle">Firmographics, routing owner, source lineage, and compliance state.</p>
-            </div>
-            <StatusPill label={account.priority} tone={account.priority === "P1" ? "success" : "warning"} />
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title="Account snapshot"
+          subtitle="Firmographics, routing owner, source lineage, and compliance state."
+          action={<StatusBadge label={account.priority} tone={account.priority === "P1" ? "success" : "warning"} />}
+          fill
+        >
+          <div className="flex flex-col gap-3">
             {[
               ["Stage", account.stage],
               ["Domain", account.domain],
@@ -257,42 +286,38 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
               ["Source", account.source],
               ["Compliance", account.compliance]
             ].map(([label, value]) => (
-              <div className="stage-row" key={label}>
-                <div className="stage-meta">
-                  <strong>{label}</strong>
-                  <span>{value}</span>
-                </div>
+              <div className="flex items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0" key={label}>
+                <span className="text-sm font-medium text-foreground">{label}</span>
+                <span className="text-sm text-muted-foreground">{value}</span>
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
         </TileItem>
 
         <TileItem id="current-work" x={7} y={4} w={5} h={7} minW={3} minH={3}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Current work</h2>
-              <p className="section-subtitle">Open tasks the CRM team should act on next.</p>
-            </div>
-            <StatusPill label={`${activeTasks.length} open`} tone={activeTasks.length ? "warning" : "success"} />
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title="Current work"
+          subtitle="Open tasks the CRM team should act on next."
+          action={<StatusBadge label={`${activeTasks.length} open`} tone={activeTasks.length ? "warning" : "success"} />}
+          fill
+        >
+          <div className="flex flex-col gap-4">
             {focusTasks.map((task) => (
-              <div className="stage-row" key={task.id}>
-                <div className="stage-meta">
-                  <strong>{task.title}</strong>
-                  <StatusPill label={task.status} tone={statusTone(task.status)} />
+              <div className="flex flex-col gap-2 border-b pb-4 last:border-0 last:pb-0" key={task.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">{task.title}</span>
+                  <StatusBadge label={task.status} tone={statusTone(task.status)} />
                 </div>
-                <div className="chip-row">
-                  <span className="pill">{task.priority}</span>
-                  <span className="pill">{userNameForId(state, task.ownerUserId)}</span>
-                  {task.dueAt ? <span className="pill">Due {formatDate(task.dueAt)}</span> : null}
+                <div className="flex flex-wrap gap-2">
+                  <StatusBadge label={task.priority} tone="default" />
+                  <StatusBadge label={userNameForId(state, task.ownerUserId)} tone="default" />
+                  {task.dueAt ? <StatusBadge label={`Due ${formatDate(task.dueAt)}`} tone="default" /> : null}
                 </div>
                 {task.status !== "Completed" ? (
                   <form action={completeTaskAction}>
                     <input name="id" type="hidden" value={task.id} />
-                    <SubmitButton className="button secondary" pendingLabel="Completing…">
+                    <SubmitButton className={buttonVariants({ variant: "outline", size: "sm" })} pendingLabel="Completing…">
                       <Check size={16} aria-hidden="true" />
                       Complete
                     </SubmitButton>
@@ -300,434 +325,419 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                 ) : null}
               </div>
             ))}
-            {focusTasks.length === 0 ? <p className="section-subtitle">No open account tasks right now.</p> : null}
+            {focusTasks.length === 0 ? <p className="text-xs text-muted-foreground">No open account tasks right now.</p> : null}
           </div>
-        </div>
+        </Panel>
         </TileItem>
 
         <TileItem id="pipeline" x={0} y={11} w={7} h={7} minW={4} minH={3}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Pipeline</h2>
-              <p className="section-subtitle">Linked opportunities with stage, amount, probability, close date, and owner.</p>
-            </div>
-            <Link href="/crm/opportunities" className="button secondary">
-              Open pipeline
-            </Link>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Opportunity</th>
-                  <th>Stage</th>
-                  <th>Amount</th>
-                  <th>Probability</th>
-                  <th>Move</th>
-                </tr>
-              </thead>
-              <tbody>
-                {opportunities.map((opportunity) => (
-                  <tr key={opportunity.id}>
-                    <td>
-                      <div className="entity">
-                        <strong>{opportunity.name}</strong>
-                        <span>{userNameForId(state, opportunity.ownerUserId)}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <StatusPill label={opportunity.stage} tone={statusTone(opportunity.stage)} />
-                    </td>
-                    <td>{formatCurrency(opportunity.amount)}</td>
-                    <td>
-                      <div className="entity">
-                        <strong>{opportunity.probability}%</strong>
-                        <ProgressBar value={opportunity.probability} />
-                      </div>
-                    </td>
-                    <td>
-                      <form action={updateOpportunityStageAction} className="inline-form">
-                        <input name="id" type="hidden" value={opportunity.id} />
-                        <select name="stage" defaultValue={opportunity.stage} aria-label="Stage">
-                          {opportunityStages.map((stage) => (
-                            <option key={stage} value={stage}>
-                              {stage}
-                            </option>
-                          ))}
-                        </select>
-                        <button className="icon-button" type="submit" aria-label="Save stage">
-                          <Save size={16} aria-hidden="true" />
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-                {opportunities.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>No opportunities are linked to this account yet.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Panel
+          title="Pipeline"
+          subtitle="Linked opportunities with stage, amount, probability, close date, and owner."
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/crm/opportunities">Open pipeline</Link>
+            </Button>
+          }
+          flush
+          fill
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Opportunity</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Probability</TableHead>
+                <TableHead>Move</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {opportunities.map((opportunity) => (
+                <TableRow key={opportunity.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{opportunity.name}</span>
+                      <span className="text-xs text-muted-foreground">{userNameForId(state, opportunity.ownerUserId)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge label={opportunity.stage} tone={statusTone(opportunity.stage)} />
+                  </TableCell>
+                  <TableCell className="text-foreground">{formatCurrency(opportunity.amount)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-foreground">{opportunity.probability}%</span>
+                      <MeterBar value={opportunity.probability} showValue={false} />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <form action={updateOpportunityStageAction} className="flex items-center gap-2">
+                      <input name="id" type="hidden" value={opportunity.id} />
+                      <select name="stage" defaultValue={opportunity.stage} aria-label="Stage" className={fieldClass}>
+                        {opportunityStages.map((stage) => (
+                          <option key={stage} value={stage}>
+                            {stage}
+                          </option>
+                        ))}
+                      </select>
+                      <Button type="submit" variant="outline" size="icon" aria-label="Save stage">
+                        <Save size={16} aria-hidden="true" />
+                      </Button>
+                    </form>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {opportunities.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">No opportunities are linked to this account yet.</TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
         </TileItem>
 
         <TileItem id="contacts" x={7} y={11} w={5} h={7} minW={3} minH={3}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Contacts</h2>
-              <p className="section-subtitle">People linked to this account with verification, score, and owner.</p>
-            </div>
-            <StatusPill label={`${accountContacts.length} contacts`} tone="info" />
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Contact</th>
-                  <th>Grade</th>
-                  <th>Score</th>
-                  <th>Status</th>
-                  <th>Owner</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accountContacts.map((contact) => (
-                  <tr key={contact.id}>
-                    <td>
-                      <Link href={`/crm/contacts/${contact.id}`} className="entity">
-                        <strong>{contact.name}</strong>
-                        <span>{contact.title}</span>
-                        <span>{contact.email}</span>
-                      </Link>
-                    </td>
-                    <td>
-                      <span className={`grade ${contact.grade.toLowerCase()}`}>{contact.grade}</span>
-                    </td>
-                    <td>{contact.score}</td>
-                    <td>
-                      <StatusPill label={contact.status} tone={statusTone(contact.status)} />
-                    </td>
-                    <td>{contact.owner}</td>
-                  </tr>
-                ))}
-                {accountContacts.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>No contacts are linked to this account yet.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Panel
+          title="Contacts"
+          subtitle="People linked to this account with verification, score, and owner."
+          action={<StatusBadge label={`${accountContacts.length} contacts`} tone="info" />}
+          flush
+          fill
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Contact</TableHead>
+                <TableHead>Grade</TableHead>
+                <TableHead>Score</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Owner</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {accountContacts.map((contact) => (
+                <TableRow key={contact.id}>
+                  <TableCell>
+                    <Link href={`/crm/contacts/${contact.id}`} className="flex flex-col">
+                      <span className="font-medium text-foreground">{contact.name}</span>
+                      <span className="text-xs text-muted-foreground">{contact.title}</span>
+                      <span className="text-xs text-muted-foreground">{contact.email}</span>
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge label={contact.grade} tone={statusTone(contact.grade)} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{contact.score}</TableCell>
+                  <TableCell>
+                    <StatusBadge label={contact.status} tone={statusTone(contact.status)} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{contact.owner}</TableCell>
+                </TableRow>
+              ))}
+              {accountContacts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">No contacts are linked to this account yet.</TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
         </TileItem>
 
         <TileItem id="activity-timeline" x={0} y={18} w={7} h={7} minW={4} minH={3}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Activity timeline</h2>
-              <p className="section-subtitle">Calls, notes, tasks, opportunity changes, and system events.</p>
-            </div>
-            <StatusPill label={`${activities.length} events`} tone="info" />
-          </div>
-          <div className="panel-body timeline">
+        <Panel
+          title="Activity timeline"
+          subtitle="Calls, notes, tasks, opportunity changes, and system events."
+          action={<StatusBadge label={`${activities.length} events`} tone="info" />}
+          fill
+        >
+          <div className="flex flex-col gap-4">
             {activities.map((activity) => {
               const Icon = activityIcons[activity.type] ?? NotebookPen;
 
               return (
-                <div className="timeline-item" key={activity.id}>
-                  <div className="timeline-icon">
-                    <Icon size={17} aria-hidden="true" />
-                  </div>
-                  <div className="timeline-copy">
-                    <div className="row-meta">
-                      <strong>{activity.title}</strong>
-                      <span>{formatDate(activity.createdAt)}</span>
+                <div className="flex gap-3 border-b pb-4 last:border-0 last:pb-0" key={activity.id}>
+                  <ToneIcon icon={Icon} tone="info" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-foreground">{activity.title}</span>
+                      <span className="text-xs text-muted-foreground">{formatDate(activity.createdAt)}</span>
                     </div>
-                    {activity.body ? <p className="section-subtitle">{activity.body}</p> : null}
-                    <StatusPill label={userNameForId(state, activity.actorUserId)} tone="default" />
+                    {activity.body ? <p className="mt-0.5 text-xs text-muted-foreground">{activity.body}</p> : null}
+                    <div className="mt-1.5">
+                      <StatusBadge label={userNameForId(state, activity.actorUserId)} tone="default" />
+                    </div>
                   </div>
                 </div>
               );
             })}
-            {activities.length === 0 ? <p className="section-subtitle">No activity has been recorded yet.</p> : null}
+            {activities.length === 0 ? <p className="text-xs text-muted-foreground">No activity has been recorded yet.</p> : null}
           </div>
-        </div>
+        </Panel>
         </TileItem>
 
         <TileItem id="recent-notes-calls" x={7} y={18} w={5} h={7} minW={3} minH={3}>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Recent notes and calls</h2>
-              <p className="section-subtitle">Latest manual account context and call outcomes.</p>
-            </div>
-            <Phone size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title="Recent notes and calls"
+          subtitle="Latest manual account context and call outcomes."
+          action={<ToneIcon icon={Phone} tone="info" />}
+          fill
+        >
+          <div className="flex flex-col gap-4">
             {recentInteractions.map((item) => (
-              <div className="stage-row" key={item.id}>
-                <div className="stage-meta">
-                  <strong>{isCall(item) ? item.outcome : "Note"}</strong>
-                  <span>{formatDate(item.createdAt)}</span>
+              <div className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0" key={item.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-foreground">{isCall(item) ? item.outcome : "Note"}</span>
+                  <span className="text-xs text-muted-foreground">{formatDate(item.createdAt)}</span>
                 </div>
-                <p className="section-subtitle">{isCall(item) ? item.notes : item.body}</p>
+                <p className="text-xs text-muted-foreground">{isCall(item) ? item.notes : item.body}</p>
               </div>
             ))}
-            {recentInteractions.length === 0 ? <p className="section-subtitle">No notes or calls have been logged yet.</p> : null}
+            {recentInteractions.length === 0 ? <p className="text-xs text-muted-foreground">No notes or calls have been logged yet.</p> : null}
           </div>
-        </div>
+        </Panel>
         </TileItem>
 
         <TileItem id="add-account-work" x={0} y={25} w={7} h={12} minW={4} minH={5}>
-        <div className="panel" id="add-account-work">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Add account work</h2>
-              <p className="section-subtitle">Create the next task or opportunity from this account record.</p>
-            </div>
-            <Calendar size={20} aria-hidden="true" />
+        <Panel
+          title="Add account work"
+          subtitle="Create the next task or opportunity from this account record."
+          action={<ToneIcon icon={Calendar} tone="info" />}
+          fill
+        >
+          <div className="flex flex-col gap-6">
+            <form action={createTaskAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <input name="companyId" type="hidden" value={account.id} />
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="task-title" className={fieldLabelClass}>Task</label>
+                <input id="task-title" name="title" placeholder="Send follow-up email" className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="task-contact" className={fieldLabelClass}>Contact</label>
+                <select id="task-contact" name="contactId" defaultValue="" className={fieldClass}>
+                  <option value="">Account-level task</option>
+                  {accountContacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="task-priority" className={fieldLabelClass}>Priority</label>
+                <select id="task-priority" name="priority" defaultValue="Normal" className={fieldClass}>
+                  {taskPriorities.map((priority) => (
+                    <option key={priority} value={priority}>
+                      {priority}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="task-due" className={fieldLabelClass}>Due date</label>
+                <input id="task-due" name="dueAt" type="date" className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="task-owner" className={fieldLabelClass}>Owner</label>
+                <select id="task-owner" name="ownerUserId" defaultValue={state.users[0]?.id} className={fieldClass}>
+                  {state.users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <SubmitButton className={buttonVariants({ className: "w-full" })} pendingLabel="Adding…">
+                  Add task
+                </SubmitButton>
+              </div>
+            </form>
+            <form action={createOpportunityAction} className="grid grid-cols-1 gap-4 border-t pt-6 sm:grid-cols-2">
+              <input name="companyId" type="hidden" value={account.id} />
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="opp-name" className={fieldLabelClass}>Opportunity</label>
+                <input id="opp-name" name="name" defaultValue={`${account.name} expansion`} className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="opp-contact" className={fieldLabelClass}>Primary contact</label>
+                <select id="opp-contact" name="contactId" defaultValue={accountContacts[0]?.id ?? ""} className={fieldClass}>
+                  <option value="">No primary contact</option>
+                  {accountContacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="opp-stage" className={fieldLabelClass}>Stage</label>
+                <select id="opp-stage" name="stage" defaultValue="Prospecting" className={fieldClass}>
+                  {opportunityStages.map((stage) => (
+                    <option key={stage} value={stage}>
+                      {stage}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="opp-amount" className={fieldLabelClass}>Amount</label>
+                <input id="opp-amount" name="amount" type="number" min="0" step="500" defaultValue="25000" className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="opp-close" className={fieldLabelClass}>Expected close</label>
+                <input id="opp-close" name="expectedCloseDate" type="date" className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="opp-owner" className={fieldLabelClass}>Owner</label>
+                <select id="opp-owner" name="ownerUserId" defaultValue={state.users[0]?.id} className={fieldClass}>
+                  {state.users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="opp-source" className={fieldLabelClass}>Source</label>
+                <input id="opp-source" name="source" defaultValue={account.source} className={fieldClass} />
+              </div>
+              <div className="flex items-end">
+                <SubmitButton className={buttonVariants({ variant: "outline", className: "w-full" })} pendingLabel="Adding…">
+                  Add opportunity
+                </SubmitButton>
+              </div>
+            </form>
           </div>
-          <form action={createTaskAction} className="panel-body form-grid">
-            <input name="companyId" type="hidden" value={account.id} />
-            <div className="field">
-              <label htmlFor="task-title">Task</label>
-              <input id="task-title" name="title" placeholder="Send follow-up email" />
-            </div>
-            <div className="field">
-              <label htmlFor="task-contact">Contact</label>
-              <select id="task-contact" name="contactId" defaultValue="">
-                <option value="">Account-level task</option>
-                {accountContacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="task-priority">Priority</label>
-              <select id="task-priority" name="priority" defaultValue="Normal">
-                {taskPriorities.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {priority}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="task-due">Due date</label>
-              <input id="task-due" name="dueAt" type="date" />
-            </div>
-            <div className="field">
-              <label htmlFor="task-owner">Owner</label>
-              <select id="task-owner" name="ownerUserId" defaultValue={state.users[0]?.id}>
-                {state.users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <SubmitButton className="button primary" pendingLabel="Adding…">
-                Add task
-              </SubmitButton>
-            </div>
-          </form>
-          <form action={createOpportunityAction} className="panel-body form-grid compact-form">
-            <input name="companyId" type="hidden" value={account.id} />
-            <div className="field">
-              <label htmlFor="opp-name">Opportunity</label>
-              <input id="opp-name" name="name" defaultValue={`${account.name} expansion`} />
-            </div>
-            <div className="field">
-              <label htmlFor="opp-contact">Primary contact</label>
-              <select id="opp-contact" name="contactId" defaultValue={accountContacts[0]?.id ?? ""}>
-                <option value="">No primary contact</option>
-                {accountContacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="opp-stage">Stage</label>
-              <select id="opp-stage" name="stage" defaultValue="Prospecting">
-                {opportunityStages.map((stage) => (
-                  <option key={stage} value={stage}>
-                    {stage}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="opp-amount">Amount</label>
-              <input id="opp-amount" name="amount" type="number" min="0" step="500" defaultValue="25000" />
-            </div>
-            <div className="field">
-              <label htmlFor="opp-close">Expected close</label>
-              <input id="opp-close" name="expectedCloseDate" type="date" />
-            </div>
-            <div className="field">
-              <label htmlFor="opp-owner">Owner</label>
-              <select id="opp-owner" name="ownerUserId" defaultValue={state.users[0]?.id}>
-                {state.users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="opp-source">Source</label>
-              <input id="opp-source" name="source" defaultValue={account.source} />
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <SubmitButton className="button secondary" pendingLabel="Adding…">
-                Add opportunity
-              </SubmitButton>
-            </div>
-          </form>
-        </div>
+        </Panel>
         </TileItem>
 
         <TileItem id="log-activity" x={7} y={25} w={5} h={12} minW={3} minH={5}>
-        <div className="panel" id="log-account-activity">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Log activity</h2>
-              <p className="section-subtitle">Add notes or call outcomes without leaving the account.</p>
-            </div>
-            <NotebookPen size={20} aria-hidden="true" />
+        <Panel
+          title="Log activity"
+          subtitle="Add notes or call outcomes without leaving the account."
+          action={<ToneIcon icon={NotebookPen} tone="info" />}
+          fill
+        >
+          <div className="flex flex-col gap-6">
+            <form action={createNoteAction} className="flex flex-col gap-4">
+              <input name="companyId" type="hidden" value={account.id} />
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="note-contact" className={fieldLabelClass}>Note contact</label>
+                <select id="note-contact" name="contactId" defaultValue="" className={fieldClass}>
+                  <option value="">Account note</option>
+                  {accountContacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="note-body" className={fieldLabelClass}>Note</label>
+                <textarea id="note-body" name="body" placeholder="Add account context" className={fieldTextareaClass} />
+              </div>
+              <div>
+                <SubmitButton className={buttonVariants({ className: "w-full" })} pendingLabel="Adding…">
+                  Add note
+                </SubmitButton>
+              </div>
+            </form>
+            <form action={createCallLogAction} className="grid grid-cols-1 gap-4 border-t pt-6 sm:grid-cols-2">
+              <input name="companyId" type="hidden" value={account.id} />
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="call-contact" className={fieldLabelClass}>Call contact</label>
+                <select id="call-contact" name="contactId" defaultValue={accountContacts[0]?.id ?? ""} className={fieldClass}>
+                  {accountContacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="call-phone" className={fieldLabelClass}>Phone</label>
+                <input id="call-phone" name="phone" defaultValue={accountContacts[0]?.phone ?? company.phone} className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="call-outcome" className={fieldLabelClass}>Outcome</label>
+                <select id="call-outcome" name="outcome" defaultValue="Connected" className={fieldClass}>
+                  {callOutcomes.map((outcome) => (
+                    <option key={outcome} value={outcome}>
+                      {outcome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="call-duration" className={fieldLabelClass}>Minutes</label>
+                <input id="call-duration" name="durationMinutes" type="number" min="0" step="1" defaultValue="5" className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label htmlFor="call-notes" className={fieldLabelClass}>Call notes</label>
+                <textarea id="call-notes" name="notes" placeholder="Summarize the conversation" className={fieldTextareaClass} />
+              </div>
+              <div className="flex items-end sm:col-span-2">
+                <SubmitButton className={buttonVariants({ variant: "outline", className: "w-full" })} pendingLabel="Logging…">
+                  Log call
+                </SubmitButton>
+              </div>
+            </form>
           </div>
-          <form action={createNoteAction} className="panel-body form-grid">
-            <input name="companyId" type="hidden" value={account.id} />
-            <div className="field">
-              <label htmlFor="note-contact">Note contact</label>
-              <select id="note-contact" name="contactId" defaultValue="">
-                <option value="">Account note</option>
-                {accountContacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="note-body">Note</label>
-              <textarea id="note-body" name="body" placeholder="Add account context" />
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <SubmitButton className="button primary" pendingLabel="Adding…">
-                Add note
-              </SubmitButton>
-            </div>
-          </form>
-          <form action={createCallLogAction} className="panel-body form-grid compact-form">
-            <input name="companyId" type="hidden" value={account.id} />
-            <div className="field">
-              <label htmlFor="call-contact">Call contact</label>
-              <select id="call-contact" name="contactId" defaultValue={accountContacts[0]?.id ?? ""}>
-                {accountContacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="call-phone">Phone</label>
-              <input id="call-phone" name="phone" defaultValue={accountContacts[0]?.phone ?? company.phone} />
-            </div>
-            <div className="field">
-              <label htmlFor="call-outcome">Outcome</label>
-              <select id="call-outcome" name="outcome" defaultValue="Connected">
-                {callOutcomes.map((outcome) => (
-                  <option key={outcome} value={outcome}>
-                    {outcome}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="call-duration">Minutes</label>
-              <input id="call-duration" name="durationMinutes" type="number" min="0" step="1" defaultValue="5" />
-            </div>
-            <div className="field">
-              <label htmlFor="call-notes">Call notes</label>
-              <textarea id="call-notes" name="notes" placeholder="Summarize the conversation" />
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <SubmitButton className="button secondary" pendingLabel="Logging…">
-                Log call
-              </SubmitButton>
-            </div>
-          </form>
-        </div>
+        </Panel>
         </TileItem>
 
         <TileItem id="custom-fields" x={0} y={37} w={12} h={7} minW={6} minH={3}>
-        <div className="panel" id="account-custom-fields">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Custom fields</h2>
-            <p className="section-subtitle">Account-specific CRM fields for the team.</p>
-          </div>
-          <StatusPill label={`${companyFields.length} fields`} tone="info" />
-        </div>
-        <div className="panel-body stage-list">
-          {companyFields.map((field) => (
-            <form action={setCustomFieldValueAction} className="stage-row" key={field.id}>
-              <input name="customFieldId" type="hidden" value={field.id} />
-              <input name="objectId" type="hidden" value={account.id} />
-              <div className="stage-meta">
-                <strong>{field.name}</strong>
-                <CustomFieldInput field={field} value={fieldValueMap.get(field.id)?.value ?? ""} />
+        <Panel
+          title="Custom fields"
+          subtitle="Account-specific CRM fields for the team."
+          action={<StatusBadge label={`${companyFields.length} fields`} tone="info" />}
+          fill
+        >
+          <div className="flex flex-col gap-4">
+            {companyFields.map((field) => (
+              <form action={setCustomFieldValueAction} className="flex items-end gap-3 border-b pb-4 last:border-0 last:pb-0" key={field.id}>
+                <input name="customFieldId" type="hidden" value={field.id} />
+                <input name="objectId" type="hidden" value={account.id} />
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <label className={fieldLabelClass}>{field.name}</label>
+                  <CustomFieldInput field={field} value={fieldValueMap.get(field.id)?.value ?? ""} />
+                </div>
+                <SubmitButton className={buttonVariants({ variant: "outline" })} pendingLabel="Saving…">
+                  <Save size={16} aria-hidden="true" />
+                  Save field
+                </SubmitButton>
+              </form>
+            ))}
+            <form action={createCustomFieldAction} className="grid grid-cols-1 gap-4 border-t pt-6 sm:grid-cols-2">
+              <input name="objectType" type="hidden" value="company" />
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="company-field-name" className={fieldLabelClass}>Field name</label>
+                <input id="company-field-name" name="name" placeholder="Renewal risk" className={fieldClass} />
               </div>
-              <SubmitButton className="button secondary" pendingLabel="Saving…">
-                <Save size={16} aria-hidden="true" />
-                Save field
-              </SubmitButton>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="company-field-type" className={fieldLabelClass}>Type</label>
+                <select id="company-field-type" name="fieldType" defaultValue="text" className={fieldClass}>
+                  <option value="text">Text</option>
+                  <option value="number">Number</option>
+                  <option value="date">Date</option>
+                  <option value="select">Select</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="company-field-options" className={fieldLabelClass}>Options</label>
+                <input id="company-field-options" name="options" placeholder="Low, Medium, High" className={fieldClass} />
+              </div>
+              <div className="flex items-end">
+                <SubmitButton className={buttonVariants({ className: "w-full" })} pendingLabel="Creating…">
+                  Create field
+                </SubmitButton>
+              </div>
             </form>
-          ))}
-          <form action={createCustomFieldAction} className="form-grid compact-form">
-            <input name="objectType" type="hidden" value="company" />
-            <div className="field">
-              <label htmlFor="company-field-name">Field name</label>
-              <input id="company-field-name" name="name" placeholder="Renewal risk" />
-            </div>
-            <div className="field">
-              <label htmlFor="company-field-type">Type</label>
-              <select id="company-field-type" name="fieldType" defaultValue="text">
-                <option value="text">Text</option>
-                <option value="number">Number</option>
-                <option value="date">Date</option>
-                <option value="select">Select</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="company-field-options">Options</label>
-              <input id="company-field-options" name="options" placeholder="Low, Medium, High" />
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <SubmitButton className="button primary" pendingLabel="Creating…">
-                Create field
-              </SubmitButton>
-            </div>
-          </form>
-        </div>
-        </div>
+          </div>
+        </Panel>
         </TileItem>
       </TileGrid>
     </>
@@ -737,7 +747,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
 function CustomFieldInput({ field, value }: { field: CustomField; value: string }) {
   if (field.fieldType === "select") {
     return (
-      <select name="value" defaultValue={value} aria-label={field.name}>
+      <select name="value" defaultValue={value} aria-label={field.name} className={fieldClass}>
         <option value="">Unset</option>
         {(field.options ?? []).map((option) => (
           <option key={option} value={option}>
@@ -748,7 +758,7 @@ function CustomFieldInput({ field, value }: { field: CustomField; value: string 
     );
   }
 
-  return <input name="value" type={field.fieldType} defaultValue={value} aria-label={field.name} />;
+  return <input name="value" type={field.fieldType} defaultValue={value} aria-label={field.name} className={fieldClass} />;
 }
 
 

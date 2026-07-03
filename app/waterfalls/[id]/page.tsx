@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { StatusPill } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
+import { fieldClass, fieldLabelClass } from "@/components/ui/field";
+import { Panel } from "@/components/ui/panel";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   addWaterfallStepAction,
   moveWaterfallStepAction,
@@ -70,176 +73,174 @@ export default async function WaterfallTemplateEditPage({ params }: { params: Pr
         kicker="Provider waterfalls"
         title={template.name}
         copy={`${labelize(template.campaignType)} - ${template.outreachChannel} - stop on ${template.requiredFields.join(", ") || "completeness"}`}
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/waterfalls">Back to templates</Link>
+          </Button>
+        }
       />
-      <p className="surface-note">
-        <Link href="/waterfalls">Back to templates</Link>
-      </p>
 
       {template.isDefault ? (
-        <section className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Read-only default</h2>
-              <p className="section-subtitle">Default templates can&apos;t be edited. Clone it from the templates list to customize the order, providers, and budgets.</p>
-            </div>
-            <StatusPill label="Default" tone="info" />
-          </div>
-          <ReadOnlySteps steps={orderedSteps} />
+        <section>
+          <Panel
+            title="Read-only default"
+            subtitle="Default templates can't be edited. Clone it from the templates list to customize the order, providers, and budgets."
+            action={<StatusBadge label="Default" tone="info" />}
+          >
+            <ReadOnlySteps steps={orderedSteps} />
+          </Panel>
         </section>
       ) : (
         <>
-          <section className="panel">
-            <div className="panel-header">
-              <div className="panel-title-wrap">
-                <h2 className="section-title">Template settings</h2>
-                <p className="section-subtitle">Name, budget caps, and the high-value score threshold for premium-only steps.</p>
-              </div>
-              <StatusPill label={template.status} tone="info" />
-            </div>
-            <form action={updateWaterfallTemplateMetaAction} className="panel-body form-grid">
-              <input name="templateId" type="hidden" value={template.id} />
-              <div className="field">
-                <label htmlFor="name">Name</label>
-                <input id="name" name="name" defaultValue={template.name} />
-              </div>
-              <div className="field">
-                <label htmlFor="maxCostPerLeadCents">Max cost / lead (cents)</label>
-                <input id="maxCostPerLeadCents" name="maxCostPerLeadCents" type="number" min="0" defaultValue={template.maxCostPerLeadCents ?? ""} />
-              </div>
-              <div className="field">
-                <label htmlFor="maxCostPerCampaignCents">Max cost / campaign (cents)</label>
-                <input id="maxCostPerCampaignCents" name="maxCostPerCampaignCents" type="number" min="0" defaultValue={template.maxCostPerCampaignCents ?? ""} />
-              </div>
-              <div className="field">
-                <label htmlFor="highValueScoreThreshold">High-value score threshold</label>
-                <input id="highValueScoreThreshold" name="highValueScoreThreshold" type="number" min="0" defaultValue={template.highValueScoreThreshold ?? ""} />
-              </div>
-              <div className="field">
-                <label aria-hidden="true">&nbsp;</label>
-                <button className="button primary" type="submit">
-                  <Save size={16} aria-hidden="true" />
-                  Save settings
-                </button>
-              </div>
-            </form>
+          <section>
+            <Panel
+              title="Template settings"
+              subtitle="Name, budget caps, and the high-value score threshold for premium-only steps."
+              action={<StatusBadge label={template.status} tone="info" />}
+            >
+              <form action={updateWaterfallTemplateMetaAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <input name="templateId" type="hidden" value={template.id} />
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="name" className={fieldLabelClass}>Name</label>
+                  <input id="name" name="name" defaultValue={template.name} className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="maxCostPerLeadCents" className={fieldLabelClass}>Max cost / lead (cents)</label>
+                  <input id="maxCostPerLeadCents" name="maxCostPerLeadCents" type="number" min="0" defaultValue={template.maxCostPerLeadCents ?? ""} className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="maxCostPerCampaignCents" className={fieldLabelClass}>Max cost / campaign (cents)</label>
+                  <input id="maxCostPerCampaignCents" name="maxCostPerCampaignCents" type="number" min="0" defaultValue={template.maxCostPerCampaignCents ?? ""} className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="highValueScoreThreshold" className={fieldLabelClass}>High-value score threshold</label>
+                  <input id="highValueScoreThreshold" name="highValueScoreThreshold" type="number" min="0" defaultValue={template.highValueScoreThreshold ?? ""} className={fieldClass} />
+                </div>
+                <div className="flex flex-col justify-end gap-1.5">
+                  <label aria-hidden="true" className={fieldLabelClass}>&nbsp;</label>
+                  <Button type="submit">
+                    <Save size={16} aria-hidden="true" />
+                    Save settings
+                  </Button>
+                </div>
+              </form>
+            </Panel>
           </section>
 
-          <section className="panel">
-            <div className="panel-header">
-              <div className="panel-title-wrap">
-                <h2 className="section-title">Steps</h2>
-                <p className="section-subtitle">Order is the waterfall priority. Provider IDs are tried in order; leave blank for any enabled provider with the capability. Run/stop conditions and quality gates are inherited from the clone source.</p>
+          <section>
+            <Panel
+              title="Steps"
+              subtitle="Order is the waterfall priority. Provider IDs are tried in order; leave blank for any enabled provider with the capability. Run/stop conditions and quality gates are inherited from the clone source."
+            >
+              <div className="grid gap-4">
+                {orderedSteps.map((step, index) => (
+                  <article className="rounded-xl border bg-[var(--bg-surface)] p-4" key={step.id}>
+                    <div className="flex items-start justify-between gap-3 border-b pb-4">
+                      <div className="min-w-0">
+                        <strong className="text-sm font-semibold text-foreground">Step {step.order} - {labelize(step.stage)}</strong>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">Eligible providers for {labelize(step.capability)}: {providersFor(step.capability).join(", ") || "none configured"}</span>
+                        {describeStepConditions(step) ? <span className="mt-0.5 block text-xs text-muted-foreground">{describeStepConditions(step)}</span> : null}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <MoveButton templateId={template.id} stepId={step.id} direction="up" disabled={index === 0} />
+                        <MoveButton templateId={template.id} stepId={step.id} direction="down" disabled={index === orderedSteps.length - 1} />
+                        <form action={removeWaterfallStepAction}>
+                          <input name="templateId" type="hidden" value={template.id} />
+                          <input name="stepId" type="hidden" value={step.id} />
+                          <Button type="submit" variant="ghost" size="icon-sm" aria-label="Remove step">
+                            <Trash2 size={15} aria-hidden="true" />
+                          </Button>
+                        </form>
+                      </div>
+                    </div>
+                    <form action={updateWaterfallStepAction} className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 xl:grid-cols-3">
+                      <input name="templateId" type="hidden" value={template.id} />
+                      <input name="stepId" type="hidden" value={step.id} />
+                      <div className="flex flex-col gap-1.5">
+                        <label className={fieldLabelClass}>Stage</label>
+                        <select name="stage" defaultValue={step.stage} className={fieldClass}>
+                          {STAGES.map((stage) => (
+                            <option key={stage} value={stage}>{labelize(stage)}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className={fieldLabelClass}>Capability</label>
+                        <select name="capability" defaultValue={step.capability} className={fieldClass}>
+                          {CAPABILITIES.map((capability) => (
+                            <option key={capability} value={capability}>{labelize(capability)}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className={fieldLabelClass}>Provider IDs (ranked, comma-separated)</label>
+                        <input name="providerIds" defaultValue={step.providerIds.join(", ")} placeholder="leadmagic, prospeo, lusha" className={fieldClass} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className={fieldLabelClass}>Step cost cap (cents)</label>
+                        <input name="costCapCents" type="number" min="0" defaultValue={step.costCapCents ?? ""} className={fieldClass} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className={fieldLabelClass}>Flags</label>
+                        <label className="flex items-center gap-2 text-sm text-foreground">
+                          <input name="highValueOnly" type="checkbox" defaultChecked={step.highValueOnly ?? false} />
+                          High-value only
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-foreground">
+                          <input name="allowCompanyMainPhone" type="checkbox" defaultChecked={step.allowCompanyMainPhone ?? false} />
+                          Allow company-main phone
+                        </label>
+                      </div>
+                      <div className="flex flex-col justify-end gap-1.5">
+                        <label aria-hidden="true" className={fieldLabelClass}>&nbsp;</label>
+                        <Button type="submit" variant="outline">
+                          <Save size={15} aria-hidden="true" />
+                          Save step
+                        </Button>
+                      </div>
+                    </form>
+                  </article>
+                ))}
               </div>
-            </div>
-            <div className="panel-body" style={{ display: "grid", gap: "14px" }}>
-              {orderedSteps.map((step, index) => (
-                <article className="item-card" key={step.id}>
-                  <div className="item-card-header">
-                    <div className="entity">
-                      <strong>Step {step.order} - {labelize(step.stage)}</strong>
-                      <span>Eligible providers for {labelize(step.capability)}: {providersFor(step.capability).join(", ") || "none configured"}</span>
-                      {describeStepConditions(step) ? <span className="field-note">{describeStepConditions(step)}</span> : null}
-                    </div>
-                    <div className="item-card-actions">
-                      <MoveButton templateId={template.id} stepId={step.id} direction="up" disabled={index === 0} />
-                      <MoveButton templateId={template.id} stepId={step.id} direction="down" disabled={index === orderedSteps.length - 1} />
-                      <form action={removeWaterfallStepAction}>
-                        <input name="templateId" type="hidden" value={template.id} />
-                        <input name="stepId" type="hidden" value={step.id} />
-                        <button className="button subtle" type="submit" aria-label="Remove step">
-                          <Trash2 size={15} aria-hidden="true" />
-                        </button>
-                      </form>
-                    </div>
-                  </div>
-                  <form action={updateWaterfallStepAction} className="form-grid">
-                    <input name="templateId" type="hidden" value={template.id} />
-                    <input name="stepId" type="hidden" value={step.id} />
-                    <div className="field">
-                      <label>Stage</label>
-                      <select name="stage" defaultValue={step.stage}>
-                        {STAGES.map((stage) => (
-                          <option key={stage} value={stage}>{labelize(stage)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field">
-                      <label>Capability</label>
-                      <select name="capability" defaultValue={step.capability}>
-                        {CAPABILITIES.map((capability) => (
-                          <option key={capability} value={capability}>{labelize(capability)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field">
-                      <label>Provider IDs (ranked, comma-separated)</label>
-                      <input name="providerIds" defaultValue={step.providerIds.join(", ")} placeholder="leadmagic, prospeo, lusha" />
-                    </div>
-                    <div className="field">
-                      <label>Step cost cap (cents)</label>
-                      <input name="costCapCents" type="number" min="0" defaultValue={step.costCapCents ?? ""} />
-                    </div>
-                    <div className="field integration-options">
-                      <label>Flags</label>
-                      <label className="pill">
-                        <input name="highValueOnly" type="checkbox" defaultChecked={step.highValueOnly ?? false} />
-                        High-value only
-                      </label>
-                      <label className="pill">
-                        <input name="allowCompanyMainPhone" type="checkbox" defaultChecked={step.allowCompanyMainPhone ?? false} />
-                        Allow company-main phone
-                      </label>
-                    </div>
-                    <div className="field">
-                      <label aria-hidden="true">&nbsp;</label>
-                      <button className="button secondary" type="submit">
-                        <Save size={15} aria-hidden="true" />
-                        Save step
-                      </button>
-                    </div>
-                  </form>
-                </article>
-              ))}
-            </div>
+            </Panel>
           </section>
 
-          <section className="panel">
-            <div className="panel-header">
-              <div className="panel-title-wrap">
-                <h2 className="section-title">Add step</h2>
-                <p className="section-subtitle">Appends a step at the end; reorder it with the arrows.</p>
-              </div>
-            </div>
-            <form action={addWaterfallStepAction} className="panel-body form-grid">
-              <input name="templateId" type="hidden" value={template.id} />
-              <div className="field">
-                <label htmlFor="add-stage">Stage</label>
-                <select id="add-stage" name="stage" defaultValue="find_email">
-                  {STAGES.map((stage) => (
-                    <option key={stage} value={stage}>{labelize(stage)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="add-capability">Capability</label>
-                <select id="add-capability" name="capability" defaultValue="find_email">
-                  {CAPABILITIES.map((capability) => (
-                    <option key={capability} value={capability}>{labelize(capability)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="add-providers">Provider IDs</label>
-                <input id="add-providers" name="providerIds" placeholder="leadmagic, prospeo" />
-              </div>
-              <div className="field">
-                <label aria-hidden="true">&nbsp;</label>
-                <button className="button primary" type="submit">
-                  <Plus size={16} aria-hidden="true" />
-                  Add step
-                </button>
-              </div>
-            </form>
+          <section>
+            <Panel
+              title="Add step"
+              subtitle="Appends a step at the end; reorder it with the arrows."
+            >
+              <form action={addWaterfallStepAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <input name="templateId" type="hidden" value={template.id} />
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="add-stage" className={fieldLabelClass}>Stage</label>
+                  <select id="add-stage" name="stage" defaultValue="find_email" className={fieldClass}>
+                    {STAGES.map((stage) => (
+                      <option key={stage} value={stage}>{labelize(stage)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="add-capability" className={fieldLabelClass}>Capability</label>
+                  <select id="add-capability" name="capability" defaultValue="find_email" className={fieldClass}>
+                    {CAPABILITIES.map((capability) => (
+                      <option key={capability} value={capability}>{labelize(capability)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="add-providers" className={fieldLabelClass}>Provider IDs</label>
+                  <input id="add-providers" name="providerIds" placeholder="leadmagic, prospeo" className={fieldClass} />
+                </div>
+                <div className="flex flex-col justify-end gap-1.5">
+                  <label aria-hidden="true" className={fieldLabelClass}>&nbsp;</label>
+                  <Button type="submit">
+                    <Plus size={16} aria-hidden="true" />
+                    Add step
+                  </Button>
+                </div>
+              </form>
+            </Panel>
           </section>
         </>
       )}
@@ -253,23 +254,23 @@ function MoveButton({ templateId, stepId, direction, disabled }: { templateId: s
       <input name="templateId" type="hidden" value={templateId} />
       <input name="stepId" type="hidden" value={stepId} />
       <input name="direction" type="hidden" value={direction} />
-      <button className="button subtle" type="submit" disabled={disabled} aria-label={`Move ${direction}`}>
+      <Button type="submit" variant="ghost" size="icon-sm" disabled={disabled} aria-label={`Move ${direction}`}>
         {direction === "up" ? <ArrowUp size={15} aria-hidden="true" /> : <ArrowDown size={15} aria-hidden="true" />}
-      </button>
+      </Button>
     </form>
   );
 }
 
 function ReadOnlySteps({ steps }: { steps: WaterfallStep[] }) {
   return (
-    <ol className="waterfall-steps">
+    <ol className="flex flex-col gap-3">
       {steps.map((step) => (
-        <li key={step.id}>
-          <span className="pill">{step.order}</span>
-          <div className="entity">
-            <strong>{labelize(step.stage)}{step.highValueOnly ? " - high-value only" : ""}</strong>
-            <span>{step.providerIds.length ? step.providerIds.join(" -> ") : "any enabled provider"}</span>
-            {describeStepConditions(step) ? <span className="field-note">{describeStepConditions(step)}</span> : null}
+        <li key={step.id} className="flex items-start gap-3">
+          <StatusBadge label={String(step.order)} tone="default" />
+          <div className="min-w-0">
+            <strong className="text-sm font-semibold text-foreground">{labelize(step.stage)}{step.highValueOnly ? " - high-value only" : ""}</strong>
+            <span className="mt-0.5 block text-xs text-muted-foreground">{step.providerIds.length ? step.providerIds.join(" -> ") : "any enabled provider"}</span>
+            {describeStepConditions(step) ? <span className="mt-0.5 block text-xs text-muted-foreground">{describeStepConditions(step)}</span> : null}
           </div>
         </li>
       ))}
