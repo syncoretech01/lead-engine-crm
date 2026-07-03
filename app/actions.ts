@@ -2642,6 +2642,7 @@ function revalidateCrmPages(paths: string[] = []) {
   revalidatePath("/crm/accounts/[id]", "page");
   revalidatePath("/crm/contacts");
   revalidatePath("/crm/contacts/[id]", "page");
+  revalidatePath("/crm/my-contacts");
   revalidatePath("/crm/opportunities");
   for (const path of paths) {
     if (path) revalidatePath(path);

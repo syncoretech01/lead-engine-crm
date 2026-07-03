@@ -1260,6 +1260,7 @@ model SdrAssignment {
 
   @@unique([workspaceId, contactId])
   @@index([workspaceId, assignedSdrId, status])
+  @@index([workspaceId, assignedSdrId, assignedAt])
   @@index([workspaceId, slaStatus])
   @@index([workspaceId, firstTouchDueAt])
   @@index([workspaceId, followUpDueAt])
