@@ -36,9 +36,13 @@ export async function ringCentralRingOut(
 
   const serverUrl = normalizeServerUrl(credential.serverUrl);
   const accessToken = await requestRingCentralAccessToken(serverUrl, credential, fetchImpl);
-  const extensionPath = await resolveExtensionPath(serverUrl, accessToken, input.extensionId, fetchImpl);
 
-  const response = await fetchImpl(`${serverUrl}/restapi/v1.0/account/~/extension/${extensionPath}/ring-out`, {
+  // Place the RingOut on the app JWT's OWN extension (~) and ring the SDR's number
+  // as the first leg. Placing it on the SDR's *own* extension (on-behalf-of) needs
+  // the JWT user to be granted the DomesticCalls "extended scope" delegated-calling
+  // permission, which RingCentral gates; this callback model is a normal RingOut
+  // that needs no extra permission. The lead still sees the SDR's number (callerId).
+  const response = await fetchImpl(`${serverUrl}/restapi/v1.0/account/~/extension/~/ring-out`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -68,34 +72,6 @@ export async function ringCentralRingOut(
     ringOutId: stringValue(json.id) || stringValue(json.uri),
     status: stringValue(statusBlock.callStatus) || stringValue(json.callStatus) || "InProgress"
   };
-}
-
-// RingOut's {extensionId} path segment needs the extension's INTERNAL id (or the
-// `~` self alias), NOT the short extension number a user knows (e.g. 102). Given
-// a configured value, resolve an extension number to its id; fall back to the raw
-// value (already an id) or `~` when blank. Requires the ReadAccounts scope.
-async function resolveExtensionPath(
-  serverUrl: string,
-  accessToken: string,
-  value: string | undefined,
-  fetchImpl: RingCentralFetch
-): Promise<string> {
-  const raw = (value ?? "").trim();
-  if (!raw) return "~";
-  try {
-    const res = await fetchImpl(
-      `${serverUrl}/restapi/v1.0/account/~/extension?extensionNumber=${encodeURIComponent(raw)}&perPage=1`,
-      { headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` } }
-    );
-    if (res.ok) {
-      const json = (await res.json().catch(() => ({}))) as { records?: Array<{ id?: string | number }> };
-      const id = json.records?.[0]?.id;
-      if (id) return encodeURIComponent(String(id));
-    }
-  } catch {
-    // fall through to using the raw value as-is
-  }
-  return encodeURIComponent(raw);
 }
 
 function stringValue(value: unknown) {
