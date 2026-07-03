@@ -254,7 +254,11 @@ export function CallButton({
                   <Button type="button" size="sm" variant="ghost" onClick={reset}>
                     New call
                   </Button>
-                ) : null}
+                ) : (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => onOpenChange(false)}>
+                    Done
+                  </Button>
+                )}
               </div>
             </div>
           )}
