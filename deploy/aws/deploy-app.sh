@@ -14,9 +14,12 @@ SERVICE_USER="syncore"
 cd "$APP_DIR"
 
 # Build with the standalone output (next.config.mjs output:"standalone").
+# Cap Node's heap at 3 GB so `next build` doesn't OOM during type-check/page-data
+# on the 2 GB instance (3 GB fits in RAM + the 2 GB swapfile). `sudo -u` drops
+# the outer env, so set NODE_OPTIONS on the build command itself.
 sudo -u "$SERVICE_USER" npm ci
 sudo -u "$SERVICE_USER" npx prisma generate
-sudo -u "$SERVICE_USER" npm run build
+sudo -u "$SERVICE_USER" env NODE_OPTIONS="--max-old-space-size=3072" npm run build
 
 # Assemble the standalone runtime dir: server.js + static assets + public.
 rm -rf "$WEB_DIR"
