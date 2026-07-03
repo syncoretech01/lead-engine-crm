@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  UserCheck,
   UserCog,
   Users,
   Workflow
@@ -107,6 +108,13 @@ export const navGroups: NavGroup[] = [
         visibleForRoles: ["Admin", "Manager", "SDR"]
       },
       { href: "/sdr/queue", label: "SDR Queue", sdrLabel: "My Queue", icon: ClipboardList, permission: "manage_sdr" },
+      {
+        href: "/crm/my-contacts",
+        label: "Assigned Contacts",
+        sdrLabel: "My Contacts",
+        icon: UserCheck,
+        permission: "manage_sdr"
+      },
       { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr_team" },
       { href: "/outreach/campaigns", label: "Campaigns", icon: Megaphone, permission: "manage_outreach" },
       {

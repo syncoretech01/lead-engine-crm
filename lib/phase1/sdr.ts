@@ -574,6 +574,16 @@ export function assignmentViews(state: AppState, workspaceId: string) {
     .sort((a, b) => sortByUrgency(a.slaStatus, b.slaStatus) || Date.parse(a.dueAt ?? a.assignedAt) - Date.parse(b.dueAt ?? b.assignedAt));
 }
 
+// File-store backing for the "my assigned contacts" directory: the same enriched
+// assignment views, filtered to one SDR (when given) and re-sorted newest-assigned
+// first (overriding assignmentViews' SLA-urgency order).
+export function assignedContactsSnapshot(state: AppState, workspaceId: string, ownerUserId?: string) {
+  refreshSlaStatuses(state, workspaceId);
+  return assignmentViews(state, workspaceId)
+    .filter((assignment) => !ownerUserId || assignment.assignedSdrId === ownerUserId)
+    .sort((a, b) => Date.parse(b.assignedAt) - Date.parse(a.assignedAt));
+}
+
 export function reminderViews(state: AppState, workspaceId: string) {
   return state.followUpReminders
     .filter((reminder) => reminder.workspaceId === workspaceId)

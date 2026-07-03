@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
@@ -94,6 +95,95 @@ const activeAssignmentStatuses = new Set([
   "Nurture"
 ]);
 
+// Shared prisma include for an SdrAssignment enriched with the contact (CRM +
+// lead), account, owner, team, and its next open reminder. Exported so the
+// assigned-contacts read model reuses the exact same join + row mapper.
+export const sdrAssignmentRowInclude = {
+  account: true,
+  contact: {
+    include: {
+      account: true,
+      contact: true
+    }
+  },
+  assignedSdr: true,
+  assignedTeam: true,
+  reminders: {
+    where: { status: { not: "Completed" } },
+    orderBy: [{ dueAt: "asc" }, { id: "asc" }],
+    take: 1
+  }
+} satisfies Prisma.SdrAssignmentInclude;
+
+type SdrAssignmentRowPayload = Prisma.SdrAssignmentGetPayload<{ include: typeof sdrAssignmentRowInclude }>;
+
+// Flattens one prisma SdrAssignment (with sdrAssignmentRowInclude) into the
+// merged read row consumed by the SDR queue and the assigned-contacts directory.
+export function mapSdrAssignmentRow(assignment: SdrAssignmentRowPayload): SdrQueueAssignmentReadRow {
+  const crmContact = assignment.contact;
+  const leadContact = crmContact?.contact;
+  const account = assignment.account ?? crmContact?.account;
+  const activeReminder = assignment.reminders[0];
+  const dueAt = assignment.firstTouchedAt ? assignment.followUpDueAt : assignment.firstTouchDueAt;
+  const grade = leadContact?.grade ?? "D";
+  const priority = leadContact?.priority ?? "P4";
+  const email = leadContact?.email ?? crmContact?.email ?? "";
+  const phone = leadContact?.phone ?? crmContact?.phone ?? "";
+
+  return {
+    id: assignment.id,
+    workspaceId: assignment.workspaceId,
+    companyId: assignment.accountId ?? account?.id ?? "",
+    contactId: assignment.contactId ?? crmContact?.id ?? "",
+    assignedSdrId: assignment.assignedSdrId ?? "",
+    assignedTeamId: assignment.assignedTeamId ?? undefined,
+    assignedById: assignment.assignedById ?? undefined,
+    assignmentMethod: assignment.assignmentMethod,
+    assignmentReason: assignment.assignmentReason,
+    assignedAt: assignment.assignedAt.toISOString(),
+    firstTouchDueAt: assignment.firstTouchDueAt?.toISOString(),
+    followUpDueAt: assignment.followUpDueAt?.toISOString(),
+    status: sdrLeadStatusValue(assignment.status),
+    reassignmentReason: assignment.reassignmentReason ?? undefined,
+    previousOwnerId: assignment.previousOwnerId ?? undefined,
+    slaStatus: slaStatusValue(assignment.slaStatus),
+    firstTouchedAt: assignment.firstTouchedAt?.toISOString(),
+    lastTouchAt: assignment.lastTouchAt?.toISOString(),
+    touchCount: assignment.touchCount,
+    createdAt: assignment.createdAt.toISOString(),
+    updatedAt: assignment.updatedAt.toISOString(),
+    contactName: displayContactName({
+      name: leadContact?.fullName ?? crmContact?.fullName,
+      email
+    }),
+    title: leadContact?.title ?? crmContact?.title ?? "",
+    email,
+    phone,
+    grade,
+    priority,
+    segment: leadContact?.segment ?? "General outbound",
+    companyName: account?.name ?? "Unknown account",
+    companyDomain: account?.domain ?? "",
+    companyState: account?.location?.split(",")[1]?.trim() ?? "",
+    companyIndustry: account?.industry ?? "",
+    ownerName: assignment.assignedSdr?.name ?? "Unassigned",
+    teamName: assignment.assignedTeam?.name ?? "No team",
+    dueAt: dueAt?.toISOString(),
+    dueLabel: timerLabel(dueAt?.toISOString()),
+    reminderTitle: activeReminder?.title,
+    reminderStatus: activeReminder?.status,
+    emailEligible: Boolean(
+      leadContact &&
+        email &&
+        !leadContact.isSuppressed &&
+        !leadContact.doNotContact &&
+        grade !== "S" &&
+        grade !== "D" &&
+        priority !== "S"
+    )
+  } satisfies SdrQueueAssignmentReadRow;
+}
+
 export async function readFastSdrQueueModel(
   session: Session,
   workspaceId: string
@@ -117,22 +207,7 @@ export async function readFastSdrQueueModel(
   const [assignments, reminders, memberRows] = await Promise.all([
     prisma.sdrAssignment.findMany({
       where: assignmentWhere,
-      include: {
-        account: true,
-        contact: {
-          include: {
-            account: true,
-            contact: true
-          }
-        },
-        assignedSdr: true,
-        assignedTeam: true,
-        reminders: {
-          where: { status: { not: "Completed" } },
-          orderBy: [{ dueAt: "asc" }, { id: "asc" }],
-          take: 1
-        }
-      },
+      include: sdrAssignmentRowInclude,
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       take: 500
     }),
@@ -160,70 +235,7 @@ export async function readFastSdrQueueModel(
     })
   ]);
 
-  const assignmentRows = assignments.map((assignment) => {
-    const crmContact = assignment.contact;
-    const leadContact = crmContact?.contact;
-    const account = assignment.account ?? crmContact?.account;
-    const activeReminder = assignment.reminders[0];
-    const dueAt = assignment.firstTouchedAt ? assignment.followUpDueAt : assignment.firstTouchDueAt;
-    const grade = leadContact?.grade ?? "D";
-    const priority = leadContact?.priority ?? "P4";
-    const email = leadContact?.email ?? crmContact?.email ?? "";
-    const phone = leadContact?.phone ?? crmContact?.phone ?? "";
-
-    return {
-      id: assignment.id,
-      workspaceId: assignment.workspaceId,
-      companyId: assignment.accountId ?? account?.id ?? "",
-      contactId: assignment.contactId ?? crmContact?.id ?? "",
-      assignedSdrId: assignment.assignedSdrId ?? "",
-      assignedTeamId: assignment.assignedTeamId ?? undefined,
-      assignedById: assignment.assignedById ?? undefined,
-      assignmentMethod: assignment.assignmentMethod,
-      assignmentReason: assignment.assignmentReason,
-      assignedAt: assignment.assignedAt.toISOString(),
-      firstTouchDueAt: assignment.firstTouchDueAt?.toISOString(),
-      followUpDueAt: assignment.followUpDueAt?.toISOString(),
-      status: sdrLeadStatusValue(assignment.status),
-      reassignmentReason: assignment.reassignmentReason ?? undefined,
-      previousOwnerId: assignment.previousOwnerId ?? undefined,
-      slaStatus: slaStatusValue(assignment.slaStatus),
-      firstTouchedAt: assignment.firstTouchedAt?.toISOString(),
-      lastTouchAt: assignment.lastTouchAt?.toISOString(),
-      touchCount: assignment.touchCount,
-      createdAt: assignment.createdAt.toISOString(),
-      updatedAt: assignment.updatedAt.toISOString(),
-      contactName: displayContactName({
-        name: leadContact?.fullName ?? crmContact?.fullName,
-        email
-      }),
-      title: leadContact?.title ?? crmContact?.title ?? "",
-      email,
-      phone,
-      grade,
-      priority,
-      segment: leadContact?.segment ?? "General outbound",
-      companyName: account?.name ?? "Unknown account",
-      companyDomain: account?.domain ?? "",
-      companyState: account?.location?.split(",")[1]?.trim() ?? "",
-      companyIndustry: account?.industry ?? "",
-      ownerName: assignment.assignedSdr?.name ?? "Unassigned",
-      teamName: assignment.assignedTeam?.name ?? "No team",
-      dueAt: dueAt?.toISOString(),
-      dueLabel: timerLabel(dueAt?.toISOString()),
-      reminderTitle: activeReminder?.title,
-      reminderStatus: activeReminder?.status,
-      emailEligible: Boolean(
-        leadContact &&
-          email &&
-          !leadContact.isSuppressed &&
-          !leadContact.doNotContact &&
-          grade !== "S" &&
-          grade !== "D" &&
-          priority !== "S"
-      )
-    } satisfies SdrQueueAssignmentReadRow;
-  });
+  const assignmentRows = assignments.map(mapSdrAssignmentRow);
   const activeAssignments = assignmentRows.filter((assignment) => activeAssignmentStatuses.has(assignment.status));
   const reminderRows = reminders.map((reminder) => ({
     id: reminder.id,
