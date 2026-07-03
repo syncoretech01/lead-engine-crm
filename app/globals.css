@@ -92,17 +92,19 @@
   --ui-chart-4: #ffb020;
   --ui-chart-5: #f6519d;
 
-  /* Syncore-blue sidebar: brand-blue gradient surface (see [data-slot=sidebar-inner]
-     below), light/white text, translucent-white hover, solid-white active pill
-     (blue text). Consumed by the shadcn Sidebar via @theme inline (--color-sidebar*). */
-  --ui-sidebar: var(--syn-primary);
-  --ui-sidebar-foreground: rgba(255, 255, 255, 0.78);
-  --ui-sidebar-primary: #ffffff;
-  --ui-sidebar-primary-foreground: var(--syn-primary);
-  --ui-sidebar-accent: rgba(255, 255, 255, 0.16);
+  /* Syncore-navy sidebar: the brand "Darks" surface (#020626) that the brand
+     itself uses for large backgrounds, with a faint blue glow for depth (see
+     [data-slot=sidebar-inner] below). Light text, subtle translucent-white hover,
+     and a solid syncore-BLUE active pill so the primary reads as a highlight, not
+     a whole wall of blue. Consumed by the shadcn Sidebar via @theme inline. */
+  --ui-sidebar: var(--syn-dark);
+  --ui-sidebar-foreground: rgba(245, 254, 255, 0.72);
+  --ui-sidebar-primary: var(--syn-primary);
+  --ui-sidebar-primary-foreground: #ffffff;
+  --ui-sidebar-accent: rgba(255, 255, 255, 0.08);
   --ui-sidebar-accent-foreground: #ffffff;
-  --ui-sidebar-border: rgba(255, 255, 255, 0.16);
-  --ui-sidebar-ring: rgba(255, 255, 255, 0.65);
+  --ui-sidebar-border: rgba(255, 255, 255, 0.1);
+  --ui-sidebar-ring: var(--syn-primary);
 }
 
 /* Border defaults for Tailwind utilities WITHOUT full Preflight. shadcn
@@ -2242,19 +2244,22 @@ table[data-slot="table"] th {
   text-transform: none;
 }
 
-/* Syncore-blue sidebar: brand-blue vertical gradient for depth. The bg-sidebar
-   utility only sets background-color; this adds a background-image on top, so the
-   gradient shows on both the desktop panel and the mobile drawer without fighting
-   the utility. Text/hover/active tones come from the --ui-sidebar* tokens. */
+/* Syncore-navy sidebar: brand "Darks" (#020626) surface with a faint blue glow
+   near the top for depth, echoing the brand's dark hero surfaces. The bg-sidebar
+   utility only sets background-color; this adds a background-image on top, so it
+   shows on both the desktop panel and the mobile drawer without fighting the
+   utility. Text/hover/active tones come from the --ui-sidebar* tokens. */
 [data-slot="sidebar-inner"],
 [data-slot="sidebar"][data-mobile="true"] {
-  background-image: linear-gradient(180deg, var(--syn-primary) 0%, var(--blue-700) 100%);
+  background-image: radial-gradient(120% 55% at 50% -8%, rgba(0, 118, 254, 0.22), transparent 62%),
+    linear-gradient(180deg, #060b30 0%, var(--syn-dark) 58%);
 }
 
 /* Overrides for the unlayered legacy element styles above, scoped to the sidebar
    so the rest of the app is untouched:
-   - `a { color: inherit }` (line ~508) would drag the active pill's blue text back
-     to white; the [data-active] selector's higher specificity re-asserts blue.
+   - `a { color: inherit }` (line ~508) would drag the active pill's white text back
+     to the inherited light tone; the [data-active] selector's higher specificity
+     re-asserts white on the solid-blue active pill.
    - No Preflight means the shadcn <ul>/<li> menus render default disc bullets. */
 [data-slot="sidebar-inner"] :is(ul, ol),
 [data-slot="sidebar"][data-mobile="true"] :is(ul, ol) {
@@ -2264,7 +2269,7 @@ table[data-slot="table"] th {
 }
 [data-slot="sidebar-inner"] [data-slot="sidebar-menu-button"][data-active="true"],
 [data-slot="sidebar"][data-mobile="true"] [data-slot="sidebar-menu-button"][data-active="true"] {
-  color: var(--syn-primary);
+  color: #ffffff;
 }
 
 tbody tr {

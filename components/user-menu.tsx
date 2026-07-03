@@ -35,7 +35,7 @@ export function UserMenu({ session }: { session: Session }) {
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
         >
           <Avatar className="size-8 rounded-lg">
-            <AvatarFallback className="rounded-lg bg-white text-xs font-semibold text-[var(--syn-primary)]">
+            <AvatarFallback className="rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
               {initials(session.user.name)}
             </AvatarFallback>
           </Avatar>
