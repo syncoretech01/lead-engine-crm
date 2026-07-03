@@ -21,8 +21,21 @@ import {
   updateOutreachProviderStatusAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
-import { ProgressBar } from "@/components/progress-bar";
-import { StatusPill, statusTone } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
+import { MeterBar } from "@/components/ui/meter-bar";
+import { Panel } from "@/components/ui/panel";
+import { StatCard, ToneIcon } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import { fieldClass, fieldLabelClass, fieldTextareaClass } from "@/components/ui/field";
+import { statusTone } from "@/components/status-pill";
 import {
   campaignStatuses,
   campaignTypes,
@@ -38,7 +51,6 @@ import { defaultPhysicalAddress } from "@/lib/phase1/compliance";
 import { readFastOutreachDashboardModel } from "@/lib/phase1/outreach-dashboard-read-model";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatCurrency, formatNumber } from "@/lib/utils";
-import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -147,435 +159,486 @@ export default async function OutreachCampaignsPage() {
         copy="A CRM-facing campaign control room for sender readiness, active sequences, deliverability signals, and simulated sends. Provider setup remains isolated in the developer view."
         actions={
           <>
-            <Link href="/outreach/events" className="button secondary">
-              <Activity size={17} aria-hidden="true" />
-              Event tracking
-            </Link>
-            <Link href="/sdr/queue" className="button primary">
-              <Send size={17} aria-hidden="true" />
-              SDR queue
-            </Link>
+            <Button asChild variant="outline">
+              <Link href="/outreach/events">
+                <Activity aria-hidden="true" />
+                Event tracking
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/sdr/queue">
+                <Send aria-hidden="true" />
+                SDR queue
+              </Link>
+            </Button>
           </>
         }
       />
 
-      <section className="stat-grid" aria-label="Outreach campaign metrics">
+      <section aria-label="Outreach campaign metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
-          <StatCard key={metric.label} {...metric} />
+          <StatCard
+            key={metric.label}
+            icon={metric.icon}
+            label={metric.label}
+            value={metric.value}
+            note={metric.note}
+            tone={metric.tone}
+          />
         ))}
       </section>
 
-      <section className="ops-stage-strip four-up" aria-label="Outreach readiness lanes">
+      <section aria-label="Outreach readiness lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {lanes.map((lane) => (
-          <LaneCard key={lane.label} {...lane} />
+          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
+            <ToneIcon icon={lane.icon} tone={lane.tone} />
+            <div className="min-w-0">
+              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {lane.label} · {lane.note}
+              </div>
+            </div>
+          </div>
         ))}
       </section>
 
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Campaign focus</h2>
-              <p className="section-subtitle">Active and recent campaigns with send progress, replies, and deliverability risk.</p>
-            </div>
-            <StatusPill label={`${snapshot.campaigns.length} campaigns`} tone="info" />
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Campaign</th>
-                  <th>Status</th>
-                  <th>Progress</th>
-                  <th>Replies</th>
-                  <th>Risk</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {snapshot.campaigns.map((campaign) => {
-                  const sentPercent = campaign.totalLeads ? Math.round((campaign.sentCount / campaign.totalLeads) * 100) : 0;
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title="Campaign focus"
+          subtitle="Active and recent campaigns with send progress, replies, and deliverability risk."
+          action={<StatusBadge label={`${snapshot.campaigns.length} campaigns`} tone="info" />}
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Campaign</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Progress</TableHead>
+                <TableHead>Replies</TableHead>
+                <TableHead>Risk</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {snapshot.campaigns.map((campaign) => {
+                const sentPercent = campaign.totalLeads ? Math.round((campaign.sentCount / campaign.totalLeads) * 100) : 0;
 
-                  return (
-                    <tr key={campaign.id}>
-                      <td>
-                        <div className="entity">
-                          <strong>{campaign.name}</strong>
-                          <span>{campaign.targetSegment}</span>
-                          <span>{campaign.ownerName}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <StatusPill label={campaign.status} tone={statusTone(campaign.status)} />
-                      </td>
-                      <td>
-                        <div className="entity">
-                          <strong>
-                            {formatNumber(campaign.sentCount)}/{formatNumber(campaign.totalLeads)} sent
-                          </strong>
-                          <ProgressBar value={sentPercent} />
-                        </div>
-                      </td>
-                      <td>
-                        {formatNumber(campaign.replyCount)} ({campaign.replyRate}%)
-                      </td>
-                      <td>
-                        <div className="chip-row">
-                          <StatusPill
-                            label={`${campaign.bounceRate}% bounce`}
-                            tone={campaign.bounceRate > 5 ? "danger" : campaign.bounceRate > 2 ? "warning" : "success"}
-                          />
-                          <StatusPill
-                            label={`${campaign.unsubscribeRate}% unsub`}
-                            tone={campaign.unsubscribeRate > 3 ? "warning" : "success"}
-                          />
-                        </div>
-                      </td>
-                      <td>
-                        <div className="entity">
-                          <form action={sendCampaignAction}>
+                return (
+                  <TableRow key={campaign.id}>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">{campaign.name}</span>
+                        <span className="text-xs text-muted-foreground">{campaign.targetSegment}</span>
+                        <span className="text-xs text-muted-foreground">{campaign.ownerName}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge label={campaign.status} tone={statusTone(campaign.status)} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1.5">
+                        <span className="font-medium text-foreground">
+                          {formatNumber(campaign.sentCount)}/{formatNumber(campaign.totalLeads)} sent
+                        </span>
+                        <MeterBar value={sentPercent} />
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatNumber(campaign.replyCount)} ({campaign.replyRate}%)
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <StatusBadge
+                          label={`${campaign.bounceRate}% bounce`}
+                          tone={campaign.bounceRate > 5 ? "danger" : campaign.bounceRate > 2 ? "warning" : "success"}
+                        />
+                        <StatusBadge
+                          label={`${campaign.unsubscribeRate}% unsub`}
+                          tone={campaign.unsubscribeRate > 3 ? "warning" : "success"}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col items-start gap-2">
+                        <form action={sendCampaignAction}>
+                          <input name="campaignId" type="hidden" value={campaign.id} />
+                          <Button type="submit" variant="outline" size="sm">
+                            Send campaign
+                          </Button>
+                        </form>
+                        <span className="text-xs text-muted-foreground">Live SES sends one batch; local mode simulates.</span>
+                        {canAssignByEngagement && campaign.sentCount > 0 ? (
+                          <form action={scoreAndAssignByCampaignAction}>
                             <input name="campaignId" type="hidden" value={campaign.id} />
-                            <button className="button secondary" type="submit">
-                              Send campaign
-                            </button>
+                            <Button type="submit" variant="outline" size="sm">
+                              Score &amp; assign by engagement
+                            </Button>
                           </form>
-                          <span>Live SES sends one batch; local mode simulates.</span>
-                          {canAssignByEngagement && campaign.sentCount > 0 ? (
-                            <form action={scoreAndAssignByCampaignAction}>
-                              <input name="campaignId" type="hidden" value={campaign.id} />
-                              <button className="button secondary" type="submit">
-                                Score & assign by engagement
-                              </button>
-                            </form>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {snapshot.campaigns.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}>No outreach campaigns have been created yet.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {snapshot.campaigns.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-muted-foreground">
+                    No outreach campaigns have been created yet.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Provider readiness</h2>
-              <p className="section-subtitle">CRM-visible sender status, daily limits, authentication, and local provider health.</p>
-            </div>
-            <RadioTower size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title="Provider readiness"
+          subtitle="CRM-visible sender status, daily limits, authentication, and local provider health."
+          action={<ToneIcon icon={RadioTower} tone="info" />}
+        >
+          <div className="flex flex-col gap-4">
             {snapshot.providers.map((provider) => {
               const usagePercent = provider.dailyLimit ? Math.round((provider.sentToday / provider.dailyLimit) * 100) : 0;
 
               return (
-                <div className="stage-row" key={provider.id}>
-                  <div className="stage-meta">
-                    <div className="entity">
-                      <strong>{provider.provider}</strong>
-                      <span>{provider.senderEmail ?? provider.fromNumber}</span>
+                <div className="flex flex-col gap-2 border-b pb-4 last:border-0 last:pb-0" key={provider.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{provider.provider}</span>
+                      <span className="text-xs text-muted-foreground">{provider.senderEmail ?? provider.fromNumber}</span>
                     </div>
-                    <StatusPill label={provider.status} tone={statusTone(provider.status)} />
+                    <StatusBadge label={provider.status} tone={statusTone(provider.status)} />
                   </div>
-                  <ProgressBar value={usagePercent} />
-                  <div className="chip-row">
-                    <span className="pill">{provider.sentToday}/{provider.dailyLimit} today</span>
-                    <span className="pill">Bounce {provider.bounceRate}%</span>
-                    <span className="pill">Complaint {provider.complaintRate}%</span>
+                  <MeterBar value={usagePercent} />
+                  <div className="flex flex-wrap gap-2">
+                    <StatusBadge label={`${provider.sentToday}/${provider.dailyLimit} today`} tone="default" />
+                    <StatusBadge label={`Bounce ${provider.bounceRate}%`} tone="default" />
+                    <StatusBadge label={`Complaint ${provider.complaintRate}%`} tone="default" />
                     {provider.kind === "Email" ? (
                       <>
-                        <StatusPill label="SPF" tone={provider.spf ? "success" : "warning"} />
-                        <StatusPill label="DKIM" tone={provider.dkim ? "success" : "warning"} />
-                        <StatusPill label="DMARC" tone={provider.dmarc ? "success" : "warning"} />
+                        <StatusBadge label="SPF" tone={provider.spf ? "success" : "warning"} />
+                        <StatusBadge label="DKIM" tone={provider.dkim ? "success" : "warning"} />
+                        <StatusBadge label="DMARC" tone={provider.dmarc ? "success" : "warning"} />
                       </>
                     ) : null}
-                    <StatusPill label="TLS" tone={provider.tls ? "success" : "warning"} />
+                    <StatusBadge label="TLS" tone={provider.tls ? "success" : "warning"} />
                   </div>
-                  <form action={updateOutreachProviderStatusAction} className="inline-form">
+                  <form action={updateOutreachProviderStatusAction} className="flex items-center gap-2">
                     <input name="id" type="hidden" value={provider.id} />
-                    <select name="status" defaultValue={provider.status} aria-label="Provider status">
+                    <select name="status" defaultValue={provider.status} aria-label="Provider status" className={fieldClass}>
                       {outreachProviderStatuses.map((status) => (
                         <option key={status} value={status}>
                           {status}
                         </option>
                       ))}
                     </select>
-                    <button className="icon-button" type="submit" aria-label="Save provider status">
-                      {provider.status === "Paused" ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
-                    </button>
+                    <Button type="submit" variant="outline" size="icon" aria-label="Save provider status">
+                      {provider.status === "Paused" ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
+                    </Button>
                   </form>
                 </div>
               );
             })}
           </div>
+        </Panel>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div id="create-campaign">
+          <Panel
+            title="Create campaign"
+            subtitle="Create the campaign shell; sequence content and steps can be added after the campaign exists."
+            action={<ToneIcon icon={Plus} tone="info" />}
+          >
+            <form action={createOutreachCampaignAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="name" className={fieldLabelClass}>
+                  Campaign name
+                </label>
+                <input id="name" name="name" placeholder="Q3 dealer owner sequence" required className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="campaignType" className={fieldLabelClass}>
+                  Type
+                </label>
+                <select id="campaignType" name="campaignType" defaultValue="Multichannel" className={fieldClass}>
+                  {campaignTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="targetSegment" className={fieldLabelClass}>
+                  Target segment
+                </label>
+                <input id="targetSegment" name="targetSegment" placeholder="High review dealer" className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="sourceJobIds" className={fieldLabelClass}>
+                  Source job IDs
+                </label>
+                <input id="sourceJobIds" name="sourceJobIds" placeholder="job-1042, job-1038" className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="ownerUserId" className={fieldLabelClass}>
+                  Owner
+                </label>
+                <select id="ownerUserId" name="ownerUserId" defaultValue={state.users[0]?.id} className={fieldClass}>
+                  {state.users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="status" className={fieldLabelClass}>
+                  Status
+                </label>
+                <select id="status" name="status" defaultValue="Draft" className={fieldClass}>
+                  {campaignStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="sendingDomain" className={fieldLabelClass}>
+                  Sending domain
+                </label>
+                <input id="sendingDomain" name="sendingDomain" defaultValue="outbound.syncore.tech" className={fieldClass} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="mailboxGroup" className={fieldLabelClass}>
+                  Mailbox group
+                </label>
+                <input id="mailboxGroup" name="mailboxGroup" defaultValue="syncore-sdr" className={fieldClass} />
+              </div>
+              <div className="flex items-end">
+                <Button type="submit" className="w-full">
+                  Create campaign
+                </Button>
+              </div>
+            </form>
+          </Panel>
+        </div>
+
+        <div id="sequence-builder">
+          <Panel
+            title="Sequence builder"
+            subtitle="Add a sequence and its next email, SMS, call, or manual step."
+            action={<ToneIcon icon={Workflow} tone="info" />}
+          >
+            <div className="flex flex-col gap-6">
+              <form action={createCampaignSequenceAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="sequenceCampaignId" className={fieldLabelClass}>
+                    Campaign
+                  </label>
+                  <select id="sequenceCampaignId" name="campaignId" className={fieldClass}>
+                    {snapshot.campaigns.map((campaign) => (
+                      <option key={campaign.id} value={campaign.id}>
+                        {campaign.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="sequenceName" className={fieldLabelClass}>
+                    Sequence name
+                  </label>
+                  <input id="sequenceName" name="name" placeholder="Owner first touch" className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="sequenceSegment" className={fieldLabelClass}>
+                    Target segment
+                  </label>
+                  <input id="sequenceSegment" name="targetSegment" placeholder="High review dealer" className={fieldClass} />
+                </div>
+                <div className="flex items-end">
+                  <Button type="submit" variant="outline" className="w-full">
+                    Create sequence
+                  </Button>
+                </div>
+              </form>
+              <form action={createSequenceStepAction} className="grid grid-cols-1 gap-4 border-t pt-6 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="sequenceId" className={fieldLabelClass}>
+                    Sequence
+                  </label>
+                  <select id="sequenceId" name="sequenceId" className={fieldClass}>
+                    {sequences.map((sequence) => (
+                      <option key={sequence.id} value={sequence.id}>
+                        {sequence.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="stepNumber" className={fieldLabelClass}>
+                    Step
+                  </label>
+                  <input id="stepNumber" name="stepNumber" type="number" min="1" defaultValue="1" className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="channel" className={fieldLabelClass}>
+                    Channel
+                  </label>
+                  <select id="channel" name="channel" defaultValue="Email" className={fieldClass}>
+                    {outreachChannels.map((channel) => (
+                      <option key={channel} value={channel}>
+                        {channel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="delayDays" className={fieldLabelClass}>
+                    Delay days
+                  </label>
+                  <input id="delayDays" name="delayDays" type="number" min="0" defaultValue="0" className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="subject" className={fieldLabelClass}>
+                    Subject
+                  </label>
+                  <input id="subject" name="subject" placeholder="{{company}} growth list quality" className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5 sm:col-span-2">
+                  <label htmlFor="bodyTemplate" className={fieldLabelClass}>
+                    Email body
+                  </label>
+                  <textarea id="bodyTemplate" name="bodyTemplate" placeholder="Hi {{first_name}}, ..." className={fieldTextareaClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="physicalAddress" className={fieldLabelClass}>
+                    Physical address
+                  </label>
+                  <input id="physicalAddress" name="physicalAddress" defaultValue={defaultPhysicalAddress} className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="smsTemplate" className={fieldLabelClass}>
+                    SMS template
+                  </label>
+                  <input id="smsTemplate" name="smsTemplate" placeholder="Quick Syncore note for {{company}}" className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="callScript" className={fieldLabelClass}>
+                    Call script
+                  </label>
+                  <input id="callScript" name="callScript" placeholder="Reference source signal and confirm fit" className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="personalizationVariables" className={fieldLabelClass}>
+                    Variables
+                  </label>
+                  <input id="personalizationVariables" name="personalizationVariables" placeholder="first_name, company, segment" className={fieldClass} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="requiredFields" className={fieldLabelClass}>
+                    Required fields
+                  </label>
+                  <input id="requiredFields" name="requiredFields" placeholder="email, phone, company" className={fieldClass} />
+                </div>
+                <div className="flex items-end">
+                  <Button type="submit" className="w-full">
+                    Create step
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </Panel>
         </div>
       </section>
 
-      <section className="grid two">
-        <div className="panel" id="create-campaign">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Create campaign</h2>
-              <p className="section-subtitle">Create the campaign shell; sequence content and steps can be added after the campaign exists.</p>
-            </div>
-            <Plus size={20} aria-hidden="true" />
-          </div>
-          <form action={createOutreachCampaignAction} className="panel-body form-grid">
-            <div className="field">
-              <label htmlFor="name">Campaign name</label>
-              <input id="name" name="name" placeholder="Q3 dealer owner sequence" required />
-            </div>
-            <div className="field">
-              <label htmlFor="campaignType">Type</label>
-              <select id="campaignType" name="campaignType" defaultValue="Multichannel">
-                {campaignTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="targetSegment">Target segment</label>
-              <input id="targetSegment" name="targetSegment" placeholder="High review dealer" />
-            </div>
-            <div className="field">
-              <label htmlFor="sourceJobIds">Source job IDs</label>
-              <input id="sourceJobIds" name="sourceJobIds" placeholder="job-1042, job-1038" />
-            </div>
-            <div className="field">
-              <label htmlFor="ownerUserId">Owner</label>
-              <select id="ownerUserId" name="ownerUserId" defaultValue={state.users[0]?.id}>
-                {state.users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="status">Status</label>
-              <select id="status" name="status" defaultValue="Draft">
-                {campaignStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="sendingDomain">Sending domain</label>
-              <input id="sendingDomain" name="sendingDomain" defaultValue="outbound.syncore.tech" />
-            </div>
-            <div className="field">
-              <label htmlFor="mailboxGroup">Mailbox group</label>
-              <input id="mailboxGroup" name="mailboxGroup" defaultValue="syncore-sdr" />
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
-                Create campaign
-              </button>
-            </div>
-          </form>
-        </div>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title="Campaign performance"
+          subtitle="Revenue, meetings, and engagement counters from local outreach events."
+          action={<StatusBadge label={`${formatNumber(snapshot.campaigns.length)} campaigns`} tone="info" />}
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Campaign</TableHead>
+                <TableHead>Leads</TableHead>
+                <TableHead>Meetings</TableHead>
+                <TableHead>Revenue won</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {snapshot.campaigns.map((campaign) => (
+                <TableRow key={campaign.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{campaign.name}</span>
+                      <span className="text-xs text-muted-foreground">{campaign.status}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{formatNumber(campaign.totalLeads)}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatNumber(campaign.meetingsBooked)}</TableCell>
+                  <TableCell className="text-foreground">{formatCurrency(campaign.revenueWon)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Panel>
 
-        <div className="panel" id="sequence-builder">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Sequence builder</h2>
-              <p className="section-subtitle">Add a sequence and its next email, SMS, call, or manual step.</p>
-            </div>
-            <Workflow size={20} aria-hidden="true" />
-          </div>
-          <form action={createCampaignSequenceAction} className="panel-body form-grid">
-            <div className="field">
-              <label htmlFor="sequenceCampaignId">Campaign</label>
-              <select id="sequenceCampaignId" name="campaignId">
-                {snapshot.campaigns.map((campaign) => (
-                  <option key={campaign.id} value={campaign.id}>
-                    {campaign.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="sequenceName">Sequence name</label>
-              <input id="sequenceName" name="name" placeholder="Owner first touch" />
-            </div>
-            <div className="field">
-              <label htmlFor="sequenceSegment">Target segment</label>
-              <input id="sequenceSegment" name="targetSegment" placeholder="High review dealer" />
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <button className="button secondary" type="submit">
-                Create sequence
-              </button>
-            </div>
-          </form>
-          <form action={createSequenceStepAction} className="panel-body form-grid">
-            <div className="field">
-              <label htmlFor="sequenceId">Sequence</label>
-              <select id="sequenceId" name="sequenceId">
-                {sequences.map((sequence) => (
-                  <option key={sequence.id} value={sequence.id}>
-                    {sequence.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="stepNumber">Step</label>
-              <input id="stepNumber" name="stepNumber" type="number" min="1" defaultValue="1" />
-            </div>
-            <div className="field">
-              <label htmlFor="channel">Channel</label>
-              <select id="channel" name="channel" defaultValue="Email">
-                {outreachChannels.map((channel) => (
-                  <option key={channel} value={channel}>
-                    {channel}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="delayDays">Delay days</label>
-              <input id="delayDays" name="delayDays" type="number" min="0" defaultValue="0" />
-            </div>
-            <div className="field">
-              <label htmlFor="subject">Subject</label>
-              <input id="subject" name="subject" placeholder="{{company}} growth list quality" />
-            </div>
-            <div className="field">
-              <label htmlFor="bodyTemplate">Email body</label>
-              <textarea id="bodyTemplate" name="bodyTemplate" placeholder="Hi {{first_name}}, ..." />
-            </div>
-            <div className="field">
-              <label htmlFor="physicalAddress">Physical address</label>
-              <input id="physicalAddress" name="physicalAddress" defaultValue={defaultPhysicalAddress} />
-            </div>
-            <div className="field">
-              <label htmlFor="smsTemplate">SMS template</label>
-              <input id="smsTemplate" name="smsTemplate" placeholder="Quick Syncore note for {{company}}" />
-            </div>
-            <div className="field">
-              <label htmlFor="callScript">Call script</label>
-              <input id="callScript" name="callScript" placeholder="Reference source signal and confirm fit" />
-            </div>
-            <div className="field">
-              <label htmlFor="personalizationVariables">Variables</label>
-              <input id="personalizationVariables" name="personalizationVariables" placeholder="first_name, company, segment" />
-            </div>
-            <div className="field">
-              <label htmlFor="requiredFields">Required fields</label>
-              <input id="requiredFields" name="requiredFields" placeholder="email, phone, company" />
-            </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
-                Create step
-              </button>
-            </div>
-          </form>
-        </div>
-      </section>
-
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Campaign performance</h2>
-              <p className="section-subtitle">Revenue, meetings, and engagement counters from local outreach events.</p>
-            </div>
-            <StatusPill label={`${formatNumber(snapshot.campaigns.length)} campaigns`} tone="info" />
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Campaign</th>
-                  <th>Leads</th>
-                  <th>Meetings</th>
-                  <th>Revenue won</th>
-                </tr>
-              </thead>
-              <tbody>
-                {snapshot.campaigns.map((campaign) => (
-                  <tr key={campaign.id}>
-                    <td>
-                      <div className="entity">
-                        <strong>{campaign.name}</strong>
-                        <span>{campaign.status}</span>
-                      </div>
-                    </td>
-                    <td>{formatNumber(campaign.totalLeads)}</td>
-                    <td>{formatNumber(campaign.meetingsBooked)}</td>
-                    <td>{formatCurrency(campaign.revenueWon)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Sequence steps</h2>
-              <p className="section-subtitle">Channel steps with delay rules, templates, scripts, variables, and compliance notes.</p>
-            </div>
-            <StatusPill label={`${steps.length} steps`} tone="info" />
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Sequence</th>
-                  <th>Step</th>
-                  <th>Channel</th>
-                  <th>Template</th>
-                  <th>Compliance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {steps.map((step) => (
-                  <tr key={step.id}>
-                    <td>{sequences.find((sequence) => sequence.id === step.sequenceId)?.name ?? "Unknown sequence"}</td>
-                    <td>{step.stepNumber} after {step.delayDays}d</td>
-                    <td>
-                      <StatusPill label={step.channel} tone="info" />
-                    </td>
-                    <td>
-                      <div className="entity">
-                        <strong>{step.subject ?? step.smsTemplate ?? step.callScript ?? step.manualTaskInstruction ?? "No copy"}</strong>
-                        <span>{step.bodyTemplate}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="entity">
-                        <StatusPill label={step.complianceStatus} tone={step.complianceStatus === "Compliant" ? "success" : "warning"} />
-                        <span>{step.complianceNotes}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {steps.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>No sequence steps have been created yet.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Panel
+          title="Sequence steps"
+          subtitle="Channel steps with delay rules, templates, scripts, variables, and compliance notes."
+          action={<StatusBadge label={`${steps.length} steps`} tone="info" />}
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Sequence</TableHead>
+                <TableHead>Step</TableHead>
+                <TableHead>Channel</TableHead>
+                <TableHead>Template</TableHead>
+                <TableHead>Compliance</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {steps.map((step) => (
+                <TableRow key={step.id}>
+                  <TableCell className="text-muted-foreground">
+                    {sequences.find((sequence) => sequence.id === step.sequenceId)?.name ?? "Unknown sequence"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{step.stepNumber} after {step.delayDays}d</TableCell>
+                  <TableCell>
+                    <StatusBadge label={step.channel} tone="info" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{step.subject ?? step.smsTemplate ?? step.callScript ?? step.manualTaskInstruction ?? "No copy"}</span>
+                      <span className="text-xs text-muted-foreground">{step.bodyTemplate}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <StatusBadge label={step.complianceStatus} tone={step.complianceStatus === "Compliant" ? "success" : "warning"} />
+                      <span className="text-xs text-muted-foreground">{step.complianceNotes}</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {steps.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    No sequence steps have been created yet.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
       </section>
     </>
   );

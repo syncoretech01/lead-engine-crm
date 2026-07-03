@@ -17,6 +17,7 @@ import {
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { fieldClass, fieldLabelClass } from "@/components/ui/field";
 import { MeterBar } from "@/components/ui/meter-bar";
 import { Panel } from "@/components/ui/panel";
 import { StatCard, ToneIcon } from "@/components/ui/stat-card";
@@ -366,7 +367,7 @@ export default async function SdrManagerPage() {
         >
           <form action={reassignSdrAssignmentAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <label htmlFor="assignmentId" className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="assignmentId" className={fieldLabelClass}>
                 Assignment
               </label>
               <select
@@ -375,7 +376,7 @@ export default async function SdrManagerPage() {
                 required
                 defaultValue=""
                 disabled={!hasManualAssignments}
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+                className={fieldClass}
               >
                 <option value="" disabled>
                   {hasManualAssignments ? "Select an active assignment" : "No active assignments yet"}
@@ -393,7 +394,7 @@ export default async function SdrManagerPage() {
               ) : null}
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="nextSdrId" className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="nextSdrId" className={fieldLabelClass}>
                 New SDR
               </label>
               <select
@@ -401,7 +402,7 @@ export default async function SdrManagerPage() {
                 name="nextSdrId"
                 required
                 disabled={!users.length}
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+                className={fieldClass}
               >
                 {users.length ? (
                   users.map((user) => (
@@ -415,7 +416,7 @@ export default async function SdrManagerPage() {
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="assignmentMethod" className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="assignmentMethod" className={fieldLabelClass}>
                 Method
               </label>
               <select
@@ -423,7 +424,7 @@ export default async function SdrManagerPage() {
                 name="assignmentMethod"
                 defaultValue="Capacity-based"
                 disabled={!canManualReassign}
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+                className={fieldClass}
               >
                 {assignmentMethods.map((method) => (
                   <option key={method} value={method}>
@@ -433,7 +434,7 @@ export default async function SdrManagerPage() {
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="reason" className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="reason" className={fieldLabelClass}>
                 Reason
               </label>
               <input
@@ -441,7 +442,7 @@ export default async function SdrManagerPage() {
                 name="reason"
                 placeholder="Capacity rebalance"
                 disabled={!canManualReassign}
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+                className={fieldClass}
               />
             </div>
             <div className="flex items-end">
@@ -463,25 +464,25 @@ export default async function SdrManagerPage() {
           <div className="flex flex-col gap-5">
             <form action={createReassignmentRuleAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5 sm:col-span-2">
-                <label htmlFor="name" className="text-xs font-medium text-muted-foreground">
+                <label htmlFor="name" className={fieldLabelClass}>
                   Rule name
                 </label>
                 <input
                   id="name"
                   name="name"
                   placeholder="Overdue rescue"
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  className={fieldClass}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="trigger" className="text-xs font-medium text-muted-foreground">
+                <label htmlFor="trigger" className={fieldLabelClass}>
                   Trigger
                 </label>
                 <select
                   id="trigger"
                   name="trigger"
                   defaultValue="SLA overdue"
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  className={fieldClass}
                 >
                   {reassignmentTriggers.map((trigger) => (
                     <option key={trigger} value={trigger}>
@@ -491,14 +492,14 @@ export default async function SdrManagerPage() {
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="rule-method" className="text-xs font-medium text-muted-foreground">
+                <label htmlFor="rule-method" className={fieldLabelClass}>
                   Method
                 </label>
                 <select
                   id="rule-method"
                   name="assignmentMethod"
                   defaultValue="Capacity-based"
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  className={fieldClass}
                 >
                   {assignmentMethods.map((method) => (
                     <option key={method} value={method}>
@@ -508,7 +509,7 @@ export default async function SdrManagerPage() {
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="thresholdHours" className="text-xs font-medium text-muted-foreground">
+                <label htmlFor="thresholdHours" className={fieldLabelClass}>
                   Threshold hours
                 </label>
                 <input
@@ -517,18 +518,18 @@ export default async function SdrManagerPage() {
                   type="number"
                   min="1"
                   defaultValue="4"
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  className={fieldClass}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="targetTeamId" className="text-xs font-medium text-muted-foreground">
+                <label htmlFor="targetTeamId" className={fieldLabelClass}>
                   Target team
                 </label>
                 <select
                   id="targetTeamId"
                   name="targetTeamId"
                   defaultValue=""
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  className={fieldClass}
                 >
                   <option value="">Any available team</option>
                   {teams.map((team) => (

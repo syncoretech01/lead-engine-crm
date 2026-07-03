@@ -18,6 +18,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { fieldClass, fieldLabelClass } from "@/components/ui/field";
 import { MeterBar } from "@/components/ui/meter-bar";
 import { Panel } from "@/components/ui/panel";
 import { StatCard, ToneIcon } from "@/components/ui/stat-card";
@@ -48,11 +49,6 @@ import type { CustomField, CustomFieldValue, User } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-
-// Shared Flexio-style field control classes for inline server-action forms.
-const fieldControlClass =
-  "h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
-const fieldLabelClass = "text-xs font-medium text-muted-foreground";
 
 export default async function OpportunitiesPage() {
   const sessionContext = await getWorkspaceSessionContext("manage_crm");
@@ -419,7 +415,7 @@ export default async function OpportunitiesPage() {
                         </div>
                         <form action={updateOpportunityStageAction} className="flex items-center gap-2">
                           <input name="id" type="hidden" value={opportunity.id} />
-                          <select name="stage" defaultValue={opportunity.stage} aria-label="Stage" className={fieldControlClass}>
+                          <select name="stage" defaultValue={opportunity.stage} aria-label="Stage" className={fieldClass}>
                             {opportunityStages.map((option) => (
                               <option key={option} value={option}>
                                 {option}
@@ -459,7 +455,7 @@ export default async function OpportunitiesPage() {
                   <label htmlFor="companyId" className={fieldLabelClass}>
                     Account
                   </label>
-                  <select id="companyId" name="companyId" required className={fieldControlClass}>
+                  <select id="companyId" name="companyId" required className={fieldClass}>
                     {accountOptions.map((account) => (
                       <option key={account.id} value={account.id}>
                         {account.name}
@@ -471,7 +467,7 @@ export default async function OpportunitiesPage() {
                   <label htmlFor="contactId" className={fieldLabelClass}>
                     Contact
                   </label>
-                  <select id="contactId" name="contactId" defaultValue="" className={fieldControlClass}>
+                  <select id="contactId" name="contactId" defaultValue="" className={fieldClass}>
                     <option value="">No primary contact</option>
                     {contactOptions.map((contact) => (
                       <option key={contact.id} value={contact.id}>
@@ -484,13 +480,13 @@ export default async function OpportunitiesPage() {
                   <label htmlFor="name" className={fieldLabelClass}>
                     Name
                   </label>
-                  <input id="name" name="name" placeholder="New outbound opportunity" className={fieldControlClass} />
+                  <input id="name" name="name" placeholder="New outbound opportunity" className={fieldClass} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="stage" className={fieldLabelClass}>
                     Stage
                   </label>
-                  <select id="stage" name="stage" defaultValue="Prospecting" className={fieldControlClass}>
+                  <select id="stage" name="stage" defaultValue="Prospecting" className={fieldClass}>
                     {opportunityStages.map((stage) => (
                       <option key={stage} value={stage}>
                         {stage}
@@ -509,20 +505,20 @@ export default async function OpportunitiesPage() {
                     min="0"
                     step="500"
                     defaultValue="25000"
-                    className={fieldControlClass}
+                    className={fieldClass}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="expectedCloseDate" className={fieldLabelClass}>
                     Expected close
                   </label>
-                  <input id="expectedCloseDate" name="expectedCloseDate" type="date" className={fieldControlClass} />
+                  <input id="expectedCloseDate" name="expectedCloseDate" type="date" className={fieldClass} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="ownerUserId" className={fieldLabelClass}>
                     Owner
                   </label>
-                  <select id="ownerUserId" name="ownerUserId" defaultValue={ownerOptions[0]?.id} className={fieldControlClass}>
+                  <select id="ownerUserId" name="ownerUserId" defaultValue={ownerOptions[0]?.id} className={fieldClass}>
                     {ownerOptions.map((user) => (
                       <option key={user.id} value={user.id}>
                         {user.name}
@@ -550,7 +546,7 @@ export default async function OpportunitiesPage() {
                   <label htmlFor="field-opportunity" className={fieldLabelClass}>
                     Opportunity
                   </label>
-                  <select id="field-opportunity" name="objectId" required className={fieldControlClass}>
+                  <select id="field-opportunity" name="objectId" required className={fieldClass}>
                     {opportunities.map((opportunity) => (
                       <option key={opportunity.id} value={opportunity.id}>
                         {opportunity.name}
@@ -562,7 +558,7 @@ export default async function OpportunitiesPage() {
                   <label htmlFor="customFieldId" className={fieldLabelClass}>
                     Field
                   </label>
-                  <select id="customFieldId" name="customFieldId" required className={fieldControlClass}>
+                  <select id="customFieldId" name="customFieldId" required className={fieldClass}>
                     {opportunityFields.map((field) => (
                       <option key={field.id} value={field.id}>
                         {field.name}
@@ -574,7 +570,7 @@ export default async function OpportunitiesPage() {
                   <label htmlFor="field-value" className={fieldLabelClass}>
                     Value
                   </label>
-                  <input id="field-value" name="value" placeholder="Best case" className={fieldControlClass} />
+                  <input id="field-value" name="value" placeholder="Best case" className={fieldClass} />
                 </div>
                 <div className="flex items-end">
                   <Button type="submit" variant="outline" className="w-full">
@@ -588,13 +584,13 @@ export default async function OpportunitiesPage() {
                   <label htmlFor="field-name" className={fieldLabelClass}>
                     Field name
                   </label>
-                  <input id="field-name" name="name" placeholder="Decision process" className={fieldControlClass} />
+                  <input id="field-name" name="name" placeholder="Decision process" className={fieldClass} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="field-type" className={fieldLabelClass}>
                     Type
                   </label>
-                  <select id="field-type" name="fieldType" defaultValue="text" className={fieldControlClass}>
+                  <select id="field-type" name="fieldType" defaultValue="text" className={fieldClass}>
                     <option value="text">Text</option>
                     <option value="number">Number</option>
                     <option value="date">Date</option>
@@ -609,7 +605,7 @@ export default async function OpportunitiesPage() {
                     id="field-options"
                     name="options"
                     placeholder="Pipeline, Best case, Commit"
-                    className={fieldControlClass}
+                    className={fieldClass}
                   />
                 </div>
                 <div className="flex items-end">
