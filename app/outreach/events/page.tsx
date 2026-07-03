@@ -15,7 +15,20 @@ import {
   recordTrackedCallAction
 } from "@/app/actions";
 import { PageHeader } from "@/components/page-header";
-import { StatusPill, statusTone } from "@/components/status-pill";
+import { statusTone } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/ui/panel";
+import { StatCard, ToneIcon } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import { fieldClass, fieldLabelClass, fieldTextareaClass } from "@/components/ui/field";
 import {
   callDispositions,
   emailEventTypes,
@@ -33,7 +46,6 @@ import { recordingConsentStatuses } from "@/lib/phase1/compliance";
 import { readFastOutreachDashboardModel } from "@/lib/phase1/outreach-dashboard-read-model";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
-import { StatCard, LaneCard } from "@/components/ui-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -245,317 +257,332 @@ export default async function OutreachEventsPage() {
         actions={
           <>
             {isSdr ? (
-              <Link href="/crm/contacts" className="button secondary">
-                <ArrowRight size={17} aria-hidden="true" />
-                Contacts
-              </Link>
+              <Button asChild variant="outline">
+                <Link href="/crm/contacts">
+                  <ArrowRight aria-hidden="true" />
+                  Contacts
+                </Link>
+              </Button>
             ) : (
-              <Link href="/outreach/campaigns" className="button secondary">
-                <ArrowRight size={17} aria-hidden="true" />
-                Campaigns
-              </Link>
+              <Button asChild variant="outline">
+                <Link href="/outreach/campaigns">
+                  <ArrowRight aria-hidden="true" />
+                  Campaigns
+                </Link>
+              </Button>
             )}
-            <Link href="/sdr/queue" className="button primary">
-              <Send size={17} aria-hidden="true" />
-              {isSdr ? "My queue" : "SDR queue"}
-            </Link>
+            <Button asChild>
+              <Link href="/sdr/queue">
+                <Send aria-hidden="true" />
+                {isSdr ? "My queue" : "SDR queue"}
+              </Link>
+            </Button>
           </>
         }
       />
 
-      <section className="stat-grid" aria-label="Outreach event metrics">
+      <section aria-label="Outreach event metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
-          <StatCard key={metric.label} {...metric} />
+          <StatCard
+            key={metric.label}
+            icon={metric.icon}
+            label={metric.label}
+            value={metric.value}
+            note={metric.note}
+            tone={metric.tone}
+          />
         ))}
       </section>
 
-      <section className="ops-stage-strip four-up" aria-label="Outreach event lanes">
+      <section aria-label="Outreach event lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {lanes.map((lane) => (
-          <LaneCard key={lane.label} {...lane} />
+          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
+            <ToneIcon icon={lane.icon} tone={lane.tone} />
+            <div className="min-w-0">
+              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {lane.label} · {lane.note}
+              </div>
+            </div>
+          </div>
         ))}
       </section>
 
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">{isSdr ? "My response stream" : "Response stream"}</h2>
-              <p className="section-subtitle">
-                {isSdr
-                  ? "Recent replies and positive call outcomes from assigned contacts."
-                  : "Recent replies and positive call outcomes that need SDR follow-up."}
-              </p>
-            </div>
-            <StatusPill label={`${responseRows.length} visible`} tone={responseRows.length ? "success" : "info"} />
-          </div>
-          <div className="panel-body stage-list">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title={isSdr ? "My response stream" : "Response stream"}
+          subtitle={
+            isSdr
+              ? "Recent replies and positive call outcomes from assigned contacts."
+              : "Recent replies and positive call outcomes that need SDR follow-up."
+          }
+          action={<StatusBadge label={`${responseRows.length} visible`} tone={responseRows.length ? "success" : "info"} />}
+        >
+          <div className="flex flex-col gap-4">
             {responseRows.map((event) => (
-              <div className="stage-row" key={event.id}>
-                <div className="stage-meta">
-                  <div className="entity">
-                    <strong>{event.contactName}</strong>
-                    <span>{event.companyName}</span>
+              <div className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0" key={event.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col">
+                    <strong className="font-medium text-foreground">{event.contactName}</strong>
+                    <span className="text-xs text-muted-foreground">{event.companyName}</span>
                   </div>
-                  <StatusPill label={event.status} tone={statusTone(event.status)} />
+                  <StatusBadge label={event.status} tone={statusTone(event.status)} />
                 </div>
-                <p className="section-subtitle">{event.detail}</p>
-                <div className="chip-row">
-                  <span className="pill">{event.channel}</span>
-                  {event.campaignName ? <span className="pill">{event.campaignName}</span> : null}
-                  <span className="pill">{formatDate(event.timestamp)}</span>
+                <p className="text-xs text-muted-foreground">{event.detail}</p>
+                <div className="flex flex-wrap gap-2">
+                  <StatusBadge label={event.channel} tone="default" />
+                  {event.campaignName ? <StatusBadge label={event.campaignName} tone="default" /> : null}
+                  <StatusBadge label={formatDate(event.timestamp)} tone="default" />
                 </div>
               </div>
             ))}
-            {responseRows.length === 0 ? <p className="section-subtitle">No response events are waiting right now.</p> : null}
+            {responseRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No response events are waiting right now.</p>
+            ) : null}
           </div>
-        </div>
+        </Panel>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">{isSdr ? "Do-not-contact stops" : "Deliverability stops"}</h2>
-              <p className="section-subtitle">
-                {isSdr ? "Contacts that should not receive more outreach." : "Events that suppress or block future outreach."}
-              </p>
-            </div>
-            <StatusPill label={`${hardStops.length} stops`} tone={hardStops.length ? "danger" : "success"} />
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title={isSdr ? "Do-not-contact stops" : "Deliverability stops"}
+          subtitle={
+            isSdr ? "Contacts that should not receive more outreach." : "Events that suppress or block future outreach."
+          }
+          action={<StatusBadge label={`${hardStops.length} stops`} tone={hardStops.length ? "danger" : "success"} />}
+        >
+          <div className="flex flex-col gap-4">
             {bouncedEmails.slice(0, 4).map((event) => (
-              <div className="stage-row" key={event.id}>
-                <div className="stage-meta">
-                  <strong>{event.contactName}</strong>
-                  <StatusPill label={event.bounceType ? `${event.bounceType} bounce` : "Bounced"} tone="danger" />
+              <div className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0" key={event.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <strong className="font-medium text-foreground">{event.contactName}</strong>
+                  <StatusBadge label={event.bounceType ? `${event.bounceType} bounce` : "Bounced"} tone="danger" />
                 </div>
-                <p className="section-subtitle">
+                <p className="text-xs text-muted-foreground">
                   {event.recipientEmail} {event.smtpCode ? `- SMTP ${event.smtpCode}` : ""}
                 </p>
               </div>
             ))}
             {unsubscribedEmails.slice(0, 3).map((event) => (
-              <div className="stage-row" key={event.id}>
-                <div className="stage-meta">
-                  <strong>{event.contactName}</strong>
-                  <StatusPill label="Unsubscribed" tone="danger" />
+              <div className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0" key={event.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <strong className="font-medium text-foreground">{event.contactName}</strong>
+                  <StatusBadge label="Unsubscribed" tone="danger" />
                 </div>
-                <p className="section-subtitle">{event.recipientEmail}</p>
+                <p className="text-xs text-muted-foreground">{event.recipientEmail}</p>
               </div>
             ))}
             {smsOptOuts.slice(0, 3).map((event) => (
-              <div className="stage-row" key={event.id}>
-                <div className="stage-meta">
-                  <strong>{event.contactName}</strong>
-                  <StatusPill label="SMS opt-out" tone="danger" />
+              <div className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0" key={event.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <strong className="font-medium text-foreground">{event.contactName}</strong>
+                  <StatusBadge label="SMS opt-out" tone="danger" />
                 </div>
-                <p className="section-subtitle">{event.toNumber}</p>
+                <p className="text-xs text-muted-foreground">{event.toNumber}</p>
               </div>
             ))}
-            {hardStops.length === 0 ? <p className="section-subtitle">No hard-stop events recorded.</p> : null}
+            {hardStops.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No hard-stop events recorded.</p>
+            ) : null}
           </div>
-        </div>
+        </Panel>
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Event stream</h2>
-            <p className="section-subtitle">
-              {isSdr
-                ? "Your assigned email, SMS, and call activity sorted by newest event."
-                : "Combined email, SMS, and voice activity sorted by newest event timestamp."}
-            </p>
-          </div>
-          <StatusPill label={`${eventRows.length} latest`} tone="info" />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Contact</th>
-                <th>Channel</th>
-                <th>Status</th>
-                {!isSdr ? <th>Campaign</th> : null}
-                <th>Detail</th>
-                <th>When</th>
-              </tr>
-            </thead>
-            <tbody>
+      <section>
+        <Panel
+          title="Event stream"
+          subtitle={
+            isSdr
+              ? "Your assigned email, SMS, and call activity sorted by newest event."
+              : "Combined email, SMS, and voice activity sorted by newest event timestamp."
+          }
+          action={<StatusBadge label={`${eventRows.length} latest`} tone="info" />}
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Contact</TableHead>
+                <TableHead>Channel</TableHead>
+                <TableHead>Status</TableHead>
+                {!isSdr ? <TableHead>Campaign</TableHead> : null}
+                <TableHead>Detail</TableHead>
+                <TableHead>When</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {eventRows.map((event) => (
-                <tr key={event.id}>
-                  <td>
-                    <div className="entity">
-                      <strong>{event.contactName}</strong>
-                      <span>{event.companyName}</span>
+                <TableRow key={event.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <strong className="font-medium text-foreground">{event.contactName}</strong>
+                      <span className="text-xs text-muted-foreground">{event.companyName}</span>
                     </div>
-                  </td>
-                  <td>{event.channel}</td>
-                  <td>
-                    <StatusPill label={event.status} tone={statusTone(event.status)} />
-                  </td>
-                  {!isSdr ? <td>{event.campaignName ?? "No campaign"}</td> : null}
-                  <td>{event.detail}</td>
-                  <td>{formatDate(event.timestamp)}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{event.channel}</TableCell>
+                  <TableCell>
+                    <StatusBadge label={event.status} tone={statusTone(event.status)} />
+                  </TableCell>
+                  {!isSdr ? <TableCell className="text-muted-foreground">{event.campaignName ?? "No campaign"}</TableCell> : null}
+                  <TableCell className="text-muted-foreground">{event.detail}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(event.timestamp)}</TableCell>
+                </TableRow>
               ))}
               {eventRows.length === 0 ? (
-                <tr>
-                  <td colSpan={isSdr ? 5 : 6}>No outreach events have been recorded yet.</td>
-                </tr>
+                <TableRow>
+                  <TableCell colSpan={isSdr ? 5 : 6} className="text-muted-foreground">
+                    No outreach events have been recorded yet.
+                  </TableCell>
+                </TableRow>
               ) : null}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Panel>
       </section>
 
-      <section className="grid two">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">SMS events</h2>
-              <p className="section-subtitle">
-                {isSdr ? "Text delivery, replies, failures, and opt-outs." : "RingCentral Local delivery, replies, failures, and STOP handling."}
-              </p>
-            </div>
-            <MessageSquare size={20} aria-hidden="true" />
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Contact</th>
-                  <th>Status</th>
-                  <th>Direction</th>
-                  <th>Body</th>
-                  <th>Opt-out</th>
-                </tr>
-              </thead>
-              <tbody>
-                {snapshot.smsEvents.slice(0, 15).map((event) => (
-                  <tr key={event.id}>
-                    <td>
-                      <div className="entity">
-                        <strong>{event.contactName}</strong>
-                        <span>{event.toNumber}</span>
-                        <span>{event.companyName}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <StatusPill label={event.status} tone={statusTone(event.status)} />
-                    </td>
-                    <td>{event.direction}</td>
-                    <td>{event.body}</td>
-                    <td>{event.optOutFlag ? "Yes" : "No"}</td>
-                  </tr>
-                ))}
-                {snapshot.smsEvents.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>No SMS events have been recorded yet.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title="SMS events"
+          subtitle={
+            isSdr ? "Text delivery, replies, failures, and opt-outs." : "RingCentral Local delivery, replies, failures, and STOP handling."
+          }
+          action={<ToneIcon icon={MessageSquare} tone="info" />}
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Contact</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Direction</TableHead>
+                <TableHead>Body</TableHead>
+                <TableHead>Opt-out</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {snapshot.smsEvents.slice(0, 15).map((event) => (
+                <TableRow key={event.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <strong className="font-medium text-foreground">{event.contactName}</strong>
+                      <span className="text-xs text-muted-foreground">{event.toNumber}</span>
+                      <span className="text-xs text-muted-foreground">{event.companyName}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge label={event.status} tone={statusTone(event.status)} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{event.direction}</TableCell>
+                  <TableCell className="text-muted-foreground">{event.body}</TableCell>
+                  <TableCell className="text-muted-foreground">{event.optOutFlag ? "Yes" : "No"}</TableCell>
+                </TableRow>
+              ))}
+              {snapshot.smsEvents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    No SMS events have been recorded yet.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Call recordings</h2>
-              <p className="section-subtitle">
-                {isSdr ? "Logged calls with outcome, summary, recording, and next step." : "Voice events with recording metadata, consent, summary, and next step."}
-              </p>
-            </div>
-            <Phone size={20} aria-hidden="true" />
-          </div>
-          <div className="panel-body stage-list">
+        <Panel
+          title="Call recordings"
+          subtitle={
+            isSdr ? "Logged calls with outcome, summary, recording, and next step." : "Voice events with recording metadata, consent, summary, and next step."
+          }
+          action={<ToneIcon icon={Phone} tone="info" />}
+        >
+          <div className="flex flex-col gap-4">
             {snapshot.calls.slice(0, 12).map((call) => (
-              <div className="stage-row" key={call.id}>
-                <div className="stage-meta">
-                  <div className="entity">
-                    <strong>{call.contactName}</strong>
-                    <span>{call.companyName}</span>
+              <div className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0" key={call.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col">
+                    <strong className="font-medium text-foreground">{call.contactName}</strong>
+                    <span className="text-xs text-muted-foreground">{call.companyName}</span>
                   </div>
-                  <StatusPill label={call.disposition} tone={statusTone(call.disposition)} />
+                  <StatusBadge label={call.disposition} tone={statusTone(call.disposition)} />
                 </div>
-                <p className="section-subtitle">
+                <p className="text-xs text-muted-foreground">
                   {call.callStatus}, {minutes(call.durationSeconds)} - {call.sdrName}
                 </p>
-                <div className="chip-row">
-                  <span className="pill">{call.recordingUrl ? "Recording attached" : "No recording"}</span>
-                  <span className="pill">Consent {call.recordingConsent}</span>
-                  {call.recordingStoragePath ? <span className="pill">{call.recordingStoragePath}</span> : null}
+                <div className="flex flex-wrap gap-2">
+                  <StatusBadge label={call.recordingUrl ? "Recording attached" : "No recording"} tone="default" />
+                  <StatusBadge label={`Consent ${call.recordingConsent}`} tone="default" />
+                  {call.recordingStoragePath ? <StatusBadge label={call.recordingStoragePath} tone="default" /> : null}
                 </div>
-                {call.callSummary ? <p className="section-subtitle">{call.callSummary}</p> : null}
-                {call.nextStep ? <p className="section-subtitle">Next: {call.nextStep}</p> : null}
+                {call.callSummary ? <p className="text-xs text-muted-foreground">{call.callSummary}</p> : null}
+                {call.nextStep ? <p className="text-xs text-muted-foreground">Next: {call.nextStep}</p> : null}
               </div>
             ))}
-            {snapshot.calls.length === 0 ? <p className="section-subtitle">No calls have been tracked yet.</p> : null}
+            {snapshot.calls.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No calls have been tracked yet.</p>
+            ) : null}
           </div>
-        </div>
+        </Panel>
       </section>
 
       {canManageOutreach ? (
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-title-wrap">
-            <h2 className="section-title">Webhook receipts</h2>
-            <p className="section-subtitle">Signed provider events with idempotency status and processed record links.</p>
-          </div>
-          <StatusPill
-            label={`${formatNumber(snapshot.metrics.webhooksProcessed)} processed / ${formatNumber(snapshot.metrics.webhookDuplicates)} duplicates`}
-            tone="success"
-          />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th>Target</th>
-                <th>Event</th>
-                <th>Status</th>
-                <th>Idempotency key</th>
-                <th>Received</th>
-              </tr>
-            </thead>
-            <tbody>
+      <section>
+        <Panel
+          title="Webhook receipts"
+          subtitle="Signed provider events with idempotency status and processed record links."
+          action={
+            <StatusBadge
+              label={`${formatNumber(snapshot.metrics.webhooksProcessed)} processed / ${formatNumber(snapshot.metrics.webhookDuplicates)} duplicates`}
+              tone="success"
+            />
+          }
+          flush
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Provider</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Idempotency key</TableHead>
+                <TableHead>Received</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {snapshot.webhookEvents.slice(0, 20).map((event) => (
-                <tr key={event.id}>
-                  <td>{event.provider}</td>
-                  <td>{event.target}</td>
-                  <td>{event.eventType}</td>
-                  <td>
-                    <StatusPill label={event.status} tone={statusTone(event.status)} />
-                  </td>
-                  <td>{event.idempotencyKey}</td>
-                  <td>{formatDate(event.receivedAt)}</td>
-                </tr>
+                <TableRow key={event.id}>
+                  <TableCell className="text-muted-foreground">{event.provider}</TableCell>
+                  <TableCell className="text-muted-foreground">{event.target}</TableCell>
+                  <TableCell className="text-muted-foreground">{event.eventType}</TableCell>
+                  <TableCell>
+                    <StatusBadge label={event.status} tone={statusTone(event.status)} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{event.idempotencyKey}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(event.receivedAt)}</TableCell>
+                </TableRow>
               ))}
               {snapshot.webhookEvents.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>No webhook receipts have been recorded yet.</td>
-                </tr>
+                <TableRow>
+                  <TableCell colSpan={6} className="text-muted-foreground">
+                    No webhook receipts have been recorded yet.
+                  </TableCell>
+                </TableRow>
               ) : null}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Panel>
       </section>
       ) : null}
 
       {canManageOutreach ? (
-      <section className="grid" id="manual-event-capture">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Record email event</h2>
-              <p className="section-subtitle">Hard bounces, unsubscribes, and complaints immediately suppress contacts.</p>
-            </div>
-            <Mail size={20} aria-hidden="true" />
-          </div>
-          <form action={recordEmailEventAction} className="panel-body form-grid">
-            <div className="field">
-              <label htmlFor="emailContactId">Contact</label>
-              <select id="emailContactId" name="contactId" required>
+      <section className="grid grid-cols-1 gap-4" id="manual-event-capture">
+        <Panel
+          title="Record email event"
+          subtitle="Hard bounces, unsubscribes, and complaints immediately suppress contacts."
+          action={<ToneIcon icon={Mail} tone="info" />}
+        >
+          <form action={recordEmailEventAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="emailContactId" className={fieldLabelClass}>Contact</label>
+              <select id="emailContactId" name="contactId" required className={fieldClass}>
                 {contacts.map((contact) => (
                   <option key={contact.id} value={contact.id}>
                     {contact.name}
@@ -563,9 +590,9 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="emailCampaignId">Campaign</label>
-              <select id="emailCampaignId" name="campaignId" defaultValue="">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="emailCampaignId" className={fieldLabelClass}>Campaign</label>
+              <select id="emailCampaignId" name="campaignId" defaultValue="" className={fieldClass}>
                 <option value="">No campaign</option>
                 {campaigns.map((campaign) => (
                   <option key={campaign.id} value={campaign.id}>
@@ -574,9 +601,9 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="emailSequenceId">Sequence</label>
-              <select id="emailSequenceId" name="sequenceId" defaultValue="">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="emailSequenceId" className={fieldLabelClass}>Sequence</label>
+              <select id="emailSequenceId" name="sequenceId" defaultValue="" className={fieldClass}>
                 <option value="">No sequence</option>
                 {sequences.map((sequence) => (
                   <option key={sequence.id} value={sequence.id}>
@@ -585,9 +612,9 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="emailStepId">Step</label>
-              <select id="emailStepId" name="sequenceStepId" defaultValue="">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="emailStepId" className={fieldLabelClass}>Step</label>
+              <select id="emailStepId" name="sequenceStepId" defaultValue="" className={fieldClass}>
                 <option value="">No step</option>
                 {steps.map((step) => (
                   <option key={step.id} value={step.id}>
@@ -596,9 +623,9 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="eventType">Event</label>
-              <select id="eventType" name="eventType" defaultValue="Sent">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="eventType" className={fieldLabelClass}>Event</label>
+              <select id="eventType" name="eventType" defaultValue="Sent" className={fieldClass}>
                 {emailEventTypes.map((eventType) => (
                   <option key={eventType} value={eventType}>
                     {eventType}
@@ -606,47 +633,43 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="bounceType">Bounce type</label>
-              <select id="bounceType" name="bounceType" defaultValue="">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="bounceType" className={fieldLabelClass}>Bounce type</label>
+              <select id="bounceType" name="bounceType" defaultValue="" className={fieldClass}>
                 <option value="">None</option>
                 <option value="Hard">Hard</option>
                 <option value="Soft">Soft</option>
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="smtpCode">SMTP code</label>
-              <input id="smtpCode" name="smtpCode" placeholder="550" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="smtpCode" className={fieldLabelClass}>SMTP code</label>
+              <input id="smtpCode" name="smtpCode" placeholder="550" className={fieldClass} />
             </div>
-            <div className="field">
-              <label htmlFor="subject">Subject</label>
-              <input id="subject" name="subject" placeholder="{{company}} growth list quality" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="subject" className={fieldLabelClass}>Subject</label>
+              <input id="subject" name="subject" placeholder="{{company}} growth list quality" className={fieldClass} />
             </div>
-            <div className="field">
-              <label htmlFor="bodySnapshot">Body snapshot</label>
-              <textarea id="bodySnapshot" name="bodySnapshot" placeholder="Provider payload or body snapshot" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="bodySnapshot" className={fieldLabelClass}>Body snapshot</label>
+              <textarea id="bodySnapshot" name="bodySnapshot" placeholder="Provider payload or body snapshot" className={fieldTextareaClass} />
             </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+            <div className="flex items-end">
+              <Button type="submit" className="w-full">
                 Record email event
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
+        </Panel>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Record SMS event</h2>
-              <p className="section-subtitle">SMS opt-out events suppress the contact phone for future SMS.</p>
-            </div>
-            <MessageSquare size={20} aria-hidden="true" />
-          </div>
-          <form action={recordSmsEventAction} className="panel-body form-grid">
-            <div className="field">
-              <label htmlFor="smsContactId">Contact</label>
-              <select id="smsContactId" name="contactId" required>
+        <Panel
+          title="Record SMS event"
+          subtitle="SMS opt-out events suppress the contact phone for future SMS."
+          action={<ToneIcon icon={MessageSquare} tone="info" />}
+        >
+          <form action={recordSmsEventAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="smsContactId" className={fieldLabelClass}>Contact</label>
+              <select id="smsContactId" name="contactId" required className={fieldClass}>
                 {contacts.map((contact) => (
                   <option key={contact.id} value={contact.id}>
                     {contact.name}
@@ -654,9 +677,9 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="smsCampaignId">Campaign</label>
-              <select id="smsCampaignId" name="campaignId" defaultValue="">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="smsCampaignId" className={fieldLabelClass}>Campaign</label>
+              <select id="smsCampaignId" name="campaignId" defaultValue="" className={fieldClass}>
                 <option value="">No campaign</option>
                 {campaigns.map((campaign) => (
                   <option key={campaign.id} value={campaign.id}>
@@ -665,9 +688,9 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="sdrUserId">SDR</label>
-              <select id="sdrUserId" name="sdrUserId" defaultValue={state.users[0]?.id}>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="sdrUserId" className={fieldLabelClass}>SDR</label>
+              <select id="sdrUserId" name="sdrUserId" defaultValue={state.users[0]?.id} className={fieldClass}>
                 {state.users.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.name}
@@ -675,16 +698,16 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="direction">Direction</label>
-              <select id="direction" name="direction" defaultValue="Outbound">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="direction" className={fieldLabelClass}>Direction</label>
+              <select id="direction" name="direction" defaultValue="Outbound" className={fieldClass}>
                 <option value="Outbound">Outbound</option>
                 <option value="Inbound">Inbound</option>
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="status">Status</label>
-              <select id="status" name="status" defaultValue="Delivered">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="status" className={fieldLabelClass}>Status</label>
+              <select id="status" name="status" defaultValue="Delivered" className={fieldClass}>
                 {smsEventStatuses.map((status) => (
                   <option key={status} value={status}>
                     {status}
@@ -692,31 +715,27 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="body">Body</label>
-              <textarea id="body" name="body" placeholder="SMS payload" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="body" className={fieldLabelClass}>Body</label>
+              <textarea id="body" name="body" placeholder="SMS payload" className={fieldTextareaClass} />
             </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+            <div className="flex items-end">
+              <Button type="submit" className="w-full">
                 Record SMS event
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
+        </Panel>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <h2 className="section-title">Record call</h2>
-              <p className="section-subtitle">Tracked calls include recording, consent, transcript, summary, and next step.</p>
-            </div>
-            <Mic size={20} aria-hidden="true" />
-          </div>
-          <form action={recordTrackedCallAction} className="panel-body form-grid">
-            <div className="field">
-              <label htmlFor="callContactId">Contact</label>
-              <select id="callContactId" name="contactId" required>
+        <Panel
+          title="Record call"
+          subtitle="Tracked calls include recording, consent, transcript, summary, and next step."
+          action={<ToneIcon icon={Mic} tone="info" />}
+        >
+          <form action={recordTrackedCallAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="callContactId" className={fieldLabelClass}>Contact</label>
+              <select id="callContactId" name="contactId" required className={fieldClass}>
                 {contacts.map((contact) => (
                   <option key={contact.id} value={contact.id}>
                     {contact.name}
@@ -724,9 +743,9 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="callSdrUserId">SDR</label>
-              <select id="callSdrUserId" name="sdrUserId" defaultValue={state.users[0]?.id}>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="callSdrUserId" className={fieldLabelClass}>SDR</label>
+              <select id="callSdrUserId" name="sdrUserId" defaultValue={state.users[0]?.id} className={fieldClass}>
                 {state.users.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.name}
@@ -734,9 +753,9 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="callStatus">Status</label>
-              <select id="callStatus" name="callStatus" defaultValue="Connected">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="callStatus" className={fieldLabelClass}>Status</label>
+              <select id="callStatus" name="callStatus" defaultValue="Connected" className={fieldClass}>
                 {trackedCallStatuses.map((status) => (
                   <option key={status} value={status}>
                     {status}
@@ -744,9 +763,9 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="disposition">Disposition</label>
-              <select id="disposition" name="disposition" defaultValue="Interested">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="disposition" className={fieldLabelClass}>Disposition</label>
+              <select id="disposition" name="disposition" defaultValue="Interested" className={fieldClass}>
                 {callDispositions.map((disposition) => (
                   <option key={disposition} value={disposition}>
                     {disposition}
@@ -754,17 +773,17 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="durationSeconds">Duration seconds</label>
-              <input id="durationSeconds" name="durationSeconds" type="number" min="0" defaultValue="300" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="durationSeconds" className={fieldLabelClass}>Duration seconds</label>
+              <input id="durationSeconds" name="durationSeconds" type="number" min="0" defaultValue="300" className={fieldClass} />
             </div>
-            <div className="field">
-              <label htmlFor="recordingUrl">Recording URL</label>
-              <input id="recordingUrl" name="recordingUrl" placeholder="https://recordings.syncore.local/call.mp3" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="recordingUrl" className={fieldLabelClass}>Recording URL</label>
+              <input id="recordingUrl" name="recordingUrl" placeholder="https://recordings.syncore.local/call.mp3" className={fieldClass} />
             </div>
-            <div className="field">
-              <label htmlFor="recordingConsent">Recording consent</label>
-              <select id="recordingConsent" name="recordingConsent" defaultValue="Unknown">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="recordingConsent" className={fieldLabelClass}>Recording consent</label>
+              <select id="recordingConsent" name="recordingConsent" defaultValue="Unknown" className={fieldClass}>
                 {recordingConsentStatuses.map((status) => (
                   <option key={status} value={status}>
                     {status}
@@ -772,30 +791,29 @@ export default async function OutreachEventsPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="recordingConsentSource">Consent source</label>
-              <input id="recordingConsentSource" name="recordingConsentSource" placeholder="Verbal disclosure at call start" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="recordingConsentSource" className={fieldLabelClass}>Consent source</label>
+              <input id="recordingConsentSource" name="recordingConsentSource" placeholder="Verbal disclosure at call start" className={fieldClass} />
             </div>
-            <div className="field">
-              <label htmlFor="callSummary">Summary</label>
-              <textarea id="callSummary" name="callSummary" placeholder="Call summary" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="callSummary" className={fieldLabelClass}>Summary</label>
+              <textarea id="callSummary" name="callSummary" placeholder="Call summary" className={fieldTextareaClass} />
             </div>
-            <div className="field">
-              <label htmlFor="nextStep">Next step</label>
-              <input id="nextStep" name="nextStep" placeholder="Send ROI one-pager" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="nextStep" className={fieldLabelClass}>Next step</label>
+              <input id="nextStep" name="nextStep" placeholder="Send ROI one-pager" className={fieldClass} />
             </div>
-            <div className="field">
-              <label htmlFor="transcript">Transcript</label>
-              <textarea id="transcript" name="transcript" placeholder="Transcript excerpt" />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="transcript" className={fieldLabelClass}>Transcript</label>
+              <textarea id="transcript" name="transcript" placeholder="Transcript excerpt" className={fieldTextareaClass} />
             </div>
-            <div className="field">
-              <label aria-hidden="true">&nbsp;</label>
-              <button className="button primary" type="submit">
+            <div className="flex items-end">
+              <Button type="submit" className="w-full">
                 Record call
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
+        </Panel>
       </section>
       ) : null}
     </>

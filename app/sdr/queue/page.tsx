@@ -33,6 +33,7 @@ import {
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { fieldClass, fieldLabelClass, fieldTextareaClass } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
 import { StatCard, ToneIcon } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -333,8 +334,8 @@ export default async function SdrQueuePage() {
               <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{telephonyNote}</div>
             ) : null}
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="assignmentId" className="text-xs font-medium text-muted-foreground">Lead</label>
-              <select id="assignmentId" name="assignmentId" required>
+              <label htmlFor="assignmentId" className={fieldLabelClass}>Lead</label>
+              <select id="assignmentId" name="assignmentId" required className={fieldClass}>
                 {activeAssignments.map((assignment) => (
                   <option key={assignment.id} value={assignment.id}>
                     {assignmentDisplayName(assignment)} - {assignment.companyName}
@@ -343,8 +344,8 @@ export default async function SdrQueuePage() {
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="channel" className="text-xs font-medium text-muted-foreground">Channel</label>
-              <select id="channel" name="channel" defaultValue="Email">
+              <label htmlFor="channel" className={fieldLabelClass}>Channel</label>
+              <select id="channel" name="channel" defaultValue="Email" className={fieldClass}>
                 {outreachChannels.map((channel) => (
                   <option key={channel} value={channel}>
                     {channel}
@@ -353,8 +354,8 @@ export default async function SdrQueuePage() {
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="outcome" className="text-xs font-medium text-muted-foreground">Outcome</label>
-              <select id="outcome" name="outcome" defaultValue="Contacted">
+              <label htmlFor="outcome" className={fieldLabelClass}>Outcome</label>
+              <select id="outcome" name="outcome" defaultValue="Contacted" className={fieldClass}>
                 {touchStatuses.map((status) => (
                   <option key={status} value={status}>
                     {status}
@@ -363,12 +364,12 @@ export default async function SdrQueuePage() {
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="followUpDueAt" className="text-xs font-medium text-muted-foreground">Follow-up due</label>
-              <input id="followUpDueAt" name="followUpDueAt" type="datetime-local" />
+              <label htmlFor="followUpDueAt" className={fieldLabelClass}>Follow-up due</label>
+              <input id="followUpDueAt" name="followUpDueAt" type="datetime-local" className={fieldClass} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="notes" className="text-xs font-medium text-muted-foreground">Notes</label>
-              <textarea id="notes" name="notes" placeholder="Call outcome, objection, next step, or reply summary" />
+              <label htmlFor="notes" className={fieldLabelClass}>Notes</label>
+              <textarea id="notes" name="notes" placeholder="Call outcome, objection, next step, or reply summary" className={fieldTextareaClass} />
             </div>
             <div>
               <SubmitButton className={buttonVariants()} pendingLabel="Saving…">
@@ -436,8 +437,8 @@ export default async function SdrQueuePage() {
               <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{bulkSenderNote}</div>
               {canSelectBulkOwner ? (
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="bulk-owner" className="text-xs font-medium text-muted-foreground">Owner</label>
-                  <select id="bulk-owner" name="ownerUserId" defaultValue="all">
+                  <label htmlFor="bulk-owner" className={fieldLabelClass}>Owner</label>
+                  <select id="bulk-owner" name="ownerUserId" defaultValue="all" className={fieldClass}>
                     <option value="all">All SDRs</option>
                     {bulkOwnerUsers.map((user) => (
                       <option key={user.id} value={user.id}>
@@ -448,15 +449,15 @@ export default async function SdrQueuePage() {
                 </div>
               ) : null}
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="bulk-audience" className="text-xs font-medium text-muted-foreground">Audience</label>
-                <select id="bulk-audience" name="audience" defaultValue="all_assigned">
+                <label htmlFor="bulk-audience" className={fieldLabelClass}>Audience</label>
+                <select id="bulk-audience" name="audience" defaultValue="all_assigned" className={fieldClass}>
                   <option value="all_assigned">All eligible assigned</option>
                   <option value="p1">P1 assigned</option>
                   <option value="due_or_overdue">Due or overdue</option>
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="bulk-limit" className="text-xs font-medium text-muted-foreground">Max sends</label>
+                <label htmlFor="bulk-limit" className={fieldLabelClass}>Max sends</label>
                 <input
                   id="bulk-limit"
                   name="limit"
@@ -464,19 +465,21 @@ export default async function SdrQueuePage() {
                   min="1"
                   max="50"
                   defaultValue={Math.min(Math.max(bulkEligibleAssignments.length, 1), 25)}
+                  className={fieldClass}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="bulk-subject" className="text-xs font-medium text-muted-foreground">Subject</label>
-                <input id="bulk-subject" name="subject" defaultValue="Quick question about {{company}}" required />
+                <label htmlFor="bulk-subject" className={fieldLabelClass}>Subject</label>
+                <input id="bulk-subject" name="subject" defaultValue="Quick question about {{company}}" required className={fieldClass} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="bulk-body" className="text-xs font-medium text-muted-foreground">Body</label>
+                <label htmlFor="bulk-body" className={fieldLabelClass}>Body</label>
                 <textarea
                   id="bulk-body"
                   name="bodySnapshot"
                   placeholder="Hi {{first_name}}, quick question about {{company}}."
                   required
+                  className={fieldTextareaClass}
                 />
               </div>
               <div>
