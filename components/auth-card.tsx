@@ -22,14 +22,18 @@ export function AuthCard({
   return (
     <main className="flex min-h-svh flex-col items-center justify-center bg-[var(--bg-subtle)] px-4 py-10">
       <div className="mb-6 flex flex-col items-center gap-1.5">
-        <Image
-          src={syncoreBrand.logo.wordmark}
-          alt={syncoreBrand.shortName}
-          width={280}
-          height={87}
-          priority
-          className="h-auto w-56"
-        />
+        {/* The wordmark PNG is a 512x512 square with the logo in the middle band
+            and large transparent padding; crop to the logo with object-cover. */}
+        <div className="relative h-16 w-56 overflow-hidden">
+          <Image
+            src={syncoreBrand.logo.wordmark}
+            alt={syncoreBrand.shortName}
+            fill
+            priority
+            sizes="224px"
+            className="object-cover object-center"
+          />
+        </div>
         {kicker ? (
           <p className="text-xs font-medium tracking-wide text-muted-foreground">{kicker}</p>
         ) : null}
