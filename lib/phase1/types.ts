@@ -125,10 +125,15 @@ export type User = {
   id: string;
   name: string;
   email: string;
-  /** RingCentral direct number this user dials from (E.164). */
+  /** Real phone RingCentral rings first (the SDR's cell/desk phone), E.164. */
   ringCentralPhoneNumber?: string;
-  /** RingCentral extension id used to place RingOut on this user's behalf. */
+  /** RingCentral extension id (optional; legacy on-behalf field). */
   ringCentralExtensionId?: string;
+  /** RingCentral DID shown to the lead as caller ID (needs this SDR's own JWT). */
+  ringCentralCallerId?: string;
+  /** This SDR's own RingCentral JWT, ENCRYPTED (see secret-box). Placing calls as
+   *  them lets their own number be presented as caller ID. */
+  ringCentralJwt?: string;
   createdAt: string;
 };
 

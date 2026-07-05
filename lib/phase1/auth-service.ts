@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { assertPermission, resolveSession, type SessionSelection } from "@/lib/phase1/auth";
+import { encryptSecretString } from "@/lib/phase1/secret-box";
 import {
   createSignedAuthSessionCookie,
   defaultAuthSessionMaxAgeSeconds,
@@ -439,7 +440,7 @@ export function deactivateUserAccount(state: AppState, session: Session, userId:
 export function updateUserTelephony(
   state: AppState,
   session: Session,
-  input: { userId: string; phoneNumber: string; extensionId: string }
+  input: { userId: string; phoneNumber: string; callerId: string; jwt: string }
 ) {
   assertPermission(session, "manage_workspace");
   const member = state.workspaceMembers.find(
@@ -452,12 +453,20 @@ export function updateUserTelephony(
   if (!user) {
     throw new Error("User not found.");
   }
+  // Audit records only whether a JWT is present, never the secret itself.
   const oldValue = {
     ringCentralPhoneNumber: user.ringCentralPhoneNumber,
-    ringCentralExtensionId: user.ringCentralExtensionId
+    ringCentralCallerId: user.ringCentralCallerId,
+    hasJwt: Boolean(user.ringCentralJwt)
   };
   user.ringCentralPhoneNumber = input.phoneNumber.trim() || undefined;
-  user.ringCentralExtensionId = input.extensionId.trim() || undefined;
+  user.ringCentralCallerId = input.callerId.trim() || undefined;
+  const jwt = input.jwt.trim();
+  if (jwt) {
+    // A pasted JWT replaces the stored one (encrypted at rest). Blank keeps the
+    // existing JWT so an admin can edit the number without re-pasting the key.
+    user.ringCentralJwt = encryptSecretString(jwt);
+  }
   appendAuthAudit(state, {
     workspaceId: session.workspace.id,
     actorUserId: session.user.id,
@@ -467,7 +476,8 @@ export function updateUserTelephony(
     oldValue,
     newValue: {
       ringCentralPhoneNumber: user.ringCentralPhoneNumber,
-      ringCentralExtensionId: user.ringCentralExtensionId
+      ringCentralCallerId: user.ringCentralCallerId,
+      hasJwt: Boolean(user.ringCentralJwt)
     }
   });
 }
