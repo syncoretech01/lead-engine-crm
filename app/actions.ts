@@ -1952,6 +1952,62 @@ export async function placeCallAction(
   return { callId, liveState, error: placeError };
 }
 
+// Records a browser-softphone (WebRTC) call once it ends. Unlike RingOut, the
+// audio flows through the browser, so the client already knows the outcome and
+// duration when the SIP session disposes — it just posts them here to log.
+export async function logSoftphoneCallAction(
+  formData: FormData
+): Promise<{ callId: string }> {
+  const contactId = stringValue(formData.get("contactId"));
+  const durationSeconds = Math.max(0, Math.round(numberValue(formData.get("durationSeconds"))));
+  const outcome = stringValue(formData.get("outcome"), "no-answer");
+  const recordingConsent = recordingConsentValue(formData.get("recordingConsent"));
+  const providerCallId = stringValue(formData.get("providerCallId")) || undefined;
+
+  // "completed" means the SIP session was answered — a real conversation, even if
+  // it lasted under a second — so it is Connected regardless of rounded duration.
+  const connected = outcome === "completed";
+  const callStatus = outcome === "failed" ? "Failed" : connected ? "Connected" : "No answer";
+
+  const callId = await updateState(
+    (state, session) => {
+      assertPermission(session, "send_direct_outreach");
+      assertAssignedContactForOutreach(state, session, contactId);
+      const call = createTrackedCall(state, {
+        workspaceId: session.workspace.id,
+        contactId,
+        sdrUserId: session.user.id,
+        direction: "Outbound",
+        callStatus,
+        disposition: "No answer",
+        durationSeconds,
+        recordingConsent,
+        recordingConsentSource: "Softphone disclosure",
+        providerCallId,
+        telephonySessionId: providerCallId,
+        liveState: outcome === "failed" ? "failed" : "completed",
+        callSummary:
+          callStatus === "Connected"
+            ? `Browser softphone call — connected for ${durationSeconds}s.`
+            : callStatus === "Failed"
+              ? "Browser softphone call — failed to connect."
+              : "Browser softphone call — no answer."
+      });
+      appendAudit(state, session, {
+        objectType: "tracked_call",
+        objectId: call.id,
+        action: "call_logged",
+        newValue: { source: "softphone", durationSeconds, outcome, providerCallId }
+      });
+      return call.id;
+    },
+    { normalizedTables: outreachTrackedCallWriteTables }
+  );
+
+  revalidateOutreachPages([`/crm/contacts/${contactId}`, "/crm/calls", "/crm/my-contacts", "/sdr/queue"]);
+  return { callId };
+}
+
 export async function updateOutreachProviderStatusAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_outreach");

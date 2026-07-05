@@ -27,16 +27,31 @@ export async function GET() {
   }
 
   const sdrUser = state.users.find((user) => user.id === session.user.id) ?? session.user;
-  let sdrJwt: string | undefined;
-  if (sdrUser.ringCentralJwt) {
-    try {
-      sdrJwt = decryptSecretString(sdrUser.ringCentralJwt);
-    } catch {
-      sdrJwt = undefined;
-    }
+  // The softphone registers a SIP device AS the authenticated user, so it MUST use
+  // that user's OWN RingCentral JWT. We never fall back to the shared admin JWT here
+  // (unlike RingOut) — doing so would hand admin-extension SIP credentials to an SDR's
+  // browser, registering them as the admin/company line. If there's no per-SDR JWT, the
+  // SDR should use the RingOut fallback instead.
+  if (!sdrUser.ringCentralJwt) {
+    return Response.json(
+      {
+        error:
+          "Your RingCentral line isn't set up for browser calling yet. Ask an admin to add your RingCentral JWT under User Access — or use “Ring my phone instead.”"
+      },
+      { status: 403 }
+    );
   }
-  const credential = sdrJwt ? { ...envCredential, jwt: sdrJwt } : envCredential;
-  const callerId = sdrJwt ? sdrUser.ringCentralCallerId : undefined;
+  let sdrJwt: string;
+  try {
+    sdrJwt = decryptSecretString(sdrUser.ringCentralJwt);
+  } catch {
+    return Response.json(
+      { error: "Your RingCentral credential couldn't be read. Ask an admin to re-enter your JWT." },
+      { status: 500 }
+    );
+  }
+  const credential = { ...envCredential, jwt: sdrJwt };
+  const callerId = sdrUser.ringCentralCallerId;
 
   const serverUrl = normalizeServerUrl(credential.serverUrl);
   let accessToken: string;

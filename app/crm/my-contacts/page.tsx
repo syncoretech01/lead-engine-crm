@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, Building2, ClipboardList, Flame, Mail, Phone, UserCheck } from "lucide-react";
 
-import { CallButton } from "@/components/call-button";
+import { SoftphoneButton } from "@/components/softphone-button";
 import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { fieldClass } from "@/components/ui/field";
@@ -231,7 +231,7 @@ export default async function MyContactsPage({
                 </TableCell>
                 {!isSdr ? <TableCell className="text-muted-foreground">{row.ownerName}</TableCell> : null}
                 <TableCell className="text-right">
-                  <CallButton
+                  <SoftphoneButton
                     contactId={row.contactId}
                     contactName={row.contactName}
                     phone={row.phone}
