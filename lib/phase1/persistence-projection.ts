@@ -280,6 +280,8 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       name: user.name,
       ringCentralPhoneNumber: user.ringCentralPhoneNumber ?? null,
       ringCentralExtensionId: user.ringCentralExtensionId ?? null,
+      ringCentralCallerId: user.ringCentralCallerId ?? null,
+      ringCentralJwt: user.ringCentralJwt ?? null,
       createdAt: user.createdAt,
       updatedAt: user.createdAt
     }))),

@@ -9,12 +9,16 @@ import {
 export type RingCentralRingOutCredential = RingCentralSmsCredential;
 
 export type RingCentralRingOutInput = {
-  /** The SDR's own RingCentral number (caller id + first leg). */
+  /** The SDR's real phone (cell/desk) RingCentral rings first — must be reachable. */
   fromNumber: string;
   /** The lead's number (second leg). */
   toNumber: string;
   /** Extension to place the RingOut on behalf of; defaults to the auth extension. */
   extensionId?: string;
+  /** Caller ID shown to the lead. Only valid when the call is placed as an identity
+   *  that owns this number (i.e. the SDR's own JWT); otherwise RingCentral rejects
+   *  it (TEL-107) and we omit it so the account default (company number) is used. */
+  callerId?: string;
 };
 
 export type RingCentralRingOutResult = {
@@ -49,14 +53,15 @@ export async function ringCentralRingOut(
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
-    // `from` is the SDR's real phone (cell/desk) that RingCentral rings first —
-    // it must be a reachable phone, NOT a RingCentral internal DID (which fails
-    // with GenericError). We intentionally omit `callerId` so RingCentral uses the
-    // account's RingOut caller ID (the business/company number) toward the lead,
-    // keeping the SDR's personal cell private.
+    // `from` is the SDR's real phone (cell/desk) that RingCentral rings first — it
+    // must be a reachable phone, NOT a RingCentral internal DID (GenericError).
+    // `callerId` (the SDR's own DID) is only included when the call is placed as
+    // that SDR (their own JWT); without it, RingCentral uses the account default
+    // (company number) toward the lead.
     body: JSON.stringify({
       from: { phoneNumber: input.fromNumber },
       to: { phoneNumber: input.toNumber },
+      ...(input.callerId ? { callerId: { phoneNumber: input.callerId } } : {}),
       playPrompt: false
     })
   });

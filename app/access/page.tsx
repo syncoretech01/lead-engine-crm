@@ -213,11 +213,15 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
           <div>
             <h2 className="section-title">RingCentral lines</h2>
             <p className="section-subtitle">
-              Enter the SDR&apos;s <strong>real phone to ring</strong> (mobile or desk phone) in E.164
-              form (e.g. +18165551234). RingCentral calls this phone first, the SDR answers, then it
-              bridges to the lead — so it must be a phone that actually rings (a RingCentral internal
-              DID won&apos;t work). The lead sees your RingCentral business caller ID, not this number.
-              The extension field is optional. Leave blank to disable calling for that user.
+              Three fields per SDR (E.164, e.g. +18165551234). <strong>Phone to ring</strong> — the
+              SDR&apos;s real cell/desk phone; RingCentral calls it first, they answer, then it
+              bridges to the lead (must be a real phone, not a RingCentral DID). <strong>Caller ID</strong>
+              — the RingCentral number the lead sees; only applied when you also add that SDR&apos;s JWT.
+              <strong>RingCentral JWT</strong> — created by signing into RingCentral as that SDR →
+              Credentials → Create JWT; stored encrypted, paste to set or replace (leave blank to keep
+              the current one). With a JWT the call is placed as that SDR so their own number shows to
+              the lead; without one, calls use the shared company caller ID. Leave the phone blank to
+              disable calling.
             </p>
           </div>
           <Phone size={20} aria-hidden="true" />
@@ -245,16 +249,23 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
                       <input
                         name="phoneNumber"
                         type="tel"
-                        placeholder="+13035551234"
+                        placeholder="Phone to ring (cell) +1816…"
                         defaultValue={member.user?.ringCentralPhoneNumber ?? ""}
-                        aria-label={`RingCentral number for ${member.user?.name ?? "user"}`}
+                        aria-label={`Phone to ring for ${member.user?.name ?? "user"}`}
                       />
                       <input
-                        name="extensionId"
-                        type="text"
-                        placeholder="Extension number (e.g. 102)"
-                        defaultValue={member.user?.ringCentralExtensionId ?? ""}
-                        aria-label={`RingCentral extension for ${member.user?.name ?? "user"}`}
+                        name="callerId"
+                        type="tel"
+                        placeholder="Caller ID to leads +1816…"
+                        defaultValue={member.user?.ringCentralCallerId ?? ""}
+                        aria-label={`Caller ID for ${member.user?.name ?? "user"}`}
+                      />
+                      <input
+                        name="jwt"
+                        type="password"
+                        autoComplete="off"
+                        placeholder={member.user?.ringCentralJwt ? "JWT set — paste to replace" : "Paste RingCentral JWT"}
+                        aria-label={`RingCentral JWT for ${member.user?.name ?? "user"}`}
                       />
                       <button className="button subtle" type="submit">
                         Save

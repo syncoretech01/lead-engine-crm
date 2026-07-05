@@ -241,7 +241,8 @@ export async function updateUserTelephonyAction(formData: FormData) {
     updateUserTelephony(state, session, {
       userId: stringValue(formData.get("userId")),
       phoneNumber: stringValue(formData.get("phoneNumber")),
-      extensionId: stringValue(formData.get("extensionId"))
+      callerId: stringValue(formData.get("callerId")),
+      jwt: stringValue(formData.get("jwt"))
     });
   }, { normalizedTables: authWriteTables });
 
