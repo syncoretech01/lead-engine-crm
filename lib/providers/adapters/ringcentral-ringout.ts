@@ -49,10 +49,14 @@ export async function ringCentralRingOut(
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
+    // `from` is the SDR's real phone (cell/desk) that RingCentral rings first —
+    // it must be a reachable phone, NOT a RingCentral internal DID (which fails
+    // with GenericError). We intentionally omit `callerId` so RingCentral uses the
+    // account's RingOut caller ID (the business/company number) toward the lead,
+    // keeping the SDR's personal cell private.
     body: JSON.stringify({
       from: { phoneNumber: input.fromNumber },
       to: { phoneNumber: input.toNumber },
-      callerId: { phoneNumber: input.fromNumber },
       playPrompt: false
     })
   });

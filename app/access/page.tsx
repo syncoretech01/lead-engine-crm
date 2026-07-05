@@ -213,10 +213,11 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
           <div>
             <h2 className="section-title">RingCentral lines</h2>
             <p className="section-subtitle">
-              Each SDR dials from their own RingCentral number: RingCentral rings this number first,
-              then bridges to the lead. Enter the direct number in E.164 form (e.g. +13035551234) —
-              this is what&apos;s required. The extension field is optional. Leave the number blank to
-              disable calling for that user.
+              Enter the SDR&apos;s <strong>real phone to ring</strong> (mobile or desk phone) in E.164
+              form (e.g. +18165551234). RingCentral calls this phone first, the SDR answers, then it
+              bridges to the lead — so it must be a phone that actually rings (a RingCentral internal
+              DID won&apos;t work). The lead sees your RingCentral business caller ID, not this number.
+              The extension field is optional. Leave blank to disable calling for that user.
             </p>
           </div>
           <Phone size={20} aria-hidden="true" />
