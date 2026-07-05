@@ -138,7 +138,7 @@ export default async function CallsPage({
                 </TableCell>
                 {!isSdr ? <TableCell className="text-muted-foreground">{userName(call.sdrUserId)}</TableCell> : null}
                 <TableCell className="whitespace-nowrap text-muted-foreground">{formatWhen(call.createdAt)}</TableCell>
-                <TableCell>{recordingCell(call.recordingUrl, call.recordingConsent, call.id)}</TableCell>
+                <TableCell>{recordingCell(call.recordingUrl, call.id)}</TableCell>
               </TableRow>
             ))}
             {calls.length === 0 ? (
@@ -155,14 +155,13 @@ export default async function CallsPage({
   );
 }
 
-function recordingCell(recordingUrl: string | undefined, consent: string, callId: string) {
+function recordingCell(recordingUrl: string | undefined, callId: string) {
   if (recordingUrl) {
     return <RecordingPlayer callId={callId} />;
   }
-  if (consent === "Granted") {
-    return <span className="text-xs text-muted-foreground">Processing…</span>;
-  }
-  return <span className="text-xs text-muted-foreground">Not recorded</span>;
+  // Recording ingestion (webhook + S3) ships in Milestone C — until then there is
+  // nothing "processing", so don't imply a recording is on its way.
+  return <span className="text-xs text-muted-foreground">—</span>;
 }
 
 function dispositionLabel(callStatus: string, disposition: string): string {

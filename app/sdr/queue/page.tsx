@@ -25,7 +25,7 @@ import { statusTone } from "@/components/status-pill";
 import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
-import { CallButton } from "@/components/call-button";
+import { SoftphoneButton } from "@/components/softphone-button";
 import {
   readFastSdrQueueModel,
   type SdrQueueAssignmentReadRow,
@@ -303,7 +303,7 @@ export default async function SdrQueuePage() {
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">
                         {assignment.phone ? (
-                          <CallButton
+                          <SoftphoneButton
                             contactId={assignment.contactId}
                             contactName={meaningfulName(assignment.contactName)}
                             phone={assignment.phone}
