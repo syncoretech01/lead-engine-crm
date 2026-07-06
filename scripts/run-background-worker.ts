@@ -1,5 +1,6 @@
 import { runLeadJobWorkerTick } from "@/lib/phase1/lead-job-worker-runner";
 import { runProviderWorkerTick } from "@/lib/phase1/provider-worker-runner";
+import { runRecordingWorkerTick } from "@/lib/phase1/recording-worker-runner";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 
 type BackgroundWorkerArgs = {
@@ -40,9 +41,10 @@ async function runTick(args: BackgroundWorkerArgs) {
     maxRuns: args.maxRuns,
     workerId: args.workerId
   });
+  const recording = await runRecordingWorkerTick({ workspaceId: args.workspaceId });
 
   console.log(
-    `[${new Date().toISOString()}] provider-mock=${provider.mock.completed}/${provider.mock.claimed} provider-live=${provider.live.executed} lead-jobs=${lead.completed}/${lead.claimed} failed=${lead.failed}`
+    `[${new Date().toISOString()}] provider-mock=${provider.mock.completed}/${provider.mock.claimed} provider-live=${provider.live.executed} lead-jobs=${lead.completed}/${lead.claimed} failed=${lead.failed} recordings=${recording.updated}/${recording.scanned}`
   );
 }
 

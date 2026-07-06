@@ -47,7 +47,7 @@ export default async function CallsPage({
   const roster = isSdr ? [] : sdrUsers(state, workspaceId).map((user) => ({ id: user.id, name: user.name }));
 
   const connected = calls.filter((call) => call.callStatus === "Connected").length;
-  const recordings = calls.filter((call) => Boolean(call.recordingUrl)).length;
+  const recordings = calls.filter((call) => Boolean(call.recordingId)).length;
 
   return (
     <>
@@ -138,7 +138,7 @@ export default async function CallsPage({
                 </TableCell>
                 {!isSdr ? <TableCell className="text-muted-foreground">{userName(call.sdrUserId)}</TableCell> : null}
                 <TableCell className="whitespace-nowrap text-muted-foreground">{formatWhen(call.createdAt)}</TableCell>
-                <TableCell>{recordingCell(call.recordingUrl, call.id)}</TableCell>
+                <TableCell>{recordingCell(call.recordingId, call.recordingConsent, call.createdAt, call.id)}</TableCell>
               </TableRow>
             ))}
             {calls.length === 0 ? (
@@ -155,12 +155,20 @@ export default async function CallsPage({
   );
 }
 
-function recordingCell(recordingUrl: string | undefined, callId: string) {
-  if (recordingUrl) {
+function recordingCell(recordingId: string | undefined, consent: string, createdAt: string, callId: string) {
+  if (recordingId) {
     return <RecordingPlayer callId={callId} />;
   }
-  // Recording ingestion (webhook + S3) ships in Milestone C — until then there is
-  // nothing "processing", so don't imply a recording is on its way.
+  if (consent === "Granted") {
+    // Recorded on-demand; the reconcile worker pulls the recording once RingCentral
+    // finishes processing it. After ~30 min with nothing, assume it never landed.
+    const ageMs = Date.now() - Date.parse(createdAt);
+    return (
+      <span className="text-xs text-muted-foreground">
+        {Number.isFinite(ageMs) && ageMs < 30 * 60 * 1000 ? "Processing…" : "Unavailable"}
+      </span>
+    );
+  }
   return <span className="text-xs text-muted-foreground">—</span>;
 }
 
