@@ -58,7 +58,10 @@ export function AppShell({ children, session, defaultSidebarOpen = true }: AppSh
     <SidebarProvider defaultOpen={defaultSidebarOpen}>
       <Sidebar collapsible="icon">
         <SidebarHeader>
-          <Link href="/" className="flex items-center gap-2 rounded-md px-1 py-1.5">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 rounded-md px-1 py-2 transition-colors hover:bg-white/5"
+          >
             <Image
               src={syncoreBrand.logo.logomark}
               alt=""
@@ -67,11 +70,8 @@ export function AppShell({ children, session, defaultSidebarOpen = true }: AppSh
               className="size-8 shrink-0 rounded-md"
               priority
             />
-            <span className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
-              <span className="truncate text-sm font-semibold leading-tight text-white">
-                {syncoreBrand.shortName}
-              </span>
-              <span className="truncate text-xs text-white/70">{session.workspace.name}</span>
+            <span className="truncate text-sm font-semibold tracking-tight text-white group-data-[collapsible=icon]:hidden">
+              {syncoreBrand.shortName}
             </span>
           </Link>
         </SidebarHeader>

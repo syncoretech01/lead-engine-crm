@@ -149,6 +149,21 @@
   ::backdrop {
     border: 0 solid var(--ui-border);
   }
+
+  /* Preflight is off, so bare <button>/<input> controls fall back to the OS
+     `ButtonFace` system color — which renders as a solid grey under
+     `color-scheme: dark`. Reset it the way Preflight would; any control with its
+     own background (legacy `.button`, shadcn variant utilities in @layer
+     utilities) still wins over this base rule. Without it the SidebarTrigger and
+     SidebarRail (bare ghost buttons that set no background) show up as grey
+     blocks in dark mode — the "grey gap" beside the sidebar and the grey
+     toggle. */
+  button,
+  [type="button"],
+  [type="reset"],
+  [type="submit"] {
+    background-color: transparent;
+  }
 }
 
 :root {
