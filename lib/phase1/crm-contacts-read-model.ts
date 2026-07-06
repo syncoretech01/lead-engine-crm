@@ -129,7 +129,7 @@ export async function readFastCrmContactsModel(
   };
 }
 
-async function crmScopedContactIds(session: Session, workspaceId: string) {
+export async function crmScopedContactIds(session: Session, workspaceId: string) {
   if (session.permissions.includes("view_all_records")) {
     return undefined;
   }
