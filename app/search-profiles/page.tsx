@@ -19,6 +19,8 @@ import {
   deleteSearchProfileAction,
   duplicateSearchProfileAction
 } from "@/app/actions";
+import { ActionForm } from "@/components/action-form";
+import { ConfirmSubmit } from "@/components/confirm-submit";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill, statusTone } from "@/components/status-pill";
@@ -277,19 +279,23 @@ export default async function SearchProfilesPage() {
                         <Play size={16} aria-hidden="true" />
                         Plan run
                       </Link>
-                      <form action={duplicateSearchProfileAction}>
+                      <ActionForm action={duplicateSearchProfileAction}>
                         <input name="id" type="hidden" value={profile.id} />
                         <button className="button secondary" type="submit">
                           <Copy size={16} aria-hidden="true" />
                           Copy
                         </button>
-                      </form>
+                      </ActionForm>
                       <form action={deleteSearchProfileAction}>
                         <input name="id" type="hidden" value={profile.id} />
-                        <button className="button danger" type="submit">
+                        <ConfirmSubmit
+                          title="Delete this search profile?"
+                          description={`"${profile.name}" and its saved targeting will be removed. This can't be undone.`}
+                          confirmLabel="Delete profile"
+                        >
                           <Trash2 size={16} aria-hidden="true" />
                           Delete
-                        </button>
+                        </ConfirmSubmit>
                       </form>
                     </div>
                   </td>
@@ -434,13 +440,13 @@ function ProfileCard({ profile }: { profile: SearchProfile }) {
             <Play size={16} aria-hidden="true" />
             Plan
           </Link>
-          <form action={duplicateSearchProfileAction}>
+          <ActionForm action={duplicateSearchProfileAction}>
             <input name="id" type="hidden" value={profile.id} />
             <button className="button secondary" type="submit" title="Copy profile">
               <Copy size={16} aria-hidden="true" />
               Copy
             </button>
-          </form>
+          </ActionForm>
         </div>
       </div>
     </article>
