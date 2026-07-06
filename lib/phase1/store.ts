@@ -39,7 +39,7 @@ import { ensureSdrDefaults } from "@/lib/phase1/sdr";
 import { ensureWaterfallDefaults, pruneWaterfallTemplateProviders } from "@/lib/phase1/waterfall-templates";
 import { timeAsync, timeSync } from "@/lib/phase1/performance";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import type { AppState, AuditLog, AuthAccountStatus, Permission, Session, WorkspaceRole } from "@/lib/phase1/types";
+import type { AppState, AuditLog, AuthAccountStatus, Permission, Session, UserInviteStatus, WorkspaceRole } from "@/lib/phase1/types";
 import {
   defaultWorkspacePath,
   hasPermission,
@@ -344,6 +344,13 @@ function authAccountStatusFromPrisma(status: string): AuthAccountStatus {
   return "Active";
 }
 
+function inviteStatusFromPrisma(status: string): UserInviteStatus {
+  if (status === "Accepted" || status === "Expired" || status === "Revoked") {
+    return status;
+  }
+  return "Pending";
+}
+
 export async function resetStore() {
   await writeState(createSeedState());
 }
@@ -492,12 +499,13 @@ async function readStateFromPrisma(client: PrismaStoreClient): Promise<AppState>
 
 async function mergePrismaIdentityRows(client: PrismaStoreClient, state: AppState) {
   let changed = false;
-  const [workspaces, users, members, authAccounts, authSessions] = await Promise.all([
+  const [workspaces, users, members, authAccounts, authSessions, userInvites] = await Promise.all([
     client.workspace.findMany(),
     client.user.findMany(),
     client.workspaceMember.findMany(),
     client.authAccount.findMany(),
-    client.authSession.findMany()
+    client.authSession.findMany(),
+    client.userInvite.findMany()
   ]);
 
   for (const workspace of workspaces) {
@@ -624,6 +632,38 @@ async function mergePrismaIdentityRows(client: PrismaStoreClient, state: AppStat
       }
     } else {
       state.authSessions.push(next);
+      changed = true;
+    }
+  }
+
+  // Invites are also written by the prisma fast path (accept flips status to
+  // "Accepted"), so reconcile them like the rows above — otherwise the blob
+  // keeps stale "Pending" invites and the /access page never clears them.
+  if (!Array.isArray(state.userInvites)) {
+    state.userInvites = [];
+  }
+  for (const invite of userInvites) {
+    const existing = state.userInvites.find((item) => item.id === invite.id);
+    const next = {
+      id: invite.id,
+      workspaceId: invite.workspaceId,
+      email: invite.email,
+      role: workspaceRoleFromPrisma(invite.role),
+      tokenHash: invite.tokenHash,
+      invitedById: invite.invitedById,
+      status: inviteStatusFromPrisma(invite.status),
+      expiresAt: invite.expiresAt.toISOString(),
+      acceptedAt: invite.acceptedAt?.toISOString(),
+      createdAt: invite.createdAt.toISOString()
+    };
+
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(next)) {
+        Object.assign(existing, next);
+        changed = true;
+      }
+    } else {
+      state.userInvites.push(next);
       changed = true;
     }
   }

@@ -4,6 +4,7 @@ import { readState } from "@/lib/phase1/store";
 import { amazonSesSendEmail } from "@/lib/providers/adapters/amazon-ses";
 import { resolveProviderExecutionMode } from "@/lib/providers/live-adapters";
 import { ensureLiveProviderAdaptersRegistered } from "@/lib/providers/register-live-adapters";
+import { syncoreBrand } from "@/lib/brand";
 import type { AppState, ProviderConnection } from "@/lib/phase1/types";
 
 export type TransactionalEmail = {
@@ -34,14 +35,60 @@ export function absoluteUrl(path: string): string {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+/**
+ * Branded, email-client-safe HTML shell (inline styles + table layout so it
+ * renders in Gmail/Outlook). The logo is a hosted PNG — data URIs are blocked
+ * by most clients.
+ */
+function brandedEmailHtml(opts: {
+  heading: string;
+  bodyHtml: string;
+  ctaLabel: string;
+  ctaHref: string;
+  footnote: string;
+}): string {
+  const logo = absoluteUrl(syncoreBrand.logo.logomark);
+  const navy = syncoreBrand.colors.dark;
+  const blue = syncoreBrand.colors.primary;
+  return `<div style="margin:0;padding:32px 12px;background:#f5f7fb;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e6ebf3;border-radius:14px;overflow:hidden;">
+    <tr><td style="background:${navy};padding:22px 32px;">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td style="vertical-align:middle;"><img src="${logo}" width="36" height="36" alt="" style="display:block;border:0;border-radius:8px;" /></td>
+        <td style="vertical-align:middle;padding-left:12px;color:#ffffff;font-size:16px;font-weight:700;letter-spacing:-0.01em;">${syncoreBrand.shortName}</td>
+      </tr></table>
+    </td></tr>
+    <tr><td style="padding:32px;">
+      <h1 style="margin:0 0 14px;font-size:20px;line-height:1.3;color:#0b1220;">${opts.heading}</h1>
+      ${opts.bodyHtml}
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px;"><tr>
+        <td style="border-radius:9px;background:${blue};">
+          <a href="${opts.ctaHref}" style="display:inline-block;padding:12px 26px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:9px;">${opts.ctaLabel}</a>
+        </td>
+      </tr></table>
+      <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">${opts.footnote}</p>
+    </td></tr>
+    <tr><td style="padding:18px 32px;border-top:1px solid #eef1f6;">
+      <p style="margin:0;font-size:12px;color:#9aa3b2;">${syncoreBrand.companyName} · ${syncoreBrand.tagline}</p>
+    </td></tr>
+  </table>
+</div>`;
+}
+
 export function inviteEmail(input: { to: string; url: string; workspaceName?: string }): TransactionalEmail {
   const link = absoluteUrl(input.url);
-  const workspace = input.workspaceName ?? "Syncore";
+  const product = syncoreBrand.shortName;
   return {
     to: input.to,
-    subject: `You're invited to ${workspace}`,
-    html: `<p>You've been invited to join <strong>${workspace}</strong>.</p><p><a href="${link}">Accept your invitation</a></p><p>This link expires in 7 days.</p>`,
-    text: `You've been invited to join ${workspace}. Accept your invitation: ${link} (expires in 7 days).`
+    subject: `You're invited to ${product}`,
+    html: brandedEmailHtml({
+      heading: `You're invited to ${product}`,
+      bodyHtml: `<p style="margin:0;font-size:15px;line-height:1.55;color:#374151;">You've been invited to join <strong>${product}</strong>. Click below to set your password and get started.</p>`,
+      ctaLabel: "Accept your invitation",
+      ctaHref: link,
+      footnote: "This link expires in 7 days. If you weren't expecting this, you can ignore this email."
+    }),
+    text: `You've been invited to join ${product}. Accept your invitation: ${link} (expires in 7 days).`
   };
 }
 
@@ -49,9 +96,15 @@ export function passwordResetEmail(input: { to: string; url: string }): Transact
   const link = absoluteUrl(input.url);
   return {
     to: input.to,
-    subject: "Reset your Syncore password",
-    html: `<p>We received a request to reset your password.</p><p><a href="${link}">Reset your password</a></p><p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>`,
-    text: `Reset your Syncore password: ${link} (expires in 1 hour). If you didn't request this, you can ignore this email.`
+    subject: `Reset your ${syncoreBrand.shortName} password`,
+    html: brandedEmailHtml({
+      heading: "Reset your password",
+      bodyHtml: `<p style="margin:0;font-size:15px;line-height:1.55;color:#374151;">We received a request to reset your ${syncoreBrand.shortName} password. Click below to choose a new one.</p>`,
+      ctaLabel: "Reset your password",
+      ctaHref: link,
+      footnote: "This link expires in 1 hour. If you didn't request this, you can safely ignore this email."
+    }),
+    text: `Reset your ${syncoreBrand.shortName} password: ${link} (expires in 1 hour). If you didn't request this, you can ignore this email.`
   };
 }
 
