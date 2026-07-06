@@ -434,6 +434,56 @@ export function deactivateUserAccount(state: AppState, session: Session, userId:
   return account;
 }
 
+/**
+ * Permanently remove a member from the workspace (unlike deactivate, which only
+ * disables). Drops the membership; if the user has no other membership, also
+ * removes their sessions, auth account, pending invites, and the user record.
+ * Returns the (normalized) email + whether the user was fully removed so the
+ * caller can prune the non-workspace-scoped prisma rows the projection leaves.
+ */
+export function removeWorkspaceMember(
+  state: AppState,
+  session: Session,
+  userId: string
+): { email?: string; fullyRemoved: boolean } {
+  assertPermission(session, "manage_workspace");
+  if (userId === session.user.id) {
+    throw new Error("You cannot remove your own access.");
+  }
+  const workspaceId = session.workspace.id;
+  const member = state.workspaceMembers.find(
+    (record) => record.workspaceId === workspaceId && record.userId === userId
+  );
+  if (!member) {
+    throw new Error("Workspace member not found.");
+  }
+  const memberId = member.id;
+  const user = state.users.find((record) => record.id === userId);
+
+  state.workspaceMembers = state.workspaceMembers.filter((record) => record.id !== memberId);
+
+  const fullyRemoved = !state.workspaceMembers.some((record) => record.userId === userId);
+  if (fullyRemoved) {
+    state.authSessions = state.authSessions.filter((record) => record.userId !== userId);
+    state.authAccounts = state.authAccounts.filter((record) => record.userId !== userId);
+    if (user) {
+      const email = normalizeEmail(user.email);
+      state.userInvites = state.userInvites.filter((record) => normalizeEmail(record.email) !== email);
+    }
+    state.users = state.users.filter((record) => record.id !== userId);
+  }
+
+  appendAuthAudit(state, {
+    workspaceId,
+    actorUserId: session.user.id,
+    objectType: "workspace_member",
+    objectId: memberId,
+    action: "removed"
+  });
+
+  return { email: user ? normalizeEmail(user.email) : undefined, fullyRemoved };
+}
+
 // Admin-provisioned RingCentral line for a workspace member. Blank values clear
 // the line. Requires manage_workspace; the member must belong to the actor's
 // workspace even though the User record itself is workspace-agnostic.

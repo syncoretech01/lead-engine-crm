@@ -1,7 +1,8 @@
-import { KeyRound, Link2, Phone, ShieldCheck, UserMinus, UserPlus } from "lucide-react";
+import { KeyRound, Link2, Phone, ShieldCheck, Trash2, UserMinus, UserPlus } from "lucide-react";
 import {
   createUserInviteAction,
   deactivateUserAction,
+  removeWorkspaceMemberAction,
   updateMemberRoleAction,
   updateUserTelephonyAction
 } from "@/app/auth/actions";
@@ -193,13 +194,22 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
                   <td>{member.activeSessions}</td>
                   <td>{member.account?.lastLoginAt ? new Date(member.account.lastLoginAt).toLocaleString() : "Never"}</td>
                   <td>
-                    <form action={deactivateUserAction}>
-                      <input type="hidden" name="userId" value={member.userId} />
-                      <button className="button danger" type="submit" disabled={member.userId === session.user.id || member.account?.status === "Disabled"}>
-                        <UserMinus size={16} aria-hidden="true" />
-                        Disable
-                      </button>
-                    </form>
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                      <form action={deactivateUserAction}>
+                        <input type="hidden" name="userId" value={member.userId} />
+                        <button className="button danger" type="submit" disabled={member.userId === session.user.id || member.account?.status === "Disabled"}>
+                          <UserMinus size={16} aria-hidden="true" />
+                          Disable
+                        </button>
+                      </form>
+                      <form action={removeWorkspaceMemberAction}>
+                        <input type="hidden" name="userId" value={member.userId} />
+                        <button className="button danger" type="submit" disabled={member.userId === session.user.id}>
+                          <Trash2 size={16} aria-hidden="true" />
+                          Remove
+                        </button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
               ))}
