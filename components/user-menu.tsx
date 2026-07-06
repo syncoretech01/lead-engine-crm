@@ -40,9 +40,11 @@ export function UserMenu({ session }: { session: Session }) {
               {initials(session.user.name)}
             </AvatarFallback>
           </Avatar>
-          <div className="grid flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-medium text-white">{session.user.name}</span>
-            <span className="truncate text-xs text-white/70">{workspaceRoleLabel(session.role)}</span>
+          <div className="flex flex-1 flex-col justify-center text-left leading-tight">
+            <span className="truncate text-sm font-medium text-white">{session.user.name}</span>
+            <span className="-mt-0.5 truncate text-xs text-white/70">
+              {workspaceRoleLabel(session.role)}
+            </span>
           </div>
           <ChevronsUpDown className="ml-auto size-4 text-white/70" />
         </SidebarMenuButton>
