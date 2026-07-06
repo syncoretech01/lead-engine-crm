@@ -26,16 +26,28 @@ import {
 } from "@/components/ui/table";
 import { readFastCrmContactsModel, type CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
 import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
-import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { contactViewsForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
 import { TileGrid, TileItem } from "@/components/tile-grid";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
+import { ContactsTable } from "@/components/crm/contacts-table";
+import {
+  contactDisplayName,
+  contactEmailAvailable,
+  contactNextAction,
+  gradeTone,
+  priorityWeight
+} from "@/lib/crm-contact-presentation";
 
 export const dynamic = "force-dynamic";
 
-export default async function ContactsPage() {
+export default async function ContactsPage({
+  searchParams
+}: {
+  searchParams: Promise<{ q?: string; sort?: string; page?: string }>;
+}) {
+  const sp = await searchParams;
   const sessionContext = await getWorkspaceSessionContext("manage_crm");
   let session = sessionContext.session;
   let workspaceId = sessionContext.workspaceId;
@@ -160,6 +172,26 @@ export default async function ContactsPage() {
           </>
         }
       />
+
+      <Panel
+        title="Contact directory"
+        subtitle={
+          isSdr
+            ? "Assigned people with channel readiness and the next recommended action. Search, sort, and page through your book."
+            : "Search, sort, and page the full contact book. Account context, channel readiness, owner, and activity in one table."
+        }
+        action={<StatusBadge label={`${formatNumber(contacts.length)} contacts`} tone="info" />}
+        flush
+        className="mb-6"
+      >
+        <ContactsTable
+          rows={contacts}
+          isSdr={isSdr}
+          initialQuery={sp.q}
+          initialSort={sp.sort}
+          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+        />
+      </Panel>
 
       <TileGrid pageKey="crm-contacts" canCustomize={canCustomize} saved={savedLayout}>
         {metrics.map((metric, index) => (
@@ -374,119 +406,12 @@ export default async function ContactsPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="contact-directory" x={0} y={18} w={12} h={7} minW={6} minH={3}>
-        <Panel
-          title="Contact directory"
-          subtitle={
-            isSdr
-              ? "Assigned people with channel readiness and the next recommended action."
-              : "A compact contact table for account context, channel readiness, owner, and activity."
-          }
-          action={<StatusBadge label={`${formatNumber(contacts.length)} contacts`} tone="info" />}
-          flush
-          fill
-        >
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Contact</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Channel</TableHead>
-                <TableHead>Score</TableHead>
-                <TableHead>{isSdr ? "Next action" : "Status"}</TableHead>
-                {!isSdr ? <TableHead>Owner</TableHead> : null}
-                <TableHead>Last activity</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {contacts.map((contact) => (
-                <TableRow key={contact.id}>
-                  <TableCell>
-                    <Link href={`/crm/contacts/${contact.id}`} className="flex flex-col">
-                      <span className="font-medium text-foreground">{contactDisplayName(contact)}</span>
-                      <span className="text-xs text-muted-foreground">{contact.title}</span>
-                      <span className="text-xs text-muted-foreground">{contact.email}</span>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link href={`/crm/accounts/${contact.companyId}`} className="flex flex-col">
-                      <span className="font-medium text-foreground">{contact.companyName}</span>
-                      <span className="text-xs text-muted-foreground">{contact.domain}</span>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <StatusBadge label={contact.grade} tone={gradeTone(contact.grade)} />
-                      {contact.email ? <StatusBadge label="Email" tone="success" /> : null}
-                      {contact.phone ? <StatusBadge label="Phone" tone="info" /> : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{contact.score}</TableCell>
-                  <TableCell>
-                    {isSdr ? (
-                      <StatusBadge label={contactNextAction(contact).label} tone={contactNextAction(contact).tone} />
-                    ) : (
-                      <StatusBadge label={contact.status} />
-                    )}
-                  </TableCell>
-                  {!isSdr ? <TableCell className="text-muted-foreground">{contact.owner}</TableCell> : null}
-                  <TableCell className="text-muted-foreground">{contact.lastActivity}</TableCell>
-                </TableRow>
-              ))}
-              {contacts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isSdr ? 6 : 7} className="text-muted-foreground">
-                    No contacts in scope yet.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </Panel>
-        </TileItem>
       </TileGrid>
     </>
   );
 }
 
 type ContactView = CrmContactListRow;
-
-function contactDisplayName(contact: Pick<ContactView, "name" | "email">) {
-  return displayContactName(contact);
-}
-
-function contactEmailAvailable(contact: Pick<ContactView, "email" | "isSuppressed">) {
-  return Boolean(contact.email && !contact.isSuppressed);
-}
-
-function gradeTone(grade: string): BadgeTone {
-  const normalized = grade.toUpperCase();
-  if (normalized === "A" || normalized === "B") return "success";
-  if (normalized === "C" || normalized === "D") return "warning";
-  if (normalized === "S") return "danger";
-  return "default";
-}
-
-function contactNextAction(contact: ContactView): { label: string; tone: "success" | "info" | "warning" | "danger" } {
-  if (contact.isSuppressed || contact.grade === "S") {
-    return { label: "Suppressed", tone: "danger" };
-  }
-
-  if (contact.openTasks > 0) {
-    return { label: "Work task", tone: "warning" };
-  }
-
-  if (contactEmailAvailable(contact)) {
-    return { label: "Email", tone: "success" };
-  }
-
-  if (contact.phone) {
-    return { label: "Call", tone: "info" };
-  }
-
-  return { label: "Review", tone: "warning" };
-}
-
 
 function ReadinessRow({
   label,
@@ -533,10 +458,3 @@ function ownerSummary(contacts: ContactView[]) {
     .sort((a, b) => b.tasks - a.tasks || b.verified - a.verified || b.contacts - a.contacts);
 }
 
-function priorityWeight(priority: string) {
-  if (priority === "P1") return 1;
-  if (priority === "P2") return 2;
-  if (priority === "P3") return 3;
-  if (priority === "P4") return 4;
-  return 5;
-}
