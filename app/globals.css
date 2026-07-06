@@ -57,6 +57,34 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* Map Tailwind's `ease-out` utility to the brand curve so motion is
+     consistent whether authored via the token or the utility. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Motion vocabulary — pair with `ease-out` / `transition-colors`. Durations
+   mirror the legacy --dur-* tokens (140ms / 220ms). Keep motion to hover
+   colors, overlay enter/exit, and disclosure height; never animate focus rings,
+   sorts, or skeleton→content swaps. */
+@utility duration-fast {
+  transition-duration: var(--dur-fast);
+}
+@utility duration-base {
+  transition-duration: var(--dur-base);
+}
+
+/* Respect users who ask for less motion — collapse animations/transitions and
+   the gridstack edit-mode jiggle to a near-instant state. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* shadcn semantic tokens — namespaced (--ui-*) and mapped onto the legacy
@@ -229,7 +257,9 @@
   --glow-teal: 0 10px 30px rgba(5, 218, 195, 0.28);
 
   --font-display: Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-body: Poppins, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* One grotesk across the app (Attio/Linear feel); Manrope is already the brand
+     display face, so headings and body now share it. */
+  --font-body: Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --dur-fast: 140ms;
   --dur-base: 220ms;

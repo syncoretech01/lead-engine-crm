@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
+import "@fontsource/manrope/400.css";
 import "@fontsource/manrope/500.css";
 import "@fontsource/manrope/600.css";
 import "@fontsource/manrope/700.css";
 import "@fontsource/manrope/800.css";
-import "@fontsource/poppins/400.css";
-import "@fontsource/poppins/500.css";
-import "@fontsource/poppins/600.css";
 import "./globals.css";
 import { cookies, headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
