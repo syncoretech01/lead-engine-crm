@@ -9,7 +9,7 @@ import { DataTable } from "@/components/data-table/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SoftphoneButton } from "@/components/softphone-button";
 import { RecordPeek } from "@/components/crm/record-peek";
-import { MyContactPeekContent } from "@/components/crm/my-contact-peek-content";
+import { ContactPeekContent } from "@/components/crm/contact-peek-content";
 import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
 
 // Serializable row: relative-time labels are precomputed server-side to avoid
@@ -213,8 +213,28 @@ export function MyContactsTable({
         description="Contact quick view"
       >
         {peekContact ? (
-          <MyContactPeekContent
-            contact={peekContact}
+          <ContactPeekContent
+            contact={{
+              id: peekContact.contactId,
+              name: peekContact.contactName,
+              title: peekContact.title,
+              email: peekContact.email,
+              phone: peekContact.phone,
+              companyId: peekContact.companyId,
+              companyName: peekContact.companyName,
+              status: peekContact.status,
+              grade: peekContact.grade,
+              gradeTone: peekContact.gradeTone,
+              priority: peekContact.priority,
+              priorityTone: peekContact.priorityTone,
+              owner: peekContact.ownerName,
+              assignment: {
+                slaStatus: peekContact.slaStatus,
+                slaTone: peekContact.slaTone,
+                assignedRelative: peekContact.assignedRelative,
+                lastTouchLabel: peekContact.lastTouchLabel
+              }
+            }}
             callerLabel={callerLabel}
             callBlockReason={callBlockReason}
           />

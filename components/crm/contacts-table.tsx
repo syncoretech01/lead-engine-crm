@@ -16,7 +16,9 @@ import type { SdrRosterEntry } from "@/lib/phase1/sdr-roster-read-model";
 import {
   contactDisplayName,
   contactNextAction,
-  gradeTone
+  gradeTone,
+  priorityTone,
+  type PeekAssignment
 } from "@/lib/crm-contact-presentation";
 
 type ContactsTableProps = {
@@ -26,6 +28,8 @@ type ContactsTableProps = {
   roster: SdrRosterEntry[];
   callerLabel?: string;
   callBlockReason?: string;
+  /** SDR-assignment fields per contact id, for the peek's SLA/Assigned rows. */
+  assignments?: Record<string, PeekAssignment>;
   initialQuery?: string;
   initialSort?: string;
   initialPage?: number;
@@ -48,6 +52,7 @@ export function ContactsTable({
   roster,
   callerLabel,
   callBlockReason,
+  assignments,
   initialQuery,
   initialSort,
   initialPage
@@ -181,7 +186,22 @@ export function ContactsTable({
       >
         {peekContact ? (
           <ContactPeekContent
-            contact={peekContact}
+            contact={{
+              id: peekContact.id,
+              name: contactDisplayName(peekContact),
+              title: peekContact.title,
+              email: peekContact.email,
+              phone: peekContact.phone,
+              companyId: peekContact.companyId,
+              companyName: peekContact.companyName,
+              status: peekContact.status,
+              grade: peekContact.grade,
+              gradeTone: gradeTone(peekContact.grade),
+              priority: peekContact.priority,
+              priorityTone: priorityTone(peekContact.priority),
+              owner: peekContact.owner,
+              assignment: assignments?.[peekContact.id]
+            }}
             callerLabel={callerLabel}
             callBlockReason={callBlockReason}
           />
