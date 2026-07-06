@@ -10,6 +10,15 @@ import { cn } from "@/lib/utils";
 // recording exists this component is never rendered by the call log.
 export function RecordingPlayer({ callId, className }: { callId: string; className?: string }) {
   const [playing, setPlaying] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
+
+  if (failed) {
+    return (
+      <span className={cn("text-xs text-muted-foreground", className)} role="status">
+        Recording unavailable
+      </span>
+    );
+  }
 
   if (playing) {
     return (
@@ -19,6 +28,7 @@ export function RecordingPlayer({ callId, className }: { callId: string; classNa
         preload="none"
         src={`/api/recordings/${callId}`}
         className={cn("h-8 w-48 max-w-full", className)}
+        onError={() => setFailed(true)}
       >
         <track kind="captions" />
       </audio>

@@ -50,6 +50,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   );
   if (!rcRes.ok || !rcRes.body) {
     // Most likely RingCentral is still processing the recording; the player retries.
+    // Log the status so a persistent failure (e.g. 403 missing ReadCallRecording)
+    // is diagnosable rather than an opaque dead audio element.
+    const body = await rcRes.text().catch(() => "");
+    console.warn(
+      `[recordings] RingCentral content fetch failed for call ${call.id} (recordingId ${call.recordingId}): HTTP ${rcRes.status} ${rcRes.statusText}. ${body.slice(0, 200)}`
+    );
     return new Response("Recording not ready", { status: 502 });
   }
 

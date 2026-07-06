@@ -152,6 +152,10 @@ export function SoftphoneButton({
   const providerCallIdRef = React.useRef<string | undefined>(undefined);
   const telephonySessionIdRef = React.useRef<string | undefined>(undefined);
   const consentRef = React.useRef<(typeof CONSENTS)[number]>("Granted");
+  // Records whether on-demand recording actually started, and the failure reason
+  // if it didn't — so a silent startRecording() failure becomes diagnosable.
+  const recordingStartedRef = React.useRef(false);
+  const recordingStartErrorRef = React.useRef<string | undefined>(undefined);
   const mountedRef = React.useRef(true);
   // Blocks dialog dismissal ONLY during the softphone connect window (provisioning
   // + INVITE), where there's no dialog to CANCEL yet. The RingOut fallback and the
@@ -284,6 +288,13 @@ export function SoftphoneButton({
         form.set("recordingConsent", consentRef.current);
         if (providerCallIdRef.current) form.set("providerCallId", providerCallIdRef.current);
         if (telephonySessionIdRef.current) form.set("telephonySessionId", telephonySessionIdRef.current);
+        // Recording diagnostics: whether on-demand recording started, and why not.
+        if (consentRef.current === "Granted") {
+          form.set("recordingStarted", recordingStartedRef.current ? "true" : "false");
+          if (recordingStartErrorRef.current) {
+            form.set("recordingStartError", recordingStartErrorRef.current);
+          }
+        }
         await logSoftphoneCallAction(form);
       } catch {
         // Logging is best-effort; never block the call UI on it.
@@ -349,9 +360,21 @@ export function SoftphoneButton({
         attachAudio(session);
         setStatus("in-call");
         // Record on-demand when consented — account auto-recording doesn't capture
-        // these VoIP calls. Best-effort: a recording failure must never break the call.
+        // these VoIP calls. Best-effort: a recording failure must never break the
+        // call, but capture the reason so it's diagnosable instead of silent.
         if (consentRef.current === "Granted") {
-          void session.startRecording().catch(() => {});
+          recordingStartedRef.current = false;
+          recordingStartErrorRef.current = undefined;
+          void session
+            .startRecording()
+            .then(() => {
+              recordingStartedRef.current = true;
+            })
+            .catch((error: unknown) => {
+              const message = error instanceof Error ? error.message : String(error);
+              recordingStartErrorRef.current = message;
+              console.error("[softphone] startRecording() failed:", message);
+            });
         }
       };
       const onDisposed = () => endCall("ended");

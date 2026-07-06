@@ -53,6 +53,9 @@ export async function runRecordingWorkerTick(
   const blockReason = ringCentralSmsLiveBlockReason();
   const credential = ringCentralCredentialFromEnv();
   if (blockReason || !credential) {
+    console.warn(
+      `[recording-worker] ${pending.length} call(s) awaiting a recording, but the live path is unavailable: ${blockReason ?? "no RingCentral credential"}`
+    );
     return { scanned: pending.length, matched: 0, updated: 0 };
   }
 
@@ -61,6 +64,11 @@ export async function runRecordingWorkerTick(
     pending.map((call) => call.telephonySessionId).filter((id): id is string => Boolean(id))
   );
   const bySession = new Map<string, string>();
+  // Diagnostics: which pending sessions RingCentral's call log actually knows
+  // about, so a persistent 0-match can be attributed (not-in-log vs in-log-but-
+  // no-recording vs fetch-failed) instead of failing silently.
+  const seenSessions = new Set<string>();
+  let logRecordsScanned = 0;
   try {
     const token = await requestRingCentralAccessToken(serverUrl, credential, fetch);
     const dateFrom = new Date(now - RECONCILE_WINDOW_MS).toISOString();
@@ -72,25 +80,53 @@ export async function runRecordingWorkerTick(
     for (let page = 0; nextUri && bySession.size < pendingSessions.size && page < MAX_CALL_LOG_PAGES; page += 1) {
       const res = await fetch(nextUri, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
       if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.warn(
+          `[recording-worker] call-log fetch failed: HTTP ${res.status} ${res.statusText}. ` +
+            `A 403 usually means the RingCentral app is missing the ReadCallLog/ReadCallRecording scope. ${body.slice(0, 200)}`
+        );
         return { scanned: pending.length, matched: 0, updated: 0 };
       }
       const json = (await res.json()) as {
         records?: CallLogRecord[];
         navigation?: { nextPage?: { uri?: string } };
       };
-      for (const record of json.records ?? []) {
-        if (record.telephonySessionId && record.recording?.id && pendingSessions.has(record.telephonySessionId)) {
+      const records = json.records ?? [];
+      logRecordsScanned += records.length;
+      for (const record of records) {
+        if (!record.telephonySessionId || !pendingSessions.has(record.telephonySessionId)) continue;
+        seenSessions.add(record.telephonySessionId);
+        if (record.recording?.id) {
           bySession.set(record.telephonySessionId, record.recording.id);
         }
       }
       nextUri = json.navigation?.nextPage?.uri;
     }
-  } catch {
-    // transient (network/auth); the next tick retries
+  } catch (error) {
+    // transient (network/auth); the next tick retries — but say so.
+    console.warn(
+      `[recording-worker] call-log fetch error: ${error instanceof Error ? error.message : String(error)}`
+    );
     return { scanned: pending.length, matched: 0, updated: 0 };
   }
 
   const matched = pending.filter((call) => call.telephonySessionId && bySession.has(call.telephonySessionId));
+
+  // When a candidate can't be matched, attribute the reason so a stuck recording
+  // is diagnosable from the logs instead of an opaque `recordings=0/1`.
+  if (matched.length < pending.length) {
+    const notInLog = [...pendingSessions].filter((id) => !seenSessions.has(id));
+    const inLogNoRecording = [...seenSessions].filter((id) => !bySession.has(id));
+    console.warn(
+      `[recording-worker] ${pending.length} pending, ${matched.length} matched ` +
+        `(call-log records scanned=${logRecordsScanned}). ` +
+        `sessions absent from call log=${notInLog.length}${notInLog.length ? ` [${notInLog.slice(0, 3).join(", ")}]` : ""}; ` +
+        `present but no recording.id=${inLogNoRecording.length}${inLogNoRecording.length ? ` [${inLogNoRecording.slice(0, 3).join(", ")}]` : ""}. ` +
+        `>0 "no recording.id" ⇒ on-demand recording never started (RC On-Demand Call Recording / scope). ` +
+        `>0 "absent" ⇒ session-id mismatch or the call hasn't landed in the call log yet.`
+    );
+  }
+
   if (matched.length === 0) {
     return { scanned: pending.length, matched: 0, updated: 0 };
   }

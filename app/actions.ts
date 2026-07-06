@@ -2064,11 +2064,29 @@ export async function logSoftphoneCallAction(
   // The RingCentral telephony session id ("s-…") — the reconcile worker matches it
   // against the account call log to pull the recording once RC finishes processing.
   const telephonySessionId = stringValue(formData.get("telephonySessionId")) || undefined;
+  // On-demand recording diagnostics from the softphone (see components/softphone-button).
+  const recordingStarted = stringValue(formData.get("recordingStarted")) || undefined;
+  const recordingStartError = stringValue(formData.get("recordingStartError")) || undefined;
 
   // "completed" means the SIP session was answered — a real conversation, even if
   // it lasted under a second — so it is Connected regardless of rounded duration.
   const connected = outcome === "completed";
   const callStatus = outcome === "failed" ? "Failed" : connected ? "Connected" : "No answer";
+
+  // Make a failed/absent on-demand recording visible in the server logs instead of
+  // silently producing a call that will never get a recordingId.
+  if (connected && recordingConsent === "Granted") {
+    if (recordingStartError) {
+      console.warn(
+        `[softphone] on-demand recording did NOT start for a connected call (session ${telephonySessionId ?? "?"}): ${recordingStartError}. ` +
+          `This usually means the RingCentral app lacks the recording scope, or On-Demand Call Recording is not enabled on the account.`
+      );
+    } else if (recordingStarted === "false") {
+      console.warn(
+        `[softphone] recording never confirmed started for a connected call (session ${telephonySessionId ?? "?"}); the reconcile worker may not find a recording.`
+      );
+    }
+  }
 
   const callId = await updateState(
     (state, session) => {
@@ -2098,7 +2116,15 @@ export async function logSoftphoneCallAction(
         objectType: "tracked_call",
         objectId: call.id,
         action: "call_logged",
-        newValue: { source: "softphone", durationSeconds, outcome, providerCallId }
+        newValue: {
+          source: "softphone",
+          durationSeconds,
+          outcome,
+          providerCallId,
+          telephonySessionId,
+          recordingStarted,
+          recordingStartError
+        }
       });
       return call.id;
     },
