@@ -5,7 +5,9 @@ import { RefreshCw } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
-export default function Error({
+// Scoped boundary so a CRM view failure shows an inline retry rather than
+// blanking the whole app shell.
+export default function CrmError({
   error,
   reset
 }: {
@@ -13,12 +15,11 @@ export default function Error({
   reset: () => void;
 }) {
   return (
-    <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center gap-4">
-      <Alert variant="destructive" className="text-left">
-        <AlertTitle>Workspace unavailable</AlertTitle>
+    <div className="flex min-h-[50vh] max-w-lg flex-col items-start justify-center gap-4">
+      <Alert variant="destructive">
+        <AlertTitle>Couldn&apos;t load this CRM view</AlertTitle>
         <AlertDescription>
-          {error.message ||
-            "Something went wrong while loading this workspace. Please try the page again."}
+          {error.message || "Something went wrong. Try again, or head back to the CRM dashboard."}
         </AlertDescription>
       </Alert>
       <Button onClick={() => reset()} type="button">
