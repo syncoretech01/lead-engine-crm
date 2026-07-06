@@ -77,6 +77,8 @@ import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/type
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, ToneIcon } from "@/components/ui/stat-card";
 import { TileGrid, TileItem } from "@/components/tile-grid";
+import { ActivityTimeline, type TimelineItem, type TimelineKind } from "@/components/crm/activity-timeline";
+import { TaskList, type TaskItem } from "@/components/crm/task-list";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +94,22 @@ const activityIcons: Record<ActivityType, typeof NotebookPen> = {
   Verification: BadgeCheck,
   Opportunity: CircleDollarSign
 };
+
+const activityKindMap: Partial<Record<ActivityType, TimelineKind>> = {
+  Call: "call",
+  Task: "task",
+  Email: "email",
+  SMS: "sms",
+  Note: "note",
+  Meeting: "meeting",
+  "Status change": "status",
+  Verification: "status",
+  Opportunity: "status"
+};
+
+function activityKind(type: ActivityType): TimelineKind {
+  return activityKindMap[type] ?? "note";
+}
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -167,6 +185,22 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   );
   const fieldValueMap = customFieldValuesForObject(state, contact.id);
   const activeTasks = tasks.filter((task) => task.status !== "Completed");
+  const timelineItems: TimelineItem[] = activities.map((activity) => ({
+    id: activity.id,
+    kind: activityKind(activity.type),
+    title: activity.title,
+    body: activity.body || undefined,
+    actor: userNameForId(state, activity.actorUserId),
+    occurredAt: activity.createdAt
+  }));
+  const taskItems: TaskItem[] = activeTasks.slice(0, 8).map((task) => ({
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    ownerName: userNameForId(state, task.ownerUserId),
+    dueLabel: task.dueAt ? `Due ${formatDate(task.dueAt)}` : undefined
+  }));
   const recentInteractions = [...notes.slice(0, 4), ...calls.slice(0, 4)]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 6);
@@ -559,29 +593,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           action={<StatusBadge label={`${activeTasks.length} open`} tone={activeTasks.length ? "warning" : "success"} />}
           fill
         >
-          <div className="flex flex-col gap-4">
-            {activeTasks.slice(0, 5).map((task) => (
-              <div className="flex flex-col gap-2 border-b pb-4 last:border-0 last:pb-0" key={task.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-foreground">{task.title}</span>
-                  <StatusBadge label={task.status} tone={statusTone(task.status)} />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge label={task.priority} />
-                  <StatusBadge label={userNameForId(state, task.ownerUserId)} />
-                  {task.dueAt ? <StatusBadge label={`Due ${formatDate(task.dueAt)}`} /> : null}
-                </div>
-                <form action={completeTaskAction}>
-                  <input name="id" type="hidden" value={task.id} />
-                  <SubmitButton className={buttonVariants({ variant: "outline", size: "sm" })} pendingLabel="Completing…">
-                    <Check size={16} aria-hidden="true" />
-                    Complete
-                  </SubmitButton>
-                </form>
-              </div>
-            ))}
-            {activeTasks.length === 0 ? <p className="text-xs text-muted-foreground">No open contact tasks right now.</p> : null}
-          </div>
+          <TaskList tasks={taskItems} />
         </Panel>
       </TileItem>
 
@@ -655,28 +667,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           action={<StatusBadge label={`${activities.length} events`} tone="info" />}
           fill
         >
-          <div className="flex flex-col gap-4">
-            {activities.map((activity) => {
-              const Icon = activityIcons[activity.type] ?? NotebookPen;
-
-              return (
-                <div className="flex gap-3" key={activity.id}>
-                  <ToneIcon icon={Icon} tone="info" />
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <strong className="text-sm font-medium text-foreground">{activity.title}</strong>
-                      <span className="shrink-0 text-xs text-muted-foreground">{formatDate(activity.createdAt)}</span>
-                    </div>
-                    {activity.body ? <p className="text-xs text-muted-foreground">{activity.body}</p> : null}
-                    <div>
-                      <StatusBadge label={userNameForId(state, activity.actorUserId)} tone="default" />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {activities.length === 0 ? <p className="text-xs text-muted-foreground">No contact activity has been recorded yet.</p> : null}
-          </div>
+          <ActivityTimeline items={timelineItems} />
         </Panel>
       </TileItem>
 
