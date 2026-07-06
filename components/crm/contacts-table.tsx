@@ -24,6 +24,8 @@ type ContactsTableProps = {
   isSdr: boolean;
   canManage: boolean;
   roster: SdrRosterEntry[];
+  callerLabel?: string;
+  callBlockReason?: string;
   initialQuery?: string;
   initialSort?: string;
   initialPage?: number;
@@ -44,6 +46,8 @@ export function ContactsTable({
   isSdr,
   canManage,
   roster,
+  callerLabel,
+  callBlockReason,
   initialQuery,
   initialSort,
   initialPage
@@ -175,7 +179,13 @@ export function ContactsTable({
         title={peekContact ? contactDisplayName(peekContact) : "Contact"}
         description="Contact quick view"
       >
-        {peekContact ? <ContactPeekContent contact={peekContact} /> : null}
+        {peekContact ? (
+          <ContactPeekContent
+            contact={peekContact}
+            callerLabel={callerLabel}
+            callBlockReason={callBlockReason}
+          />
+        ) : null}
       </RecordPeek>
     </>
   );

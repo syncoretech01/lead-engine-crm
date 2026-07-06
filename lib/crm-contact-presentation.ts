@@ -21,6 +21,12 @@ export function gradeTone(grade: string): BadgeTone {
   return "default";
 }
 
+export function priorityTone(priority: string): BadgeTone {
+  if (priority === "P1") return "danger";
+  if (priority === "P2") return "warning";
+  return "info";
+}
+
 export type NextAction = { label: string; tone: "success" | "info" | "warning" | "danger" };
 
 export function contactNextAction(contact: CrmContactListRow): NextAction {
