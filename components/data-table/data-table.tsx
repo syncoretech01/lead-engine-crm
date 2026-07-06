@@ -12,6 +12,7 @@ import {
   useReactTable,
   type ColumnDef,
   type ColumnFiltersState,
+  type RowSelectionState,
   type SortingState,
   type Table as TanstackTable,
   type VisibilityState
@@ -26,6 +27,7 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
@@ -48,6 +50,10 @@ type DataTableProps<TData> = {
   emptyState?: React.ReactNode;
   /** Extra toolbar controls (e.g. filter chips) rendered with access to the table. */
   renderToolbar?: (table: TanstackTable<TData>) => React.ReactNode;
+  /** Enable a leading checkbox column + bulk-action bar. */
+  enableSelection?: boolean;
+  /** Floating bar shown while rows are selected. */
+  renderBulkBar?: (args: { selected: TData[]; clear: () => void }) => React.ReactNode;
 };
 
 export function DataTable<TData>({
@@ -60,24 +66,55 @@ export function DataTable<TData>({
   initialSort,
   initialPage = 0,
   emptyState,
-  renderToolbar
+  renderToolbar,
+  enableSelection,
+  renderBulkBar
 }: DataTableProps<TData>) {
   const [globalFilter, setGlobalFilter] = React.useState(initialQuery);
   const [sorting, setSorting] = React.useState<SortingState>(() => parseSortParam(initialSort));
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [pagination, setPagination] = React.useState({ pageIndex: initialPage, pageSize: PAGE_SIZE });
+
+  const allColumns = React.useMemo<ColumnDef<TData, unknown>[]>(() => {
+    if (!enableSelection) return columns;
+    const selectionColumn: ColumnDef<TData, unknown> = {
+      id: "__select",
+      enableSorting: false,
+      enableHiding: false,
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
+          aria-label="Select all rows on this page"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
+          aria-label="Select row"
+        />
+      )
+    };
+    return [selectionColumn, ...columns];
+  }, [columns, enableSelection]);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table returns non-memoizable functions by design; the compiler correctly skips memoizing this component.
   const table = useReactTable({
     data,
-    columns,
+    columns: allColumns,
     getRowId,
-    state: { globalFilter, sorting, columnFilters, columnVisibility, pagination },
+    enableRowSelection: enableSelection,
+    state: { globalFilter, sorting, columnFilters, columnVisibility, rowSelection, pagination },
     onGlobalFilterChange: setGlobalFilter,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -87,6 +124,9 @@ export function DataTable<TData>({
     getFacetedUniqueValues: getFacetedUniqueValues(),
     autoResetPageIndex: false
   });
+
+  const selectedRows = table.getSelectedRowModel().rows.map((row) => row.original);
+  const clearSelection = React.useCallback(() => setRowSelection({}), []);
 
   // Reset to the first page whenever the search term changes.
   const handleSearchChange = React.useCallback(
@@ -177,6 +217,16 @@ export function DataTable<TData>({
       <div className="border-t">
         <DataTablePagination table={table} />
       </div>
+
+      {enableSelection && renderBulkBar && selectedRows.length > 0 ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border bg-popover px-3 py-2 text-sm shadow-lg">
+            <span className="pl-1 font-medium tabular-nums">{selectedRows.length} selected</span>
+            <span className="h-4 w-px bg-border" aria-hidden="true" />
+            {renderBulkBar({ selected: selectedRows, clear: clearSelection })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

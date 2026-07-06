@@ -25,7 +25,9 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { readFastCrmContactsModel, type CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
-import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { hasPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { readWorkspaceSdrRoster, type SdrRosterEntry } from "@/lib/phase1/sdr-roster-read-model";
+import { sdrUsers } from "@/lib/phase1/sdr";
 import { contactViewsForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
@@ -53,11 +55,13 @@ export default async function ContactsPage({
   let workspaceId = sessionContext.workspaceId;
   let contacts: ContactView[];
   let openTasks = 0;
+  let roster: SdrRosterEntry[] = [];
   const fastModel = await readFastCrmContactsModel(session, workspaceId);
 
   if (fastModel) {
     contacts = fastModel.contacts;
     openTasks = fastModel.openTaskCount;
+    roster = (await readWorkspaceSdrRoster(workspaceId)) ?? [];
   } else {
     const { state, session: fallbackSession, workspaceId: fallbackWorkspaceId } = await getWorkspaceContext("manage_crm");
     session = fallbackSession;
@@ -66,8 +70,10 @@ export default async function ContactsPage({
     const allContacts = await contactViewsForWorkspace(state, workspaceId);
     contacts = ownedScope ? allContacts.filter((contact) => ownedScope.contactIds.has(contact.id)) : allContacts;
     openTasks = state.tasks.filter((task) => task.workspaceId === workspaceId && task.status !== "Completed").length;
+    roster = sdrUsers(state, workspaceId).map((user) => ({ id: user.id, name: user.name }));
   }
   const isSdr = session.role === "SDR";
+  const canManageBulk = hasPermission(session, "manage_sdr_team");
   const verified = contacts.filter((contact) => contact.grade === "A" || contact.grade === "B");
   const emailAvailable = contacts.filter((contact) => contactEmailAvailable(contact));
   const callReady = contacts.filter((contact) => Boolean(contact.phone) && !contact.isSuppressed);
@@ -187,6 +193,8 @@ export default async function ContactsPage({
         <ContactsTable
           rows={contacts}
           isSdr={isSdr}
+          canManage={canManageBulk}
+          roster={roster}
           initialQuery={sp.q}
           initialSort={sp.sort}
           initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
