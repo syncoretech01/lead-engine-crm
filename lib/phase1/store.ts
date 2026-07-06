@@ -668,6 +668,22 @@ async function mergePrismaIdentityRows(client: PrismaStoreClient, state: AppStat
     }
   }
 
+  // Self-heal: an invite whose invitee already has an active account has, by
+  // definition, been accepted. The prisma fast path sets the invite "Accepted"
+  // but only in the DB, and a later blob→prisma projection resets it from the
+  // stale snapshot — so a plain reconcile can't clear it. Key off the account.
+  for (const invite of state.userInvites) {
+    if (invite.status !== "Pending") continue;
+    const email = invite.email.toLowerCase();
+    const user = state.users.find((item) => item.email.toLowerCase() === email);
+    const account = user && state.authAccounts.find((item) => item.userId === user.id && item.status === "Active");
+    if (account) {
+      invite.status = "Accepted";
+      invite.acceptedAt = invite.acceptedAt ?? account.emailVerifiedAt ?? account.updatedAt;
+      changed = true;
+    }
+  }
+
   return { changed };
 }
 

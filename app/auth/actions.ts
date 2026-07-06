@@ -18,12 +18,14 @@ import {
   createUserInvite,
   deactivateUserAccount,
   loginWithPassword,
+  removeWorkspaceMember,
   resetPasswordWithToken,
   revokeAuthSession,
   switchAuthWorkspace,
   updateMemberRole,
   updateUserTelephony
 } from "@/lib/phase1/auth-service";
+import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import {
   authCookieOptions,
   authSessionCookieName,
@@ -232,6 +234,36 @@ export async function deactivateUserAction(formData: FormData) {
   await updateState((state, session) => {
     deactivateUserAccount(state, session, stringValue(formData.get("userId")));
   }, { normalizedTables: authWriteTables });
+
+  revalidatePath("/access");
+}
+
+export async function removeWorkspaceMemberAction(formData: FormData) {
+  const userId = stringValue(formData.get("userId"));
+  const result = await updateState(
+    (state, session) => removeWorkspaceMember(state, session, userId),
+    { normalizedTables: authWriteTables }
+  );
+
+  // The projection prunes workspace-scoped rows (membership, sessions, invites)
+  // but not the non-scoped user/authAccount rows — and mergePrismaIdentityRows
+  // would re-add them from prisma. Delete those directly (best-effort; the blob
+  // is already authoritative for the /access UI even if a FK reference blocks
+  // the final user delete).
+  if (result?.fullyRemoved && resolveStorageDriver() === "prisma") {
+    const { prisma } = await import("@/lib/prisma");
+    try {
+      await prisma.authSession.deleteMany({ where: { userId } });
+      await prisma.workspaceMember.deleteMany({ where: { userId } });
+      await prisma.authAccount.deleteMany({ where: { userId } });
+      if (result.email) {
+        await prisma.userInvite.deleteMany({ where: { email: result.email } });
+      }
+      await prisma.user.delete({ where: { id: userId } });
+    } catch {
+      // best-effort cleanup
+    }
+  }
 
   revalidatePath("/access");
 }
