@@ -109,6 +109,11 @@ export function ActivityTimeline({ items }: { items: TimelineItem[] }) {
                           className="shrink-0 text-xs text-muted-foreground"
                           dateTime={item.occurredAt}
                           title={formatAbsolute(item.occurredAt)}
+                          // Relative time is computed from Date.now(), so the SSR
+                          // string can differ from the client's by a bucket
+                          // ("59m ago" vs "1h ago"). This is the canonical
+                          // suppressHydrationWarning case for timestamps.
+                          suppressHydrationWarning
                         >
                           {formatRelative(item.occurredAt)}
                         </time>
