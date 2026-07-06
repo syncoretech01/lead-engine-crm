@@ -50,6 +50,7 @@ import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts
 import type { CustomField, CustomFieldValue, User } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { OpportunitiesTable, type OpportunityRow } from "@/components/crm/opportunities-table";
+import { OpportunityBoard, type BoardOpportunity } from "@/components/crm/opportunity-board";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,17 @@ export default async function OpportunitiesPage({
     .slice(0, 8);
   const canCustomize = canCustomizeTiles(session);
   const savedLayout = await readUserTileLayout(session.user.id, "crm-opportunities");
+
+  const boardOpportunities: BoardOpportunity[] = opportunities.map((opportunity) => ({
+    id: opportunity.id,
+    name: opportunity.name,
+    companyId: opportunity.companyId,
+    companyName: opportunity.companyName,
+    stage: opportunity.stage,
+    amount: opportunity.amount,
+    probability: opportunity.probability,
+    openTasks: opportunity.openTasks
+  }));
 
   const opportunityRows: OpportunityRow[] = opportunities.map((opportunity) => {
     const fieldMap = customFieldValuesForObject(customFieldValues, opportunity.id);
@@ -436,66 +448,10 @@ export default async function OpportunitiesPage({
           <Panel
             fill
             title="Stage board"
-            subtitle="Move opportunities between stages without opening the full account record."
+            subtitle="Drag opportunities between stages, or use the stage picker on each card. Column totals update live."
             action={<StatusBadge label={`${formatNumber(opportunities.length)} opportunities`} tone="info" />}
           >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Opportunity pipeline">
-              {opportunityStages.map((stage) => {
-                const stageOpportunities = opportunities.filter((opportunity) => opportunity.stage === stage);
-
-                return (
-                  <div className="flex flex-col gap-3" key={stage}>
-                    <div className="flex items-center justify-between gap-2">
-                      <strong className="text-sm font-semibold text-foreground">{stage}</strong>
-                      <StatusBadge
-                        label={`${stageOpportunities.length}`}
-                        tone={stageOpportunities.length ? statusTone(stage) : "default"}
-                      />
-                    </div>
-                    {stageOpportunities.map((opportunity) => (
-                      <Card className="gap-3 p-4" key={opportunity.id}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-semibold text-foreground">{opportunity.name}</h3>
-                            <p className="text-xs text-muted-foreground">{opportunity.companyName}</p>
-                          </div>
-                          <div className="flex w-24 shrink-0 flex-col items-end gap-1">
-                            <strong className="text-sm font-semibold text-foreground">{opportunity.probability}%</strong>
-                            <MeterBar value={opportunity.probability} showValue={false} />
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <StatusBadge label={formatCurrency(opportunity.amount)} tone="info" />
-                          <StatusBadge
-                            label={`${opportunity.openTasks} tasks`}
-                            tone={opportunity.openTasks ? "warning" : "success"}
-                          />
-                        </div>
-                        <form action={updateOpportunityStageAction} className="flex items-center gap-2">
-                          <input name="id" type="hidden" value={opportunity.id} />
-                          <select name="stage" defaultValue={opportunity.stage} aria-label="Stage" className={fieldClass}>
-                            {opportunityStages.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                          <Button type="submit" variant="outline" size="icon" aria-label="Save stage">
-                            <Save aria-hidden="true" />
-                          </Button>
-                        </form>
-                        <Button asChild variant="outline" size="sm" className="w-full">
-                          <Link href={`/crm/accounts/${opportunity.companyId}`}>
-                            <ArrowRight aria-hidden="true" />
-                            Account
-                          </Link>
-                        </Button>
-                      </Card>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
+            <OpportunityBoard opportunities={boardOpportunities} stages={opportunityStages} />
           </Panel>
         </TileItem>
 
