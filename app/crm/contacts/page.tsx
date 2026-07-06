@@ -27,7 +27,8 @@ import {
 import { readFastCrmContactsModel, type CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
 import { hasPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { readWorkspaceSdrRoster, type SdrRosterEntry } from "@/lib/phase1/sdr-roster-read-model";
-import { sdrUsers } from "@/lib/phase1/sdr";
+import { assignedContactsSnapshot, sdrUsers } from "@/lib/phase1/sdr";
+import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
 import {
   resolveUserTelephonyIdentity,
   telephonyIdentityBlockReason
@@ -39,11 +40,13 @@ import { TileGrid, TileItem } from "@/components/tile-grid";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import { ContactsTable } from "@/components/crm/contacts-table";
 import {
+  buildPeekAssignment,
   contactDisplayName,
   contactEmailAvailable,
   contactNextAction,
   gradeTone,
-  priorityWeight
+  priorityWeight,
+  type PeekAssignment
 } from "@/lib/crm-contact-presentation";
 
 export const dynamic = "force-dynamic";
@@ -60,12 +63,19 @@ export default async function ContactsPage({
   let contacts: ContactView[];
   let openTasks = 0;
   let roster: SdrRosterEntry[] = [];
+  // SDR-assignment fields (SLA / assigned-ago / last touch) keyed by contact id,
+  // so the peek matches the My Contacts peek for contacts that are assigned.
+  const assignments: Record<string, PeekAssignment> = {};
   const fastModel = await readFastCrmContactsModel(session, workspaceId);
 
   if (fastModel) {
     contacts = fastModel.contacts;
     openTasks = fastModel.openTaskCount;
     roster = (await readWorkspaceSdrRoster(workspaceId)) ?? [];
+    const assigned = await readAssignedContactsModel(session, workspaceId, {});
+    for (const row of assigned?.rows ?? []) {
+      assignments[row.contactId] = buildPeekAssignment(row);
+    }
   } else {
     const { state, session: fallbackSession, workspaceId: fallbackWorkspaceId } = await getWorkspaceContext("manage_crm");
     session = fallbackSession;
@@ -75,6 +85,9 @@ export default async function ContactsPage({
     contacts = ownedScope ? allContacts.filter((contact) => ownedScope.contactIds.has(contact.id)) : allContacts;
     openTasks = state.tasks.filter((task) => task.workspaceId === workspaceId && task.status !== "Completed").length;
     roster = sdrUsers(state, workspaceId).map((user) => ({ id: user.id, name: user.name }));
+    for (const row of assignedContactsSnapshot(state, workspaceId)) {
+      assignments[row.contactId] = buildPeekAssignment(row);
+    }
   }
   const isSdr = session.role === "SDR";
   const canManageBulk = hasPermission(session, "manage_sdr_team");
@@ -208,6 +221,7 @@ export default async function ContactsPage({
           roster={roster}
           callerLabel={callerLabel}
           callBlockReason={callBlockReason}
+          assignments={assignments}
           initialQuery={sp.q}
           initialSort={sp.sort}
           initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}

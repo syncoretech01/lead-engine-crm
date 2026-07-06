@@ -8,10 +8,32 @@ import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
 import { SoftphoneButton } from "@/components/softphone-button";
-import type { CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
-import { contactDisplayName, gradeTone, priorityTone } from "@/lib/crm-contact-presentation";
+import type { PeekAssignment } from "@/lib/crm-contact-presentation";
+
+/**
+ * Normalized shape the contact peek renders. Both the Contacts directory and
+ * the My Contacts table map their own row into this so the two peeks stay
+ * identical — one component, one layout, no drift.
+ */
+export type PeekContact = {
+  id: string;
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+  companyId: string;
+  companyName: string;
+  status: string;
+  grade: string;
+  gradeTone: BadgeTone;
+  priority: string;
+  priorityTone: BadgeTone;
+  owner: string;
+  /** Present when the contact is assigned to an SDR (always on My Contacts). */
+  assignment?: PeekAssignment;
+};
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -34,13 +56,12 @@ export function ContactPeekContent({
   callerLabel,
   callBlockReason
 }: {
-  contact: CrmContactListRow;
+  contact: PeekContact;
   callerLabel?: string;
   callBlockReason?: string;
 }) {
   const router = useRouter();
   const href = `/crm/contacts/${contact.id}`;
-  const name = contactDisplayName(contact);
 
   React.useEffect(() => {
     router.prefetch(href);
@@ -57,12 +78,14 @@ export function ContactPeekContent({
         <div className="flex items-start gap-3">
           <Avatar className="size-11 rounded-lg">
             <AvatarFallback className="rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-              {initials(name)}
+              {initials(contact.name)}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-semibold text-foreground">{name}</h2>
-            {contact.title ? <p className="truncate text-sm text-muted-foreground">{contact.title}</p> : null}
+            <h2 className="truncate text-base font-semibold text-foreground">{contact.name}</h2>
+            {contact.title ? (
+              <p className="truncate text-sm text-muted-foreground">{contact.title}</p>
+            ) : null}
             {contact.companyId ? (
               <Link
                 href={`/crm/accounts/${contact.companyId}`}
@@ -80,7 +103,7 @@ export function ContactPeekContent({
           {contact.phone ? (
             <SoftphoneButton
               contactId={contact.id}
-              contactName={name}
+              contactName={contact.name}
               phone={contact.phone}
               callerLabel={callerLabel}
               blockReason={callBlockReason}
@@ -114,16 +137,23 @@ export function ContactPeekContent({
         <Field label="Phone">{contact.phone || "—"}</Field>
         <Field label="Account">{contact.companyName || "—"}</Field>
         <Field label="Priority">
-          <StatusBadge label={contact.priority} tone={priorityTone(contact.priority)} />
+          <StatusBadge label={contact.priority} tone={contact.priorityTone} />
         </Field>
         <Field label="Grade">
-          <StatusBadge label={contact.grade} tone={gradeTone(contact.grade)} />
+          <StatusBadge label={contact.grade} tone={contact.gradeTone} />
         </Field>
-        <Field label="Score">
-          <span className="tabular-nums">{contact.score}</span>
-        </Field>
-        <Field label="Owner">{contact.owner}</Field>
-        <Field label="Last activity">{contact.lastActivity}</Field>
+        {contact.assignment ? (
+          <>
+            <Field label="SLA">
+              <StatusBadge label={contact.assignment.slaStatus} tone={contact.assignment.slaTone} />
+            </Field>
+            <Field label="Assigned">{contact.assignment.assignedRelative}</Field>
+            <Field label="Last touch">{contact.assignment.lastTouchLabel}</Field>
+          </>
+        ) : (
+          <Field label="Assigned">Unassigned</Field>
+        )}
+        <Field label="Owner">{contact.owner || "—"}</Field>
       </div>
 
       <div className="border-t p-5">
