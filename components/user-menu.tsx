@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
+import { ThemeMenuItems } from "@/components/theme-menu-items";
 import { canUseDeveloperWorkspace, workspaceRoleLabel } from "@/lib/phase1/auth";
 import type { Session } from "@/lib/phase1/types";
 
@@ -58,6 +59,11 @@ export function UserMenu({ session }: { session: Session }) {
             <span className="truncate text-xs text-muted-foreground">{session.user.email}</span>
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          Theme
+        </DropdownMenuLabel>
+        <ThemeMenuItems />
         <DropdownMenuSeparator />
         {canManageWorkspace ? (
           <DropdownMenuItem asChild>

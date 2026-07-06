@@ -235,6 +235,90 @@
   --dur-base: 220ms;
 }
 
+/* ── Dark theme ───────────────────────────────────────────────────────────────
+   One override layer themes both systems: the legacy alias tokens flip to a
+   navy-tinted dark palette, and every --ui-* token that derives from them
+   (surface/foreground/border) follows automatically. Only --ui-* values that
+   bypass the alias chain are overridden directly. Sidebar tokens are
+   intentionally untouched — it stays constant brand navy in both themes.
+   Toggled by a `dark` class on <html> (lib/theme.ts). MUST stay after the two
+   :root blocks above: .dark and :root have equal specificity, so source order
+   decides which wins. */
+.dark {
+  color-scheme: dark;
+
+  /* Surfaces & text — navy-tinted darks anchored on the brand ink ramp */
+  --bg-canvas: #05091f;
+  --bg-subtle: #05091f;
+  --bg-surface: #0b102c;
+  --bg-inverse: #f5feff;
+  --bg-inverse-2: #e9ecf4;
+  --surface-strong: #10173a;
+  --fg1: #eef3ff;
+  --fg2: #9aa6cc;
+  --fg3: #646c9c;
+  --fg-link: #5aa2ff;
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-default: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  /* Tint pairs: soft washes become translucent overlays, paired text lightens.
+     This one move fixes status chips on both legacy and reskinned surfaces. */
+  --blue-50: rgba(0, 118, 254, 0.16);
+  --blue-100: rgba(0, 118, 254, 0.24);
+  --blue-700: #5aa2ff;
+  --blue-800: #99c5ff;
+  --teal-50: rgba(5, 218, 195, 0.14);
+  --teal-100: rgba(5, 218, 195, 0.2);
+  --teal-600: #4be6cf;
+  --teal-700: #4be6cf;
+  --teal-800: #89f0e1;
+  --ink-50: #0e1434;
+  --ink-100: #161c45;
+  --primary-strong: #5aa2ff;
+  --primary-soft: rgba(0, 118, 254, 0.16);
+  --accent-soft: rgba(5, 218, 195, 0.14);
+  --info-soft: rgba(0, 118, 254, 0.16);
+  --danger: #ff6b7a;
+  --danger-soft: rgba(255, 77, 94, 0.16);
+  --success: #4be6cf;
+  --success-soft: rgba(5, 218, 195, 0.14);
+  --warning: #ffc95c;
+  --warning-soft: rgba(255, 176, 32, 0.16);
+
+  /* Shadows read as mud on navy — flatten them; borders carry elevation */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.6);
+  --glow-blue: 0 10px 30px rgba(0, 118, 254, 0.35);
+  --glow-teal: 0 10px 30px rgba(5, 218, 195, 0.35);
+
+  /* --ui-* values that bypass the alias chain */
+  --ui-primary: #2789ff; /* blue-400: AA contrast on navy surfaces */
+  --ui-ring: #2789ff;
+  --ui-secondary-foreground: var(--fg1);
+  --ui-accent-foreground: var(--fg1);
+  --ui-destructive: #ff6b7a;
+  --ui-popover: #10173a; /* one elevation step above card */
+}
+
+/* Legacy rules with hard-coded light values, re-scoped for dark. Kept as a
+   short, explicit list — legacy pages get fully migrated page-by-page later. */
+.dark tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dark .inline-form input,
+.dark .row-meta select,
+.dark .row-meta input {
+  background: var(--bg-surface);
+}
+
+.dark .empty-state svg {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 * {
   box-sizing: border-box;
 }
