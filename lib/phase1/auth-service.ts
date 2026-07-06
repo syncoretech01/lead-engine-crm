@@ -490,7 +490,14 @@ export function removeWorkspaceMember(
 export function updateUserTelephony(
   state: AppState,
   session: Session,
-  input: { userId: string; phoneNumber: string; callerId: string; jwt: string }
+  input: {
+    userId: string;
+    phoneNumber: string;
+    callerId: string;
+    jwt: string;
+    clientId?: string;
+    clientSecret?: string;
+  }
 ) {
   assertPermission(session, "manage_workspace");
   const member = state.workspaceMembers.find(
@@ -515,7 +522,13 @@ export function updateUserTelephony(
   if (jwt) {
     // A pasted JWT replaces the stored one (encrypted at rest). Blank keeps the
     // existing JWT so an admin can edit the number without re-pasting the key.
-    user.ringCentralJwt = encryptSecretString(jwt);
+    // When the SDR is on their OWN RingCentral account, their app's client
+    // id/secret are packed alongside the JWT (see resolveUserRingCentralCredential);
+    // blank client fields mean the shared Syncore app (e.g. Sam).
+    const clientId = input.clientId?.trim() ?? "";
+    const clientSecret = input.clientSecret?.trim() ?? "";
+    const payload = clientId || clientSecret ? JSON.stringify({ jwt, clientId, clientSecret }) : jwt;
+    user.ringCentralJwt = encryptSecretString(payload);
   }
   appendAuthAudit(state, {
     workspaceId: session.workspace.id,
