@@ -833,9 +833,11 @@ export async function updateContactDetailsAction(formData: FormData) {
     const result = updateContactDetailsForWorkspace(state, {
       workspaceId: session.workspace.id,
       contactId,
-      name: stringValue(formData.get("name")),
-      email: stringValue(formData.get("email")),
-      phone: stringValue(formData.get("phone"))
+      // Presence-based: only fields included in this submit are updated, so a
+      // single-field inline edit leaves the others untouched.
+      name: formData.has("name") ? stringValue(formData.get("name")) : undefined,
+      email: formData.has("email") ? stringValue(formData.get("email")) : undefined,
+      phone: formData.has("phone") ? stringValue(formData.get("phone")) : undefined
     });
 
     companyId = result.companyId;

@@ -79,6 +79,7 @@ import { StatCard, ToneIcon } from "@/components/ui/stat-card";
 import { TileGrid, TileItem } from "@/components/tile-grid";
 import { ActivityTimeline, type TimelineItem, type TimelineKind } from "@/components/crm/activity-timeline";
 import { TaskList, type TaskItem } from "@/components/crm/task-list";
+import { InlineField } from "@/components/crm/inline-field";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 
 export const dynamic = "force-dynamic";
@@ -420,36 +421,31 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         <TileItem id="edit-contact-details" x={0} y={4} w={12} h={5} minW={6} minH={3}>
           <Panel
             title="Edit contact details"
-            subtitle="Update the canonical name, email, and phone used across CRM and Lead Engine views."
+            subtitle="Click a value to edit it inline — name, email, and phone are used across CRM and Lead Engine views."
             action={<ToneIcon icon={Pencil} tone="info" />}
             fill
           >
-            <form
-              action={updateContactDetailsAction}
-              id="edit-contact-details"
-              className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-4"
-            >
-              <input name="contactId" type="hidden" value={contact.id} />
-              <div className="flex flex-col gap-1.5">
-                <label className={fieldLabelClass} htmlFor="contact-edit-name">Name</label>
-                <input className={fieldClass} id="contact-edit-name" name="name" defaultValue={contact.name} required />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className={fieldLabelClass} htmlFor="contact-edit-email">Email</label>
-                <input className={fieldClass} id="contact-edit-email" name="email" type="email" defaultValue={contact.email} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className={fieldLabelClass} htmlFor="contact-edit-phone">Phone</label>
-                <input className={fieldClass} id="contact-edit-phone" name="phone" type="tel" defaultValue={contact.phone} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className={fieldLabelClass} aria-hidden="true">&nbsp;</label>
-                <SubmitButton className={buttonVariants()} pendingLabel="Saving…">
-                  <Save size={16} aria-hidden="true" />
-                  Save contact details
-                </SubmitButton>
-              </div>
-            </form>
+            <div className="divide-y">
+              {(
+                [
+                  { field: "name" as const, label: "Name", value: contact.name, type: "text" as const },
+                  { field: "email" as const, label: "Email", value: contact.email, type: "email" as const },
+                  { field: "phone" as const, label: "Phone", value: contact.phone, type: "tel" as const }
+                ]
+              ).map((row) => (
+                <div className="flex items-center justify-between gap-4 py-2.5" key={row.field}>
+                  <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
+                  <InlineField
+                    contactId={contact.id}
+                    field={row.field}
+                    value={row.value}
+                    label={row.label}
+                    type={row.type}
+                    canEdit={canEditContactDetails}
+                  />
+                </div>
+              ))}
+            </div>
           </Panel>
         </TileItem>
       ) : null}
