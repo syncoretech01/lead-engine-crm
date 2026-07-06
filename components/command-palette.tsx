@@ -11,6 +11,8 @@ import {
   CommandItem,
   CommandList
 } from "@/components/ui/command";
+import { THEME_OPTIONS } from "@/components/theme-menu-items";
+import { useTheme } from "@/hooks/use-theme";
 import { accessibleNav, resolveNavLabel } from "@/lib/navigation";
 import type { Session } from "@/lib/phase1/types";
 
@@ -27,6 +29,7 @@ type CommandPaletteProps = {
  */
 export function CommandPalette({ session, open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
+  const { setTheme } = useTheme();
   const groups = React.useMemo(() => accessibleNav(session), [session]);
 
   const go = React.useCallback(
@@ -65,6 +68,24 @@ export function CommandPalette({ session, open, onOpenChange }: CommandPalettePr
             })}
           </CommandGroup>
         ))}
+        <CommandGroup heading="Theme">
+          {THEME_OPTIONS.map((option) => {
+            const Icon = option.icon;
+            return (
+              <CommandItem
+                key={option.pref}
+                value={`Theme ${option.label}`}
+                onSelect={() => {
+                  setTheme(option.pref);
+                  onOpenChange(false);
+                }}
+              >
+                <Icon aria-hidden="true" />
+                <span>{option.label} theme</span>
+              </CommandItem>
+            );
+          })}
+        </CommandGroup>
       </CommandList>
     </CommandDialog>
   );

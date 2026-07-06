@@ -9,9 +9,11 @@ import "@fontsource/poppins/600.css";
 import "./globals.css";
 import { cookies, headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
+import { ThemeProvider } from "@/components/theme-provider";
 import { syncoreBrand } from "@/lib/brand";
 import { isPublicAuthPath, isPublicUnsubscribePath } from "@/lib/phase1/auth-routes";
 import { getSession } from "@/lib/phase1/store";
+import { readThemePref, THEME_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: syncoreBrand.productName,
@@ -29,10 +31,21 @@ export default async function RootLayout({
   const headerStore = await headers();
   const pathname = headerStore.get("x-syncore-pathname") ?? "";
 
+  // Theme preference is a cookie (like sidebar_state) so the first server
+  // render is already themed; the inline script only resolves "system".
+  // suppressHydrationWarning: for "system" the pre-paint script may add the
+  // dark class before React hydrates the <html> element.
+  const cookieStore = await cookies();
+  const themePref = readThemePref(cookieStore);
+  const htmlClassName = themePref === "dark" ? "dark" : undefined;
+
   if (isPublicAuthPath(pathname) || isPublicUnsubscribePath(pathname)) {
     return (
-      <html lang="en">
-        <body>{children}</body>
+      <html lang="en" className={htmlClassName} suppressHydrationWarning>
+        <body>
+          <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+          <ThemeProvider initialPref={themePref}>{children}</ThemeProvider>
+        </body>
       </html>
     );
   }
@@ -40,15 +53,17 @@ export default async function RootLayout({
   const session = await getSession();
   // Restore the sidebar collapsed/expanded state from the cookie shadcn sets,
   // so the first server render matches the user's last choice (no flash).
-  const cookieStore = await cookies();
   const defaultSidebarOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
   return (
-    <html lang="en">
+    <html lang="en" className={htmlClassName} suppressHydrationWarning>
       <body>
-        <AppShell session={session} defaultSidebarOpen={defaultSidebarOpen}>
-          {children}
-        </AppShell>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <ThemeProvider initialPref={themePref}>
+          <AppShell session={session} defaultSidebarOpen={defaultSidebarOpen}>
+            {children}
+          </AppShell>
+        </ThemeProvider>
       </body>
     </html>
   );
