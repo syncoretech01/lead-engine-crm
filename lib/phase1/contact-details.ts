@@ -4,7 +4,9 @@ import type { AppState } from "@/lib/phase1/types";
 export type ContactDetailsUpdateInput = {
   workspaceId: string;
   contactId: string;
-  name: string;
+  // Presence-based: a field left `undefined` is kept as-is, so a single-field
+  // inline edit never blanks the others. Passing "" clears the field.
+  name?: string;
   email?: string;
   phone?: string;
   now?: string;
@@ -39,13 +41,15 @@ export function updateContactDetailsForWorkspace(
     throw new Error("Contact not found.");
   }
 
-  const nextName = input.name.trim();
+  const nextName = input.name !== undefined ? input.name.trim() : contact.name;
   if (!nextName) {
     throw new Error("Contact name is required.");
   }
 
-  const nextEmail = normalizeEditableEmail(input.email ?? "");
-  const nextPhone = normalizeEditablePhone(input.phone ?? "");
+  const nextEmail =
+    input.email !== undefined ? normalizeEditableEmail(input.email) : contact.email;
+  const nextPhone =
+    input.phone !== undefined ? normalizeEditablePhone(input.phone) : contact.phone;
   const before = {
     name: contact.name,
     email: contact.email,

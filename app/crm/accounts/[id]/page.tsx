@@ -56,6 +56,7 @@ import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { accountDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { readFastAccountDetailModel } from "@/lib/phase1/crm-detail-read-model";
 import { dedupeTimelineActivities } from "@/lib/phase1/crm-display";
+import { ActivityTimeline, type TimelineItem, type TimelineKind } from "@/components/crm/activity-timeline";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -75,6 +76,22 @@ const activityIcons: Record<ActivityType, typeof NotebookPen> = {
   Verification: ShieldCheck,
   Opportunity: CircleDollarSign
 };
+
+const accountActivityKindMap: Partial<Record<ActivityType, TimelineKind>> = {
+  Call: "call",
+  Task: "task",
+  Email: "email",
+  SMS: "sms",
+  Note: "note",
+  Meeting: "meeting",
+  "Status change": "status",
+  Verification: "status",
+  Opportunity: "status"
+};
+
+function accountActivityKind(type: ActivityType): TimelineKind {
+  return accountActivityKindMap[type] ?? "note";
+}
 
 export default async function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -138,6 +155,14 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
       .filter((activity) => activity.workspaceId === workspaceId && activity.companyId === account.id)
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
   ).slice(0, 14);
+  const accountTimelineItems: TimelineItem[] = activities.map((activity) => ({
+    id: activity.id,
+    kind: accountActivityKind(activity.type),
+    title: activity.title,
+    body: activity.body || undefined,
+    actor: userNameForId(state, activity.actorUserId),
+    occurredAt: activity.createdAt
+  }));
   const companyFields = state.customFields.filter(
     (field) => field.workspaceId === workspaceId && field.objectType === "company"
   );
@@ -453,28 +478,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
           action={<StatusBadge label={`${activities.length} events`} tone="info" />}
           fill
         >
-          <div className="flex flex-col gap-4">
-            {activities.map((activity) => {
-              const Icon = activityIcons[activity.type] ?? NotebookPen;
-
-              return (
-                <div className="flex gap-3 border-b pb-4 last:border-0 last:pb-0" key={activity.id}>
-                  <ToneIcon icon={Icon} tone="info" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium text-foreground">{activity.title}</span>
-                      <span className="text-xs text-muted-foreground">{formatDate(activity.createdAt)}</span>
-                    </div>
-                    {activity.body ? <p className="mt-0.5 text-xs text-muted-foreground">{activity.body}</p> : null}
-                    <div className="mt-1.5">
-                      <StatusBadge label={userNameForId(state, activity.actorUserId)} tone="default" />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {activities.length === 0 ? <p className="text-xs text-muted-foreground">No activity has been recorded yet.</p> : null}
-          </div>
+          <ActivityTimeline items={accountTimelineItems} />
         </Panel>
         </TileItem>
 
