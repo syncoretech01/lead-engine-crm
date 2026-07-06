@@ -1,5 +1,5 @@
 import { assertPermission } from "@/lib/phase1/auth";
-import { decryptSecretString } from "@/lib/phase1/secret-box";
+import { resolveUserRingCentralCredential } from "@/lib/phase1/ringcentral-user-credential";
 import { getSession, readState } from "@/lib/phase1/store";
 import {
   normalizeServerUrl,
@@ -41,16 +41,16 @@ export async function GET() {
       { status: 403 }
     );
   }
-  let sdrJwt: string;
-  try {
-    sdrJwt = decryptSecretString(sdrUser.ringCentralJwt);
-  } catch {
+  // Uses the SDR's own account app credentials when configured (their number lives
+  // in their own RingCentral account), else the shared Syncore app + their JWT.
+  // Never the shared admin JWT — the 403 above guarantees a per-SDR JWT exists.
+  const credential = resolveUserRingCentralCredential(sdrUser);
+  if (!credential) {
     return Response.json(
       { error: "Your RingCentral credential couldn't be read. Ask an admin to re-enter your JWT." },
       { status: 500 }
     );
   }
-  const credential = { ...envCredential, jwt: sdrJwt };
   const callerId = sdrUser.ringCentralCallerId;
 
   const serverUrl = normalizeServerUrl(credential.serverUrl);

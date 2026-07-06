@@ -231,7 +231,11 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
               Credentials → Create JWT; stored encrypted, paste to set or replace (leave blank to keep
               the current one). With a JWT the call is placed as that SDR so their own number shows to
               the lead; without one, calls use the shared company caller ID. Leave the phone blank to
-              disable calling.
+              disable calling. <strong>App Client ID / Client Secret</strong> — only for an SDR whose
+              RingCentral number lives in their <em>own</em> RingCentral account (not Syncore&apos;s):
+              create a JWT-auth app in that account and paste its Client ID + Secret alongside the JWT,
+              so their calls and SMS run through their own account. Leave both blank for SDRs on the
+              shared Syncore account.
             </p>
           </div>
           <Phone size={20} aria-hidden="true" />
@@ -276,6 +280,20 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
                         autoComplete="off"
                         placeholder={member.user?.ringCentralJwt ? "JWT set — paste to replace" : "Paste RingCentral JWT"}
                         aria-label={`RingCentral JWT for ${member.user?.name ?? "user"}`}
+                      />
+                      <input
+                        name="clientId"
+                        type="text"
+                        autoComplete="off"
+                        placeholder="App Client ID (own RC account only)"
+                        aria-label={`RingCentral app Client ID for ${member.user?.name ?? "user"}`}
+                      />
+                      <input
+                        name="clientSecret"
+                        type="password"
+                        autoComplete="off"
+                        placeholder="App Client Secret (own RC account only)"
+                        aria-label={`RingCentral app Client Secret for ${member.user?.name ?? "user"}`}
                       />
                       <button className="button subtle" type="submit">
                         Save

@@ -3,8 +3,8 @@ import { createSmsEvent } from "@/lib/phase1/outreach";
 import { startPerformanceTimer, timeAsync } from "@/lib/phase1/performance";
 import { recordFirstTouch } from "@/lib/phase1/sdr";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
+import { resolveUserRingCentralCredential } from "@/lib/phase1/ringcentral-user-credential";
 import {
-  ringCentralCredentialFromEnv,
   ringCentralSendSms,
   ringCentralSmsLiveBlockReason,
   type RingCentralSmsCredential
@@ -105,7 +105,9 @@ export function buildDirectSmsSendPlan(
   }
 
   const liveBlockReason = ringCentralSmsLiveBlockReason();
-  const credential = ringCentralCredentialFromEnv();
+  // Send AS the acting SDR — their own RingCentral account app when configured,
+  // else the shared Syncore app + their JWT (see resolveUserRingCentralCredential).
+  const credential = resolveUserRingCentralCredential(input.actor);
   if (liveBlockReason || !credential) {
     return {
       credentialOk: false,

@@ -274,7 +274,9 @@ export async function updateUserTelephonyAction(formData: FormData) {
       userId: stringValue(formData.get("userId")),
       phoneNumber: stringValue(formData.get("phoneNumber")),
       callerId: stringValue(formData.get("callerId")),
-      jwt: stringValue(formData.get("jwt"))
+      jwt: stringValue(formData.get("jwt")),
+      clientId: stringValue(formData.get("clientId")),
+      clientSecret: stringValue(formData.get("clientSecret"))
     });
   }, { normalizedTables: authWriteTables });
 

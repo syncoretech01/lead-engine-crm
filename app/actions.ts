@@ -75,12 +75,9 @@ import { applyCampaignEngagementScores } from "@/lib/phase1/engagement-scoring";
 import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/phase1/normalization";
 import { outreachBatchSize } from "@/lib/phase1/outreach-config";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
-import { decryptSecretString } from "@/lib/phase1/secret-box";
+import { resolveUserRingCentralCredential } from "@/lib/phase1/ringcentral-user-credential";
 import { ringCentralRingOut } from "@/lib/providers/adapters/ringcentral-ringout";
-import {
-  ringCentralCredentialFromEnv,
-  ringCentralSmsLiveBlockReason
-} from "@/lib/providers/adapters/ringcentral-sms";
+import { ringCentralSmsLiveBlockReason } from "@/lib/providers/adapters/ringcentral-sms";
 import {
   buildCampaignSendBatch,
   recordCampaignSendResults,
@@ -1977,22 +1974,13 @@ export async function placeCallAction(
 
   // Live gate: only place a real RingOut when live providers + credentials are on.
   const liveBlocked = ringCentralSmsLiveBlockReason();
-  const envCredential = ringCentralCredentialFromEnv();
-  // Prefer the SDR's OWN RingCentral JWT (stored encrypted) so the call is placed
-  // AS them — which lets their own number (ringCentralCallerId) be presented to the
-  // lead. Without a per-user JWT, fall back to the shared admin JWT (company caller ID).
-  let sdrJwt: string | undefined;
-  if (sdrUser.ringCentralJwt) {
-    try {
-      sdrJwt = decryptSecretString(sdrUser.ringCentralJwt);
-    } catch {
-      sdrJwt = undefined;
-    }
-  }
-  const credential = envCredential && sdrJwt ? { ...envCredential, jwt: sdrJwt } : envCredential;
+  // Place the call AS the SDR: their own RingCentral account app credentials when
+  // they're on their own account, else the shared Syncore app + their JWT, else the
+  // shared admin credential (company caller ID). See resolveUserRingCentralCredential.
+  const credential = resolveUserRingCentralCredential(sdrUser);
   // Presenting a specific caller ID only works when placing as that SDR (their JWT);
   // otherwise RingCentral rejects it (TEL-107), so we leave it to the account default.
-  const callerId = sdrJwt ? sdrUser.ringCentralCallerId : undefined;
+  const callerId = sdrUser.ringCentralJwt ? sdrUser.ringCentralCallerId : undefined;
   let providerCallId: string | undefined;
   let liveState: TrackedCallLiveState;
   let placeError: string | undefined;
