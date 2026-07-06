@@ -9,8 +9,9 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SoftphoneButton } from "@/components/softphone-button";
 import type { CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
-import { contactDisplayName, gradeTone } from "@/lib/crm-contact-presentation";
+import { contactDisplayName, gradeTone, priorityTone } from "@/lib/crm-contact-presentation";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -28,7 +29,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function ContactPeekContent({ contact }: { contact: CrmContactListRow }) {
+export function ContactPeekContent({
+  contact,
+  callerLabel,
+  callBlockReason
+}: {
+  contact: CrmContactListRow;
+  callerLabel?: string;
+  callBlockReason?: string;
+}) {
   const router = useRouter();
   const href = `/crm/contacts/${contact.id}`;
   const name = contactDisplayName(contact);
@@ -68,6 +77,15 @@ export function ContactPeekContent({ contact }: { contact: CrmContactListRow }) 
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
+          {contact.phone ? (
+            <SoftphoneButton
+              contactId={contact.id}
+              contactName={name}
+              phone={contact.phone}
+              callerLabel={callerLabel}
+              blockReason={callBlockReason}
+            />
+          ) : null}
           {contact.email ? (
             <Button asChild size="sm" variant="outline">
               <a href={`mailto:${contact.email}`}>
@@ -95,6 +113,9 @@ export function ContactPeekContent({ contact }: { contact: CrmContactListRow }) 
         <Field label="Email">{contact.email || "—"}</Field>
         <Field label="Phone">{contact.phone || "—"}</Field>
         <Field label="Account">{contact.companyName || "—"}</Field>
+        <Field label="Priority">
+          <StatusBadge label={contact.priority} tone={priorityTone(contact.priority)} />
+        </Field>
         <Field label="Grade">
           <StatusBadge label={contact.grade} tone={gradeTone(contact.grade)} />
         </Field>

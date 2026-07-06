@@ -28,6 +28,10 @@ import { readFastCrmContactsModel, type CrmContactListRow } from "@/lib/phase1/c
 import { hasPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { readWorkspaceSdrRoster, type SdrRosterEntry } from "@/lib/phase1/sdr-roster-read-model";
 import { sdrUsers } from "@/lib/phase1/sdr";
+import {
+  resolveUserTelephonyIdentity,
+  telephonyIdentityBlockReason
+} from "@/lib/phase1/telephony-identities";
 import { contactViewsForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
@@ -74,6 +78,13 @@ export default async function ContactsPage({
   }
   const isSdr = session.role === "SDR";
   const canManageBulk = hasPermission(session, "manage_sdr_team");
+
+  // Caller line for the peek's in-line dialer: the current user's own RC number.
+  const callerIdentity = resolveUserTelephonyIdentity(session.user);
+  const callerLabel = callerIdentity
+    ? `${callerIdentity.displayName} · ${callerIdentity.phoneNumber}`
+    : undefined;
+  const callBlockReason = callerIdentity ? undefined : telephonyIdentityBlockReason(session.user);
   const verified = contacts.filter((contact) => contact.grade === "A" || contact.grade === "B");
   const emailAvailable = contacts.filter((contact) => contactEmailAvailable(contact));
   const callReady = contacts.filter((contact) => Boolean(contact.phone) && !contact.isSuppressed);
@@ -195,6 +206,8 @@ export default async function ContactsPage({
           isSdr={isSdr}
           canManage={canManageBulk}
           roster={roster}
+          callerLabel={callerLabel}
+          callBlockReason={callBlockReason}
           initialQuery={sp.q}
           initialSort={sp.sort}
           initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
