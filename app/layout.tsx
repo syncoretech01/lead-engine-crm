@@ -10,6 +10,7 @@ import "./globals.css";
 import { cookies, headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { syncoreBrand } from "@/lib/brand";
 import { isPublicAuthPath, isPublicUnsubscribePath } from "@/lib/phase1/auth-routes";
 import { getSession } from "@/lib/phase1/store";
@@ -44,7 +45,10 @@ export default async function RootLayout({
       <html lang="en" className={htmlClassName} suppressHydrationWarning>
         <body>
           <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-          <ThemeProvider initialPref={themePref}>{children}</ThemeProvider>
+          <ThemeProvider initialPref={themePref}>
+            {children}
+            <Toaster richColors closeButton position="bottom-right" />
+          </ThemeProvider>
         </body>
       </html>
     );
@@ -63,6 +67,7 @@ export default async function RootLayout({
           <AppShell session={session} defaultSidebarOpen={defaultSidebarOpen}>
             {children}
           </AppShell>
+          <Toaster richColors closeButton position="bottom-right" />
         </ThemeProvider>
       </body>
     </html>

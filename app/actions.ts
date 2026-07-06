@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { asActionResult, type ActionResult } from "@/lib/action-result";
 import { assertPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import {
   completeDataSubjectRequest,
@@ -228,37 +229,42 @@ export async function createSearchProfileAction(formData: FormData) {
   revalidateLeadEnginePages(["/", "/search-profiles", "/build-list"]);
 }
 
-export async function duplicateSearchProfileAction(formData: FormData) {
-  await updateState((state, session) => {
-    assertPermission(session, "manage_profiles");
-    const id = stringValue(formData.get("id"));
-    const profile = state.searchProfiles.find((item) => item.id === id && item.workspaceId === session.workspace.id);
+export async function duplicateSearchProfileAction(
+  _prev: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return asActionResult(async () => {
+    await updateState((state, session) => {
+      assertPermission(session, "manage_profiles");
+      const id = stringValue(formData.get("id"));
+      const profile = state.searchProfiles.find((item) => item.id === id && item.workspaceId === session.workspace.id);
 
-    if (!profile) {
-      throw new Error("Search profile not found.");
-    }
+      if (!profile) {
+        throw new Error("Search profile not found.");
+      }
 
-    const now = new Date().toISOString();
-    const duplicate: SearchProfile = {
-      ...profile,
-      id: `sp-${randomUUID()}`,
-      name: `${profile.name} Copy`,
-      createdById: session.user.id,
-      createdAt: now,
-      updatedAt: now
-    };
+      const now = new Date().toISOString();
+      const duplicate: SearchProfile = {
+        ...profile,
+        id: `sp-${randomUUID()}`,
+        name: `${profile.name} Copy`,
+        createdById: session.user.id,
+        createdAt: now,
+        updatedAt: now
+      };
 
-    state.searchProfiles.unshift(duplicate);
-    appendAudit(state, session, {
-      objectType: "search_profile",
-      objectId: duplicate.id,
-      action: "duplicated",
-      oldValue: { sourceProfileId: profile.id },
-      newValue: duplicate
-    });
-  }, { normalizedTables: leadGenerationWriteTables });
+      state.searchProfiles.unshift(duplicate);
+      appendAudit(state, session, {
+        objectType: "search_profile",
+        objectId: duplicate.id,
+        action: "duplicated",
+        oldValue: { sourceProfileId: profile.id },
+        newValue: duplicate
+      });
+    }, { normalizedTables: leadGenerationWriteTables });
 
-  revalidateLeadEnginePages(["/search-profiles", "/build-list"]);
+    revalidateLeadEnginePages(["/search-profiles", "/build-list"]);
+  }, "Search profile duplicated");
 }
 
 export async function deleteSearchProfileAction(formData: FormData) {

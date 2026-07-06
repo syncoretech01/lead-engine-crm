@@ -1,49 +1,23 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { toast } from "sonner";
 
-const TOAST_EVENT = "syncore:toast";
-
-/** Mounted once on the page; shows a transient confirmation when an action fires. */
+/**
+ * Kept for API compatibility with the build-list pages. The global <Toaster />
+ * now lives in app/layout.tsx (sonner), so this mount is a no-op.
+ */
 export function Toaster() {
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<string>).detail;
-      if (!detail) return;
-      setMessage(detail);
-      clearTimeout(timer);
-      timer = setTimeout(() => setMessage(null), 2800);
-    };
-    window.addEventListener(TOAST_EVENT, handler);
-    return () => {
-      window.removeEventListener(TOAST_EVENT, handler);
-      clearTimeout(timer);
-    };
-  }, []);
-
-  if (!message) return null;
-
-  return (
-    <div className="toast" role="status" aria-live="polite">
-      <span className="toast-check" aria-hidden="true">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 12.5l4.5 4.5L19 7" />
-        </svg>
-      </span>
-      {message}
-    </div>
-  );
+  return null;
 }
 
 /**
- * A submit button that fires an optimistic toast on click. Used inside server-action
- * forms - the click both dispatches the toast and submits the form.
+ * A submit button that fires a confirmation toast on click. Used inside
+ * server-action forms — the click both dispatches the toast and submits the
+ * form. Now backed by sonner instead of the bespoke CustomEvent toaster.
  */
 export function ToastButton({
-  toast,
+  toast: message,
   children,
   className = "button primary",
   type = "submit"
@@ -54,11 +28,7 @@ export function ToastButton({
   type?: "submit" | "button";
 }) {
   return (
-    <button
-      type={type}
-      className={className}
-      onClick={() => window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: toast }))}
-    >
+    <button type={type} className={className} onClick={() => toast.success(message)}>
       {children}
     </button>
   );

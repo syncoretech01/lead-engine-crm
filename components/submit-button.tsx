@@ -3,6 +3,8 @@
 import { useFormStatus } from "react-dom";
 import type { ReactNode } from "react";
 
+import { buttonVariants } from "@/components/ui/button";
+
 type SubmitButtonProps = {
   children: ReactNode;
   /** Shown (and announced) while the form action is in flight. */
@@ -16,18 +18,19 @@ type SubmitButtonProps = {
 // useFormStatus: it disables itself and swaps to `pendingLabel` while the server
 // action runs. This gives users immediate "in-progress" feedback so they don't
 // refresh mid-action (which would abort the write). Must be rendered inside a
-// <form>.
+// <form>. Defaults to the shadcn primary Button styling; callers can pass their
+// own buttonVariants(...) string.
 export function SubmitButton({
   children,
   pendingLabel = "Saving…",
-  className = "button primary",
+  className,
   disabled = false
 }: SubmitButtonProps) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      className={className}
+      className={className ?? buttonVariants()}
       disabled={pending || disabled}
       aria-busy={pending || undefined}
     >
