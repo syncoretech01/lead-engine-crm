@@ -8,6 +8,8 @@ import { UserCheck } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SoftphoneButton } from "@/components/softphone-button";
+import { RecordPeek } from "@/components/crm/record-peek";
+import { MyContactPeekContent } from "@/components/crm/my-contact-peek-content";
 import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
 
 // Serializable row: relative-time labels are precomputed server-side to avoid
@@ -53,6 +55,7 @@ export function MyContactsTable({
   initialSort?: string;
   initialPage?: number;
 }) {
+  const [peekContact, setPeekContact] = React.useState<MyContactRow | null>(null);
   const columns = React.useMemo<ColumnDef<MyContactRow, unknown>[]>(() => {
     const defs: ColumnDef<MyContactRow, unknown>[] = [
       {
@@ -62,12 +65,13 @@ export function MyContactsTable({
         enableHiding: false,
         cell: ({ row }) => {
           const c = row.original;
+          // Row click opens the peek; the name is part of that affordance.
           return (
-            <Link href={`/crm/contacts/${c.contactId}`} className="flex flex-col">
+            <div className="flex flex-col">
               <span className="font-medium text-foreground">{c.contactName}</span>
               {c.title ? <span className="text-xs text-muted-foreground">{c.title}</span> : null}
               {c.email ? <span className="text-xs text-muted-foreground">{c.email}</span> : null}
-            </Link>
+            </div>
           );
         }
       },
@@ -78,7 +82,11 @@ export function MyContactsTable({
         cell: ({ row }) => {
           const c = row.original;
           return c.companyId ? (
-            <Link href={`/crm/accounts/${c.companyId}`} className="flex flex-col">
+            <Link
+              href={`/crm/accounts/${c.companyId}`}
+              className="flex flex-col"
+              onClick={(event) => event.stopPropagation()}
+            >
               <span className="font-medium text-foreground">{c.companyName}</span>
               {c.companyDomain ? (
                 <span className="text-xs text-muted-foreground">{c.companyDomain}</span>
@@ -158,8 +166,9 @@ export function MyContactsTable({
       enableHiding: false,
       cell: ({ row }) => {
         const c = row.original;
+        // Calling is its own affordance — don't let it open the row peek.
         return (
-          <div className="text-right">
+          <div className="text-right" onClick={(event) => event.stopPropagation()}>
             <SoftphoneButton
               contactId={c.contactId}
               contactName={c.contactName}
@@ -177,21 +186,40 @@ export function MyContactsTable({
   }, [isSdr, callerLabel, callBlockReason]);
 
   return (
-    <DataTable
-      columns={columns}
-      data={rows}
-      getRowId={(row) => row.contactId}
-      searchPlaceholder="Search assigned contacts…"
-      initialQuery={initialQuery}
-      initialSort={initialSort}
-      initialPage={initialPage}
-      emptyState={
-        <EmptyState
-          icon={UserCheck}
-          title="No assigned contacts match"
-          description="Try a different search, or clear the filter."
-        />
-      }
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.contactId}
+        searchPlaceholder="Search assigned contacts…"
+        initialQuery={initialQuery}
+        initialSort={initialSort}
+        initialPage={initialPage}
+        onRowClick={(row) => setPeekContact(row)}
+        emptyState={
+          <EmptyState
+            icon={UserCheck}
+            title="No assigned contacts match"
+            description="Try a different search, or clear the filter."
+          />
+        }
+      />
+      <RecordPeek
+        open={peekContact !== null}
+        onOpenChange={(open) => {
+          if (!open) setPeekContact(null);
+        }}
+        title={peekContact ? peekContact.contactName : "Contact"}
+        description="Contact quick view"
+      >
+        {peekContact ? (
+          <MyContactPeekContent
+            contact={peekContact}
+            callerLabel={callerLabel}
+            callBlockReason={callBlockReason}
+          />
+        ) : null}
+      </RecordPeek>
+    </>
   );
 }
