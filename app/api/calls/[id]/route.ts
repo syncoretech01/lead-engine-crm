@@ -26,7 +26,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     callStatus: call.callStatus,
     disposition: call.disposition,
     durationSeconds: call.durationSeconds,
-    hasRecording: Boolean(call.recordingUrl),
+    // The recording pipeline populates recordingId (not recordingUrl); the player
+    // and the reconcile worker both key off recordingId.
+    hasRecording: Boolean(call.recordingId),
     recordingConsent: call.recordingConsent
   });
 }
