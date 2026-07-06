@@ -8,7 +8,9 @@ import { Users } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ContactsBulkBar } from "@/components/crm/contacts-bulk-bar";
 import type { CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
+import type { SdrRosterEntry } from "@/lib/phase1/sdr-roster-read-model";
 import {
   contactDisplayName,
   contactNextAction,
@@ -18,6 +20,8 @@ import {
 type ContactsTableProps = {
   rows: CrmContactListRow[];
   isSdr: boolean;
+  canManage: boolean;
+  roster: SdrRosterEntry[];
   initialQuery?: string;
   initialSort?: string;
   initialPage?: number;
@@ -33,7 +37,15 @@ const COLUMN_LABELS: Record<string, string> = {
   lastActivity: "Last activity"
 };
 
-export function ContactsTable({ rows, isSdr, initialQuery, initialSort, initialPage }: ContactsTableProps) {
+export function ContactsTable({
+  rows,
+  isSdr,
+  canManage,
+  roster,
+  initialQuery,
+  initialSort,
+  initialPage
+}: ContactsTableProps) {
   const columns = React.useMemo<ColumnDef<CrmContactListRow, unknown>[]>(() => {
     const defs: ColumnDef<CrmContactListRow, unknown>[] = [
       {
@@ -132,6 +144,10 @@ export function ContactsTable({ rows, isSdr, initialQuery, initialSort, initialP
       initialQuery={initialQuery}
       initialSort={initialSort}
       initialPage={initialPage}
+      enableSelection
+      renderBulkBar={({ selected, clear }) => (
+        <ContactsBulkBar selected={selected} clear={clear} canManage={canManage} roster={roster} />
+      )}
       emptyState={
         <EmptyState
           icon={Users}

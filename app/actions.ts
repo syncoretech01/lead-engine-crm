@@ -1254,6 +1254,96 @@ export async function reassignSdrAssignmentAction(formData: FormData) {
   revalidateSdrPages();
 }
 
+// Bulk-reassign several contacts to one SDR in a SINGLE snapshot transaction —
+// N separate action calls would rewrite the whole snapshot N times.
+export async function bulkReassignContactsAction(input: {
+  contactIds: string[];
+  nextSdrId: string;
+}): Promise<ActionResult> {
+  return asActionResult(async () => {
+    const contactIds = [...new Set(input.contactIds)].filter(Boolean);
+    if (contactIds.length === 0 || !input.nextSdrId) {
+      throw new Error("Select at least one contact and an SDR.");
+    }
+    await updateState((state, session) => {
+      assertPermission(session, "manage_sdr_team");
+      const wanted = new Set(contactIds);
+      const assignments = state.sdrAssignments.filter(
+        (item) => item.workspaceId === session.workspace.id && wanted.has(item.contactId)
+      );
+      if (assignments.length === 0) {
+        throw new Error("None of the selected contacts have an SDR assignment to move.");
+      }
+      for (const assignment of assignments) {
+        reassignSdrAssignment(state, {
+          workspaceId: session.workspace.id,
+          assignmentId: assignment.id,
+          nextSdrId: input.nextSdrId,
+          actorUserId: session.user.id,
+          reason: "Bulk manager reassignment.",
+          method: "Account ownership"
+        });
+      }
+      appendAudit(state, session, {
+        objectType: "sdr_assignment",
+        objectId: session.workspace.id,
+        action: "bulk_reassigned",
+        newValue: { contactIds, nextSdrId: input.nextSdrId, count: assignments.length }
+      });
+    }, { normalizedTables: sdrWriteTables });
+
+    revalidateSdrPages();
+    revalidateCrmPages(["/crm", "/crm/contacts", "/crm/my-contacts"]);
+  }, "Contacts reassigned");
+}
+
+// Bulk status change across several contacts in one transaction.
+export async function bulkUpdateContactStatusAction(input: {
+  contactIds: string[];
+  status: LeadStatus;
+}): Promise<ActionResult> {
+  return asActionResult(async () => {
+    const contactIds = [...new Set(input.contactIds)].filter(Boolean);
+    if (contactIds.length === 0 || !input.status) {
+      throw new Error("Select at least one contact and a status.");
+    }
+    await updateState((state, session) => {
+      assertPermission(session, "manage_crm");
+      const wanted = new Set(contactIds);
+      const contacts = state.contacts.filter(
+        (item) => item.workspaceId === session.workspace.id && wanted.has(item.id)
+      );
+      if (contacts.length === 0) {
+        throw new Error("No matching contacts to update.");
+      }
+      const now = new Date().toISOString();
+      for (const contact of contacts) {
+        const previous = contact.status;
+        if (previous === input.status) continue;
+        contact.status = input.status;
+        contact.updatedAt = now;
+        addActivity(state, {
+          workspaceId: session.workspace.id,
+          companyId: contact.companyId,
+          contactId: contact.id,
+          type: "Status change",
+          title: `Status set to ${input.status}`,
+          body: `Bulk update from ${previous}.`,
+          actorUserId: session.user.id
+        });
+      }
+      appendAudit(state, session, {
+        objectType: "contact",
+        objectId: session.workspace.id,
+        action: "bulk_status_updated",
+        newValue: { contactIds, status: input.status, count: contacts.length }
+      });
+    }, { normalizedTables: crmWriteTables });
+
+    revalidateCrmPages(["/crm", "/crm/contacts", "/crm/my-contacts"]);
+  }, "Status updated");
+}
+
 export async function applyReassignmentRulesAction() {
   await updateState((state, session) => {
     assertPermission(session, "manage_sdr_team");
