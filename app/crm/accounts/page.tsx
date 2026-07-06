@@ -38,10 +38,16 @@ import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/st
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { TileGrid, TileItem } from "@/components/tile-grid";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
+import { AccountsTable } from "@/components/crm/accounts-table";
 
 export const dynamic = "force-dynamic";
 
-export default async function AccountsPage() {
+export default async function AccountsPage({
+  searchParams
+}: {
+  searchParams: Promise<{ q?: string; sort?: string; page?: string }>;
+}) {
+  const sp = await searchParams;
   const sessionContext = await getWorkspaceSessionContext("manage_crm");
   let session = sessionContext.session;
   let workspaceId = sessionContext.workspaceId;
@@ -180,6 +186,26 @@ export default async function AccountsPage() {
           </>
         }
       />
+
+      <Panel
+        title="Account directory"
+        subtitle={
+          isSdr
+            ? "Accounts tied to your visible contacts. Search, sort, and page through them."
+            : "Search, sort, and page every account — owner, stage, activity, and source context in one table."
+        }
+        action={<StatusBadge label={`${formatNumber(accounts.length)} accounts`} tone="info" />}
+        flush
+        className="mb-6"
+      >
+        <AccountsTable
+          rows={accounts}
+          isSdr={isSdr}
+          initialQuery={sp.q}
+          initialSort={sp.sort}
+          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+        />
+      </Panel>
 
       <TileGrid pageKey="crm-accounts" canCustomize={canCustomize} saved={savedLayout}>
         {metrics.map((metric, index) => (
@@ -410,59 +436,6 @@ export default async function AccountsPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="account-directory" x={0} y={18} w={12} h={7} minW={6} minH={3}>
-        <Panel
-          title="Account directory"
-          subtitle={
-            isSdr
-              ? "A compact list of accounts tied to your visible contacts."
-              : "A compact account table for scanning owner, stage, activity, and source context."
-          }
-          action={<StatusBadge label={`${formatNumber(accounts.length)} accounts`} tone="info" />}
-          flush
-          fill
-        >
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Account</TableHead>
-                {!isSdr ? <TableHead>Owner</TableHead> : null}
-                <TableHead>Stage</TableHead>
-                <TableHead>Contacts</TableHead>
-                <TableHead>Open work</TableHead>
-                {!isSdr ? <TableHead>Pipeline</TableHead> : null}
-                <TableHead>Source</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {accounts.map((account) => (
-                <TableRow key={account.id}>
-                  <TableCell>
-                    <Link href={`/crm/accounts/${account.id}`} className="flex flex-col">
-                      <span className="font-medium text-foreground">{account.name}</span>
-                      <span className="text-xs text-muted-foreground">{account.domain}</span>
-                      <span className="text-xs text-muted-foreground">{account.location || account.industry}</span>
-                    </Link>
-                  </TableCell>
-                  {!isSdr ? <TableCell className="text-muted-foreground">{account.owner}</TableCell> : null}
-                  <TableCell>
-                    <StatusBadge label={account.stage} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{formatNumber(account.contacts)}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium text-foreground">{formatNumber(account.openTasks)} tasks</span>
-                      <span className="text-xs text-muted-foreground">{account.lastActivity}</span>
-                    </div>
-                  </TableCell>
-                  {!isSdr ? <TableCell className="text-muted-foreground">{formatCurrency(account.amount)}</TableCell> : null}
-                  <TableCell className="text-muted-foreground">{account.source}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Panel>
-        </TileItem>
       </TileGrid>
     </>
   );

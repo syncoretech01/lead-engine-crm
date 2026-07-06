@@ -2,20 +2,12 @@ import Link from "next/link";
 import { Clock, PhoneCall, PhoneMissed } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { RecordingPlayer } from "@/components/recording-player";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { fieldClass } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from "@/components/ui/table";
+import { CallsTable, type CallRow } from "@/components/crm/calls-table";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { sdrUsers } from "@/lib/phase1/sdr";
 import { getWorkspaceContext } from "@/lib/phase1/store";
@@ -26,9 +18,10 @@ export const dynamic = "force-dynamic";
 export default async function CallsPage({
   searchParams
 }: {
-  searchParams: Promise<{ sdr?: string }>;
+  searchParams: Promise<{ sdr?: string; q?: string; sort?: string; page?: string }>;
 }) {
-  const { sdr } = await searchParams;
+  const sp = await searchParams;
+  const sdr = sp.sdr;
   const { state, session, workspaceId } = await getWorkspaceContext("manage_sdr");
   const isSdr = session.role === "SDR";
   const sdrFilter = isSdr ? session.user.id : sdr || undefined;
@@ -48,6 +41,22 @@ export default async function CallsPage({
 
   const connected = calls.filter((call) => call.callStatus === "Connected").length;
   const recordings = calls.filter((call) => Boolean(call.recordingId)).length;
+
+  const rows: CallRow[] = calls.map((call) => ({
+    id: call.id,
+    contactId: call.contactId ?? "",
+    contactName: call.contactId ? contactName(call.contactId) : "Unknown contact",
+    phoneNumber: call.phoneNumber || "",
+    durationLabel: formatDuration(call.durationSeconds),
+    durationSeconds: call.durationSeconds ?? 0,
+    outcomeLabel: dispositionLabel(call.callStatus, call.disposition),
+    outcomeGroup: outcomeGroup(call.callStatus),
+    outcomeTone: outcomeTone(call.callStatus),
+    sdrName: userName(call.sdrUserId),
+    whenLabel: formatWhen(call.createdAt),
+    whenAt: call.createdAt,
+    recordingState: recordingState(call.recordingId, call.recordingConsent, call.createdAt)
+  }));
 
   return (
     <>
@@ -105,76 +114,45 @@ export default async function CallsPage({
         }
         flush
       >
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Contact</TableHead>
-              <TableHead>Number</TableHead>
-              <TableHead>Duration</TableHead>
-              <TableHead>Outcome</TableHead>
-              {!isSdr ? <TableHead>SDR</TableHead> : null}
-              <TableHead>When</TableHead>
-              <TableHead>Recording</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {calls.map((call) => (
-              <TableRow key={call.id}>
-                <TableCell>
-                  {call.contactId ? (
-                    <Link href={`/crm/contacts/${call.contactId}`} className="font-medium text-foreground">
-                      {contactName(call.contactId)}
-                    </Link>
-                  ) : (
-                    <span className="text-foreground">Unknown contact</span>
-                  )}
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-muted-foreground">{call.phoneNumber || "—"}</TableCell>
-                <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {formatDuration(call.durationSeconds)}
-                </TableCell>
-                <TableCell>
-                  <StatusBadge label={dispositionLabel(call.callStatus, call.disposition)} tone={outcomeTone(call.callStatus)} />
-                </TableCell>
-                {!isSdr ? <TableCell className="text-muted-foreground">{userName(call.sdrUserId)}</TableCell> : null}
-                <TableCell className="whitespace-nowrap text-muted-foreground">{formatWhen(call.createdAt)}</TableCell>
-                <TableCell>{recordingCell(call.recordingId, call.recordingConsent, call.createdAt, call.id)}</TableCell>
-              </TableRow>
-            ))}
-            {calls.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isSdr ? 6 : 7} className="text-muted-foreground">
-                  {isSdr ? "You haven't placed any calls yet." : "No calls logged yet."}
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
+        <CallsTable
+          rows={rows}
+          isSdr={isSdr}
+          initialQuery={sp.q}
+          initialSort={sp.sort}
+          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+        />
       </Panel>
     </>
   );
 }
 
-function recordingCell(recordingId: string | undefined, consent: string, createdAt: string, callId: string) {
-  if (recordingId) {
-    return <RecordingPlayer callId={callId} />;
-  }
+function recordingState(
+  recordingId: string | undefined,
+  consent: string,
+  createdAt: string
+): CallRow["recordingState"] {
+  if (recordingId) return "ready";
   if (consent === "Granted") {
-    // Recorded on-demand; the reconcile worker pulls the recording once RingCentral
-    // finishes processing it. After ~30 min with nothing, assume it never landed.
+    // Recorded on-demand; the reconcile worker pulls the recording once
+    // RingCentral finishes processing. After ~30 min with nothing, give up.
     const ageMs = Date.now() - Date.parse(createdAt);
-    return (
-      <span className="text-xs text-muted-foreground">
-        {Number.isFinite(ageMs) && ageMs < 30 * 60 * 1000 ? "Processing…" : "Unavailable"}
-      </span>
-    );
+    return Number.isFinite(ageMs) && ageMs < 30 * 60 * 1000 ? "processing" : "unavailable";
   }
-  return <span className="text-xs text-muted-foreground">—</span>;
+  return "none";
 }
 
 function dispositionLabel(callStatus: string, disposition: string): string {
   if (callStatus === "Dialed") return "Placed";
   if (callStatus === "Connected") return disposition && disposition !== "No answer" ? disposition : "Connected";
+  return callStatus;
+}
+
+// Coarse outcome bucket used by the faceted filter chips.
+function outcomeGroup(callStatus: string): string {
+  if (callStatus === "Connected") return "Connected";
+  if (callStatus === "Voicemail") return "Voicemail";
+  if (callStatus === "No answer") return "No answer";
+  if (callStatus === "Failed" || callStatus === "Busy") return "Failed";
   return callStatus;
 }
 

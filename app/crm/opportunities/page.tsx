@@ -49,10 +49,16 @@ import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/st
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import type { CustomField, CustomFieldValue, User } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { OpportunitiesTable, type OpportunityRow } from "@/components/crm/opportunities-table";
 
 export const dynamic = "force-dynamic";
 
-export default async function OpportunitiesPage() {
+export default async function OpportunitiesPage({
+  searchParams
+}: {
+  searchParams: Promise<{ q?: string; sort?: string; page?: string }>;
+}) {
+  const sp = await searchParams;
   const sessionContext = await getWorkspaceSessionContext("manage_crm");
   let session = sessionContext.session;
   let workspaceId = sessionContext.workspaceId;
@@ -112,6 +118,29 @@ export default async function OpportunitiesPage() {
     .slice(0, 8);
   const canCustomize = canCustomizeTiles(session);
   const savedLayout = await readUserTileLayout(session.user.id, "crm-opportunities");
+
+  const opportunityRows: OpportunityRow[] = opportunities.map((opportunity) => {
+    const fieldMap = customFieldValuesForObject(customFieldValues, opportunity.id);
+    return {
+      id: opportunity.id,
+      name: opportunity.name,
+      source: opportunity.source,
+      lastActivity: opportunity.lastActivity,
+      companyId: opportunity.companyId,
+      companyName: opportunity.companyName,
+      contactName: opportunity.contactName,
+      stage: opportunity.stage,
+      amount: opportunity.amount,
+      amountLabel: formatCurrency(opportunity.amount),
+      closeLabel: opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : "Not set",
+      closeAt: opportunity.expectedCloseDate ?? "",
+      owner: opportunity.owner,
+      fields: opportunityFields.map((field) => ({
+        name: field.name,
+        value: fieldMap.get(field.id)?.value ?? "Unset"
+      }))
+    };
+  });
 
   const metrics = isSdr
     ? [
@@ -273,6 +302,26 @@ export default async function OpportunitiesPage() {
           </>
         }
       />
+
+      <Panel
+        title={isSdr ? "My opportunity list" : "Opportunity directory"}
+        subtitle={
+          isSdr
+            ? "Assigned pipeline records with account, stage, value, close date, and latest activity. Search, sort, and page."
+            : "Search, sort, and page pipeline records — account, source, owner, and custom forecast fields."
+        }
+        action={<StatusBadge label={`${formatNumber(opportunities.length)} records`} tone="info" />}
+        flush
+        className="mb-6"
+      >
+        <OpportunitiesTable
+          rows={opportunityRows}
+          isSdr={isSdr}
+          initialQuery={sp.q}
+          initialSort={sp.sort}
+          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+        />
+      </Panel>
 
       <TileGrid pageKey="crm-opportunities" canCustomize={canCustomize} saved={savedLayout}>
         {metrics.map((metric, index) => (
@@ -633,84 +682,6 @@ export default async function OpportunitiesPage() {
           </TileItem>
         ) : null}
 
-        <TileItem id="opportunity-directory" x={0} y={31} w={12} h={7} minW={6} minH={3}>
-          <Panel
-            fill
-            flush
-            title={isSdr ? "My opportunity list" : "Opportunity directory"}
-            subtitle={
-              isSdr
-                ? "Assigned pipeline records with the account, stage, value, close date, and latest activity."
-                : "Pipeline records with account, contact, source, owner, and custom forecast fields."
-            }
-            action={<StatusBadge label={`${formatNumber(opportunities.length)} records`} tone="info" />}
-          >
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Opportunity</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Stage</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Close</TableHead>
-                  {!isSdr ? <TableHead>Owner</TableHead> : null}
-                  {!isSdr ? <TableHead>Fields</TableHead> : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {opportunities.map((opportunity) => {
-                  const fieldMap = customFieldValuesForObject(customFieldValues, opportunity.id);
-
-                  return (
-                    <TableRow key={opportunity.id}>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium text-foreground">{opportunity.name}</span>
-                          <span className="text-xs text-muted-foreground">{opportunity.source}</span>
-                          <span className="text-xs text-muted-foreground">{opportunity.lastActivity}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Link href={`/crm/accounts/${opportunity.companyId}`} className="flex flex-col">
-                          <span className="font-medium text-foreground">{opportunity.companyName}</span>
-                          <span className="text-xs text-muted-foreground">{opportunity.contactName}</span>
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge label={opportunity.stage} tone={statusTone(opportunity.stage)} />
-                      </TableCell>
-                      <TableCell className="text-foreground">{formatCurrency(opportunity.amount)}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : "Not set"}
-                      </TableCell>
-                      {!isSdr ? <TableCell className="text-muted-foreground">{opportunity.owner}</TableCell> : null}
-                      {!isSdr ? (
-                        <TableCell>
-                          <div className="flex flex-wrap gap-2">
-                            {opportunityFields.map((field) => (
-                              <StatusBadge
-                                key={field.id}
-                                label={`${field.name}: ${fieldMap.get(field.id)?.value ?? "Unset"}`}
-                                tone="default"
-                              />
-                            ))}
-                          </div>
-                        </TableCell>
-                      ) : null}
-                    </TableRow>
-                  );
-                })}
-                {opportunities.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={isSdr ? 5 : 7} className="text-muted-foreground">
-                      No opportunities are available in this view.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </Panel>
-        </TileItem>
       </TileGrid>
     </>
   );

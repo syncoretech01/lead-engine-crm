@@ -4,12 +4,16 @@ import * as React from "react";
 import {
   flexRender,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnFiltersState,
   type SortingState,
+  type Table as TanstackTable,
   type VisibilityState
 } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
@@ -42,8 +46,8 @@ type DataTableProps<TData> = {
   initialPage?: number;
   /** Empty-state node shown when there are zero rows after filtering. */
   emptyState?: React.ReactNode;
-  /** Filter chips or extra toolbar controls. */
-  toolbar?: React.ReactNode;
+  /** Extra toolbar controls (e.g. filter chips) rendered with access to the table. */
+  renderToolbar?: (table: TanstackTable<TData>) => React.ReactNode;
 };
 
 export function DataTable<TData>({
@@ -56,10 +60,11 @@ export function DataTable<TData>({
   initialSort,
   initialPage = 0,
   emptyState,
-  toolbar
+  renderToolbar
 }: DataTableProps<TData>) {
   const [globalFilter, setGlobalFilter] = React.useState(initialQuery);
   const [sorting, setSorting] = React.useState<SortingState>(() => parseSortParam(initialSort));
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [pagination, setPagination] = React.useState({ pageIndex: initialPage, pageSize: PAGE_SIZE });
 
@@ -68,15 +73,18 @@ export function DataTable<TData>({
     data,
     columns,
     getRowId,
-    state: { globalFilter, sorting, columnVisibility, pagination },
+    state: { globalFilter, sorting, columnFilters, columnVisibility, pagination },
     onGlobalFilterChange: setGlobalFilter,
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     autoResetPageIndex: false
   });
 
@@ -103,7 +111,7 @@ export function DataTable<TData>({
         searchPlaceholder={searchPlaceholder}
         columnLabels={columnLabels}
       >
-        {toolbar}
+        {renderToolbar?.(table)}
       </DataTableToolbar>
 
       <div className="border-t">

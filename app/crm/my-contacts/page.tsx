@@ -1,21 +1,13 @@
 import Link from "next/link";
 import { AlertTriangle, Building2, ClipboardList, Flame, Mail, Phone, UserCheck } from "lucide-react";
 
-import { SoftphoneButton } from "@/components/softphone-button";
 import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { fieldClass } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from "@/components/ui/table";
+import { MyContactsTable, type MyContactRow } from "@/components/crm/my-contacts-table";
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
 import { assignedContactsSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
@@ -52,9 +44,10 @@ type AssignedRow = {
 export default async function MyContactsPage({
   searchParams
 }: {
-  searchParams: Promise<{ sdr?: string }>;
+  searchParams: Promise<{ sdr?: string; q?: string; sort?: string; page?: string }>;
 }) {
-  const { sdr } = await searchParams;
+  const sp = await searchParams;
+  const sdr = sp.sdr;
   const sessionContext = await getWorkspaceSessionContext("manage_sdr");
   let session = sessionContext.session;
   let workspaceId = sessionContext.workspaceId;
@@ -89,6 +82,30 @@ export default async function MyContactsPage({
     ? `${callerIdentity.displayName} · ${callerIdentity.phoneNumber}`
     : undefined;
   const callBlockReason = callerIdentity ? undefined : telephonyIdentityBlockReason(session.user);
+
+  const tableRows: MyContactRow[] = rows.map((row) => ({
+    contactId: row.contactId,
+    contactName: row.contactName,
+    title: row.title,
+    email: row.email,
+    phone: row.phone,
+    grade: row.grade,
+    gradeTone: gradeTone(row.grade),
+    priority: row.priority,
+    priorityTone: priorityTone(row.priority),
+    status: row.status,
+    slaStatus: row.slaStatus,
+    slaTone: slaTone(row.slaStatus),
+    companyId: row.companyId,
+    companyName: row.companyName,
+    companyDomain: row.companyDomain,
+    assignedRelative: relativeSince(row.assignedAt),
+    assignedDate: formatDate(row.assignedAt),
+    assignedAt: row.assignedAt,
+    lastTouchLabel: `${row.lastTouchAt ? relativeSince(row.lastTouchAt) : "No touches"}${row.touchCount > 0 ? ` · ${row.touchCount}` : ""}`,
+    lastTouchAt: row.lastTouchAt ?? "",
+    ownerName: row.ownerName
+  }));
 
   return (
     <>
@@ -166,95 +183,15 @@ export default async function MyContactsPage({
         }
         flush
       >
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Contact</TableHead>
-              <TableHead>Account</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead>Channel</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>SLA</TableHead>
-              <TableHead>Assigned</TableHead>
-              <TableHead>Last touch</TableHead>
-              {!isSdr ? <TableHead>Owner</TableHead> : null}
-              <TableHead className="text-right">Call</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.contactId || `${row.contactName}-${row.assignedAt}`}>
-                <TableCell>
-                  <Link href={`/crm/contacts/${row.contactId}`} className="flex flex-col">
-                    <span className="font-medium text-foreground">{row.contactName}</span>
-                    {row.title ? <span className="text-xs text-muted-foreground">{row.title}</span> : null}
-                    {row.email ? <span className="text-xs text-muted-foreground">{row.email}</span> : null}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  {row.companyId ? (
-                    <Link href={`/crm/accounts/${row.companyId}`} className="flex flex-col">
-                      <span className="font-medium text-foreground">{row.companyName}</span>
-                      {row.companyDomain ? (
-                        <span className="text-xs text-muted-foreground">{row.companyDomain}</span>
-                      ) : null}
-                    </Link>
-                  ) : (
-                    <span className="text-foreground">{row.companyName}</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <StatusBadge label={row.priority} tone={priorityTone(row.priority)} />
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <StatusBadge label={row.grade} tone={gradeTone(row.grade)} />
-                    {row.email ? <StatusBadge label="Email" tone="success" /> : null}
-                    {row.phone ? <StatusBadge label="Phone" tone="info" /> : null}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <StatusBadge label={row.status} />
-                </TableCell>
-                <TableCell>
-                  <StatusBadge label={row.slaStatus} tone={slaTone(row.slaStatus)} />
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <span className="text-foreground">{relativeSince(row.assignedAt)}</span>
-                    <span className="text-xs text-muted-foreground">{formatDate(row.assignedAt)}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {row.lastTouchAt ? relativeSince(row.lastTouchAt) : "No touches"}
-                  {row.touchCount > 0 ? ` · ${row.touchCount}` : ""}
-                </TableCell>
-                {!isSdr ? <TableCell className="text-muted-foreground">{row.ownerName}</TableCell> : null}
-                <TableCell className="text-right">
-                  <SoftphoneButton
-                    contactId={row.contactId}
-                    contactName={row.contactName}
-                    phone={row.phone}
-                    callerLabel={callerLabel}
-                    blockReason={callBlockReason}
-                    iconOnly
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isSdr ? 9 : 10} className="text-muted-foreground">
-                  {isSdr
-                    ? "No contacts are assigned to you yet."
-                    : sdrFilter
-                      ? "No contacts assigned to this SDR."
-                      : "No SDR assignments in this workspace yet."}
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
+        <MyContactsTable
+          rows={tableRows}
+          isSdr={isSdr}
+          callerLabel={callerLabel}
+          callBlockReason={callBlockReason}
+          initialQuery={sp.q}
+          initialSort={sp.sort}
+          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+        />
       </Panel>
     </>
   );
