@@ -1963,6 +1963,9 @@ export async function logSoftphoneCallAction(
   const outcome = stringValue(formData.get("outcome"), "no-answer");
   const recordingConsent = recordingConsentValue(formData.get("recordingConsent"));
   const providerCallId = stringValue(formData.get("providerCallId")) || undefined;
+  // The RingCentral telephony session id ("s-…") — the reconcile worker matches it
+  // against the account call log to pull the recording once RC finishes processing.
+  const telephonySessionId = stringValue(formData.get("telephonySessionId")) || undefined;
 
   // "completed" means the SIP session was answered — a real conversation, even if
   // it lasted under a second — so it is Connected regardless of rounded duration.
@@ -1984,7 +1987,7 @@ export async function logSoftphoneCallAction(
         recordingConsent,
         recordingConsentSource: "Softphone disclosure",
         providerCallId,
-        telephonySessionId: providerCallId,
+        telephonySessionId,
         liveState: outcome === "failed" ? "failed" : "completed",
         callSummary:
           callStatus === "Connected"

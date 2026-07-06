@@ -150,6 +150,7 @@ export function SoftphoneButton({
   const wasConnectedRef = React.useRef(false);
   const endedRef = React.useRef(false);
   const providerCallIdRef = React.useRef<string | undefined>(undefined);
+  const telephonySessionIdRef = React.useRef<string | undefined>(undefined);
   const consentRef = React.useRef<(typeof CONSENTS)[number]>("Granted");
   const mountedRef = React.useRef(true);
   // Blocks dialog dismissal ONLY during the softphone connect window (provisioning
@@ -282,6 +283,7 @@ export function SoftphoneButton({
         form.set("outcome", outcome);
         form.set("recordingConsent", consentRef.current);
         if (providerCallIdRef.current) form.set("providerCallId", providerCallIdRef.current);
+        if (telephonySessionIdRef.current) form.set("telephonySessionId", telephonySessionIdRef.current);
         await logSoftphoneCallAction(form);
       } catch {
         // Logging is best-effort; never block the call UI on it.
@@ -327,10 +329,14 @@ export function SoftphoneButton({
       endedRef.current = false;
       connectedAtRef.current = null;
       providerCallIdRef.current = session.callId || undefined;
+      telephonySessionIdRef.current = session.sessionId || undefined;
 
       const onRinging = () => {
         clearConnectTimeout();
         blockCloseRef.current = false; // now cancelable via the UI
+        if (!telephonySessionIdRef.current && session.sessionId) {
+          telephonySessionIdRef.current = session.sessionId;
+        }
         setStatus((s) => (s === "in-call" || s === "ended" ? s : "ringing"));
       };
       const onAnswered = () => {
@@ -338,9 +344,15 @@ export function SoftphoneButton({
         clearConnectTimeout();
         blockCloseRef.current = false;
         wasConnectedRef.current = true;
+        if (session.sessionId) telephonySessionIdRef.current = session.sessionId;
         startTimer();
         attachAudio(session);
         setStatus("in-call");
+        // Record on-demand when consented — account auto-recording doesn't capture
+        // these VoIP calls. Best-effort: a recording failure must never break the call.
+        if (consentRef.current === "Granted") {
+          void session.startRecording().catch(() => {});
+        }
       };
       const onDisposed = () => endCall("ended");
       const onFailed = (subject?: unknown) => {

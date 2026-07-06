@@ -138,8 +138,21 @@ export async function updateAuthState<T>(
       return client.$transaction(
         async (tx) => {
           const state = await readStateFromPrisma(tx);
+          const syncOptions = normalizedSyncOptions(options);
+          // Capture the pre-mutation baseline for the scoped tables so the diff
+          // write path upserts only the rows this mutation changes — parity with
+          // updateState. Without it, a worker flipping one field (e.g. a call's
+          // recordingId) re-syncs entire append-only tables (activities/auditLogs).
+          const previousRowStrings =
+            projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
+              ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
+              : undefined;
           const result = mutator(state);
-          await writeStateToPrisma(state, tx, normalizedSyncOptions(options));
+          await writeStateToPrisma(
+            state,
+            tx,
+            previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions
+          );
           return result;
         },
         { maxWait: 10_000, timeout: 30_000 }
