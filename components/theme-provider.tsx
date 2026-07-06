@@ -12,6 +12,14 @@ type ThemeContextValue = {
 
 const ThemeContext = React.createContext<ThemeContextValue | null>(null);
 
+const SYSTEM_DARK_QUERY = "(prefers-color-scheme: dark)";
+
+function subscribeSystemDark(onChange: () => void): () => void {
+  const mql = window.matchMedia(SYSTEM_DARK_QUERY);
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+}
+
 /**
  * Client half of the theme system. The server reads the cookie and passes the
  * preference down (see app/layout.tsx), so the first render is already themed;
@@ -25,17 +33,14 @@ export function ThemeProvider({
   children: React.ReactNode;
 }) {
   const [pref, setPref] = React.useState<ThemePref>(initialPref);
-  const [systemDark, setSystemDark] = React.useState<boolean>(
-    () => typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
-  );
 
-  React.useEffect(() => {
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    setSystemDark(mql.matches);
-    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
+  // useSyncExternalStore is the idiomatic way to subscribe to an external store
+  // (matchMedia) without setState-in-effect; server snapshot is light.
+  const systemDark = React.useSyncExternalStore(
+    subscribeSystemDark,
+    () => window.matchMedia(SYSTEM_DARK_QUERY).matches,
+    () => false
+  );
 
   const resolved: "light" | "dark" = pref === "system" ? (systemDark ? "dark" : "light") : pref;
 
