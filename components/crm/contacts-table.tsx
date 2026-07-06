@@ -9,6 +9,8 @@ import { DataTable } from "@/components/data-table/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ContactsBulkBar } from "@/components/crm/contacts-bulk-bar";
+import { RecordPeek } from "@/components/crm/record-peek";
+import { ContactPeekContent } from "@/components/crm/contact-peek-content";
 import type { CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
 import type { SdrRosterEntry } from "@/lib/phase1/sdr-roster-read-model";
 import {
@@ -46,6 +48,7 @@ export function ContactsTable({
   initialSort,
   initialPage
 }: ContactsTableProps) {
+  const [peekContact, setPeekContact] = React.useState<CrmContactListRow | null>(null);
   const columns = React.useMemo<ColumnDef<CrmContactListRow, unknown>[]>(() => {
     const defs: ColumnDef<CrmContactListRow, unknown>[] = [
       {
@@ -55,12 +58,13 @@ export function ContactsTable({
         enableHiding: false,
         cell: ({ row }) => {
           const contact = row.original;
+          // Row click opens the peek; the name is part of that affordance.
           return (
-            <Link href={`/crm/contacts/${contact.id}`} className="flex flex-col">
+            <div className="flex flex-col">
               <span className="font-medium text-foreground">{contactDisplayName(contact)}</span>
               <span className="text-xs text-muted-foreground">{contact.title}</span>
               <span className="text-xs text-muted-foreground">{contact.email}</span>
-            </Link>
+            </div>
           );
         }
       },
@@ -70,8 +74,13 @@ export function ContactsTable({
         header: "Account",
         cell: ({ row }) => {
           const contact = row.original;
+          // Cross-navigation to the account — stop the click from opening the peek.
           return (
-            <Link href={`/crm/accounts/${contact.companyId}`} className="flex flex-col">
+            <Link
+              href={`/crm/accounts/${contact.companyId}`}
+              className="flex flex-col"
+              onClick={(event) => event.stopPropagation()}
+            >
               <span className="font-medium text-foreground">{contact.companyName}</span>
               <span className="text-xs text-muted-foreground">{contact.domain}</span>
             </Link>
@@ -135,26 +144,39 @@ export function ContactsTable({
   }, [isSdr]);
 
   return (
-    <DataTable
-      columns={columns}
-      data={rows}
-      getRowId={(row) => row.id}
-      columnLabels={COLUMN_LABELS}
-      searchPlaceholder="Search contacts, accounts, emails…"
-      initialQuery={initialQuery}
-      initialSort={initialSort}
-      initialPage={initialPage}
-      enableSelection
-      renderBulkBar={({ selected, clear }) => (
-        <ContactsBulkBar selected={selected} clear={clear} canManage={canManage} roster={roster} />
-      )}
-      emptyState={
-        <EmptyState
-          icon={Users}
-          title="No contacts match"
-          description="Try a different search, or clear the filter to see everyone in scope."
-        />
-      }
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        columnLabels={COLUMN_LABELS}
+        searchPlaceholder="Search contacts, accounts, emails…"
+        initialQuery={initialQuery}
+        initialSort={initialSort}
+        initialPage={initialPage}
+        enableSelection
+        onRowClick={(row) => setPeekContact(row)}
+        renderBulkBar={({ selected, clear }) => (
+          <ContactsBulkBar selected={selected} clear={clear} canManage={canManage} roster={roster} />
+        )}
+        emptyState={
+          <EmptyState
+            icon={Users}
+            title="No contacts match"
+            description="Try a different search, or clear the filter to see everyone in scope."
+          />
+        }
+      />
+      <RecordPeek
+        open={peekContact !== null}
+        onOpenChange={(open) => {
+          if (!open) setPeekContact(null);
+        }}
+        title={peekContact ? contactDisplayName(peekContact) : "Contact"}
+        description="Contact quick view"
+      >
+        {peekContact ? <ContactPeekContent contact={peekContact} /> : null}
+      </RecordPeek>
+    </>
   );
 }

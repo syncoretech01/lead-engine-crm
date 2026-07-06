@@ -54,6 +54,8 @@ type DataTableProps<TData> = {
   enableSelection?: boolean;
   /** Floating bar shown while rows are selected. */
   renderBulkBar?: (args: { selected: TData[]; clear: () => void }) => React.ReactNode;
+  /** Clicking a row (outside interactive cells) invokes this — e.g. open a peek. */
+  onRowClick?: (row: TData) => void;
 };
 
 export function DataTable<TData>({
@@ -68,7 +70,8 @@ export function DataTable<TData>({
   emptyState,
   renderToolbar,
   enableSelection,
-  renderBulkBar
+  renderBulkBar,
+  onRowClick
 }: DataTableProps<TData>) {
   const [globalFilter, setGlobalFilter] = React.useState(initialQuery);
   const [sorting, setSorting] = React.useState<SortingState>(() => parseSortParam(initialSort));
@@ -93,11 +96,13 @@ export function DataTable<TData>({
         />
       ),
       cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
-          aria-label="Select row"
-        />
+        <span onClick={(event) => event.stopPropagation()}>
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
+            aria-label="Select row"
+          />
+        </span>
       )
     };
     return [selectionColumn, ...columns];
@@ -191,7 +196,23 @@ export function DataTable<TData>({
           <TableBody>
             {rows.length ? (
               rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() ? "selected" : undefined}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() ? "selected" : undefined}
+                  className={cn(onRowClick && "cursor-pointer")}
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (event) => {
+                          if (event.key === "Enter" && event.currentTarget === event.target) {
+                            event.preventDefault();
+                            onRowClick(row.original);
+                          }
+                        }
+                      : undefined
+                  }
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
