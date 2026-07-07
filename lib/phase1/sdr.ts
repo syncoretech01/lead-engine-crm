@@ -417,6 +417,110 @@ export function completeReminder(state: AppState, reminderId: string, actorUserI
   return reminder;
 }
 
+/**
+ * Manager/owner action: assign one contact to a specific SDR. Creates a fresh
+ * SdrAssignment (with a first-touch reminder + activity, like the auto router)
+ * when the contact has no assignment, or reassigns an existing one to the target
+ * SDR. No-op when the contact is already assigned to that SDR.
+ */
+export function assignContactToSdr(
+  state: AppState,
+  input: {
+    workspaceId: string;
+    contactId: string;
+    sdrId: string;
+    actorUserId: string;
+    reason: string;
+    method?: AssignmentMethod;
+  }
+): { created: boolean; reassigned: boolean } {
+  assertWorkspaceMember(state, input.workspaceId, input.actorUserId);
+  assertWorkspaceMember(state, input.workspaceId, input.sdrId);
+  const contact = requireWorkspaceScopedRecord(
+    state.contacts.find((item) => item.id === input.contactId),
+    input.workspaceId,
+    "Contact"
+  );
+  const method = input.method ?? "Account ownership";
+
+  const existing = state.sdrAssignments.find(
+    (item) => item.workspaceId === input.workspaceId && item.contactId === input.contactId
+  );
+  if (existing) {
+    if (existing.assignedSdrId === input.sdrId) {
+      return { created: false, reassigned: false };
+    }
+    reassignSdrAssignment(state, {
+      workspaceId: input.workspaceId,
+      assignmentId: existing.id,
+      nextSdrId: input.sdrId,
+      actorUserId: input.actorUserId,
+      reason: input.reason,
+      method
+    });
+    return { created: false, reassigned: true };
+  }
+
+  const assignedAt = new Date().toISOString();
+  const status = statusForContact(contact.status);
+  const assignment: SdrAssignment = {
+    id: `assign-${randomUUID()}`,
+    workspaceId: input.workspaceId,
+    companyId: contact.companyId,
+    contactId: contact.id,
+    assignedSdrId: input.sdrId,
+    assignedById: input.actorUserId,
+    assignmentMethod: method,
+    assignmentReason: input.reason,
+    assignedAt,
+    firstTouchDueAt: firstTouchDueAtForPriority(contact.priority, assignedAt),
+    followUpDueAt: followUpDueAtForStatus(status, assignedAt),
+    status,
+    slaStatus: "On track",
+    touchCount: 0,
+    createdAt: assignedAt,
+    updatedAt: assignedAt
+  };
+  assignment.slaStatus = calculateSlaStatus(assignment, assignedAt);
+  state.sdrAssignments.push(assignment);
+  contact.owner = userNameForId(state, input.sdrId);
+  contact.status = leadStatusForAssignment(assignment.status);
+  contact.updatedAt = assignedAt;
+
+  if (assignment.firstTouchDueAt) {
+    state.followUpReminders.push({
+      id: `reminder-${randomUUID()}`,
+      workspaceId: input.workspaceId,
+      assignmentId: assignment.id,
+      companyId: assignment.companyId,
+      contactId: assignment.contactId,
+      ownerUserId: assignment.assignedSdrId,
+      title: `First touch ${contact.name}`,
+      channel: recommendedChannel(contact.grade, contact.phone),
+      dueAt: assignment.firstTouchDueAt,
+      status: reminderStatusForDueAt(assignment.firstTouchDueAt, assignedAt),
+      createdAt: assignedAt
+    });
+  }
+
+  const company = state.companies.find(
+    (item) => item.id === contact.companyId && item.workspaceId === input.workspaceId
+  );
+  addActivity(state, {
+    workspaceId: input.workspaceId,
+    companyId: assignment.companyId,
+    contactId: assignment.contactId,
+    type: "Status change",
+    title: `Assigned to ${userNameForId(state, input.sdrId)}`,
+    body: `${method}: ${input.reason}${company ? ` for ${company.name}` : ""}.`,
+    actorUserId: input.actorUserId,
+    metadata: { assignmentId: assignment.id, method: assignment.assignmentMethod },
+    createdAt: assignedAt
+  });
+
+  return { created: true, reassigned: false };
+}
+
 export function reassignSdrAssignment(
   state: AppState,
   input: {
