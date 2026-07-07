@@ -1805,9 +1805,13 @@ export async function sendDirectSmsAction(formData: FormData) {
   const session = await getSession(state);
   assertPermission(session, "send_direct_outreach");
   assertAssignedContactForOutreach(state, session, contactId);
+  // session.user omits the RingCentral fields (phone/JWT) at runtime — read the
+  // full user from the blob so SMS sends from the SDR's own number/account, the
+  // same way placeCallAction does.
+  const actorUser = state.users.find((user) => user.id === session.user.id) ?? session.user;
   const plan = buildDirectSmsSendPlan(state, {
     workspaceId: session.workspace.id,
-    actor: session.user,
+    actor: actorUser,
     requestId,
     contactId,
     body
