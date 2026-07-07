@@ -47,15 +47,23 @@ export function resolveUserSenderIdentity(
       identity.nameAliases.some((name) => normalizeName(name) === normalizedName)
   );
 
-  if (!known || !isAllowedSenderEmail(known.email, env)) {
+  // Use a curated display name/email when we have one, otherwise the user's own
+  // name + email. Either way the sending address must be on an allowed
+  // (SES-verified) domain — that domain check is the real gate, so any member on
+  // it can send as themselves without being hardcoded here. Who is *allowed* to
+  // send is enforced separately by the send_direct_outreach permission.
+  const displayName = (known?.displayName ?? user.name).trim();
+  const email = known ? normalizeEmail(known.email) : normalizedEmail;
+
+  if (!email || !isAllowedSenderEmail(email, env)) {
     return undefined;
   }
 
-  const replyTo = senderReplyTo(known.email, env);
+  const replyTo = senderReplyTo(email, env);
   return {
-    displayName: known.displayName,
-    email: known.email,
-    mailbox: formatMailbox(known.displayName, known.email),
+    displayName: displayName || email,
+    email,
+    mailbox: formatMailbox(displayName || email, email),
     replyTo,
   };
 }
