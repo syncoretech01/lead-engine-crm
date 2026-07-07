@@ -137,6 +137,7 @@ import {
   assignWorkspaceLeads,
   assignmentMethods,
   completeReminder,
+  assignContactToSdr,
   createReassignmentRule,
   outreachChannels,
   reassignmentTriggers,
@@ -1259,41 +1260,67 @@ export async function bulkReassignContactsAction(input: {
   contactIds: string[];
   nextSdrId: string;
 }): Promise<ActionResult> {
-  return asActionResult(async () => {
-    const contactIds = [...new Set(input.contactIds)].filter(Boolean);
-    if (contactIds.length === 0 || !input.nextSdrId) {
-      throw new Error("Select at least one contact and an SDR.");
-    }
-    await updateState((state, session) => {
+  const contactIds = [...new Set(input.contactIds)].filter(Boolean);
+  if (contactIds.length === 0 || !input.nextSdrId) {
+    return { ok: false, error: "Select at least one contact and an SDR." };
+  }
+  try {
+    const summary = await updateState((state, session) => {
       assertPermission(session, "manage_sdr_team");
-      const wanted = new Set(contactIds);
-      const assignments = state.sdrAssignments.filter(
-        (item) => item.workspaceId === session.workspace.id && wanted.has(item.contactId)
+      // The target must be a member of this workspace (the roster is SDRs, but
+      // validate before touching any contact so a bad id fails cleanly).
+      const isMember = state.workspaceMembers.some(
+        (member) => member.workspaceId === session.workspace.id && member.userId === input.nextSdrId
       );
-      if (assignments.length === 0) {
-        throw new Error("None of the selected contacts have an SDR assignment to move.");
+      if (!isMember) {
+        throw new Error("The selected SDR isn't a member of this workspace.");
       }
-      for (const assignment of assignments) {
-        reassignSdrAssignment(state, {
-          workspaceId: session.workspace.id,
-          assignmentId: assignment.id,
-          nextSdrId: input.nextSdrId,
-          actorUserId: session.user.id,
-          reason: "Bulk manager reassignment.",
-          method: "Account ownership"
-        });
+      let assigned = 0;
+      let reassigned = 0;
+      let skipped = 0;
+      for (const contactId of contactIds) {
+        try {
+          const result = assignContactToSdr(state, {
+            workspaceId: session.workspace.id,
+            contactId,
+            sdrId: input.nextSdrId,
+            actorUserId: session.user.id,
+            reason: "Bulk manager assignment.",
+            method: "Account ownership"
+          });
+          if (result.created) assigned += 1;
+          else if (result.reassigned) reassigned += 1;
+          else skipped += 1; // already assigned to this SDR
+        } catch {
+          skipped += 1; // contact not found / out of scope
+        }
       }
       appendAudit(state, session, {
         objectType: "sdr_assignment",
         objectId: session.workspace.id,
-        action: "bulk_reassigned",
-        newValue: { contactIds, nextSdrId: input.nextSdrId, count: assignments.length }
+        action: "bulk_assigned",
+        newValue: { contactIds, nextSdrId: input.nextSdrId, assigned, reassigned, skipped }
       });
+      return { assigned, reassigned, skipped };
     }, { normalizedTables: sdrWriteTables });
 
     revalidateSdrPages();
     revalidateCrmPages(["/crm", "/crm/contacts", "/crm/my-contacts"]);
-  }, "Contacts reassigned");
+
+    const moved = summary.assigned + summary.reassigned;
+    const parts = [
+      summary.assigned ? `${summary.assigned} assigned` : "",
+      summary.reassigned ? `${summary.reassigned} reassigned` : "",
+      summary.skipped ? `${summary.skipped} unchanged` : ""
+    ].filter(Boolean);
+    const message =
+      moved === 0 && summary.skipped > 0
+        ? `Already assigned to that SDR (${summary.skipped} unchanged).`
+        : parts.join(" · ") || "Contacts assigned";
+    return { ok: true, message };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
+  }
 }
 
 // Bulk status change across several contacts in one transaction.
