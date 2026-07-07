@@ -8,6 +8,8 @@ import { Panel } from "@/components/ui/panel";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
 import { MyContactsTable, type MyContactRow } from "@/components/crm/my-contacts-table";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
 import { assignedContactsSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
@@ -83,6 +85,9 @@ export default async function MyContactsPage({
     : undefined;
   const callBlockReason = callerIdentity ? undefined : telephonyIdentityBlockReason(session.user);
 
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "crm-my-contacts");
+
   const tableRows: MyContactRow[] = rows.map((row) => ({
     contactId: row.contactId,
     contactName: row.contactName,
@@ -127,29 +132,38 @@ export default async function MyContactsPage({
         }
       />
 
-      <section aria-label="Assigned contact metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          icon={UserCheck}
-          tone="info"
-          label={isSdr ? "Assigned to me" : activeSdrName ? `Assigned to ${activeSdrName}` : "Assigned (team)"}
-          value={formatNumber(rows.length)}
-          note="Contacts in this view"
-        />
-        <StatCard
-          icon={AlertTriangle}
-          tone={overdue > 0 ? "danger" : "success"}
-          label="Overdue SLA"
-          value={formatNumber(overdue)}
-          note="First touch or follow-up past due"
-        />
-        <StatCard
-          icon={Flame}
-          tone={p1 > 0 ? "warning" : "default"}
-          label="P1 priority"
-          value={formatNumber(p1)}
-          note="Highest-priority assignments"
-        />
-      </section>
+      <TileGrid pageKey="crm-my-contacts" canCustomize={canCustomize} saved={savedLayout}>
+        <TileItem id="metric-assigned" x={0} y={0} w={4} h={2} minW={2}>
+          <StatCard
+            fill
+            icon={UserCheck}
+            tone="info"
+            label={isSdr ? "Assigned to me" : activeSdrName ? `Assigned to ${activeSdrName}` : "Assigned (team)"}
+            value={formatNumber(rows.length)}
+            note="Contacts in this view"
+          />
+        </TileItem>
+        <TileItem id="metric-overdue" x={4} y={0} w={4} h={2} minW={2}>
+          <StatCard
+            fill
+            icon={AlertTriangle}
+            tone={overdue > 0 ? "danger" : "success"}
+            label="Overdue SLA"
+            value={formatNumber(overdue)}
+            note="First touch or follow-up past due"
+          />
+        </TileItem>
+        <TileItem id="metric-p1" x={8} y={0} w={4} h={2} minW={2}>
+          <StatCard
+            fill
+            icon={Flame}
+            tone={p1 > 0 ? "warning" : "default"}
+            label="P1 priority"
+            value={formatNumber(p1)}
+            note="Highest-priority assignments"
+          />
+        </TileItem>
+      </TileGrid>
 
       <Panel
         title="Assigned contacts"

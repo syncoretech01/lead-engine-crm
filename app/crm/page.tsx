@@ -43,6 +43,8 @@ import { accountViewsForWorkspace, contactViewsForWorkspace, opportunityViews, o
 import { sdrQueueSnapshot } from "@/lib/phase1/sdr";
 import { readFastSdrQueueModel, type SdrQueueReadModel } from "@/lib/phase1/sdr-queue-read-model";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import type { OpportunityStage } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
@@ -116,6 +118,9 @@ export default async function CrmDashboardPage() {
   const pipelineWatchlist = [...openOpportunities]
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 8);
+
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "crm-dashboard");
 
   const metrics = [
     {
@@ -271,64 +276,70 @@ export default async function CrmDashboardPage() {
         }
       />
 
-      <section aria-label="CRM metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <StatCard
-            key={metric.label}
-            icon={metric.icon}
-            label={metric.label}
-            value={metric.value}
-            note={metric.note}
-            tone={metric.tone}
-          />
+      <TileGrid pageKey="crm-dashboard" canCustomize={canCustomize} saved={savedLayout}>
+        {metrics.map((metric, index) => (
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+            <StatCard
+              fill
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+              note={metric.note}
+              tone={metric.tone}
+            />
+          </TileItem>
         ))}
-      </section>
-
-      <section aria-label="CRM workspace lanes" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {lanes.map((lane) => (
-          <div key={lane.label} className="bg-card flex items-center gap-3 rounded-xl border p-4 shadow-sm">
-            <ToneIcon icon={lane.icon} tone={lane.tone} />
-            <div className="min-w-0">
-              <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {lane.label} · {lane.note}
+        {lanes.map((lane, index) => (
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+            <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
+              <ToneIcon icon={lane.icon} tone={lane.tone} />
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {lane.label} · {lane.note}
+                </div>
               </div>
             </div>
-          </div>
+          </TileItem>
         ))}
-      </section>
-
-      <section aria-label="CRM workspace shortcuts" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {workspaceCards
           .filter((card) => card.visible)
-          .map((card) => {
+          .map((card, index) => {
             const Icon = card.icon;
             return (
-              <Link
+              <TileItem
                 key={card.title}
-                href={card.href}
-                className="group bg-card flex flex-col gap-4 rounded-xl border p-5 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
+                id={`shortcut-${index}`}
+                x={(index % 3) * 4}
+                y={4 + Math.floor(index / 3) * 3}
+                w={4}
+                h={3}
+                minW={3}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="text-sm font-semibold text-foreground">{card.title}</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">{card.copy}</p>
+                <Link
+                  href={card.href}
+                  className="group bg-card flex h-full flex-col gap-4 rounded-xl border p-5 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-semibold text-foreground">{card.title}</h2>
+                      <p className="mt-1 text-xs text-muted-foreground">{card.copy}</p>
+                    </div>
+                    <ToneIcon icon={Icon} tone="info" />
                   </div>
-                  <ToneIcon icon={Icon} tone="info" />
-                </div>
-                <div className="mt-auto flex items-center justify-between">
-                  <StatusBadge label={`${formatNumber(card.count)} ${card.label}`} tone={card.count ? "info" : "default"} />
-                  <ArrowRight
-                    className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-                    aria-hidden="true"
-                  />
-                </div>
-              </Link>
+                  <div className="mt-auto flex items-center justify-between">
+                    <StatusBadge label={`${formatNumber(card.count)} ${card.label}`} tone={card.count ? "info" : "default"} />
+                    <ArrowRight
+                      className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    />
+                  </div>
+                </Link>
+              </TileItem>
             );
           })}
-      </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <TileItem id="priority-work" x={0} y={10} w={6} h={9} minW={4} minH={5}>
         <Panel
           title={session.role === "SDR" ? "My priority work" : "Priority SDR work"}
           subtitle="Highest-priority assigned leads, SLA status, recommended channel, and next due date."
@@ -340,6 +351,7 @@ export default async function CrmDashboardPage() {
             </Button>
           }
           flush
+          fill
         >
           <Table>
             <TableHeader>
@@ -388,7 +400,8 @@ export default async function CrmDashboardPage() {
             </TableBody>
           </Table>
         </Panel>
-
+        </TileItem>
+        <TileItem id="pipeline-snapshot" x={6} y={10} w={6} h={9} minW={4} minH={5}>
         <Panel
           title="Pipeline snapshot"
           subtitle="Open opportunities sorted by value, with stage and latest activity context."
@@ -397,6 +410,7 @@ export default async function CrmDashboardPage() {
               <Link href="/crm/opportunities">Open pipeline</Link>
             </Button>
           }
+          fill
         >
           <div className="flex flex-col gap-4">
             {pipelineWatchlist.map((opportunity) => (
@@ -418,9 +432,9 @@ export default async function CrmDashboardPage() {
             ) : null}
           </div>
         </Panel>
-      </section>
+        </TileItem>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <TileItem id="account-watchlist" x={0} y={19} w={6} h={9} minW={4} minH={5}>
         <Panel
           title="Account watchlist"
           subtitle="Accounts with active tasks or high scores that managers and SDRs should keep close."
@@ -430,6 +444,7 @@ export default async function CrmDashboardPage() {
             </Button>
           }
           flush
+          fill
         >
           <Table>
             <TableHeader>
@@ -469,11 +484,13 @@ export default async function CrmDashboardPage() {
             </TableBody>
           </Table>
         </Panel>
-
+        </TileItem>
+        <TileItem id="outreach-lanes" x={6} y={19} w={6} h={9} minW={4} minH={5}>
         <Panel
           title="Outreach lanes"
           subtitle="CRM execution by available channel and active campaign state."
           action={<ToneIcon icon={Mail} tone="info" />}
+          fill
         >
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5 border-b pb-4">
@@ -526,7 +543,8 @@ export default async function CrmDashboardPage() {
             </div>
           </div>
         </Panel>
-      </section>
+        </TileItem>
+      </TileGrid>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {infoCards.map((info) => {
