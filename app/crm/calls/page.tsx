@@ -8,6 +8,8 @@ import { Panel } from "@/components/ui/panel";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
 import { CallsTable, type CallRow } from "@/components/crm/calls-table";
+import { TileGrid, TileItem } from "@/components/tile-grid";
+import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { sdrUsers } from "@/lib/phase1/sdr";
 import { getWorkspaceContext } from "@/lib/phase1/store";
@@ -42,6 +44,9 @@ export default async function CallsPage({
   const connected = calls.filter((call) => call.callStatus === "Connected").length;
   const recordings = calls.filter((call) => Boolean(call.recordingId)).length;
 
+  const canCustomize = canCustomizeTiles(session);
+  const savedLayout = await readUserTileLayout(session.user.id, "crm-calls");
+
   const rows: CallRow[] = calls.map((call) => ({
     id: call.id,
     contactId: call.contactId ?? "",
@@ -75,17 +80,24 @@ export default async function CallsPage({
         }
       />
 
-      <section aria-label="Call metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon={PhoneCall} tone="info" label="Calls" value={formatNumber(calls.length)} note="Most recent 200" />
-        <StatCard icon={Clock} tone="success" label="Connected" value={formatNumber(connected)} note="Reached the contact" />
-        <StatCard
-          icon={PhoneMissed}
-          tone={recordings > 0 ? "success" : "default"}
-          label="Recordings"
-          value={formatNumber(recordings)}
-          note="Available to play"
-        />
-      </section>
+      <TileGrid pageKey="crm-calls" canCustomize={canCustomize} saved={savedLayout}>
+        <TileItem id="metric-calls" x={0} y={0} w={4} h={2} minW={2}>
+          <StatCard fill icon={PhoneCall} tone="info" label="Calls" value={formatNumber(calls.length)} note="Most recent 200" />
+        </TileItem>
+        <TileItem id="metric-connected" x={4} y={0} w={4} h={2} minW={2}>
+          <StatCard fill icon={Clock} tone="success" label="Connected" value={formatNumber(connected)} note="Reached the contact" />
+        </TileItem>
+        <TileItem id="metric-recordings" x={8} y={0} w={4} h={2} minW={2}>
+          <StatCard
+            fill
+            icon={PhoneMissed}
+            tone={recordings > 0 ? "success" : "default"}
+            label="Recordings"
+            value={formatNumber(recordings)}
+            note="Available to play"
+          />
+        </TileItem>
+      </TileGrid>
 
       <Panel
         title="Call log"

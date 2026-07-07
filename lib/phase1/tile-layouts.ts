@@ -12,7 +12,10 @@ export const TILE_PAGE_KEYS = [
   "crm-contact-detail",
   "crm-accounts",
   "crm-contacts",
-  "crm-opportunities"
+  "crm-opportunities",
+  "crm-dashboard",
+  "crm-calls",
+  "crm-my-contacts"
 ] as const;
 
 export type TilePageKey = (typeof TILE_PAGE_KEYS)[number];
