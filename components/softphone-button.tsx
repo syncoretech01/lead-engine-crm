@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Delete, Loader2, Mic, MicOff, Phone, PhoneCall, PhoneOff } from "lucide-react";
+import { Check, Delete, Loader2, Maximize2, Mic, MicOff, Minimize2, Phone, PhoneCall, PhoneOff, StickyNote } from "lucide-react";
 
-import { logSoftphoneCallAction, placeCallAction } from "@/app/actions";
+import { createNoteAction, logSoftphoneCallAction, placeCallAction } from "@/app/actions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
-import { fieldClass } from "@/components/ui/field";
+import { fieldClass, fieldTextareaClass } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
 // Type-only: the class is dynamically imported in the browser (it touches
@@ -134,12 +134,19 @@ export function SoftphoneButton({
   className
 }: SoftphoneButtonProps) {
   const [open, setOpen] = React.useState(false);
+  // Backgrounded call: the dialog is closed to a small floating bar while the
+  // call keeps running (clicking outside during a call minimizes, never hangs up).
+  const [minimized, setMinimized] = React.useState(false);
   const [number, setNumber] = React.useState(phone ?? "");
   const [consent, setConsent] = React.useState<(typeof CONSENTS)[number]>("Granted");
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [muted, setMuted] = React.useState(false);
   const [seconds, setSeconds] = React.useState(0);
+  // Call notes the SDR jots down; saved to the contact timeline as a "Call note".
+  const [notes, setNotes] = React.useState("");
+  const [noteSaving, setNoteSaving] = React.useState(false);
+  const [noteSaved, setNoteSaved] = React.useState(false);
 
   const sessionRef = React.useRef<CallSession | null>(null);
   const handlersRef = React.useRef<Array<[string, (...args: unknown[]) => void]>>([]);
@@ -328,7 +335,10 @@ export function SoftphoneButton({
 
   const endCall = React.useCallback(
     (final: "ended" | "error") => {
-      if (finalize(final)) setStatus(final);
+      if (finalize(final)) {
+        setStatus(final);
+        setMinimized(false); // call is over — drop the background bar
+      }
     },
     [finalize]
   );
@@ -428,6 +438,9 @@ export function SoftphoneButton({
     setError(null);
     setMuted(false);
     setSeconds(0);
+    setMinimized(false);
+    setNotes("");
+    setNoteSaved(false);
     setNumber(phone ?? "");
   }, [cleanupSession, clearConnectTimeout, detachAudio, finalize, phone, stopTimer, terminateSession]);
 
@@ -456,11 +469,22 @@ export function SoftphoneButton({
   }, [cleanupSession, clearConnectTimeout, detachAudio, finalize, stopTimer, terminateSession]);
 
   function onOpenChange(next: boolean) {
-    // Block dismissal only during the softphone connect window (there's no dialog to
-    // CANCEL yet). The RingOut fallback and idle dialpad stay dismissable.
-    if (!next && blockCloseRef.current) return;
-    if (!next) reset();
-    setOpen(next);
+    if (next) {
+      setMinimized(false);
+      setOpen(true);
+      return;
+    }
+    // Closing. A live call must NOT be dropped by a click-outside / Escape — send it
+    // to the background bar and keep it running. Only tear down when idle/ended.
+    const active = status === "connecting" || status === "ringing" || status === "in-call";
+    if (active) {
+      setMinimized(true);
+      setOpen(false);
+      return;
+    }
+    if (blockCloseRef.current) return;
+    reset();
+    setOpen(false);
   }
 
   async function startCall() {
@@ -637,7 +661,51 @@ export function SoftphoneButton({
     }
   }
 
+  async function saveNote() {
+    const body = notes.trim();
+    if (!body || noteSaving) return;
+    setNoteSaving(true);
+    try {
+      const form = new FormData();
+      form.set("contactId", contactId);
+      form.set("title", "Call note");
+      form.set("body", body);
+      await createNoteAction(form);
+      setNoteSaved(true);
+    } catch {
+      // best-effort; keep the text so the SDR can retry
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
   const inLiveCall = status === "connecting" || status === "ringing" || status === "in-call";
+  // The notes editor + save button, reused in the in-call and call-ended views.
+  const notesEditor = (
+    <div className="w-full text-left">
+      <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground" htmlFor="softphone-notes">
+        <StickyNote className="size-3.5" aria-hidden="true" />
+        Call notes
+      </label>
+      <textarea
+        id="softphone-notes"
+        value={notes}
+        onChange={(event) => {
+          setNotes(event.target.value);
+          if (noteSaved) setNoteSaved(false);
+        }}
+        rows={3}
+        placeholder="Jot down what happened on the call…"
+        className={cn(fieldTextareaClass, "w-full")}
+      />
+      <div className="mt-1.5 flex items-center gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={saveNote} disabled={!notes.trim() || noteSaving}>
+          {noteSaved ? <Check className="size-4" aria-hidden="true" /> : <StickyNote className="size-4" aria-hidden="true" />}
+          {noteSaving ? "Saving…" : noteSaved ? "Saved to timeline" : "Save note to timeline"}
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -780,7 +848,22 @@ export function SoftphoneButton({
                   <PhoneOff aria-hidden="true" />
                   {status === "ringing" ? "Cancel" : "Hang up"}
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setMinimized(true);
+                    setOpen(false);
+                  }}
+                  title="Keep the call running in the background"
+                >
+                  <Minimize2 aria-hidden="true" />
+                  Minimize
+                </Button>
               </div>
+
+              {notesEditor}
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
@@ -804,6 +887,7 @@ export function SoftphoneButton({
                   You can retry in the browser, or ring your own phone and bridge the lead instead.
                 </p>
               ) : null}
+              {status === "ended" ? notesEditor : null}
               <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
                 {status === "error" ? (
                   <>
@@ -829,6 +913,63 @@ export function SoftphoneButton({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Backgrounded call: a floating bar so the call keeps running while the SDR
+          works elsewhere on the page. Expand reopens the dialog. */}
+      {minimized && inLiveCall ? (
+        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-full border bg-popover px-4 py-2 shadow-lg">
+          <span className="relative flex size-2.5" aria-hidden="true">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--teal-700)] opacity-60" />
+            <span className="relative inline-flex size-2.5 rounded-full bg-[var(--teal-700)]" />
+          </span>
+          <div className="min-w-0 text-left">
+            <p className="truncate text-sm font-medium text-foreground">{contactName}</p>
+            <p className="text-xs text-muted-foreground">
+              {status === "in-call"
+                ? `On call · ${formatClock(seconds)}`
+                : status === "ringing"
+                  ? "Ringing…"
+                  : "Connecting…"}
+            </p>
+          </div>
+          {status === "in-call" ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={toggleMute}
+              aria-label={muted ? "Unmute" : "Mute"}
+              title={muted ? "Unmute" : "Mute"}
+            >
+              {muted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={() => {
+              setMinimized(false);
+              setOpen(true);
+            }}
+            aria-label="Expand call"
+            title="Expand"
+          >
+            <Maximize2 aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            className="bg-[var(--ui-destructive)] text-white hover:opacity-90"
+            onClick={hangup}
+            disabled={status === "connecting"}
+            aria-label="Hang up"
+            title="Hang up"
+          >
+            <PhoneOff aria-hidden="true" />
+          </Button>
+        </div>
+      ) : null}
     </>
   );
 }
