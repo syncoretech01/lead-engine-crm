@@ -69,6 +69,7 @@ import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { directSmsBlockReason, directSmsLiveBlockReason } from "@/lib/phase1/direct-sms-send";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
+import { timelineActivityDisplayForViewer } from "@/lib/phase1/activity-timeline-redaction";
 import { SoftphoneButton } from "@/components/softphone-button";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { runWaterfallEnrichmentAction } from "@/lib/phase1/waterfall-enrichment-service";
@@ -186,14 +187,28 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   );
   const fieldValueMap = customFieldValuesForObject(state, contact.id);
   const activeTasks = tasks.filter((task) => task.status !== "Completed");
-  const timelineItems: TimelineItem[] = activities.map((activity) => ({
-    id: activity.id,
-    kind: activityKind(activity.type),
-    title: activity.title,
-    body: activity.body || undefined,
-    actor: userNameForId(state, activity.actorUserId),
-    occurredAt: activity.createdAt
-  }));
+  const timelineItems: TimelineItem[] = activities.flatMap((activity) => {
+    const display = timelineActivityDisplayForViewer({
+      activity,
+      actorName: userNameForId(state, activity.actorUserId),
+      viewerRole: session.role,
+      viewerName: session.user.name
+    });
+    if (display.hidden) {
+      return [];
+    }
+
+    return [
+      {
+        id: activity.id,
+        kind: activityKind(activity.type),
+        title: display.title,
+        body: display.body,
+        actor: display.actor,
+        occurredAt: activity.createdAt
+      }
+    ];
+  });
   const taskItems: TaskItem[] = activeTasks.slice(0, 8).map((task) => ({
     id: task.id,
     title: task.title,
@@ -280,7 +295,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     {
       label: "Open work",
       value: activeTasks.length,
-      note: `${formatNumber(activities.length)} timeline events`,
+      note: `${formatNumber(timelineItems.length)} timeline events`,
       icon: Check,
       tone: activeTasks.length ? "warning" as const : "success" as const
     },
@@ -672,7 +687,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         <Panel
           title="Timeline"
           subtitle="Contact-level notes, calls, tasks, and opportunity updates."
-          action={<StatusBadge label={`${activities.length} events`} tone="info" />}
+          action={<StatusBadge label={`${timelineItems.length} events`} tone="info" />}
           fill
         >
           <ActivityTimeline items={timelineItems} />

@@ -461,6 +461,16 @@ export function assignContactToSdr(
     return { created: false, reassigned: true };
   }
 
+  const accountAssignment = accountAssignmentForContact(state, input.workspaceId, contact);
+  const targetSdrId = accountAssignment?.assignedSdrId ?? input.sdrId;
+  if (targetSdrId !== input.sdrId) {
+    assertWorkspaceMember(state, input.workspaceId, targetSdrId);
+  }
+  const targetReason =
+    targetSdrId !== input.sdrId
+      ? "Existing account SDR retained so all contacts stay with one owner"
+      : input.reason;
+  const targetMethod = targetSdrId !== input.sdrId ? "Account ownership" : method;
   const assignedAt = new Date().toISOString();
   const status = statusForContact(contact.status);
   const assignment: SdrAssignment = {
@@ -468,10 +478,10 @@ export function assignContactToSdr(
     workspaceId: input.workspaceId,
     companyId: contact.companyId,
     contactId: contact.id,
-    assignedSdrId: input.sdrId,
+    assignedSdrId: targetSdrId,
     assignedById: input.actorUserId,
-    assignmentMethod: method,
-    assignmentReason: input.reason,
+    assignmentMethod: targetMethod,
+    assignmentReason: targetReason,
     assignedAt,
     firstTouchDueAt: firstTouchDueAtForPriority(contact.priority, assignedAt),
     followUpDueAt: followUpDueAtForStatus(status, assignedAt),
@@ -483,7 +493,7 @@ export function assignContactToSdr(
   };
   assignment.slaStatus = calculateSlaStatus(assignment, assignedAt);
   state.sdrAssignments.push(assignment);
-  contact.owner = userNameForId(state, input.sdrId);
+  contact.owner = userNameForId(state, targetSdrId);
   contact.status = leadStatusForAssignment(assignment.status);
   contact.updatedAt = assignedAt;
 
@@ -511,8 +521,8 @@ export function assignContactToSdr(
     companyId: assignment.companyId,
     contactId: assignment.contactId,
     type: "Status change",
-    title: `Assigned to ${userNameForId(state, input.sdrId)}`,
-    body: `${method}: ${input.reason}${company ? ` for ${company.name}` : ""}.`,
+    title: `Assigned to ${userNameForId(state, targetSdrId)}`,
+    body: `${targetMethod}: ${targetReason}${company ? ` for ${company.name}` : ""}.`,
     actorUserId: input.actorUserId,
     metadata: { assignmentId: assignment.id, method: assignment.assignmentMethod },
     createdAt: assignedAt
@@ -896,6 +906,7 @@ function routeContact(state: AppState, workspaceId: string, contactId: string) {
   const company = contact
     ? state.companies.find((item) => item.id === contact.companyId && item.workspaceId === workspaceId)
     : undefined;
+  const accountAssignment = contact ? accountAssignmentForContact(state, workspaceId, contact) : undefined;
   const existingOwnerId = contact?.owner && contact.owner !== "Unassigned" ? ownerUserIdForName(state, contact.owner) : undefined;
   const territoryTeam = state.sdrTeams.find(
     (team) => team.workspaceId === workspaceId && company?.state && team.territories.includes(company.state)
@@ -903,6 +914,15 @@ function routeContact(state: AppState, workspaceId: string, contactId: string) {
   const industryTeam = state.sdrTeams.find(
     (team) => team.workspaceId === workspaceId && company?.industry && team.industries.some((industry) => company.industry.includes(industry))
   );
+
+  if (accountAssignment?.assignedSdrId) {
+    return {
+      sdrId: accountAssignment.assignedSdrId,
+      teamId: teamForUser(state, workspaceId, accountAssignment.assignedSdrId)?.id,
+      method: "Account ownership" as AssignmentMethod,
+      reason: "Existing account SDR retained so all contacts stay with one owner"
+    };
+  }
 
   if (existingOwnerId && contact?.owner !== "Blocked") {
     return {
@@ -938,6 +958,20 @@ function routeContact(state: AppState, workspaceId: string, contactId: string) {
     method: "Capacity-based" as AssignmentMethod,
     reason: "Assigned to lowest active workload"
   };
+}
+
+function accountAssignmentForContact(
+  state: AppState,
+  workspaceId: string,
+  contact: Pick<AppState["contacts"][number], "id" | "companyId">
+) {
+  return state.sdrAssignments.find(
+    (assignment) =>
+      assignment.workspaceId === workspaceId &&
+      assignment.companyId === contact.companyId &&
+      assignment.contactId !== contact.id &&
+      Boolean(assignment.assignedSdrId)
+  );
 }
 
 function teamForUser(state: AppState, workspaceId: string, userId: string) {

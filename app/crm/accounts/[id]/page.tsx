@@ -56,6 +56,7 @@ import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { accountDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { readFastAccountDetailModel } from "@/lib/phase1/crm-detail-read-model";
 import { dedupeTimelineActivities } from "@/lib/phase1/crm-display";
+import { timelineActivityDisplayForViewer } from "@/lib/phase1/activity-timeline-redaction";
 import { ActivityTimeline, type TimelineItem, type TimelineKind } from "@/components/crm/activity-timeline";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
@@ -155,14 +156,28 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
       .filter((activity) => activity.workspaceId === workspaceId && activity.companyId === account.id)
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
   ).slice(0, 14);
-  const accountTimelineItems: TimelineItem[] = activities.map((activity) => ({
-    id: activity.id,
-    kind: accountActivityKind(activity.type),
-    title: activity.title,
-    body: activity.body || undefined,
-    actor: userNameForId(state, activity.actorUserId),
-    occurredAt: activity.createdAt
-  }));
+  const accountTimelineItems: TimelineItem[] = activities.flatMap((activity) => {
+    const display = timelineActivityDisplayForViewer({
+      activity,
+      actorName: userNameForId(state, activity.actorUserId),
+      viewerRole: session.role,
+      viewerName: session.user.name
+    });
+    if (display.hidden) {
+      return [];
+    }
+
+    return [
+      {
+        id: activity.id,
+        kind: accountActivityKind(activity.type),
+        title: display.title,
+        body: display.body,
+        actor: display.actor,
+        occurredAt: activity.createdAt
+      }
+    ];
+  });
   const companyFields = state.customFields.filter(
     (field) => field.workspaceId === workspaceId && field.objectType === "company"
   );
@@ -226,7 +241,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
     {
       label: "Recent activity",
       value: recentInteractions.length,
-      note: `${formatNumber(activities.length)} timeline events`,
+      note: `${formatNumber(accountTimelineItems.length)} timeline events`,
       icon: NotebookPen,
       tone: recentInteractions.length ? "info" as const : "success" as const
     },
@@ -475,7 +490,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         <Panel
           title="Activity timeline"
           subtitle="Calls, notes, tasks, opportunity changes, and system events."
-          action={<StatusBadge label={`${activities.length} events`} tone="info" />}
+          action={<StatusBadge label={`${accountTimelineItems.length} events`} tone="info" />}
           fill
         >
           <ActivityTimeline items={accountTimelineItems} />
