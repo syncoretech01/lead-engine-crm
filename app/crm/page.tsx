@@ -544,20 +544,20 @@ export default async function CrmDashboardPage() {
           </div>
         </Panel>
         </TileItem>
-      </TileGrid>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {infoCards.map((info) => {
+        {infoCards.map((info, index) => {
           const Icon = info.icon;
           return (
-            <Card key={info.title} className="gap-3 p-5">
-              <ToneIcon icon={Icon} tone="info" />
-              <h2 className="text-sm font-semibold text-foreground">{info.title}</h2>
-              <p className="text-xs text-muted-foreground">{info.copy}</p>
-            </Card>
+            <TileItem key={info.title} id={`info-${index}`} x={index * 4} y={28} w={4} h={3} minW={3} minH={2}>
+              <Card className="h-full gap-3 p-5">
+                <ToneIcon icon={Icon} tone="info" />
+                <h2 className="text-sm font-semibold text-foreground">{info.title}</h2>
+                <p className="text-xs text-muted-foreground">{info.copy}</p>
+              </Card>
+            </TileItem>
           );
         })}
-      </section>
+      </TileGrid>
     </>
   );
 }

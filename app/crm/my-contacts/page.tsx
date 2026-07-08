@@ -116,7 +116,7 @@ export default async function MyContactsPage({
     <>
       <PageHeader
         kicker="CRM Execution"
-        title={isSdr ? "My assigned contacts" : "Assigned contacts"}
+        title={isSdr ? "My assigned contacts" : "Assigned Contacts"}
         copy={
           isSdr
             ? "Every contact currently assigned to you — newest assignment first. Open a contact to log touches, call, and track SLA."
@@ -163,50 +163,53 @@ export default async function MyContactsPage({
             note="Highest-priority assignments"
           />
         </TileItem>
-      </TileGrid>
 
-      <Panel
-        title="Assigned contacts"
-        subtitle="Sorted by assignment date — newest on top."
-        action={
-          !isSdr && roster.length > 0 ? (
-            <form method="get" className="flex items-center gap-2">
-              <label className="sr-only" htmlFor="sdr-filter">
-                Filter by SDR
-              </label>
-              <select
-                id="sdr-filter"
-                name="sdr"
-                defaultValue={sdrFilter ?? ""}
-                className={cn(fieldClass, "h-8 w-44")}
-              >
-                <option value="">All SDRs</option>
-                {roster.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-              <button type="submit" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                Filter
-              </button>
-            </form>
-          ) : (
-            <StatusBadge label={`${formatNumber(rows.length)} contacts`} tone="info" />
-          )
-        }
-        flush
-      >
-        <MyContactsTable
-          rows={tableRows}
-          isSdr={isSdr}
-          callerLabel={callerLabel}
-          callBlockReason={callBlockReason}
-          initialQuery={sp.q}
-          initialSort={sp.sort}
-          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
-        />
-      </Panel>
+        <TileItem id="assigned-contacts" x={0} y={2} w={12} h={10} minW={6} minH={5}>
+          <Panel
+            title="Assigned contacts"
+            subtitle="Sorted by assignment date — newest on top."
+            action={
+              !isSdr && roster.length > 0 ? (
+                <form method="get" className="flex items-center gap-2">
+                  <label className="sr-only" htmlFor="sdr-filter">
+                    Filter by SDR
+                  </label>
+                  <select
+                    id="sdr-filter"
+                    name="sdr"
+                    defaultValue={sdrFilter ?? ""}
+                    className={cn(fieldClass, "h-8 w-44")}
+                  >
+                    <option value="">All SDRs</option>
+                    {roster.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                    Filter
+                  </button>
+                </form>
+              ) : (
+                <StatusBadge label={`${formatNumber(rows.length)} contacts`} tone="info" />
+              )
+            }
+            flush
+            fill
+          >
+            <MyContactsTable
+              rows={tableRows}
+              isSdr={isSdr}
+              callerLabel={callerLabel}
+              callBlockReason={callBlockReason}
+              initialQuery={sp.q}
+              initialSort={sp.sort}
+              initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+            />
+          </Panel>
+        </TileItem>
+      </TileGrid>
     </>
   );
 }

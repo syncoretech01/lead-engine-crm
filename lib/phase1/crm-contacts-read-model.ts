@@ -29,6 +29,9 @@ export type CrmContactListRow = {
 export type CrmContactsReadModel = {
   contacts: CrmContactListRow[];
   openTaskCount: number;
+  /** Every contact in scope (assigned or unassigned), not capped by the 500-row
+   *  list limit — powers the "Total Contacts" tile. */
+  totalContacts: number;
 };
 
 export async function readFastCrmContactsModel(
@@ -45,7 +48,7 @@ export async function readFastCrmContactsModel(
     workspaceId,
     ...(scopedContactIds ? { id: { in: scopedContactIds } } : {})
   };
-  const [contacts, taskRows, opportunityRows, activityRows, openTaskCount] = await Promise.all([
+  const [contacts, taskRows, opportunityRows, activityRows, openTaskCount, totalContacts] = await Promise.all([
     prisma.contact.findMany({
       where: contactWhere,
       include: { company: true },
@@ -82,7 +85,8 @@ export async function readFastCrmContactsModel(
         status: { not: "Completed" },
         contactId: scopedContactIds ? { in: scopedContactIds } : undefined
       }
-    })
+    }),
+    prisma.contact.count({ where: contactWhere })
   ]);
   const taskCounts = countByContact(taskRows.map((row) => row.contactId));
   const opportunityCounts = countByContact(opportunityRows.map((row) => row.contactId));
@@ -125,7 +129,8 @@ export async function readFastCrmContactsModel(
         isSuppressed: contact.isSuppressed
       };
     }),
-    openTaskCount
+    openTaskCount,
+    totalContacts
   };
 }
 
