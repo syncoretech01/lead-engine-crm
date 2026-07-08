@@ -12,6 +12,14 @@ const nextConfig = {
   output: "standalone",
   turbopack: {
     root: __dirname
+  },
+  experimental: {
+    // 1:1 email attachments post through a server action as multipart FormData;
+    // the default 1 MB cap would reject them. Headroom over the 10 MB attachment
+    // total enforced in readEmailAttachments.
+    serverActions: {
+      bodySizeLimit: "12mb"
+    }
   }
 };
 

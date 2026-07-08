@@ -12,7 +12,7 @@ import { resolveLiveProviderCredential } from "@/lib/phase1/provider-live-execut
 import { recordFirstTouch } from "@/lib/phase1/sdr";
 import { resolveUserSenderIdentity, senderIdentityBlockReason } from "@/lib/phase1/sender-identities";
 import { buildOneClickUnsubscribeUrl, buildUnsubscribeUrl } from "@/lib/phase1/unsubscribe-token";
-import { amazonSesSendEmail } from "@/lib/providers/adapters/amazon-ses";
+import { amazonSesSendEmail, type EmailAttachment } from "@/lib/providers/adapters/amazon-ses";
 import { ensureLiveProviderAdaptersRegistered } from "@/lib/providers/register-live-adapters";
 import type { AppState, Contact, SdrLeadStatus, User } from "@/lib/phase1/types";
 import type { ProviderCredential } from "@/lib/providers/types";
@@ -34,6 +34,7 @@ export type DirectEmailRecipient = {
   senderName: string;
   senderEmail: string;
   headers: Record<string, string>;
+  attachments?: EmailAttachment[];
 };
 
 export type DirectEmailSkipped = {
@@ -77,6 +78,7 @@ export function buildDirectEmailSendPlan(
     contactIds: string[];
     subject: string;
     body: string;
+    attachments?: EmailAttachment[];
   }
 ): DirectEmailSendPlan {
   const requestedIds = [...new Set(input.contactIds.filter(Boolean))];
@@ -137,6 +139,7 @@ export function buildDirectEmailSendPlan(
         "List-Unsubscribe": `<${oneClick}>, <mailto:${emailAddressFromMailbox(senderIdentity.replyTo)}?subject=unsubscribe>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
       },
+      attachments: input.attachments,
       ...rendered
     });
   }
@@ -196,7 +199,8 @@ export async function sendDirectEmailBatch(
           text: recipient.text,
           replyTo: recipient.replyTo,
           from: recipient.from,
-          headers: recipient.headers
+          headers: recipient.headers,
+          attachments: recipient.attachments
         },
         {
           workspaceId,
@@ -282,7 +286,18 @@ export function recordDirectEmailSendResults(
         directRequestId: recipient.requestId,
         directEmailMode: recipient.mode,
         senderUserId: recipient.senderUserId,
-        senderName: recipient.senderName
+        senderName: recipient.senderName,
+        // rawPayload is flat primitives only — flatten attachment metadata.
+        ...(recipient.attachments && recipient.attachments.length > 0
+          ? {
+              attachmentCount: recipient.attachments.length,
+              attachmentNames: recipient.attachments.map((attachment) => attachment.filename).join(", "),
+              attachmentBytes: recipient.attachments.reduce(
+                (total, attachment) => total + Math.floor((attachment.content.length * 3) / 4),
+                0
+              )
+            }
+          : {})
       }
     });
     markSdrAssignmentTouched(state, input.workspaceId, recipient.contactId, input.actorUserId, recipient.subject);

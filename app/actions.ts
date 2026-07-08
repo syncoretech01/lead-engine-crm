@@ -54,6 +54,7 @@ import {
   sendDirectEmailBatch,
   type BulkEmailAudience
 } from "@/lib/phase1/direct-email-send";
+import { readEmailAttachments } from "@/lib/phase1/email-attachments";
 import {
   buildDirectSmsSendPlan,
   recordDirectSmsSendResults,
@@ -1677,6 +1678,7 @@ export async function sendDirectEmailAction(formData: FormData) {
   const requestId = stringValue(formData.get("requestId"), `direct-${contactId}-${randomUUID()}`);
   const subject = stringValue(formData.get("subject"), "Quick question");
   const body = stringValue(formData.get("bodySnapshot"), "Hi {{first_name}}, quick question about {{company}}.");
+  const attachments = await readEmailAttachments(formData.getAll("attachments"));
 
   const state = await readState();
   const session = await getSession(state);
@@ -1689,7 +1691,8 @@ export async function sendDirectEmailAction(formData: FormData) {
     mode: "one_to_one",
     contactIds: [contactId],
     subject,
-    body
+    body,
+    attachments
   });
 
   // Durable outbox (opt-in): claim recipients before the live send so a retry

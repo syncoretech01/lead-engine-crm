@@ -549,6 +549,18 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                     required
                   />
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={fieldLabelClass} htmlFor="direct-email-attachments">Attachments</label>
+                  <input
+                    id="direct-email-attachments"
+                    name="attachments"
+                    type="file"
+                    multiple
+                    accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.svg,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.md,.zip"
+                    className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium"
+                  />
+                  <p className="text-xs text-muted-foreground">Up to 5 files, 10 MB total. PDF, images, Office docs, txt/csv, zip.</p>
+                </div>
                 <div>
                   <SubmitButton className={buttonVariants()} pendingLabel="Sending…" disabled={!canSendEmail}>
                     <Mail size={16} aria-hidden="true" />
@@ -852,6 +864,18 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
                   placeholder="Hi {{first_name}}, quick question about {{company}}."
                   required
                 />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={fieldLabelClass} htmlFor="direct-email-attachments">Attachments</label>
+                <input
+                  id="direct-email-attachments"
+                  name="attachments"
+                  type="file"
+                  multiple
+                  accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.svg,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.md,.zip"
+                  className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium"
+                />
+                <p className="text-xs text-muted-foreground">Up to 5 files, 10 MB total. PDF, images, Office docs, txt/csv, zip.</p>
               </div>
               <div>
                 <SubmitButton className={buttonVariants()} pendingLabel="Sending…" disabled={!canSendEmail}>
