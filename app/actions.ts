@@ -1027,7 +1027,7 @@ export async function createNoteAction(formData: FormData) {
       companyId,
       contactId,
       type: "Note",
-      title: "Note added",
+      title: stringValue(formData.get("title"), "Note added"),
       body: note.body,
       actorUserId: session.user.id
     });
