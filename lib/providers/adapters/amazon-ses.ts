@@ -22,6 +22,13 @@ export type SesCredential = {
   configurationSet?: string;
 };
 
+/** One email attachment. `content` is already base64-encoded file bytes. */
+export type EmailAttachment = {
+  filename: string;
+  contentType: string;
+  content: string;
+};
+
 export type SesSendInput = {
   to: string;
   subject: string;
@@ -30,6 +37,7 @@ export type SesSendInput = {
   replyTo?: string;
   from?: string;
   headers?: Record<string, string>;
+  attachments?: EmailAttachment[];
 };
 
 export type SesSendResult = {
@@ -125,7 +133,6 @@ export async function amazonSesSendEmail(
 }
 
 export function buildMimeMessage(input: SesSendInput, from: string): Uint8Array {
-  const boundary = `syncore-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   const headers = [
     headerLine("From", from),
     headerLine("To", input.to),
@@ -136,9 +143,44 @@ export function buildMimeMessage(input: SesSendInput, from: string): Uint8Array 
     ...Object.entries(input.headers ?? {}).map(([name, value]) => headerLine(name, value))
   ].filter((line): line is string => Boolean(line));
 
-  let body: string;
+  // The message body — a self-contained MIME part beginning with its own
+  // Content-Type line (text/html alternative, or a single part).
+  const bodyPart = buildBodyPart(input);
+  const attachments = input.attachments ?? [];
+
+  if (attachments.length === 0) {
+    return Buffer.from(`${headers.join("\r\n")}\r\n${bodyPart}`, "utf8");
+  }
+
+  // With attachments, wrap the body + each attachment in multipart/mixed.
+  const mixed = uniqueBoundary("mixed");
+  const sections = [
+    `Content-Type: multipart/mixed; boundary="${mixed}"`,
+    "",
+    `--${mixed}`,
+    bodyPart,
+    ...attachments.map((attachment) =>
+      [
+        `--${mixed}`,
+        headerLine("Content-Type", `${attachment.contentType || "application/octet-stream"}; name="${sanitizeFilename(attachment.filename)}"`),
+        headerLine("Content-Disposition", `attachment; filename="${sanitizeFilename(attachment.filename)}"`),
+        "Content-Transfer-Encoding: base64",
+        "",
+        wrapExistingBase64(attachment.content)
+      ].join("\r\n")
+    ),
+    `--${mixed}--`,
+    ""
+  ];
+
+  return Buffer.from(`${headers.join("\r\n")}\r\n${sections.join("\r\n")}`, "utf8");
+}
+
+// Build the message body MIME part (text/html alternative, or a single part).
+function buildBodyPart(input: SesSendInput): string {
   if (input.text && input.html) {
-    body = [
+    const boundary = uniqueBoundary("alt");
+    return [
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
       "",
       `--${boundary}`,
@@ -154,23 +196,31 @@ export function buildMimeMessage(input: SesSendInput, from: string): Uint8Array 
       `--${boundary}--`,
       ""
     ].join("\r\n");
-  } else if (input.html) {
-    body = [
-      "Content-Type: text/html; charset=UTF-8",
-      "Content-Transfer-Encoding: base64",
-      "",
-      wrapBase64(input.html)
-    ].join("\r\n");
-  } else {
-    body = [
-      "Content-Type: text/plain; charset=UTF-8",
-      "Content-Transfer-Encoding: base64",
-      "",
-      wrapBase64(input.text ?? "")
-    ].join("\r\n");
   }
+  if (input.html) {
+    return ["Content-Type: text/html; charset=UTF-8", "Content-Transfer-Encoding: base64", "", wrapBase64(input.html)].join("\r\n");
+  }
+  return ["Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64", "", wrapBase64(input.text ?? "")].join("\r\n");
+}
 
-  return Buffer.from(`${headers.join("\r\n")}\r\n${body}`, "utf8");
+function uniqueBoundary(kind: string) {
+  return `syncore-${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+// Strip quotes / CR/LF / path separators so a filename can't break out of the
+// Content-Disposition header or inject MIME structure.
+function sanitizeFilename(name: string) {
+  const clean = name.replace(/[\r\n"\\/]+/g, "_").trim();
+  return (clean || "attachment").slice(0, 200);
+}
+
+// Re-wrap an already-base64 string to 76-column lines (RFC 2045) without
+// re-encoding it (attachment bytes arrive pre-encoded).
+function wrapExistingBase64(base64: string) {
+  return base64
+    .replace(/\s+/g, "")
+    .replace(/.{1,76}/g, "$&\r\n")
+    .trimEnd();
 }
 
 function headerLine(name: string, value: string) {
