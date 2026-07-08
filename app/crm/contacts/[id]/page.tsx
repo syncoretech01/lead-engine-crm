@@ -314,29 +314,32 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     isSuppressed: contact.isSuppressed,
     doNotContact: contact.doNotContact
   });
-  const snapshotRows = isSdr
+  const contactNotes = contact.notes?.trim();
+  const snapshotRows: Array<{ label: string; value: string; multiline?: boolean }> = isSdr
     ? [
-        ["Account", company?.name ?? "Unknown"],
-        ["Email", contact.email || "No email"],
-        ["Phone", contact.phone || "No phone"],
-        ["Owner", contact.owner],
-        ["Fit reason", contact.fitReason ?? "No fit reason yet"],
-        ["Source", contact.sourceLineage[0] ?? "Unknown"],
-        ["Status", contact.status],
-        ["Do not contact", contact.doNotContact ? "Yes" : "No"]
+        { label: "Account", value: company?.name ?? "Unknown" },
+        { label: "Email", value: contact.email || "No email" },
+        { label: "Phone", value: contact.phone || "No phone" },
+        { label: "Owner", value: contact.owner },
+        { label: "Fit reason", value: contact.fitReason ?? "No fit reason yet" },
+        ...(contactNotes ? [{ label: "Notes", value: contactNotes, multiline: true }] : []),
+        { label: "Source", value: contact.sourceLineage[0] ?? "Unknown" },
+        { label: "Status", value: contact.status },
+        { label: "Do not contact", value: contact.doNotContact ? "Yes" : "No" }
       ]
     : [
-        ["Account", company?.name ?? "Unknown"],
-        ["Email", contact.email],
-        ["Phone", contact.phone || "No phone"],
-        ["Owner", contact.owner],
-        ["Seniority", contact.seniority ?? "Unknown"],
-        ["Department", contact.department ?? "Unknown"],
-        ["Enrichment", `${contact.enrichmentCoverage ?? 0}% coverage`],
-        ["Fit reason", contact.fitReason ?? "No fit reason yet"],
-        ["Lawful basis", contact.lawfulBasis],
-        ["Consent", contact.consentStatus],
-        ["Do not contact", contact.doNotContact ? "Yes" : "No"]
+        { label: "Account", value: company?.name ?? "Unknown" },
+        { label: "Email", value: contact.email },
+        { label: "Phone", value: contact.phone || "No phone" },
+        { label: "Owner", value: contact.owner },
+        { label: "Seniority", value: contact.seniority ?? "Unknown" },
+        { label: "Department", value: contact.department ?? "Unknown" },
+        { label: "Enrichment", value: `${contact.enrichmentCoverage ?? 0}% coverage` },
+        { label: "Fit reason", value: contact.fitReason ?? "No fit reason yet" },
+        ...(contactNotes ? [{ label: "Notes", value: contactNotes, multiline: true }] : []),
+        { label: "Lawful basis", value: contact.lawfulBasis },
+        { label: "Consent", value: contact.consentStatus },
+        { label: "Do not contact", value: contact.doNotContact ? "Yes" : "No" }
       ];
 
   const canCustomize = canCustomizeTiles(session);
@@ -599,10 +602,17 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           fill
         >
           <div className="flex flex-col gap-3">
-            {snapshotRows.map(([label, value]) => (
-              <div className="flex items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0" key={label}>
-                <span className="text-xs font-medium text-muted-foreground">{label}</span>
-                <span className="text-right text-sm text-foreground">{value}</span>
+            {snapshotRows.map((row) => (
+              <div
+                className={row.multiline ? "border-b pb-3 last:border-0 last:pb-0" : "flex items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0"}
+                key={row.label}
+              >
+                <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
+                {row.multiline ? (
+                  <p className="mt-1 whitespace-pre-line text-sm text-foreground">{row.value}</p>
+                ) : (
+                  <span className="text-right text-sm text-foreground">{row.value}</span>
+                )}
               </div>
             ))}
           </div>

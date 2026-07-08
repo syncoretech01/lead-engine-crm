@@ -319,6 +319,7 @@ type PrismaContactReadRow = {
   verification: string | null;
   enrichmentCoverage: number | null;
   fitReason: string | null;
+  notes: string | null;
   enrichedAt: Date | string | null;
   lawfulBasis: string | null;
   consentStatus: string | null;
@@ -411,6 +412,7 @@ async function readNormalizedCrmRowsFromPrisma(workspaceId: string): Promise<Crm
         verification: true,
         enrichmentCoverage: true,
         fitReason: true,
+        notes: true,
         enrichedAt: true,
         lawfulBasis: true,
         consentStatus: true,
@@ -477,6 +479,7 @@ function contactFromPrismaReadRow(row: PrismaContactReadRow): Contact {
     verification: row.verification ?? "No verification yet",
     enrichmentCoverage: row.enrichmentCoverage ?? row.confidence,
     fitReason: row.fitReason ?? undefined,
+    notes: row.notes ?? undefined,
     enrichedAt: optionalIsoString(row.enrichedAt),
     lawfulBasis: lawfulBasisValue(row.lawfulBasis),
     consentStatus: consentStatusValue(row.consentStatus),

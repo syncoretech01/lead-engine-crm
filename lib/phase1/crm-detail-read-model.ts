@@ -429,6 +429,7 @@ function contactFromPrisma(row: {
   verification: string | null;
   enrichmentCoverage: number | null;
   fitReason: string | null;
+  notes: string | null;
   enrichedAt: Date | null;
   lawfulBasis: string | null;
   consentStatus: string | null;
@@ -459,6 +460,7 @@ function contactFromPrisma(row: {
     verification: row.verification ?? "No verification yet",
     enrichmentCoverage: row.enrichmentCoverage ?? row.confidence,
     fitReason: row.fitReason ?? undefined,
+    notes: row.notes ?? undefined,
     enrichedAt: optionalIso(row.enrichedAt),
     lawfulBasis: lawfulBasisValue(row.lawfulBasis),
     consentStatus: consentStatusValue(row.consentStatus),
