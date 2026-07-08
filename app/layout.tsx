@@ -7,6 +7,7 @@ import "@fontsource/manrope/800.css";
 import "./globals.css";
 import { cookies, headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
+import { CallProvider } from "@/components/call/call-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { syncoreBrand } from "@/lib/brand";
@@ -62,9 +63,11 @@ export default async function RootLayout({
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <ThemeProvider initialPref={themePref}>
-          <AppShell session={session} defaultSidebarOpen={defaultSidebarOpen}>
-            {children}
-          </AppShell>
+          <CallProvider>
+            <AppShell session={session} defaultSidebarOpen={defaultSidebarOpen}>
+              {children}
+            </AppShell>
+          </CallProvider>
           <Toaster richColors closeButton position="bottom-right" />
         </ThemeProvider>
       </body>
