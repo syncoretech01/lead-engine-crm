@@ -99,6 +99,14 @@ export const navGroups: NavGroup[] = [
         exact: true,
         visibleForRoles: ["Admin", "Manager"]
       },
+      { href: "/sdr/queue", label: "SDR Queue", sdrLabel: "My Queue", icon: ClipboardList, permission: "manage_sdr" },
+      {
+        href: "/crm/my-contacts",
+        label: "Assigned Contacts",
+        sdrLabel: "My Contacts",
+        icon: UserCheck,
+        permission: "manage_sdr"
+      },
       { href: "/crm/accounts", label: "Accounts", icon: Building2, permission: "view_records" },
       { href: "/crm/contacts", label: "All Contacts", icon: Users, permission: "view_records" },
       {
@@ -107,14 +115,6 @@ export const navGroups: NavGroup[] = [
         icon: CircleDollarSign,
         permission: "view_records",
         visibleForRoles: ["Admin", "Manager", "SDR"]
-      },
-      { href: "/sdr/queue", label: "SDR Queue", sdrLabel: "My Queue", icon: ClipboardList, permission: "manage_sdr" },
-      {
-        href: "/crm/my-contacts",
-        label: "Assigned Contacts",
-        sdrLabel: "My Contacts",
-        icon: UserCheck,
-        permission: "manage_sdr"
       },
       { href: "/crm/calls", label: "Call Log", sdrLabel: "My Calls", icon: PhoneCall, permission: "manage_sdr" },
       { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr_team" },
