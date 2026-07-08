@@ -176,8 +176,11 @@ model User {
   ringCentralExtensionId       String?
   ringCentralCallerId          String?
   ringCentralJwt               String?
+  emailSignature               String?
+  timezone                     String?
   createdAt                    DateTime              @default(now())
   updatedAt                    DateTime              @updatedAt
+  avatar                       UserAvatar?
   memberships                  WorkspaceMember[]
   createdJobs                  LeadJob[]             @relation("LeadJobCreator")
   ownedOpportunities           Opportunity[]         @relation("OpportunityOwner")
@@ -206,6 +209,17 @@ model User {
   authSessions                 AuthSession[]
   sentUserInvites              UserInvite[]          @relation("UserInviteSender")
   passwordResetTokens          PasswordResetToken[]
+}
+
+// Profile picture bytes, kept OUT of the AppState blob (which is on the hot read
+// path) and out of the normalized projection — managed directly by the profile
+// avatar upload/serve routes. Served via GET /api/profile/avatar/[userId].
+model UserAvatar {
+  userId      String   @id
+  contentType String
+  data        Bytes
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model WorkspaceMember {
