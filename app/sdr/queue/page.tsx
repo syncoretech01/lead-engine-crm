@@ -22,16 +22,20 @@ import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/submit-button";
 import { statusTone } from "@/components/status-pill";
+import { userNameForId } from "@/lib/phase1/crm";
 import { outreachChannels, sdrLeadStatuses, sdrQueueSnapshot, sdrUsers } from "@/lib/phase1/sdr";
 import { resolveUserSenderIdentity } from "@/lib/phase1/sender-identities";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
+import { timelineActivityDisplayForViewer } from "@/lib/phase1/activity-timeline-redaction";
 import { SoftphoneButton } from "@/components/softphone-button";
 import {
   readFastSdrQueueModel,
+  type SdrQueueActivityReadRow,
   type SdrQueueAssignmentReadRow,
   type SdrQueueReadModel
 } from "@/lib/phase1/sdr-queue-read-model";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
+import type { AppState } from "@/lib/phase1/types";
 import { formatNumber } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { fieldClass, fieldLabelClass, fieldTextareaClass } from "@/components/ui/field";
@@ -106,6 +110,30 @@ export default async function SdrQueuePage() {
     ? `RingCentral: ${currentTelephonyIdentity.phoneNumber}`
     : "No RingCentral number configured";
   const canSubmitBulkEmail = Boolean(bulkEligibleAssignments.length) && (canSelectBulkOwner || Boolean(currentSenderIdentity));
+  const recentActivityRows = snapshot.recentActivity ?? (
+    fallbackState ? recentActivityRowsFromState(fallbackState, workspaceId, isSdr ? session.user.id : undefined, snapshot.assignments, snapshot.reminders) : []
+  );
+  const recentActivityItems = recentActivityRows.flatMap((activity) => {
+    const display = timelineActivityDisplayForViewer({
+      activity,
+      actorName: activity.actorName,
+      viewerRole: session.role,
+      viewerName: session.user.name
+    });
+
+    if (display.hidden) {
+      return [];
+    }
+
+    return [
+      {
+        ...activity,
+        title: display.title,
+        body: display.body,
+        actorName: display.actor ?? activity.actorName
+      }
+    ];
+  }).slice(0, 10);
 
   const metrics = [
     {
@@ -520,8 +548,59 @@ export default async function SdrQueuePage() {
         </Panel>
         </TileItem>
 
+        <TileItem id="recent-activity" x={0} y={19} w={12} h={5} minW={6} minH={3}>
+        <Panel
+          title="Recent activity"
+          subtitle={isSdr ? "Latest visible updates across your assigned contacts." : "Latest queue updates across the team."}
+          action={<StatusBadge label={`${recentActivityItems.length} events`} tone="info" />}
+          fill
+        >
+          <div className="flex flex-col gap-3">
+            {recentActivityItems.map((activity) => {
+              const href = activityHref(activity);
+              const activityContext = [meaningfulName(activity.contactName), meaningfulName(activity.companyName)]
+                .filter(Boolean)
+                .join(" - ");
+
+              return (
+                <div key={activity.id} className="flex flex-col gap-1.5 border-b pb-3 last:border-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      {href ? (
+                        <Link href={href} className="font-medium text-foreground hover:underline">
+                          {activity.title}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-foreground">{activity.title}</span>
+                      )}
+                      <p className="mt-0.5 text-xs text-muted-foreground break-words">
+                        {activityContext || "Queue activity"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                      <StatusBadge label={activity.type} />
+                      <StatusBadge label={formatDate(activity.occurredAt)} />
+                    </div>
+                  </div>
+                  {activity.body ? (
+                    <p className="text-sm text-muted-foreground break-words">{activity.body}</p>
+                  ) : null}
+                  <span className="text-xs text-muted-foreground">{activity.actorName}</span>
+                </div>
+              );
+            })}
+            {recentActivityItems.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+                <Clock className="size-6" aria-hidden="true" />
+                <span>No recent activity in this queue.</span>
+              </div>
+            ) : null}
+          </div>
+        </Panel>
+        </TileItem>
+
         {!isSdr ? (
-        <TileItem id="assignment-directory" x={0} y={19} w={12} h={7} minW={6} minH={3}>
+        <TileItem id="assignment-directory" x={0} y={24} w={12} h={7} minW={6} minH={3}>
           <Panel
             title="Assignment directory"
             subtitle="All active and historical assignments for this queue scope."
@@ -578,8 +657,11 @@ export default async function SdrQueuePage() {
   );
 }
 
-type QueueSnapshot = ReturnType<typeof sdrQueueSnapshot> | SdrQueueReadModel["snapshot"];
+type QueueSnapshot = (ReturnType<typeof sdrQueueSnapshot> | SdrQueueReadModel["snapshot"]) & {
+  recentActivity?: SdrQueueActivityReadRow[];
+};
 type AssignmentView = QueueSnapshot["assignments"][number];
+type ReminderView = QueueSnapshot["reminders"][number];
 
 function assignmentDisplayName(assignment: AssignmentView) {
   const contactName = meaningfulName(assignment.contactName);
@@ -652,6 +734,75 @@ function slaTone(status: string): "default" | "info" | "success" | "warning" | "
   return "default";
 }
 
+function activityHref(activity: SdrQueueActivityReadRow) {
+  if (activity.contactId) {
+    return `/crm/contacts/${activity.contactId}`;
+  }
+
+  if (activity.companyId) {
+    return `/crm/accounts/${activity.companyId}`;
+  }
+
+  return undefined;
+}
+
+function recentActivityRowsFromState(
+  state: AppState,
+  workspaceId: string,
+  ownerUserId: string | undefined,
+  assignments: AssignmentView[],
+  reminders: ReminderView[]
+): SdrQueueActivityReadRow[] {
+  const scopedContactIds = new Set<string>();
+  const scopedCompanyIds = new Set<string>();
+
+  for (const assignment of assignments) {
+    if (assignment.contactId) scopedContactIds.add(assignment.contactId);
+    if (assignment.companyId) scopedCompanyIds.add(assignment.companyId);
+  }
+
+  for (const reminder of reminders) {
+    if (reminder.contactId) scopedContactIds.add(reminder.contactId);
+    if (reminder.companyId) scopedCompanyIds.add(reminder.companyId);
+  }
+
+  return state.activities
+    .filter((activity) => activity.workspaceId === workspaceId)
+    .filter((activity) => {
+      if (!ownerUserId) {
+        return true;
+      }
+
+      return Boolean(
+        (activity.contactId && scopedContactIds.has(activity.contactId)) ||
+          (activity.companyId && scopedCompanyIds.has(activity.companyId))
+      );
+    })
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 16)
+    .map((activity) => {
+      const contact = state.contacts.find(
+        (item) => item.id === activity.contactId && item.workspaceId === workspaceId
+      );
+      const companyId = activity.companyId ?? contact?.companyId;
+      const company = state.companies.find((item) => item.id === companyId && item.workspaceId === workspaceId);
+
+      return {
+        id: activity.id,
+        workspaceId: activity.workspaceId,
+        companyId,
+        contactId: activity.contactId,
+        type: activity.type,
+        title: activity.title,
+        body: activity.body,
+        actorName: userNameForId(state, activity.actorUserId),
+        contactName: displayContactLabel(contact?.name, contact?.email),
+        companyName: company?.name ?? "Unknown account",
+        occurredAt: activity.createdAt
+      } satisfies SdrQueueActivityReadRow;
+    });
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleString("en-US", {
     month: "short",
@@ -660,6 +811,10 @@ function formatDate(value: string) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function displayContactLabel(name?: string, email?: string) {
+  return meaningfulName(name) || displayNameFromEmail(email) || "Contact";
 }
 
 function meaningfulName(value?: string) {

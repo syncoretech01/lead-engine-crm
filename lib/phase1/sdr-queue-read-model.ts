@@ -2,7 +2,8 @@ import type { Prisma } from "@prisma/client";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
-import type { Session, SdrLeadStatus, SlaStatus, User } from "@/lib/phase1/types";
+import { activityTypeValue } from "@/lib/phase1/fast-read-utils";
+import type { ActivityType, Session, SdrLeadStatus, SlaStatus, User } from "@/lib/phase1/types";
 
 export type SdrQueueAssignmentReadRow = {
   id: string;
@@ -67,6 +68,20 @@ export type SdrQueueReminderReadRow = {
   dueLabel: string;
 };
 
+export type SdrQueueActivityReadRow = {
+  id: string;
+  workspaceId: string;
+  companyId?: string;
+  contactId?: string;
+  type: ActivityType;
+  title: string;
+  body?: string;
+  actorName: string;
+  contactName: string;
+  companyName: string;
+  occurredAt: string;
+};
+
 export type SdrQueueReadModel = {
   snapshot: {
     metrics: {
@@ -78,6 +93,7 @@ export type SdrQueueReadModel = {
     queueViews: Array<{ name: string; purpose: string; count: number }>;
     assignments: SdrQueueAssignmentReadRow[];
     reminders: SdrQueueReminderReadRow[];
+    recentActivity: SdrQueueActivityReadRow[];
   };
   bulkOwnerUsers: User[];
 };
@@ -117,6 +133,27 @@ export const sdrAssignmentRowInclude = {
 } satisfies Prisma.SdrAssignmentInclude;
 
 type SdrAssignmentRowPayload = Prisma.SdrAssignmentGetPayload<{ include: typeof sdrAssignmentRowInclude }>;
+
+const sdrActivityRowInclude = {
+  account: {
+    include: {
+      company: true
+    }
+  },
+  contact: {
+    include: {
+      account: {
+        include: {
+          company: true
+        }
+      },
+      contact: true
+    }
+  },
+  actor: true
+} satisfies Prisma.ActivityInclude;
+
+type SdrActivityRowPayload = Prisma.ActivityGetPayload<{ include: typeof sdrActivityRowInclude }>;
 
 // Flattens one prisma SdrAssignment (with sdrAssignmentRowInclude) into the
 // merged read row consumed by the SDR queue and the assigned-contacts directory.
@@ -184,6 +221,31 @@ export function mapSdrAssignmentRow(assignment: SdrAssignmentRowPayload): SdrQue
     ),
     notes: leadContact?.notes ?? ""
   } satisfies SdrQueueAssignmentReadRow;
+}
+
+function mapSdrActivityRow(activity: SdrActivityRowPayload): SdrQueueActivityReadRow {
+  const crmContact = activity.contact;
+  const leadContact = crmContact?.contact;
+  const account = activity.account ?? crmContact?.account;
+  const company = activity.account?.company ?? crmContact?.account?.company;
+  const contactName = displayContactName({
+    name: leadContact?.fullName ?? crmContact?.fullName,
+    email: leadContact?.email ?? crmContact?.email
+  });
+
+  return {
+    id: activity.id,
+    workspaceId: activity.workspaceId,
+    companyId: company?.id ?? leadContact?.companyId ?? account?.companyId ?? activity.accountId ?? undefined,
+    contactId: leadContact?.id ?? activity.contactId ?? undefined,
+    type: activityTypeValue(activity.type),
+    title: activity.title,
+    body: activity.body ?? undefined,
+    actorName: activity.actor?.name ?? "Syncore user",
+    contactName,
+    companyName: company?.name ?? account?.name ?? "Unknown account",
+    occurredAt: activity.occurredAt.toISOString()
+  } satisfies SdrQueueActivityReadRow;
 }
 
 export async function readFastSdrQueueModel(
@@ -264,6 +326,13 @@ export async function readFastSdrQueueModel(
   const dueToday = reminderRows.filter((reminder) => isUtcToday(reminder.dueAt)).length;
   const overdue = assignmentRows.filter((assignment) => assignment.slaStatus === "Overdue").length +
     reminderRows.filter((reminder) => reminder.status === "Overdue").length;
+  const recentActivity = await readRecentActivityRows({
+    prisma,
+    workspaceId,
+    ownerUserId,
+    assignments,
+    reminders
+  });
 
   return {
     snapshot: {
@@ -316,7 +385,8 @@ export async function readFastSdrQueueModel(
         }
       ],
       assignments: assignmentRows,
-      reminders: reminderRows
+      reminders: reminderRows,
+      recentActivity
     },
     bulkOwnerUsers: memberRows.map(({ user }) => ({
       id: user.id,
@@ -325,6 +395,54 @@ export async function readFastSdrQueueModel(
       createdAt: user.createdAt.toISOString()
     }))
   };
+}
+
+async function readRecentActivityRows({
+  prisma,
+  workspaceId,
+  ownerUserId,
+  assignments,
+  reminders
+}: {
+  prisma: Prisma.TransactionClient;
+  workspaceId: string;
+  ownerUserId?: string;
+  assignments: SdrAssignmentRowPayload[];
+  reminders: Array<{ accountId: string | null; contactId: string | null }>;
+}) {
+  const scopedContactIds = new Set<string>();
+  const scopedAccountIds = new Set<string>();
+
+  for (const assignment of assignments) {
+    if (assignment.contactId) scopedContactIds.add(assignment.contactId);
+    if (assignment.accountId) scopedAccountIds.add(assignment.accountId);
+  }
+
+  for (const reminder of reminders) {
+    if (reminder.contactId) scopedContactIds.add(reminder.contactId);
+    if (reminder.accountId) scopedAccountIds.add(reminder.accountId);
+  }
+
+  if (ownerUserId && scopedContactIds.size === 0 && scopedAccountIds.size === 0) {
+    return [];
+  }
+
+  const scopedFilters: Prisma.ActivityWhereInput[] = [
+    ...(scopedContactIds.size ? [{ contactId: { in: Array.from(scopedContactIds) } }] : []),
+    ...(scopedAccountIds.size ? [{ accountId: { in: Array.from(scopedAccountIds) } }] : [])
+  ];
+  const where: Prisma.ActivityWhereInput = {
+    workspaceId,
+    ...(ownerUserId ? { OR: scopedFilters } : {})
+  };
+  const activityRows = await prisma.activity.findMany({
+    where,
+    include: sdrActivityRowInclude,
+    orderBy: [{ occurredAt: "desc" }, { id: "asc" }],
+    take: 16
+  });
+
+  return activityRows.map(mapSdrActivityRow);
 }
 
 function timerLabel(value?: string) {
