@@ -668,6 +668,7 @@ export function assignmentViews(state: AppState, workspaceId: string) {
         companyState: company?.state ?? "",
         companyIndustry: company?.industry ?? "",
         ownerName: userNameForId(state, assignment.assignedSdrId),
+        notes: contact?.notes ?? "",
         teamName: state.sdrTeams.find((team) => team.id === assignment.assignedTeamId)?.name ?? "No team",
         dueAt: assignment.firstTouchedAt ? assignment.followUpDueAt : assignment.firstTouchDueAt,
         dueLabel: timerLabel(assignment.firstTouchedAt ? assignment.followUpDueAt : assignment.firstTouchDueAt),

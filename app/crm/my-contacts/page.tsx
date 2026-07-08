@@ -41,6 +41,7 @@ type AssignedRow = {
   lastTouchAt?: string;
   touchCount: number;
   ownerName: string;
+  notes: string;
 };
 
 export default async function MyContactsPage({
@@ -110,7 +111,8 @@ export default async function MyContactsPage({
     assignedAt: row.assignedAt,
     lastTouchLabel: `${row.lastTouchAt ? relativeSince(row.lastTouchAt) : "No touches"}${row.touchCount > 0 ? ` · ${row.touchCount}` : ""}`,
     lastTouchAt: row.lastTouchAt ?? "",
-    ownerName: row.ownerName
+    ownerName: row.ownerName,
+    notes: row.notes
   }));
 
   return (

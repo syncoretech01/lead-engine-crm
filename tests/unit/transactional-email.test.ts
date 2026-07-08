@@ -6,7 +6,8 @@ describe("transactional email templates", () => {
   it("builds an invite email with the link", () => {
     const email = inviteEmail({ to: "sam@x.com", url: "/invite/abc", workspaceName: "Syncore Outbound" });
     expect(email.to).toBe("sam@x.com");
-    expect(email.subject).toContain("Syncore Outbound");
+    // The invite subject references the product brand (Syncore CRM), not the workspace name.
+    expect(email.subject).toContain("Syncore CRM");
     expect(email.html).toContain("/invite/abc");
     expect(email.text).toContain("/invite/abc");
   });

@@ -793,6 +793,7 @@ model Contact {
   verification        String?
   enrichmentCoverage  Int?
   fitReason           String?
+  notes               String?
   enrichedAt          DateTime?
   lawfulBasis         String?
   consentStatus       String?

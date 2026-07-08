@@ -625,6 +625,8 @@ export type Contact = {
   verification: string;
   enrichmentCoverage?: number;
   fitReason?: string;
+  /** Free-text notes shown on the contact + in the peek view. */
+  notes?: string;
   enrichedAt?: string;
   lawfulBasis: LawfulBasis;
   consentStatus: ConsentStatus;

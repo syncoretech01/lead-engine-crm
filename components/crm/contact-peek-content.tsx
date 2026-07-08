@@ -31,6 +31,8 @@ export type PeekContact = {
   priority: string;
   priorityTone: BadgeTone;
   owner: string;
+  /** Free-text notes shown at the bottom of the peek. */
+  notes?: string;
   /** Present when the contact is assigned to an SDR (always on My Contacts). */
   assignment?: PeekAssignment;
 };
@@ -155,6 +157,13 @@ export function ContactPeekContent({
         )}
         <Field label="Owner">{contact.owner || "—"}</Field>
       </div>
+
+      {contact.notes ? (
+        <div className="border-t px-5 py-4">
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Notes</p>
+          <p className="whitespace-pre-line text-sm text-foreground">{contact.notes}</p>
+        </div>
+      ) : null}
 
       <div className="border-t p-5">
         <Button asChild className="w-full">

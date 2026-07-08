@@ -24,6 +24,7 @@ export type CrmContactListRow = {
   verification: string;
   enrichmentCoverage: number;
   isSuppressed: boolean;
+  notes: string;
 };
 
 export type CrmContactsReadModel = {
@@ -126,7 +127,8 @@ export async function readFastCrmContactsModel(
         lastActivityAt: latest?.occurredAt,
         verification: contact.verification ?? "No verification yet",
         enrichmentCoverage: contact.enrichmentCoverage ?? contact.confidence,
-        isSuppressed: contact.isSuppressed
+        isSuppressed: contact.isSuppressed,
+        notes: contact.notes ?? ""
       };
     }),
     openTaskCount,

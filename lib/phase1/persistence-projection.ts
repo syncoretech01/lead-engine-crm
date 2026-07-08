@@ -697,6 +697,7 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       verification: contact.verification,
       enrichmentCoverage: contact.enrichmentCoverage,
       fitReason: contact.fitReason,
+      notes: contact.notes ?? null,
       enrichedAt: contact.enrichedAt,
       lawfulBasis: contact.lawfulBasis,
       consentStatus: contact.consentStatus,

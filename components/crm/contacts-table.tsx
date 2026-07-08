@@ -200,6 +200,7 @@ export function ContactsTable({
               priority: peekContact.priority,
               priorityTone: priorityTone(peekContact.priority),
               owner: peekContact.owner,
+              notes: peekContact.notes,
               assignment: assignments?.[peekContact.id]
             }}
             callerLabel={callerLabel}
