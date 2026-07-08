@@ -382,6 +382,115 @@ export function resetPasswordWithToken(
   });
 }
 
+// --- Self-service (a user editing THEIR OWN profile) ---------------------------
+// These intentionally omit an `assertPermission(manage_*)` gate: they resolve the
+// target from `session.user.id`, so a caller can only ever mutate their own row.
+
+const MAX_SIGNATURE_LENGTH = 2000;
+const MIN_PASSWORD_LENGTH = 10;
+
+function isValidTimezone(tz: string): boolean {
+  if (!tz) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Update the signed-in user's own display name, email signature, and timezone.
+ *  Presence-based: only the fields provided are touched. */
+export function updateOwnProfile(
+  state: AppState,
+  session: Session,
+  input: { name?: string; emailSignature?: string; timezone?: string }
+) {
+  const user = state.users.find((record) => record.id === session.user.id);
+  if (!user) {
+    throw new Error("Your account could not be found.");
+  }
+  const now = new Date().toISOString();
+  const before = { name: user.name, emailSignature: user.emailSignature, timezone: user.timezone };
+
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) {
+      throw new Error("Name cannot be empty.");
+    }
+    user.name = name;
+  }
+  if (input.emailSignature !== undefined) {
+    const signature = input.emailSignature.trim();
+    if (signature.length > MAX_SIGNATURE_LENGTH) {
+      throw new Error(`Email signature must be ${MAX_SIGNATURE_LENGTH} characters or fewer.`);
+    }
+    user.emailSignature = signature || undefined;
+  }
+  if (input.timezone !== undefined) {
+    const timezone = input.timezone.trim();
+    if (timezone && !isValidTimezone(timezone)) {
+      throw new Error("That timezone is not recognized.");
+    }
+    user.timezone = timezone || undefined;
+  }
+
+  appendAuthAudit(state, {
+    workspaceId: session.workspace.id,
+    actorUserId: session.user.id,
+    objectType: "user",
+    objectId: user.id,
+    action: "profile_updated",
+    oldValue: before,
+    newValue: { name: user.name, emailSignature: user.emailSignature, timezone: user.timezone }
+  });
+  return user;
+}
+
+/** Change the signed-in user's own password. Verifies the current password,
+ *  then revokes every OTHER live session (the current one stays signed in). */
+export function changeOwnPassword(
+  state: AppState,
+  session: Session,
+  input: { currentPassword: string; newPassword: string }
+) {
+  ensureAuthDefaults(state);
+  const now = new Date().toISOString();
+  const account = state.authAccounts.find((record) => record.userId === session.user.id);
+  if (!account || account.status !== "Active") {
+    throw new Error("Your account could not be found.");
+  }
+  if (!verifyPassword(input.currentPassword, account.passwordHash)) {
+    throw new Error("Your current password is incorrect.");
+  }
+  if (input.newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+  if (verifyPassword(input.newPassword, account.passwordHash)) {
+    throw new Error("New password must be different from your current password.");
+  }
+
+  account.passwordHash = hashPassword(input.newPassword);
+  account.passwordUpdatedAt = now;
+  account.failedLoginCount = 0;
+  account.lockedUntil = undefined;
+  account.updatedAt = now;
+  // Revoke other live sessions; keep the current one so the user stays signed in.
+  for (const active of state.authSessions.filter(
+    (record) => record.userId === account.userId && !record.revokedAt && record.id !== session.authSessionId
+  )) {
+    active.revokedAt = now;
+    active.lastSeenAt = now;
+  }
+  appendAuthAudit(state, {
+    workspaceId: session.workspace.id,
+    actorUserId: session.user.id,
+    objectType: "auth_account",
+    objectId: account.id,
+    action: "password_changed"
+  });
+}
+
 export function updateMemberRole(
   state: AppState,
   session: Session,

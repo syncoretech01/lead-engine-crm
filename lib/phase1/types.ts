@@ -134,6 +134,10 @@ export type User = {
   /** This SDR's own RingCentral JWT, ENCRYPTED (see secret-box). Placing calls as
    *  them lets their own number be presented as caller ID. */
   ringCentralJwt?: string;
+  /** Personal signature appended to this user's outbound direct emails. */
+  emailSignature?: string;
+  /** IANA timezone (e.g. "America/New_York") for rendering dates to this user. */
+  timezone?: string;
   createdAt: string;
 };
 

@@ -119,7 +119,8 @@ export function buildDirectEmailSendPlan(
       companyName: companyName(state, contact.companyId, input.workspaceId),
       senderName: senderIdentity.displayName,
       unsubscribeUrl,
-      physicalAddress
+      physicalAddress,
+      signature: senderUser.emailSignature
     });
 
     recipients.push({
@@ -349,6 +350,8 @@ export function renderDirectEmail(input: {
   senderName: string;
   unsubscribeUrl: string;
   physicalAddress: string;
+  /** The sending user's personal signature, appended after the body. */
+  signature?: string;
 }): { subject: string; text: string; html: string } {
   const firstName = input.contact.name.split(" ")[0] ?? input.contact.name;
   const replacements: Record<string, string> = {
@@ -363,6 +366,11 @@ export function renderDirectEmail(input: {
   };
   const subject = replaceTokens(input.subject || "Quick question", replacements);
   let text = replaceTokens(input.body || "Hi {{first_name}}, quick question about {{company}}.", replacements);
+  // Personal signature sits between the message body and the compliance footer.
+  const signature = input.signature?.trim();
+  if (signature) {
+    text = `${text.trim()}\n\n${replaceTokens(signature, replacements)}`;
+  }
   if (!text.includes(input.unsubscribeUrl)) {
     text = `${text.trim()}\n\nUnsubscribe: ${input.unsubscribeUrl}`;
   }

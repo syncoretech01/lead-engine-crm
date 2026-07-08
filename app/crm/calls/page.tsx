@@ -78,6 +78,7 @@ export default async function CallsPage({
   }
 
   const sdrFilter = isSdr ? session.user.id : sdr || undefined;
+  const timeZone = session.user.timezone || undefined;
   const canCustomize = canCustomizeTiles(session);
   const savedLayout = await readUserTileLayout(session.user.id, "crm-calls");
 
@@ -92,7 +93,7 @@ export default async function CallsPage({
     outcomeGroup: outcomeGroup(call.callStatus),
     outcomeTone: outcomeTone(call.callStatus),
     sdrName: call.sdrName,
-    whenLabel: formatWhen(call.createdAt),
+    whenLabel: formatWhen(call.createdAt, timeZone),
     whenAt: call.createdAt,
     recordingState: recordingState(call.recordingId, call.recordingConsent, call.createdAt)
   }));
@@ -219,13 +220,14 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
-function formatWhen(iso: string): string {
+function formatWhen(iso: string, timeZone?: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
-    minute: "2-digit"
+    minute: "2-digit",
+    ...(timeZone ? { timeZone } : {})
   });
 }

@@ -296,6 +296,8 @@ async function getPrismaSession(client?: PrismaStoreClient): Promise<Session | u
       name: authSession.user.name,
       ringCentralPhoneNumber: authSession.user.ringCentralPhoneNumber ?? undefined,
       ringCentralExtensionId: authSession.user.ringCentralExtensionId ?? undefined,
+      emailSignature: authSession.user.emailSignature ?? undefined,
+      timezone: authSession.user.timezone ?? undefined,
       createdAt: authSession.user.createdAt.toISOString()
     },
     workspace: {

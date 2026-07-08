@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ChevronsUpDown, LogOut, Settings } from "lucide-react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
 import { ThemeMenuItems } from "@/components/theme-menu-items";
-import { canUseDeveloperWorkspace, workspaceRoleLabel } from "@/lib/phase1/auth";
+import { workspaceRoleLabel } from "@/lib/phase1/auth";
 import type { Session } from "@/lib/phase1/types";
 
 function initials(name: string): string {
@@ -26,7 +26,6 @@ function initials(name: string): string {
 
 export function UserMenu({ session }: { session: Session }) {
   const { isMobile } = useSidebar();
-  const canManageWorkspace = canUseDeveloperWorkspace(session);
 
   return (
     <DropdownMenu>
@@ -36,6 +35,7 @@ export function UserMenu({ session }: { session: Session }) {
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
         >
           <Avatar className="size-8 rounded-lg">
+            <AvatarImage src={`/api/profile/avatar/${session.user.id}`} alt={session.user.name} />
             <AvatarFallback className="rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
               {initials(session.user.name)}
             </AvatarFallback>
@@ -67,14 +67,12 @@ export function UserMenu({ session }: { session: Session }) {
         </DropdownMenuLabel>
         <ThemeMenuItems />
         <DropdownMenuSeparator />
-        {canManageWorkspace ? (
-          <DropdownMenuItem asChild>
-            <Link href="/compliance">
-              <Settings aria-hidden="true" />
-              Settings
-            </Link>
-          </DropdownMenuItem>
-        ) : null}
+        <DropdownMenuItem asChild>
+          <Link href="/settings">
+            <Settings aria-hidden="true" />
+            Settings
+          </Link>
+        </DropdownMenuItem>
         {/* Logout stays a server POST (no-JS) so auth/redirect semantics are unchanged. */}
         <form action="/auth/logout" method="post" className="w-full">
           <DropdownMenuItem asChild>

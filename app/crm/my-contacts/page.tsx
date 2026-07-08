@@ -87,6 +87,7 @@ export default async function MyContactsPage({
 
   const canCustomize = canCustomizeTiles(session);
   const savedLayout = await readUserTileLayout(session.user.id, "crm-my-contacts");
+  const timeZone = session.user.timezone || undefined;
 
   const tableRows: MyContactRow[] = rows.map((row) => ({
     contactId: row.contactId,
@@ -105,7 +106,7 @@ export default async function MyContactsPage({
     companyName: row.companyName,
     companyDomain: row.companyDomain,
     assignedRelative: relativeSince(row.assignedAt),
-    assignedDate: formatDate(row.assignedAt),
+    assignedDate: formatDate(row.assignedAt, timeZone),
     assignedAt: row.assignedAt,
     lastTouchLabel: `${row.lastTouchAt ? relativeSince(row.lastTouchAt) : "No touches"}${row.touchCount > 0 ? ` · ${row.touchCount}` : ""}`,
     lastTouchAt: row.lastTouchAt ?? "",
@@ -249,9 +250,14 @@ function relativeSince(iso?: string): string {
   return `${Math.round(months / 12)}y ago`;
 }
 
-function formatDate(iso?: string): string {
+function formatDate(iso?: string, timeZone?: string): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    ...(timeZone ? { timeZone } : {})
+  });
 }
