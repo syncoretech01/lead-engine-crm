@@ -56,7 +56,20 @@ export function MyContactsTable({
   initialSort?: string;
   initialPage?: number;
 }) {
-  const [peekContact, setPeekContact] = React.useState<MyContactRow | null>(null);
+  const [peekQueue, setPeekQueue] = React.useState<{
+    rows: MyContactRow[];
+    index: number;
+    returnTo: string;
+  } | null>(null);
+  const peekContact = peekQueue?.rows[peekQueue.index] ?? null;
+  const movePeek = React.useCallback((offset: number) => {
+    setPeekQueue((current) => {
+      if (!current) return current;
+      const nextIndex = current.index + offset;
+      if (nextIndex < 0 || nextIndex >= current.rows.length) return current;
+      return { ...current, index: nextIndex };
+    });
+  }, []);
   const columns = React.useMemo<ColumnDef<MyContactRow, unknown>[]>(() => {
     const defs: ColumnDef<MyContactRow, unknown>[] = [
       {
@@ -196,7 +209,14 @@ export function MyContactsTable({
         initialQuery={initialQuery}
         initialSort={initialSort}
         initialPage={initialPage}
-        onRowClick={(row) => setPeekContact(row)}
+        onRowClick={(row, context) => {
+          const index = context.index >= 0 ? context.index : context.rows.findIndex((item) => item.contactId === row.contactId);
+          setPeekQueue({
+            rows: context.rows,
+            index: Math.max(index, 0),
+            returnTo: currentMyContactsHref()
+          });
+        }}
         emptyState={
           <EmptyState
             icon={UserCheck}
@@ -208,7 +228,7 @@ export function MyContactsTable({
       <RecordPeek
         open={peekContact !== null}
         onOpenChange={(open) => {
-          if (!open) setPeekContact(null);
+          if (!open) setPeekQueue(null);
         }}
         title={peekContact ? peekContact.contactName : "Contact"}
         description="Contact quick view"
@@ -239,9 +259,47 @@ export function MyContactsTable({
             }}
             callerLabel={callerLabel}
             callBlockReason={callBlockReason}
+            detailHref={detailHrefForMyContact(peekContact.contactId, peekQueue?.returnTo)}
+            queueNavigation={
+              peekQueue
+                ? {
+                    onPrevious: peekQueue.index > 0 ? () => movePeek(-1) : undefined,
+                    onNext: peekQueue.index < peekQueue.rows.length - 1 ? () => movePeek(1) : undefined,
+                    positionLabel: `${peekQueue.index + 1} of ${peekQueue.rows.length}`
+                  }
+                : undefined
+            }
           />
         ) : null}
       </RecordPeek>
     </>
   );
+}
+
+function currentMyContactsHref() {
+  if (typeof window === "undefined") {
+    return "/crm/my-contacts";
+  }
+
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+function detailHrefForMyContact(contactId: string, returnTo?: string) {
+  const params = new URLSearchParams();
+  params.set("source", "my-contacts");
+  params.set("returnTo", returnTo || "/crm/my-contacts");
+
+  try {
+    const url = new URL(returnTo || "/crm/my-contacts", "http://syncore.local");
+    for (const key of ["q", "sort", "page", "sdr"]) {
+      const value = url.searchParams.get(key);
+      if (value) {
+        params.set(key, value);
+      }
+    }
+  } catch {
+    // The return URL is only for convenience; fall back to the base list.
+  }
+
+  return `/crm/my-contacts/${contactId}?${params.toString()}`;
 }

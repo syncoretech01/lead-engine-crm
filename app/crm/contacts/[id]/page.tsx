@@ -2,12 +2,14 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowRight,
+  ArrowLeft,
   BadgeCheck,
   Building2,
   Calendar,
   Check,
   CircleDollarSign,
+  ChevronLeft,
+  ChevronRight,
   Mail,
   NotebookPen,
   Phone,
@@ -64,6 +66,8 @@ import { restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { contactDetailReadModelForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { readFastContactDetailModel } from "@/lib/phase1/crm-detail-read-model";
 import { dedupeTimelineActivities } from "@/lib/phase1/crm-display";
+import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
+import { assignedContactsSnapshot } from "@/lib/phase1/sdr";
 import { displayContactName as formatContactDisplayName } from "@/lib/phase1/lead-data-quality";
 import { directEmailBlockReason } from "@/lib/phase1/direct-email-send";
 import { directSmsBlockReason, directSmsLiveBlockReason } from "@/lib/phase1/direct-sms-send";
@@ -74,7 +78,7 @@ import { SoftphoneButton } from "@/components/softphone-button";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { runWaterfallEnrichmentAction } from "@/lib/phase1/waterfall-enrichment-service";
 import { waterfallTemplatesForWorkspace } from "@/lib/phase1/waterfall-templates";
-import type { ActivityType, CallLog, CustomField, Note } from "@/lib/phase1/types";
+import type { ActivityType, AppState, CallLog, CustomField, Note, Session } from "@/lib/phase1/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { StatCard, ToneIcon } from "@/components/ui/stat-card";
 import { TileGrid, TileItem } from "@/components/tile-grid";
@@ -113,8 +117,23 @@ function activityKind(type: ActivityType): TimelineKind {
   return activityKindMap[type] ?? "note";
 }
 
-export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+type ContactDetailSearchParams = {
+  source?: string | string[];
+  returnTo?: string | string[];
+  q?: string | string[];
+  sort?: string | string[];
+  page?: string | string[];
+  sdr?: string | string[];
+};
+
+export default async function ContactDetailPage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<ContactDetailSearchParams>;
+}) {
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const sessionContext = await getWorkspaceSessionContext("manage_crm");
   const fastModel = await readFastContactDetailModel(sessionContext.session, sessionContext.workspaceId, id);
   let state = fastModel?.state;
@@ -347,6 +366,15 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const openSendClaims = directSendOutboxEnabled()
     ? await readOpenDirectSendClaimsForContact(workspaceId, contact.id)
     : [];
+  const queueNavigation = await assignedContactQueueNavigation({
+    session,
+    workspaceId,
+    state,
+    contactId: contact.id,
+    searchParams: sp
+  });
+  const contactListHref = queueNavigation?.returnHref ?? (isSdr ? "/crm/my-contacts" : "/crm/contacts");
+  const contactListLabel = queueNavigation || isSdr ? "My contacts" : "Contacts";
 
   return (
     <>
@@ -374,11 +402,42 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               size="default"
             />
             <Button asChild variant="outline">
-              <Link href="/crm/contacts">
-                <ArrowRight aria-hidden="true" />
-                Contacts
+              <Link href={contactListHref}>
+                <ArrowLeft aria-hidden="true" />
+                {contactListLabel}
               </Link>
             </Button>
+            {queueNavigation ? (
+              <>
+                {queueNavigation.previousHref ? (
+                  <Button asChild variant="outline">
+                    <Link href={queueNavigation.previousHref}>
+                      <ChevronLeft aria-hidden="true" />
+                      Previous
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button variant="outline" disabled>
+                    <ChevronLeft aria-hidden="true" />
+                    Previous
+                  </Button>
+                )}
+                {queueNavigation.nextHref ? (
+                  <Button asChild variant="outline">
+                    <Link href={queueNavigation.nextHref}>
+                      Next
+                      <ChevronRight aria-hidden="true" />
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button variant="outline" disabled>
+                    Next
+                    <ChevronRight aria-hidden="true" />
+                  </Button>
+                )}
+                <StatusBadge label={queueNavigation.positionLabel} tone="info" />
+              </>
+            ) : null}
             {company ? (
               <Button asChild>
                 <Link href={`/crm/accounts/${company.id}`}>
@@ -1175,6 +1234,204 @@ function recommendedContactAction(input: {
     label: "Review contact quality",
     note: "This contact needs more usable channel data before outreach."
   };
+}
+
+type AssignedContactQueueRow = {
+  contactId: string;
+  contactName: string;
+  title: string;
+  email: string;
+  phone: string;
+  grade: string;
+  priority: string;
+  status: string;
+  slaStatus: string;
+  companyId: string;
+  companyName: string;
+  companyDomain: string;
+  assignedAt: string;
+  lastTouchAt?: string;
+  ownerName: string;
+};
+
+async function assignedContactQueueNavigation({
+  session,
+  workspaceId,
+  state,
+  contactId,
+  searchParams
+}: {
+  session: Session;
+  workspaceId: string;
+  state: AppState;
+  contactId: string;
+  searchParams: ContactDetailSearchParams;
+}) {
+  if (firstParam(searchParams.source) !== "my-contacts") {
+    return undefined;
+  }
+
+  const sdrId = session.role === "SDR" ? undefined : firstParam(searchParams.sdr) || undefined;
+  const fast = await readAssignedContactsModel(session, workspaceId, { sdrId });
+  const rows = fast?.rows ?? assignedContactsSnapshot(state, workspaceId, session.role === "SDR" ? session.user.id : sdrId);
+  const queueRows = sortAssignedContactQueue(
+    filterAssignedContactQueue(rows, firstParam(searchParams.q)),
+    firstParam(searchParams.sort)
+  );
+  const index = queueRows.findIndex((row) => row.contactId === contactId);
+  const returnHref = safeMyContactsReturnHref(firstParam(searchParams.returnTo), searchParams);
+
+  if (index < 0) {
+    return {
+      returnHref,
+      previousHref: undefined,
+      nextHref: undefined,
+      positionLabel: `${formatNumber(queueRows.length)} contacts`
+    };
+  }
+
+  return {
+    returnHref,
+    previousHref: queueRows[index - 1]
+      ? assignedContactDetailHref(queueRows[index - 1].contactId, searchParams, returnHref)
+      : undefined,
+    nextHref: queueRows[index + 1]
+      ? assignedContactDetailHref(queueRows[index + 1].contactId, searchParams, returnHref)
+      : undefined,
+    positionLabel: `${formatNumber(index + 1)} of ${formatNumber(queueRows.length)}`
+  };
+}
+
+function filterAssignedContactQueue(rows: AssignedContactQueueRow[], query?: string) {
+  const needle = query?.trim().toLowerCase();
+  if (!needle) {
+    return rows;
+  }
+
+  return rows.filter((row) =>
+    [
+      row.contactName,
+      row.title,
+      row.email,
+      row.phone,
+      row.grade,
+      row.priority,
+      row.status,
+      row.slaStatus,
+      row.companyName,
+      row.companyDomain,
+      row.ownerName
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(needle)
+  );
+}
+
+function sortAssignedContactQueue(rows: AssignedContactQueueRow[], sort?: string) {
+  if (!sort) {
+    return rows;
+  }
+
+  const desc = sort.startsWith("-");
+  const id = desc ? sort.slice(1) : sort;
+
+  return [...rows].sort((a, b) => {
+    const left = assignedContactSortValue(a, id);
+    const right = assignedContactSortValue(b, id);
+    const result = compareSortValues(left, right);
+    return desc ? -result : result;
+  });
+}
+
+function assignedContactSortValue(row: AssignedContactQueueRow, id: string) {
+  switch (id) {
+    case "contact":
+      return `${row.contactName} ${row.email} ${row.title}`;
+    case "company":
+      return `${row.companyName} ${row.companyDomain}`;
+    case "priority":
+      return row.priority;
+    case "channel":
+      return row.grade;
+    case "status":
+      return row.status;
+    case "sla":
+      return row.slaStatus;
+    case "assigned":
+      return Date.parse(row.assignedAt) || 0;
+    case "lastTouch":
+      return row.lastTouchAt ? Date.parse(row.lastTouchAt) || 0 : 0;
+    case "owner":
+      return row.ownerName;
+    default:
+      return Date.parse(row.assignedAt) || 0;
+  }
+}
+
+function compareSortValues(left: string | number, right: string | number) {
+  if (typeof left === "number" && typeof right === "number") {
+    return left - right;
+  }
+
+  return String(left).localeCompare(String(right), "en-US", {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
+function assignedContactDetailHref(
+  contactId: string,
+  searchParams: ContactDetailSearchParams,
+  returnHref: string
+) {
+  const params = new URLSearchParams();
+  params.set("source", "my-contacts");
+  params.set("returnTo", returnHref);
+
+  for (const key of ["q", "sort", "page", "sdr"] as const) {
+    const value = firstParam(searchParams[key]);
+    if (value) {
+      params.set(key, value);
+    }
+  }
+
+  return `/crm/my-contacts/${contactId}?${params.toString()}`;
+}
+
+function safeMyContactsReturnHref(returnTo: string | undefined, searchParams: ContactDetailSearchParams) {
+  const fallback = myContactsHrefFromParams(searchParams);
+
+  if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//")) {
+    return fallback;
+  }
+
+  try {
+    const url = new URL(returnTo, "http://syncore.local");
+    if (url.origin !== "http://syncore.local" || !url.pathname.startsWith("/crm/my-contacts")) {
+      return fallback;
+    }
+
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return fallback;
+  }
+}
+
+function myContactsHrefFromParams(searchParams: ContactDetailSearchParams) {
+  const params = new URLSearchParams();
+  for (const key of ["q", "sort", "page", "sdr"] as const) {
+    const value = firstParam(searchParams[key]);
+    if (value) {
+      params.set(key, value);
+    }
+  }
+  const query = params.toString();
+  return `/crm/my-contacts${query ? `?${query}` : ""}`;
+}
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function CustomFieldInput({ field, value }: { field: CustomField; value: string }) {

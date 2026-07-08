@@ -221,7 +221,7 @@ export default async function SdrQueuePage() {
               </form>
             ) : null}
             <Button asChild>
-              <Link href={isSdr ? "/crm/contacts" : "/sdr/manager"}>
+              <Link href={isSdr ? "/crm/my-contacts" : "/sdr/manager"}>
                 <Users aria-hidden="true" />
                 {isSdr ? "My contacts" : "Manager dashboard"}
               </Link>

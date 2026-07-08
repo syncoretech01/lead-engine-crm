@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, Building2, Copy, Mail } from "lucide-react";
+import { ArrowUpRight, Building2, ChevronLeft, ChevronRight, Copy, Mail } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -56,14 +56,22 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function ContactPeekContent({
   contact,
   callerLabel,
-  callBlockReason
+  callBlockReason,
+  detailHref,
+  queueNavigation
 }: {
   contact: PeekContact;
   callerLabel?: string;
   callBlockReason?: string;
+  detailHref?: string;
+  queueNavigation?: {
+    onPrevious?: () => void;
+    onNext?: () => void;
+    positionLabel?: string;
+  };
 }) {
   const router = useRouter();
-  const href = `/crm/contacts/${contact.id}`;
+  const href = detailHref ?? `/crm/contacts/${contact.id}`;
 
   React.useEffect(() => {
     router.prefetch(href);
@@ -166,6 +174,31 @@ export function ContactPeekContent({
       ) : null}
 
       <div className="border-t p-5">
+        {queueNavigation ? (
+          <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={queueNavigation.onPrevious}
+              disabled={!queueNavigation.onPrevious}
+            >
+              <ChevronLeft aria-hidden="true" />
+              Previous
+            </Button>
+            <span className="text-xs text-muted-foreground">{queueNavigation.positionLabel}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={queueNavigation.onNext}
+              disabled={!queueNavigation.onNext}
+            >
+              Next
+              <ChevronRight aria-hidden="true" />
+            </Button>
+          </div>
+        ) : null}
         <Button asChild className="w-full">
           <Link href={href}>
             Open full record

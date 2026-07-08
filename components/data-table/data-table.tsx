@@ -55,7 +55,7 @@ type DataTableProps<TData> = {
   /** Floating bar shown while rows are selected. */
   renderBulkBar?: (args: { selected: TData[]; clear: () => void }) => React.ReactNode;
   /** Clicking a row (outside interactive cells) invokes this — e.g. open a peek. */
-  onRowClick?: (row: TData) => void;
+  onRowClick?: (row: TData, context: { rows: TData[]; index: number }) => void;
 };
 
 export function DataTable<TData>({
@@ -145,6 +145,9 @@ export function DataTable<TData>({
   useTableUrlSync({ q: globalFilter, sort: sorting, page: pagination.pageIndex });
 
   const rows = table.getRowModel().rows;
+  const queueRows = table.getPrePaginationRowModel().rows;
+  const queueDataRows = queueRows.map((row) => row.original);
+  const queueIndexById = new Map(queueRows.map((row, index) => [row.id, index]));
   const colSpan = table.getVisibleFlatColumns().length;
 
   return (
@@ -200,14 +203,18 @@ export function DataTable<TData>({
                   key={row.id}
                   data-state={row.getIsSelected() ? "selected" : undefined}
                   className={cn(onRowClick && "cursor-pointer")}
-                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onClick={
+                    onRowClick
+                      ? () => onRowClick(row.original, { rows: queueDataRows, index: queueIndexById.get(row.id) ?? 0 })
+                      : undefined
+                  }
                   tabIndex={onRowClick ? 0 : undefined}
                   onKeyDown={
                     onRowClick
                       ? (event) => {
                           if (event.key === "Enter" && event.currentTarget === event.target) {
                             event.preventDefault();
-                            onRowClick(row.original);
+                            onRowClick(row.original, { rows: queueDataRows, index: queueIndexById.get(row.id) ?? 0 });
                           }
                         }
                       : undefined
