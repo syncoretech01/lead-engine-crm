@@ -228,7 +228,8 @@ export function contactViewsFromRows(
       lastActivityAt: latestActivity?.createdAt,
       verification: contact.verification,
       enrichmentCoverage: contact.enrichmentCoverage ?? 0,
-      isSuppressed: contact.isSuppressed
+      isSuppressed: contact.isSuppressed,
+      notes: contact.notes ?? ""
     };
   });
 }

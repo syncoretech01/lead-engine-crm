@@ -44,6 +44,7 @@ export type SdrQueueAssignmentReadRow = {
   reminderTitle?: string;
   reminderStatus?: string;
   emailEligible: boolean;
+  notes: string;
 };
 
 export type SdrQueueReminderReadRow = {
@@ -180,7 +181,8 @@ export function mapSdrAssignmentRow(assignment: SdrAssignmentRowPayload): SdrQue
         grade !== "S" &&
         grade !== "D" &&
         priority !== "S"
-    )
+    ),
+    notes: leadContact?.notes ?? ""
   } satisfies SdrQueueAssignmentReadRow;
 }
 

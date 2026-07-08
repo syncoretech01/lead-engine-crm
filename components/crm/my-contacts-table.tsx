@@ -36,6 +36,7 @@ export type MyContactRow = {
   lastTouchLabel: string;
   lastTouchAt: string;
   ownerName: string;
+  notes: string;
 };
 
 export function MyContactsTable({
@@ -228,6 +229,7 @@ export function MyContactsTable({
               priority: peekContact.priority,
               priorityTone: peekContact.priorityTone,
               owner: peekContact.ownerName,
+              notes: peekContact.notes,
               assignment: {
                 slaStatus: peekContact.slaStatus,
                 slaTone: peekContact.slaTone,
