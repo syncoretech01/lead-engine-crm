@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, Delete, Loader2, Maximize2, Mic, MicOff, Minimize2, Phone, PhoneCall, PhoneOff, StickyNote } from "lucide-react";
 
 import { createNoteAction, logSoftphoneCallAction, placeCallAction } from "@/app/actions";
+import { useCall, type CallTarget } from "@/components/call/call-context";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -121,18 +122,23 @@ function formatClock(seconds: number): string {
   return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
-export function SoftphoneButton({
-  contactId,
-  contactName,
-  phone,
-  callerLabel,
-  blockReason,
-  label = "Call",
-  iconOnly = false,
-  variant = "outline",
-  size = "sm",
-  className
-}: SoftphoneButtonProps) {
+export type SoftphoneEngineHandle = { openCall: (target: CallTarget) => void };
+
+type SoftphoneEngineProps = {
+  onStateChange?: (state: { busy: boolean; activeContactId: string | null }) => void;
+};
+
+// The live-call engine. Mounted ONCE by CallProvider (in the root layout) so the
+// WebRTC session survives client-side navigation — the per-page SoftphoneButton
+// below just triggers `openCall`. Its call target comes from state (set via the
+// imperative `openCall`) rather than props; everything else is unchanged.
+export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, SoftphoneEngineProps>(
+  function SoftphoneEngine({ onStateChange }, ref) {
+  const [target, setTarget] = React.useState<CallTarget | null>(null);
+  const contactId = target?.contactId ?? "";
+  const contactName = target?.contactName ?? "contact";
+  const phone = target?.phone;
+  const callerLabel = target?.callerLabel;
   const [open, setOpen] = React.useState(false);
   // Backgrounded call: the dialog is closed to a small floating bar while the
   // call keeps running (clicking outside during a call minimizes, never hangs up).
@@ -168,8 +174,6 @@ export function SoftphoneButton({
   // + INVITE), where there's no dialog to CANCEL yet. The RingOut fallback and the
   // idle dialpad stay freely dismissable.
   const blockCloseRef = React.useRef(false);
-
-  const disabled = Boolean(blockReason) || !phone;
 
   const stopTimer = React.useCallback(() => {
     if (timerRef.current) {
@@ -680,6 +684,36 @@ export function SoftphoneButton({
   }
 
   const inLiveCall = status === "connecting" || status === "ringing" || status === "in-call";
+
+  // Imperative entry point used by SoftphoneButton (via CallProvider) to start /
+  // re-surface a call. A live call is never dropped: opening the same contact
+  // just expands it; opening while idle sets up a fresh call.
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      openCall(next: CallTarget) {
+        const busy = status === "connecting" || status === "ringing" || status === "in-call";
+        setTarget(next);
+        setMinimized(false);
+        setOpen(true);
+        if (!busy) {
+          setNumber(next.phone ?? "");
+          setStatus("idle");
+          setError(null);
+          setNotes("");
+          setNoteSaved(false);
+          setSeconds(0);
+        }
+      }
+    }),
+    [status]
+  );
+
+  // Report live-call state up so page-level Call buttons can reflect "on call".
+  React.useEffect(() => {
+    onStateChange?.({ busy: inLiveCall, activeContactId: inLiveCall ? contactId : null });
+  }, [inLiveCall, contactId, onStateChange]);
+
   // The notes editor + save button, reused in the in-call and call-ended views.
   const notesEditor = (
     <div className="w-full text-left">
@@ -709,20 +743,6 @@ export function SoftphoneButton({
 
   return (
     <>
-      <Button
-        type="button"
-        variant={variant}
-        size={iconOnly ? "icon-sm" : size}
-        className={className}
-        disabled={disabled}
-        title={blockReason ?? (!phone ? "No phone number on file" : `Call ${contactName}`)}
-        aria-label={iconOnly ? `Call ${contactName}` : undefined}
-        onClick={() => setOpen(true)}
-      >
-        <Phone aria-hidden="true" />
-        {iconOnly ? null : label}
-      </Button>
-
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -971,6 +991,53 @@ export function SoftphoneButton({
         </div>
       ) : null}
     </>
+  );
+});
+
+/**
+ * Thin, per-contact Call button. It does not own the call — it asks the global
+ * call engine (mounted once in the root layout via CallProvider) to place it, so
+ * the live call survives navigating between pages.
+ */
+export function SoftphoneButton({
+  contactId,
+  contactName,
+  phone,
+  callerLabel,
+  blockReason,
+  label = "Call",
+  iconOnly = false,
+  variant = "outline",
+  size = "sm",
+  className
+}: SoftphoneButtonProps) {
+  const { openCall, busy, activeContactId } = useCall();
+  const onThisCall = activeContactId === contactId;
+  // Block starting a second call while one is live (return to the active one instead).
+  const disabled = Boolean(blockReason) || !phone || (busy && !onThisCall);
+  return (
+    <Button
+      type="button"
+      variant={variant}
+      size={iconOnly ? "icon-sm" : size}
+      className={className}
+      disabled={disabled}
+      title={
+        blockReason ??
+        (!phone
+          ? "No phone number on file"
+          : busy && !onThisCall
+            ? "Finish your current call first"
+            : onThisCall
+              ? "Return to call"
+              : `Call ${contactName}`)
+      }
+      aria-label={iconOnly ? `Call ${contactName}` : undefined}
+      onClick={() => openCall({ contactId, contactName, phone, callerLabel, blockReason })}
+    >
+      <Phone aria-hidden="true" />
+      {iconOnly ? null : onThisCall ? "On call" : label}
+    </Button>
   );
 }
 
