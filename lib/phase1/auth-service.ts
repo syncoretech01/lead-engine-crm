@@ -491,6 +491,56 @@ export function changeOwnPassword(
   });
 }
 
+/** Admin/owner sets a new password for another member of their workspace (e.g. an
+ *  SDR who forgot theirs, or to regain access to an account). Revokes all of the
+ *  target's sessions so they must sign in again with the new password. */
+export function adminResetUserPassword(
+  state: AppState,
+  session: Session,
+  input: { userId: string; newPassword: string }
+): { email: string; name: string } {
+  assertPermission(session, "manage_workspace");
+  if (input.userId === session.user.id) {
+    throw new Error("Use your own Settings page to change your password.");
+  }
+  ensureAuthDefaults(state);
+  const member = state.workspaceMembers.find(
+    (record) => record.workspaceId === session.workspace.id && record.userId === input.userId
+  );
+  if (!member) {
+    throw new Error("That user is not a member of this workspace.");
+  }
+  const user = state.users.find((record) => record.id === input.userId);
+  const account = state.authAccounts.find((record) => record.userId === input.userId);
+  if (!user || !account) {
+    throw new Error("That user's account could not be found.");
+  }
+  if (input.newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+
+  const now = new Date().toISOString();
+  account.passwordHash = hashPassword(input.newPassword);
+  account.passwordUpdatedAt = now;
+  account.failedLoginCount = 0;
+  account.lockedUntil = undefined;
+  account.updatedAt = now;
+  // Force the target to re-authenticate everywhere with the new password.
+  for (const active of state.authSessions.filter((record) => record.userId === input.userId && !record.revokedAt)) {
+    active.revokedAt = now;
+    active.lastSeenAt = now;
+  }
+  appendAuthAudit(state, {
+    workspaceId: session.workspace.id,
+    actorUserId: session.user.id,
+    objectType: "auth_account",
+    objectId: account.id,
+    action: "password_reset_by_admin",
+    newValue: { targetUserId: input.userId }
+  });
+  return { email: account.email, name: user.name };
+}
+
 export function updateMemberRole(
   state: AppState,
   session: Session,

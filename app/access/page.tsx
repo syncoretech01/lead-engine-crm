@@ -1,5 +1,6 @@
 import { KeyRound, Link2, Phone, ShieldCheck, Trash2, UserMinus, UserPlus } from "lucide-react";
 import {
+  adminResetPasswordAction,
   createUserInviteAction,
   deactivateUserAction,
   removeWorkspaceMemberAction,
@@ -15,7 +16,7 @@ import type { WorkspaceRole } from "@/lib/phase1/types";
 export const dynamic = "force-dynamic";
 
 type AccessPageProps = {
-  searchParams?: Promise<{ invite?: string; invited?: string }>;
+  searchParams?: Promise<{ invite?: string; invited?: string; resetUser?: string; resetError?: string }>;
 };
 
 const roles: WorkspaceRole[] = ["Admin", "Manager", "SDR", "Data Operator", "Viewer", "Compliance Admin"];
@@ -68,6 +69,29 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
         <section className="panel">
           <div className="panel-body">
             <p className="surface-note">Invite created and emailed to the user — it&apos;s listed under pending invites below.</p>
+          </div>
+        </section>
+      ) : null}
+
+      {params?.resetUser ? (
+        <section className="panel">
+          <div className="panel-body">
+            <p className="surface-note">
+              Password reset for <strong>{params.resetUser}</strong>. They&apos;ve been signed out everywhere and must
+              sign in with the new password — share it through a secure channel.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {params?.resetError ? (
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="section-title">Password reset failed</h2>
+              <p className="section-subtitle">{params.resetError}</p>
+            </div>
+            <StatusPill label="Failed" tone="warning" />
           </div>
         </section>
       ) : null}
@@ -207,6 +231,27 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
                         <button className="button danger" type="submit" disabled={member.userId === session.user.id}>
                           <Trash2 size={16} aria-hidden="true" />
                           Remove
+                        </button>
+                      </form>
+                      <form action={adminResetPasswordAction} className="inline-form">
+                        <input type="hidden" name="userId" value={member.userId} />
+                        <input
+                          name="newPassword"
+                          type="password"
+                          minLength={10}
+                          required
+                          autoComplete="off"
+                          placeholder="New password (10+)"
+                          aria-label={`New password for ${member.user?.name ?? "user"}`}
+                          disabled={member.userId === session.user.id || member.account?.status !== "Active"}
+                        />
+                        <button
+                          className="button subtle"
+                          type="submit"
+                          disabled={member.userId === session.user.id || member.account?.status !== "Active"}
+                        >
+                          <KeyRound size={16} aria-hidden="true" />
+                          Reset password
                         </button>
                       </form>
                     </div>
