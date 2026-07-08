@@ -12,9 +12,10 @@ function sessionForRole(role: WorkspaceRole): Session {
 }
 
 // The rendered nav each role must see, by group id -> item labels (via
-// resolveNavLabel, so SDR label rewrites are included). This is the source of
-// truth the redesign must preserve — identical to the pre-redesign shell,
-// including the Lead-Generation fallback for roles that can access no group.
+// resolveNavLabel, so SDR label rewrites are included). This mirrors the current
+// nav config in lib/navigation.ts (SDR-first CRM ordering; the "All Contacts" /
+// "Assigned Contacts" labels), including the Lead-Generation fallback for roles
+// that can access no group.
 const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
   Admin: {
     "lead-generation": [
@@ -30,11 +31,11 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
     ],
     crm: [
       "CRM Dashboard",
-      "Accounts",
-      "Contacts",
-      "Opportunities",
       "SDR Queue",
       "Assigned Contacts",
+      "Accounts",
+      "All Contacts",
+      "Opportunities",
       "Call Log",
       "Manager Dashboard",
       "Campaigns",
@@ -63,11 +64,11 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
     ],
     crm: [
       "CRM Dashboard",
-      "Accounts",
-      "Contacts",
-      "Opportunities",
       "SDR Queue",
       "Assigned Contacts",
+      "Accounts",
+      "All Contacts",
+      "Opportunities",
       "Call Log",
       "Manager Dashboard",
       "Campaigns",
@@ -75,7 +76,7 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
     ]
   },
   SDR: {
-    crm: ["Accounts", "Contacts", "Opportunities", "My Queue", "My Contacts", "My Calls"]
+    crm: ["My Queue", "My Contacts", "Accounts", "All Contacts", "Opportunities", "My Calls"]
   },
   "Data Operator": {
     "lead-generation": [
