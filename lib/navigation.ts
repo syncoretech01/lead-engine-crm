@@ -100,7 +100,7 @@ export const navGroups: NavGroup[] = [
         visibleForRoles: ["Admin", "Manager"]
       },
       { href: "/crm/accounts", label: "Accounts", icon: Building2, permission: "view_records" },
-      { href: "/crm/contacts", label: "Contacts", icon: Users, permission: "view_records" },
+      { href: "/crm/contacts", label: "All Contacts", icon: Users, permission: "view_records" },
       {
         href: "/crm/opportunities",
         label: "Opportunities",

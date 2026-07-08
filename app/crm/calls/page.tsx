@@ -12,7 +12,8 @@ import { TileGrid, TileItem } from "@/components/tile-grid";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { sdrUsers } from "@/lib/phase1/sdr";
-import { getWorkspaceContext } from "@/lib/phase1/store";
+import { readFastCallsModel, type CallReadRow } from "@/lib/phase1/calls-read-model";
+import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { cn, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -24,40 +25,73 @@ export default async function CallsPage({
 }) {
   const sp = await searchParams;
   const sdr = sp.sdr;
-  const { state, session, workspaceId } = await getWorkspaceContext("manage_sdr");
+  const sessionContext = await getWorkspaceSessionContext("manage_sdr");
+  let session = sessionContext.session;
+  let workspaceId = sessionContext.workspaceId;
   const isSdr = session.role === "SDR";
+
+  let calls: CallReadRow[];
+  let roster: Array<{ id: string; name: string }>;
+  let connected: number;
+  let recordings: number;
+
+  // Fast path: query calls straight from Prisma. Falls back to the whole-state
+  // blob only on the file-storage driver (local dev).
+  const fast = await readFastCallsModel(session, workspaceId, { sdrId: sdr || undefined });
+  if (fast) {
+    calls = fast.calls;
+    roster = fast.roster;
+    connected = fast.connected;
+    recordings = fast.recordings;
+  } else {
+    const ctx = await getWorkspaceContext("manage_sdr");
+    session = ctx.session;
+    workspaceId = ctx.workspaceId;
+    const sdrFilter = isSdr ? ctx.session.user.id : sdr || undefined;
+    const contactName = (id: string) => {
+      const contact = ctx.state.contacts.find((item) => item.id === id && item.workspaceId === workspaceId);
+      return contact ? displayContactName(contact) : "Unknown contact";
+    };
+    const userName = (id: string) => ctx.state.users.find((user) => user.id === id)?.name ?? "—";
+    calls = ctx.state.trackedCalls
+      .filter((call) => call.workspaceId === workspaceId)
+      .filter((call) => !sdrFilter || call.sdrUserId === sdrFilter)
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+      .slice(0, 200)
+      .map((call) => ({
+        id: call.id,
+        contactId: call.contactId ?? "",
+        contactName: call.contactId ? contactName(call.contactId) : "Unknown contact",
+        phoneNumber: call.phoneNumber || "",
+        durationSeconds: call.durationSeconds ?? 0,
+        callStatus: call.callStatus,
+        disposition: call.disposition,
+        sdrUserId: call.sdrUserId ?? "",
+        sdrName: call.sdrUserId ? userName(call.sdrUserId) : "—",
+        recordingId: call.recordingId,
+        recordingConsent: call.recordingConsent,
+        createdAt: call.createdAt
+      }));
+    roster = isSdr ? [] : sdrUsers(ctx.state, workspaceId).map((user) => ({ id: user.id, name: user.name }));
+    connected = calls.filter((call) => call.callStatus === "Connected").length;
+    recordings = calls.filter((call) => Boolean(call.recordingId)).length;
+  }
+
   const sdrFilter = isSdr ? session.user.id : sdr || undefined;
-
-  const calls = state.trackedCalls
-    .filter((call) => call.workspaceId === workspaceId)
-    .filter((call) => !sdrFilter || call.sdrUserId === sdrFilter)
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, 200);
-
-  const contactName = (id: string) => {
-    const contact = state.contacts.find((item) => item.id === id && item.workspaceId === workspaceId);
-    return contact ? displayContactName(contact) : "Unknown contact";
-  };
-  const userName = (id: string) => state.users.find((user) => user.id === id)?.name ?? "—";
-  const roster = isSdr ? [] : sdrUsers(state, workspaceId).map((user) => ({ id: user.id, name: user.name }));
-
-  const connected = calls.filter((call) => call.callStatus === "Connected").length;
-  const recordings = calls.filter((call) => Boolean(call.recordingId)).length;
-
   const canCustomize = canCustomizeTiles(session);
   const savedLayout = await readUserTileLayout(session.user.id, "crm-calls");
 
   const rows: CallRow[] = calls.map((call) => ({
     id: call.id,
-    contactId: call.contactId ?? "",
-    contactName: call.contactId ? contactName(call.contactId) : "Unknown contact",
-    phoneNumber: call.phoneNumber || "",
+    contactId: call.contactId,
+    contactName: call.contactName,
+    phoneNumber: call.phoneNumber,
     durationLabel: formatDuration(call.durationSeconds),
-    durationSeconds: call.durationSeconds ?? 0,
+    durationSeconds: call.durationSeconds,
     outcomeLabel: dispositionLabel(call.callStatus, call.disposition),
     outcomeGroup: outcomeGroup(call.callStatus),
     outcomeTone: outcomeTone(call.callStatus),
-    sdrName: userName(call.sdrUserId),
+    sdrName: call.sdrName,
     whenLabel: formatWhen(call.createdAt),
     whenAt: call.createdAt,
     recordingState: recordingState(call.recordingId, call.recordingConsent, call.createdAt)
@@ -97,43 +131,46 @@ export default async function CallsPage({
             note="Available to play"
           />
         </TileItem>
-      </TileGrid>
 
-      <Panel
-        title="Call log"
-        subtitle="Newest calls first."
-        action={
-          !isSdr && roster.length > 0 ? (
-            <form method="get" className="flex items-center gap-2">
-              <label className="sr-only" htmlFor="sdr-filter">
-                Filter by SDR
-              </label>
-              <select id="sdr-filter" name="sdr" defaultValue={sdrFilter ?? ""} className={cn(fieldClass, "h-8 w-44")}>
-                <option value="">All SDRs</option>
-                {roster.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-              <button type="submit" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                Filter
-              </button>
-            </form>
-          ) : (
-            <StatusBadge label={`${formatNumber(calls.length)} calls`} tone="info" />
-          )
-        }
-        flush
-      >
-        <CallsTable
-          rows={rows}
-          isSdr={isSdr}
-          initialQuery={sp.q}
-          initialSort={sp.sort}
-          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
-        />
-      </Panel>
+        <TileItem id="call-log" x={0} y={2} w={12} h={10} minW={6} minH={5}>
+          <Panel
+            title="Call log"
+            subtitle="Newest calls first."
+            action={
+              !isSdr && roster.length > 0 ? (
+                <form method="get" className="flex items-center gap-2">
+                  <label className="sr-only" htmlFor="sdr-filter">
+                    Filter by SDR
+                  </label>
+                  <select id="sdr-filter" name="sdr" defaultValue={sdrFilter ?? ""} className={cn(fieldClass, "h-8 w-44")}>
+                    <option value="">All SDRs</option>
+                    {roster.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                    Filter
+                  </button>
+                </form>
+              ) : (
+                <StatusBadge label={`${formatNumber(calls.length)} calls`} tone="info" />
+              )
+            }
+            flush
+            fill
+          >
+            <CallsTable
+              rows={rows}
+              isSdr={isSdr}
+              initialQuery={sp.q}
+              initialSort={sp.sort}
+              initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+            />
+          </Panel>
+        </TileItem>
+      </TileGrid>
     </>
   );
 }

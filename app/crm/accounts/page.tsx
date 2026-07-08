@@ -187,29 +187,30 @@ export default async function AccountsPage({
         }
       />
 
-      <Panel
-        title="Account directory"
-        subtitle={
-          isSdr
-            ? "Accounts tied to your visible contacts. Search, sort, and page through them."
-            : "Search, sort, and page every account — owner, stage, activity, and source context in one table."
-        }
-        action={<StatusBadge label={`${formatNumber(accounts.length)} accounts`} tone="info" />}
-        flush
-        className="mb-6"
-      >
-        <AccountsTable
-          rows={accounts}
-          isSdr={isSdr}
-          initialQuery={sp.q}
-          initialSort={sp.sort}
-          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
-        />
-      </Panel>
-
       <TileGrid pageKey="crm-accounts" canCustomize={canCustomize} saved={savedLayout}>
+        <TileItem id="account-directory" x={0} y={0} w={12} h={11} minW={6} minH={5}>
+          <Panel
+            title="Account directory"
+            subtitle={
+              isSdr
+                ? "Accounts tied to your visible contacts. Search, sort, and page through them."
+                : "Search, sort, and page every account — owner, stage, activity, and source context in one table."
+            }
+            action={<StatusBadge label={`${formatNumber(accounts.length)} accounts`} tone="info" />}
+            flush
+            fill
+          >
+            <AccountsTable
+              rows={accounts}
+              isSdr={isSdr}
+              initialQuery={sp.q}
+              initialSort={sp.sort}
+              initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+            />
+          </Panel>
+        </TileItem>
         {metrics.map((metric, index) => (
-          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={11} w={3} h={2} minW={2}>
             <StatCard
               icon={metric.icon}
               label={metric.label}
@@ -221,7 +222,7 @@ export default async function AccountsPage({
           </TileItem>
         ))}
         {lanes.map((lane, index) => (
-          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={13} w={3} h={2} minW={2}>
             <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
               <ToneIcon icon={lane.icon} tone={lane.tone} />
               <div className="min-w-0">
@@ -234,7 +235,7 @@ export default async function AccountsPage({
           </TileItem>
         ))}
 
-        <TileItem id="account-watchlist" x={0} y={4} w={7} h={8} minW={4} minH={4}>
+        <TileItem id="account-watchlist" x={0} y={15} w={7} h={8} minW={4} minH={4}>
         <Panel
           title={isSdr ? "Account focus" : "Account watchlist"}
           subtitle={
@@ -291,7 +292,7 @@ export default async function AccountsPage({
         </Panel>
         </TileItem>
 
-        <TileItem id="watchlist-side" x={7} y={4} w={5} h={8} minW={3} minH={4}>
+        <TileItem id="watchlist-side" x={7} y={15} w={5} h={8} minW={3} minH={4}>
         {isSdr ? (
           <Panel
             title="Account coverage"
@@ -352,7 +353,7 @@ export default async function AccountsPage({
         )}
         </TileItem>
 
-        <TileItem id="secondary-left" x={0} y={12} w={7} h={6} minW={4} minH={3}>
+        <TileItem id="secondary-left" x={0} y={23} w={7} h={6} minW={4} minH={3}>
         {isSdr ? (
           <Panel
             title="Recent account context"
@@ -398,7 +399,7 @@ export default async function AccountsPage({
         )}
         </TileItem>
 
-        <TileItem id="account-actions" x={7} y={12} w={5} h={6} minW={3} minH={3}>
+        <TileItem id="account-actions" x={7} y={23} w={5} h={6} minW={3} minH={3}>
         <Panel
           title="Account actions"
           subtitle={isSdr ? "Fast paths back to daily contact work." : "Shortcuts for the CRM work around account records."}

@@ -315,29 +315,30 @@ export default async function OpportunitiesPage({
         }
       />
 
-      <Panel
-        title={isSdr ? "My opportunity list" : "Opportunity directory"}
-        subtitle={
-          isSdr
-            ? "Assigned pipeline records with account, stage, value, close date, and latest activity. Search, sort, and page."
-            : "Search, sort, and page pipeline records — account, source, owner, and custom forecast fields."
-        }
-        action={<StatusBadge label={`${formatNumber(opportunities.length)} records`} tone="info" />}
-        flush
-        className="mb-6"
-      >
-        <OpportunitiesTable
-          rows={opportunityRows}
-          isSdr={isSdr}
-          initialQuery={sp.q}
-          initialSort={sp.sort}
-          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
-        />
-      </Panel>
-
       <TileGrid pageKey="crm-opportunities" canCustomize={canCustomize} saved={savedLayout}>
+        <TileItem id="opportunity-directory" x={0} y={0} w={12} h={11} minW={6} minH={5}>
+          <Panel
+            title={isSdr ? "My opportunity list" : "Opportunity directory"}
+            subtitle={
+              isSdr
+                ? "Assigned pipeline records with account, stage, value, close date, and latest activity. Search, sort, and page."
+                : "Search, sort, and page pipeline records — account, source, owner, and custom forecast fields."
+            }
+            action={<StatusBadge label={`${formatNumber(opportunities.length)} records`} tone="info" />}
+            flush
+            fill
+          >
+            <OpportunitiesTable
+              rows={opportunityRows}
+              isSdr={isSdr}
+              initialQuery={sp.q}
+              initialSort={sp.sort}
+              initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+            />
+          </Panel>
+        </TileItem>
         {metrics.map((metric, index) => (
-          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={11} w={3} h={2} minW={2}>
             <StatCard
               fill
               icon={metric.icon}
@@ -351,7 +352,7 @@ export default async function OpportunitiesPage({
 
         {!isSdr
           ? lanes.map((lane, index) => (
-              <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+              <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={13} w={3} h={2} minW={2}>
                 <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
                   <ToneIcon icon={lane.icon} tone={lane.tone} />
                   <div className="min-w-0">
@@ -365,7 +366,7 @@ export default async function OpportunitiesPage({
             ))
           : null}
 
-        <TileItem id="pipeline-focus" x={0} y={4} w={7} h={8} minW={4} minH={4}>
+        <TileItem id="pipeline-focus" x={0} y={15} w={7} h={8} minW={4} minH={4}>
           <Panel
             fill
             flush
@@ -417,7 +418,7 @@ export default async function OpportunitiesPage({
           </Panel>
         </TileItem>
 
-        <TileItem id="stage-health" x={7} y={4} w={5} h={8} minW={3} minH={4}>
+        <TileItem id="stage-health" x={7} y={15} w={5} h={8} minW={3} minH={4}>
           <Panel
             fill
             title={isSdr ? "Stage snapshot" : "Stage health"}
@@ -444,7 +445,7 @@ export default async function OpportunitiesPage({
           </Panel>
         </TileItem>
 
-        <TileItem id="stage-board" x={0} y={12} w={12} h={9} minW={6} minH={4}>
+        <TileItem id="stage-board" x={0} y={23} w={12} h={9} minW={6} minH={4}>
           <Panel
             fill
             title="Stage board"
@@ -456,7 +457,7 @@ export default async function OpportunitiesPage({
         </TileItem>
 
         {!isSdr ? (
-          <TileItem id="create-opportunity-tile" x={0} y={21} w={7} h={10} minW={4} minH={4}>
+          <TileItem id="create-opportunity-tile" x={0} y={32} w={7} h={10} minW={4} minH={4}>
             <div id="create-opportunity" className="h-full">
               <Panel
                 fill
@@ -552,7 +553,7 @@ export default async function OpportunitiesPage({
         ) : null}
 
         {!isSdr ? (
-          <TileItem id="forecast-fields" x={7} y={21} w={5} h={10} minW={3} minH={4}>
+          <TileItem id="forecast-fields" x={7} y={32} w={5} h={10} minW={3} minH={4}>
             <Panel
               fill
               title="Forecast fields"

@@ -62,6 +62,7 @@ export default async function ContactsPage({
   let workspaceId = sessionContext.workspaceId;
   let contacts: ContactView[];
   let openTasks = 0;
+  let totalContacts = 0;
   let roster: SdrRosterEntry[] = [];
   // SDR-assignment fields (SLA / assigned-ago / last touch) keyed by contact id,
   // so the peek matches the My Contacts peek for contacts that are assigned.
@@ -71,6 +72,7 @@ export default async function ContactsPage({
   if (fastModel) {
     contacts = fastModel.contacts;
     openTasks = fastModel.openTaskCount;
+    totalContacts = fastModel.totalContacts;
     roster = (await readWorkspaceSdrRoster(workspaceId)) ?? [];
     const assigned = await readAssignedContactsModel(session, workspaceId, {});
     for (const row of assigned?.rows ?? []) {
@@ -83,6 +85,7 @@ export default async function ContactsPage({
     const ownedScope = restrictsToOwnedRecords(session) ? ownedCrmRecordScope(state, session) : null;
     const allContacts = await contactViewsForWorkspace(state, workspaceId);
     contacts = ownedScope ? allContacts.filter((contact) => ownedScope.contactIds.has(contact.id)) : allContacts;
+    totalContacts = contacts.length;
     openTasks = state.tasks.filter((task) => task.workspaceId === workspaceId && task.status !== "Completed").length;
     roster = sdrUsers(state, workspaceId).map((user) => ({ id: user.id, name: user.name }));
     for (const row of assignedContactsSnapshot(state, workspaceId)) {
@@ -112,9 +115,9 @@ export default async function ContactsPage({
 
   const metrics = [
     {
-      label: isSdr ? "My contacts" : "CRM contacts",
-      value: formatNumber(contacts.length),
-      note: isSdr ? "Assigned people in scope" : "People linked to account records",
+      label: isSdr ? "My contacts" : "Total contacts",
+      value: formatNumber(isSdr ? contacts.length : totalContacts),
+      note: isSdr ? "Assigned people in scope" : "All contacts — assigned or unassigned",
       icon: Users,
       tone: "info" as const
     },
@@ -179,11 +182,11 @@ export default async function ContactsPage({
     <>
       <PageHeader
         kicker="Sales CRM"
-        title={isSdr ? "My contacts" : "Contacts"}
+        title={isSdr ? "My contacts" : "All Contacts"}
         copy={
           isSdr
             ? "Assigned people with account context, channel readiness, and the next practical action."
-            : "A focused people workspace for SDRs and managers: find who to contact, see verification and channel readiness, and keep each person tied to account context."
+            : "Every contact in the workspace — assigned or unassigned. Search verification and channel readiness, and keep each person tied to account context."
         }
         actions={
           <>
@@ -203,34 +206,35 @@ export default async function ContactsPage({
         }
       />
 
-      <Panel
-        title="Contact directory"
-        subtitle={
-          isSdr
-            ? "Assigned people with channel readiness and the next recommended action. Search, sort, and page through your book."
-            : "Search, sort, and page the full contact book. Account context, channel readiness, owner, and activity in one table."
-        }
-        action={<StatusBadge label={`${formatNumber(contacts.length)} contacts`} tone="info" />}
-        flush
-        className="mb-6"
-      >
-        <ContactsTable
-          rows={contacts}
-          isSdr={isSdr}
-          canManage={canManageBulk}
-          roster={roster}
-          callerLabel={callerLabel}
-          callBlockReason={callBlockReason}
-          assignments={assignments}
-          initialQuery={sp.q}
-          initialSort={sp.sort}
-          initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
-        />
-      </Panel>
-
       <TileGrid pageKey="crm-contacts" canCustomize={canCustomize} saved={savedLayout}>
+        <TileItem id="contact-directory" x={0} y={0} w={12} h={11} minW={6} minH={5}>
+          <Panel
+            title="Contact directory"
+            subtitle={
+              isSdr
+                ? "Assigned people with channel readiness and the next recommended action. Search, sort, and page through your book."
+                : "Search, sort, and page the full contact book. Account context, channel readiness, owner, and activity in one table."
+            }
+            action={<StatusBadge label={`${formatNumber(contacts.length)} contacts`} tone="info" />}
+            flush
+            fill
+          >
+            <ContactsTable
+              rows={contacts}
+              isSdr={isSdr}
+              canManage={canManageBulk}
+              roster={roster}
+              callerLabel={callerLabel}
+              callBlockReason={callBlockReason}
+              assignments={assignments}
+              initialQuery={sp.q}
+              initialSort={sp.sort}
+              initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+            />
+          </Panel>
+        </TileItem>
         {metrics.map((metric, index) => (
-          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
+          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={11} w={3} h={2} minW={2}>
             <StatCard
               fill
               icon={metric.icon}
@@ -242,7 +246,7 @@ export default async function ContactsPage({
           </TileItem>
         ))}
         {lanes.map((lane, index) => (
-          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={13} w={3} h={2} minW={2}>
             <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
               <ToneIcon icon={lane.icon} tone={lane.tone} />
               <div className="min-w-0">
@@ -255,7 +259,7 @@ export default async function ContactsPage({
           </TileItem>
         ))}
 
-        <TileItem id="priority-contacts" x={0} y={4} w={7} h={8} minW={4} minH={4}>
+        <TileItem id="priority-contacts" x={0} y={15} w={7} h={8} minW={4} minH={4}>
         <Panel
           title={isSdr ? "Next contacts" : "Priority contacts"}
           subtitle={
@@ -322,7 +326,7 @@ export default async function ContactsPage({
         </Panel>
         </TileItem>
 
-        <TileItem id="channel-readiness" x={7} y={4} w={5} h={8} minW={3} minH={4}>
+        <TileItem id="channel-readiness" x={7} y={15} w={5} h={8} minW={3} minH={4}>
         <Panel
           title="Channel readiness"
           subtitle="How the contact database breaks down for email, phone, review, and compliance blocks."
@@ -343,7 +347,7 @@ export default async function ContactsPage({
         </Panel>
         </TileItem>
 
-        <TileItem id="secondary-left" x={0} y={12} w={7} h={6} minW={4} minH={3}>
+        <TileItem id="secondary-left" x={0} y={23} w={7} h={6} minW={4} minH={3}>
         {isSdr ? (
           <Panel
             title="Work focus"
@@ -399,7 +403,7 @@ export default async function ContactsPage({
         )}
         </TileItem>
 
-        <TileItem id="contact-actions" x={7} y={12} w={5} h={6} minW={3} minH={3}>
+        <TileItem id="contact-actions" x={7} y={23} w={5} h={6} minW={3} minH={3}>
         <Panel
           title="Contact actions"
           subtitle={
