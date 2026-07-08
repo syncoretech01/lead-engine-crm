@@ -14,6 +14,7 @@ import {
 } from "@/lib/phase1/auth-fast-path";
 import {
   acceptUserInvite,
+  adminResetUserPassword,
   createPasswordResetToken,
   createUserInvite,
   deactivateUserAccount,
@@ -281,6 +282,23 @@ export async function updateUserTelephonyAction(formData: FormData) {
   }, { normalizedTables: authWriteTables });
 
   revalidatePath("/access");
+}
+
+export async function adminResetPasswordAction(formData: FormData) {
+  const userId = stringValue(formData.get("userId"));
+  // Don't trim the password — it's set verbatim.
+  const newPassword = String(formData.get("newPassword") ?? "");
+  let name = "";
+  try {
+    await updateState((state, session) => {
+      name = adminResetUserPassword(state, session, { userId, newPassword }).name;
+    }, { normalizedTables: authWriteTables });
+  } catch (error) {
+    redirect(`/access?resetError=${encodeURIComponent(errorMessage(error))}`);
+  }
+
+  revalidatePath("/access");
+  redirect(`/access?resetUser=${encodeURIComponent(name)}`);
 }
 
 function stringValue(value: FormDataEntryValue | null, fallback = "") {
