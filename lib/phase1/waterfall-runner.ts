@@ -7,7 +7,15 @@ import {
   type WaterfallProviderOutcome
 } from "@/lib/phase1/waterfall-engine";
 import type { WaterfallLeadState } from "@/lib/phase1/waterfall-conditions";
-import type { AppState, FieldSource, ProviderConnection, WaterfallStep, WaterfallTemplate } from "@/lib/phase1/types";
+import type {
+  AppState,
+  FieldProvenanceStatus,
+  FieldSource,
+  LeadGrade,
+  ProviderConnection,
+  WaterfallStep,
+  WaterfallTemplate
+} from "@/lib/phase1/types";
 
 /**
  * Executes one provider dispatch and returns the normalized outcome. In
@@ -134,12 +142,56 @@ export function applyWaterfallResults(
     if (contact) {
       if (result.finalState.email) contact.email = result.finalState.email;
       if (result.finalState.phone) contact.phone = result.finalState.phone;
+      // Surface real email deliverability from the verify_email step onto the
+      // contact's grade + verification message, so it shows in the CRM exactly
+      // where the (previously synthetic) status did — now backed by a real
+      // provider. Only touched when a verify_email source is present.
+      const verify = result.fieldSources
+        .filter((source) => source.capability === "verify_email" && source.field === "email")
+        .sort((a, b) => b.confidence - a.confidence)[0];
+      const mapped = verify ? mapEmailVerification(verify.validationStatus, verify.providerId) : undefined;
+      if (mapped) {
+        if (mapped.grade) contact.grade = mapped.grade;
+        contact.verification = mapped.verification;
+      }
       contact.updatedAt = now;
     }
     costCents += result.costCents;
   }
 
   return { contactsProcessed: contactResults.length, fieldsWritten, costCents };
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  millionverifier: "MillionVerifier",
+  hunter: "Hunter",
+  apollo: "Apollo",
+  zerobounce: "ZeroBounce",
+  bouncer: "Bouncer"
+};
+
+// Translate a real verify_email result into the contact's grade + a short,
+// human-readable verification message (the fields the CRM already displays).
+function mapEmailVerification(
+  status: FieldProvenanceStatus,
+  providerId: string
+): { grade?: LeadGrade; verification: string } | undefined {
+  const by = ` (${PROVIDER_LABELS[providerId] ?? providerId})`;
+  switch (status) {
+    case "valid":
+      return { grade: "A", verification: `Valid — deliverable${by}` };
+    case "catch_all":
+      return { grade: "B", verification: `Catch-all domain${by}` };
+    case "risky":
+      return { grade: "C", verification: `Risky — send with caution${by}` };
+    case "invalid":
+      return { grade: "D", verification: `Invalid — undeliverable${by}` };
+    case "unknown":
+      return { verification: `Unknown — could not verify${by}` };
+    case "unverified":
+    default:
+      return undefined;
+  }
 }
 
 function fieldForStage(stage: WaterfallStep["stage"]): "email" | "phone" | "contact" | undefined {

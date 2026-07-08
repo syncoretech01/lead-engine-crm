@@ -20,6 +20,9 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusPill } from "@/components/status-pill";
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/submit-button";
+import { runLiveContactEnrichmentAction } from "@/app/enrichment/live-actions";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import { buildLeadEngineMetrics, displayContactLabel } from "@/lib/phase1/lead-engine-metrics";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
@@ -155,6 +158,38 @@ export default async function EnrichmentPage() {
         {stats.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}
+      </section>
+
+      <section className="panel" aria-label="Live verification and enrichment">
+        <div className="panel-header">
+          <div className="panel-title-wrap">
+            <h2 className="section-title">Live verification &amp; enrichment</h2>
+            <p className="section-subtitle">
+              Find missing emails (Apollo → Hunter) and verify deliverability (MillionVerifier → Hunter) using your
+              real provider connections. Only calls providers you&apos;ve set <strong>Enabled + Live</strong> in
+              Integrations — otherwise it&apos;s a no-op with no spend. Real calls cost a few cents per contact; check
+              the cost ledger afterward.
+            </p>
+          </div>
+          <Sparkles size={20} aria-hidden="true" />
+        </div>
+        <div
+          className="panel-body"
+          style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}
+        >
+          <ActionForm action={runLiveContactEnrichmentAction}>
+            <input type="hidden" name="limit" value="5" />
+            <SubmitButton className="button secondary" pendingLabel="Running…">
+              Test on 5 contacts
+            </SubmitButton>
+          </ActionForm>
+          <ActionForm action={runLiveContactEnrichmentAction}>
+            <input type="hidden" name="limit" value="all" />
+            <SubmitButton className="button primary" pendingLabel="Running…">
+              Run on all contacts
+            </SubmitButton>
+          </ActionForm>
+        </div>
       </section>
 
       <section className="ops-stage-strip four-up" aria-label="Enrichment workflow lanes">
