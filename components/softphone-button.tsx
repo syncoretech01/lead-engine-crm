@@ -2,7 +2,21 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Check, Delete, Loader2, Maximize2, Mic, MicOff, Minimize2, Phone, PhoneCall, PhoneOff, StickyNote } from "lucide-react";
+import {
+  Check,
+  Delete,
+  Loader2,
+  Maximize2,
+  Mic,
+  MicOff,
+  Minimize2,
+  Phone,
+  PhoneCall,
+  PhoneForwarded,
+  PhoneOff,
+  RefreshCw,
+  StickyNote
+} from "lucide-react";
 
 import { createNoteAction, logSoftphoneCallAction, placeCallAction } from "@/app/actions";
 import { useCall, type CallTarget } from "@/components/call/call-context";
@@ -21,6 +35,18 @@ import { cn } from "@/lib/utils";
 // `document`/`navigator`/WebRTC, so it must never load on the server).
 import type WebPhoneClass from "ringcentral-web-phone";
 type CallSession = Awaited<ReturnType<WebPhoneClass["call"]>>;
+type TransferCapableSession = CallSession & {
+  transfer?: (targetNumber: string) => Promise<unknown>;
+};
+
+type TransferTarget = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  phoneNumber: string;
+  label: string;
+};
 
 type SoftphoneButtonProps = {
   contactId: string;
@@ -153,6 +179,13 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
   const [notes, setNotes] = React.useState("");
   const [noteSaving, setNoteSaving] = React.useState(false);
   const [noteSaved, setNoteSaved] = React.useState(false);
+  const [transferTargets, setTransferTargets] = React.useState<TransferTarget[]>([]);
+  const [transferTargetsLoading, setTransferTargetsLoading] = React.useState(false);
+  const [selectedTransferTargetId, setSelectedTransferTargetId] = React.useState("");
+  const [transferNumber, setTransferNumber] = React.useState("");
+  const [transferPending, setTransferPending] = React.useState(false);
+  const [transferError, setTransferError] = React.useState<string | null>(null);
+  const [transferMessage, setTransferMessage] = React.useState<string | null>(null);
 
   const sessionRef = React.useRef<CallSession | null>(null);
   const handlersRef = React.useRef<Array<[string, (...args: unknown[]) => void]>>([]);
@@ -174,6 +207,40 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
   // + INVITE), where there's no dialog to CANCEL yet. The RingOut fallback and the
   // idle dialpad stay freely dismissable.
   const blockCloseRef = React.useRef(false);
+
+  const resetTransferState = React.useCallback(() => {
+    setTransferPending(false);
+    setTransferError(null);
+    setTransferMessage(null);
+  }, []);
+
+  const loadTransferTargets = React.useCallback(async () => {
+    if (transferTargetsLoading) return;
+    setTransferTargetsLoading(true);
+    setTransferError(null);
+    try {
+      const response = await fetch("/api/rc/transfer-targets", { cache: "no-store" });
+      const data = (await response.json().catch(() => ({}))) as {
+        targets?: TransferTarget[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || `Could not load managers (HTTP ${response.status}).`);
+      }
+
+      const targets = data.targets ?? [];
+      setTransferTargets(targets);
+      if (!selectedTransferTargetId && !transferNumber && targets[0]) {
+        setSelectedTransferTargetId(targets[0].id);
+        setTransferNumber(targets[0].phoneNumber);
+      }
+    } catch (err) {
+      setTransferError(err instanceof Error ? err.message : "Could not load manager transfer targets.");
+    } finally {
+      setTransferTargetsLoading(false);
+    }
+  }, [selectedTransferTargetId, transferNumber, transferTargetsLoading]);
 
   const stopTimer = React.useCallback(() => {
     if (timerRef.current) {
@@ -373,6 +440,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
         startTimer();
         attachAudio(session);
         setStatus("in-call");
+        void loadTransferTargets();
         // Record on-demand when consented — account auto-recording doesn't capture
         // these VoIP calls. Best-effort: a recording failure must never break the
         // call, but capture the reason so it's diagnosable instead of silent.
@@ -407,7 +475,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       for (const [event, handler] of handlers) session.on(event, handler);
       handlersRef.current = handlers;
     },
-    [attachAudio, clearConnectTimeout, endCall, startTimer]
+    [attachAudio, clearConnectTimeout, endCall, loadTransferTargets, startTimer]
   );
 
   // Signal SIP teardown with the right verb: BYE after answer, CANCEL while ringing.
@@ -446,7 +514,8 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     setNotes("");
     setNoteSaved(false);
     setNumber(phone ?? "");
-  }, [cleanupSession, clearConnectTimeout, detachAudio, finalize, phone, stopTimer, terminateSession]);
+    resetTransferState();
+  }, [cleanupSession, clearConnectTimeout, detachAudio, finalize, phone, resetTransferState, stopTimer, terminateSession]);
 
   // Dedicated mount flag (empty deps) so it only flips on real unmount.
   React.useEffect(() => {
@@ -683,6 +752,47 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     }
   }
 
+  function selectTransferTarget(targetId: string) {
+    setSelectedTransferTargetId(targetId);
+    setTransferError(null);
+    setTransferMessage(null);
+
+    const target = transferTargets.find((item) => item.id === targetId);
+    if (target) {
+      setTransferNumber(target.phoneNumber);
+    }
+  }
+
+  async function transferCall() {
+    const dial = toDialString(transferNumber);
+    if (!dial) {
+      setTransferError("Enter a valid manager number to transfer the call.");
+      return;
+    }
+
+    const session = sessionRef.current as TransferCapableSession | null;
+    if (!session || status !== "in-call") {
+      setTransferError("Transfer is available after the call is connected.");
+      return;
+    }
+    if (typeof session.transfer !== "function") {
+      setTransferError("This RingCentral softphone session does not support transfer.");
+      return;
+    }
+
+    setTransferPending(true);
+    setTransferError(null);
+    setTransferMessage(null);
+    try {
+      await session.transfer(dial);
+      setTransferMessage("Transfer sent. The SDR call will end when RingCentral completes the handoff.");
+    } catch (err) {
+      setTransferError(err instanceof Error ? err.message : "Call transfer failed.");
+    } finally {
+      setTransferPending(false);
+    }
+  }
+
   const inLiveCall = status === "connecting" || status === "ringing" || status === "in-call";
 
   // Imperative entry point used by SoftphoneButton (via CallProvider) to start /
@@ -703,10 +813,11 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
           setNotes("");
           setNoteSaved(false);
           setSeconds(0);
+          resetTransferState();
         }
       }
     }),
-    [status]
+    [resetTransferState, status]
   );
 
   // Report live-call state up so page-level Call buttons can reflect "on call".
@@ -882,6 +993,74 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
                   Minimize
                 </Button>
               </div>
+
+              {status === "in-call" ? (
+                <div className="w-full rounded-md border bg-muted/40 p-3 text-left">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <label className="text-xs font-medium text-muted-foreground" htmlFor="transfer-target">
+                      Transfer to manager
+                    </label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => void loadTransferTargets()}
+                      disabled={transferTargetsLoading || transferPending}
+                      aria-label="Refresh transfer targets"
+                      title="Refresh"
+                    >
+                      <RefreshCw className={cn("size-4", transferTargetsLoading && "animate-spin")} aria-hidden="true" />
+                    </Button>
+                  </div>
+                  {transferTargets.length ? (
+                    <select
+                      id="transfer-target"
+                      value={selectedTransferTargetId}
+                      onChange={(event) => selectTransferTarget(event.target.value)}
+                      className={cn(fieldClass, "h-9 w-full")}
+                      disabled={transferPending}
+                    >
+                      <option value="">Custom number</option>
+                      {transferTargets.map((target) => (
+                        <option key={target.id} value={target.id}>
+                          {target.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {transferTargetsLoading ? "Loading managers..." : "No manager RingCentral line configured."}
+                    </p>
+                  )}
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      value={transferNumber}
+                      onChange={(event) => {
+                        setTransferNumber(event.target.value);
+                        setSelectedTransferTargetId("");
+                        setTransferError(null);
+                        setTransferMessage(null);
+                      }}
+                      inputMode="tel"
+                      aria-label="Transfer number"
+                      className={cn(fieldClass, "h-9 min-w-0 flex-1")}
+                      placeholder="+1 (___) ___-____"
+                      disabled={transferPending}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={transferCall}
+                      disabled={transferPending || !transferNumber.trim()}
+                    >
+                      {transferPending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <PhoneForwarded aria-hidden="true" />}
+                      Transfer
+                    </Button>
+                  </div>
+                  {transferError ? <p className="mt-2 text-xs text-[var(--ui-destructive)]">{transferError}</p> : null}
+                  {transferMessage ? <p className="mt-2 text-xs text-muted-foreground">{transferMessage}</p> : null}
+                </div>
+              ) : null}
 
               {notesEditor}
             </div>
