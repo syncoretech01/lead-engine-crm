@@ -773,7 +773,7 @@ function readInitialStateForPrisma() {
   return createSeedState();
 }
 
-function migrateState(input: AppState): { state: AppState; changed: boolean } {
+export function migrateState(input: AppState): { state: AppState; changed: boolean } {
   let changed = false;
   const state = input;
   const workspaceId = state.workspaces[0]?.id;
@@ -1116,12 +1116,18 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
 
   if (workspaceId && state.verificationResults.length === 0 && state.contacts.length > 0) {
     runWorkspaceVerification(state, workspaceId);
-    changed = true;
+    // Only mark changed if the backfill actually produced rows. Otherwise the
+    // empty-array guard re-fires on every read, forcing a self-heal forever.
+    if (state.verificationResults.length > 0) changed = true;
   }
 
   if (workspaceId && state.dedupeMatches.length === 0 && (state.contacts.length > 0 || state.companies.length > 0)) {
     detectWorkspaceDuplicates(state, workspaceId);
-    changed = true;
+    // detectWorkspaceDuplicates on a workspace with no duplicates (e.g. the
+    // seeded demo workspace at workspaces[0]) leaves dedupeMatches empty, so an
+    // unconditional `changed = true` here re-triggered a full projection on
+    // EVERY read. Only mark changed when it actually recorded matches.
+    if (state.dedupeMatches.length > 0) changed = true;
   }
 
   if (workspaceId) {
@@ -1149,7 +1155,7 @@ function migrateState(input: AppState): { state: AppState; changed: boolean } {
 
   if (workspaceId && state.enrichmentResults.length === 0 && (state.contacts.length > 0 || state.companies.length > 0)) {
     runWorkspaceEnrichment(state, workspaceId);
-    changed = true;
+    if (state.enrichmentResults.length > 0) changed = true;
   }
 
   if (workspaceId) {
