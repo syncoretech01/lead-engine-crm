@@ -135,54 +135,46 @@ export function ensureCrmDefaults(state: AppState, workspaceId: string) {
   const now = new Date().toISOString();
   const actorUserId = state.users[0]?.id ?? "user-nora";
 
-  if (state.customFields.filter((field) => field.workspaceId === workspaceId).length === 0) {
-    state.customFields.push(...defaultCustomFields(workspaceId, now));
-    changed = true;
-  }
+  // Seed a table's per-workspace defaults only when it has none, and only mark
+  // `changed` when rows were actually added. A workspace with no source data
+  // (e.g. the empty seeded demo workspace that sits at workspaces[0] on prod)
+  // makes the derived seeds (opportunities/notes/activities/...) produce nothing,
+  // so an unconditional `changed = true` re-fired on EVERY read -> a full
+  // self-heal projection forever. migrateState runs this on every read.
+  const seedIfEmpty = <T>(arr: T[], workspaceOf: (item: T) => string, make: () => T[]) => {
+    if (arr.some((item) => workspaceOf(item) === workspaceId)) return;
+    const before = arr.length;
+    arr.push(...make());
+    if (arr.length > before) changed = true;
+  };
 
-  if (state.opportunities.filter((opportunity) => opportunity.workspaceId === workspaceId).length === 0) {
-    state.opportunities.push(...seedOpportunities(state, workspaceId, now));
-    changed = true;
-  }
-
-  if (state.tasks.filter((task) => task.workspaceId === workspaceId).length === 0) {
-    state.tasks.push(...seedTasks(state, workspaceId, actorUserId, now));
-    changed = true;
-  }
-
-  if (state.notes.filter((note) => note.workspaceId === workspaceId).length === 0) {
-    state.notes.push(
-      ...state.companies
-        .filter((company) => company.workspaceId === workspaceId)
-        .slice(0, 5)
-        .map((company, index) => ({
-          id: `note-${slug(company.id)}-${index + 1}`,
-          workspaceId,
-          companyId: company.id,
-          contactId: primaryContactForCompany(state, company.id)?.id,
-          body: noteForCompany(company),
-          createdById: ownerUserIdForName(state, primaryContactForCompany(state, company.id)?.owner),
-          createdAt: offsetDate(now, -(index + 3), 11),
-          updatedAt: offsetDate(now, -(index + 3), 11)
-        }))
-    );
-    changed = true;
-  }
-
-  if (state.callLogs.filter((call) => call.workspaceId === workspaceId).length === 0) {
-    state.callLogs.push(...seedCallLogs(state, workspaceId, now));
-    changed = true;
-  }
-
-  if (state.customFieldValues.filter((value) => value.workspaceId === workspaceId).length === 0) {
-    state.customFieldValues.push(...seedCustomFieldValues(state, workspaceId, now));
-    changed = true;
-  }
-
-  if (state.activities.filter((activity) => activity.workspaceId === workspaceId).length === 0) {
-    state.activities.push(...seedActivities(state, workspaceId, actorUserId, now));
-    changed = true;
-  }
+  seedIfEmpty(state.customFields, (field) => field.workspaceId, () => defaultCustomFields(workspaceId, now));
+  seedIfEmpty(state.opportunities, (opportunity) => opportunity.workspaceId, () =>
+    seedOpportunities(state, workspaceId, now)
+  );
+  seedIfEmpty(state.tasks, (task) => task.workspaceId, () => seedTasks(state, workspaceId, actorUserId, now));
+  seedIfEmpty(state.notes, (note) => note.workspaceId, () =>
+    state.companies
+      .filter((company) => company.workspaceId === workspaceId)
+      .slice(0, 5)
+      .map((company, index) => ({
+        id: `note-${slug(company.id)}-${index + 1}`,
+        workspaceId,
+        companyId: company.id,
+        contactId: primaryContactForCompany(state, company.id)?.id,
+        body: noteForCompany(company),
+        createdById: ownerUserIdForName(state, primaryContactForCompany(state, company.id)?.owner),
+        createdAt: offsetDate(now, -(index + 3), 11),
+        updatedAt: offsetDate(now, -(index + 3), 11)
+      }))
+  );
+  seedIfEmpty(state.callLogs, (call) => call.workspaceId, () => seedCallLogs(state, workspaceId, now));
+  seedIfEmpty(state.customFieldValues, (value) => value.workspaceId, () =>
+    seedCustomFieldValues(state, workspaceId, now)
+  );
+  seedIfEmpty(state.activities, (activity) => activity.workspaceId, () =>
+    seedActivities(state, workspaceId, actorUserId, now)
+  );
 
   return { changed };
 }
