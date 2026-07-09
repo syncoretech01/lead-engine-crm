@@ -65,33 +65,30 @@ export function ensureOutreachDefaults(state: AppState, workspaceId: string) {
     changed = true;
   }
 
-  if (state.outreachProviders.filter((provider) => provider.workspaceId === workspaceId).length === 0) {
-    state.outreachProviders.push(...defaultOutreachProviders(workspaceId, now));
-    changed = true;
-  }
+  // Seed defaults only when empty, and only mark `changed` when rows are actually
+  // added. Otherwise a workspace whose seed derives nothing (e.g. the empty demo
+  // workspace at workspaces[0] with no contacts) re-fires the empty-guard on every
+  // read -> a full self-heal projection forever. migrateState runs this per read.
+  const seedIfEmpty = <T extends { workspaceId: string }>(arr: T[], make: () => T[]) => {
+    if (arr.some((item) => item.workspaceId === workspaceId)) return;
+    const before = arr.length;
+    arr.push(...make());
+    if (arr.length > before) changed = true;
+  };
 
-  if (state.outreachCampaigns.filter((campaign) => campaign.workspaceId === workspaceId).length === 0) {
-    state.outreachCampaigns.push(...defaultCampaigns(state, workspaceId, now));
-    changed = true;
-  }
-
-  if (state.campaignSequences.filter((sequence) => sequence.workspaceId === workspaceId).length === 0) {
-    state.campaignSequences.push(...defaultSequences(state, workspaceId, now));
-    changed = true;
-  }
-
-  if (state.sequenceSteps.filter((step) => step.workspaceId === workspaceId).length === 0) {
-    state.sequenceSteps.push(...defaultSequenceSteps(state, workspaceId, now));
-    changed = true;
-  }
+  seedIfEmpty(state.outreachProviders, () => defaultOutreachProviders(workspaceId, now));
+  seedIfEmpty(state.outreachCampaigns, () => defaultCampaigns(state, workspaceId, now));
+  seedIfEmpty(state.campaignSequences, () => defaultSequences(state, workspaceId, now));
+  seedIfEmpty(state.sequenceSteps, () => defaultSequenceSteps(state, workspaceId, now));
 
   if (
     state.emailEvents.filter((event) => event.workspaceId === workspaceId).length === 0 &&
     state.outreachCampaigns.length > 0 &&
     state.sdrAssignments.length > 0
   ) {
+    const before = state.emailEvents.length;
     seedOutreachEvents(state, workspaceId, now);
-    changed = true;
+    if (state.emailEvents.length > before) changed = true;
   }
 
   refreshCampaignMetrics(state, workspaceId);

@@ -2,8 +2,30 @@ import { describe, expect, it } from "vitest";
 
 import { migrateState } from "@/lib/phase1/store";
 import { createSeedState } from "@/lib/phase1/seed";
+import type { Workspace } from "@/lib/phase1/types";
 
 describe("migrateState idempotency", () => {
+  // The exact prod trap: an empty workspace (no contacts, companies, or any
+  // derived data) sits at workspaces[0], so every derive-from-source seed
+  // (opportunities, notes, activities, outreach events, dedupe) produces nothing
+  // and its empty-guard would re-fire on every read.
+  it("reports no change on a second pass with a fully empty workspace at [0]", () => {
+    const state = createSeedState();
+    const emptyFirst: Workspace = {
+      id: "ws-empty-demo",
+      name: "Empty Demo",
+      market: "",
+      seats: 0,
+      health: "",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    };
+    state.workspaces.unshift(emptyFirst);
+
+    migrateState(state);
+    expect(migrateState(state).changed).toBe(false);
+  });
+
   // Regression for the prod OOM outage (2026-07-09): migrateState runs on every
   // readStateFromPrisma, and its dedupe backfill set changed=true unconditionally.
   // Prod's workspaces[0] is a seeded demo workspace with 0 contacts, so
