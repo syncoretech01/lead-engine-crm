@@ -633,6 +633,9 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
         return;
       }
       attachSession(session);
+      clearConnectTimeout();
+      blockCloseRef.current = false;
+      setStatus("ringing");
     };
     removeOutbound = () => {
       try {
