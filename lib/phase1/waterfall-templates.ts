@@ -247,53 +247,17 @@ export function ensureWaterfallDefaults(state: AppState, workspaceId: string, no
   );
 
   for (const seeded of seededTemplates) {
-    const existing = defaultsByType.get(seeded.campaignType);
-    if (!existing) {
+    if (!defaultsByType.has(seeded.campaignType)) {
       state.waterfallTemplates.push(seeded);
-      changed = true;
-      continue;
-    }
-
-    if (defaultTemplateSignature(existing) !== defaultTemplateSignature(seeded)) {
-      Object.assign(existing, {
-        ...seeded,
-        id: existing.id,
-        status: existing.status,
-        createdAt: existing.createdAt,
-        createdById: existing.createdById,
-        updatedAt: now
-      });
       changed = true;
     }
   }
 
+  // NOTE: we intentionally only seed MISSING default templates; we do not
+  // re-sync existing ones to the code defaults. migrateState runs this on every
+  // read, and defaultTemplateSignature is not stable across a JSON round-trip of
+  // the stored template, so the old signature-based Object.assign reported
+  // changed=true on every read -> a full self-heal projection forever (the OOM).
   return { changed };
 }
 
-function defaultTemplateSignature(template: WaterfallTemplate) {
-  return JSON.stringify({
-    name: template.name,
-    campaignType: template.campaignType,
-    outreachChannel: template.outreachChannel,
-    country: template.country,
-    requiredFields: template.requiredFields,
-    maxCostPerLeadCents: template.maxCostPerLeadCents,
-    maxCostPerCampaignCents: template.maxCostPerCampaignCents,
-    highValueScoreThreshold: template.highValueScoreThreshold,
-    allowGenericEmail: template.allowGenericEmail,
-    personas: template.personas,
-    steps: normalizeStepOrders(template.steps).map((step) => ({
-      order: step.order,
-      stage: step.stage,
-      capability: step.capability,
-      providerIds: step.providerIds,
-      runIf: step.runIf,
-      stopIf: step.stopIf,
-      qualityGate: step.qualityGate,
-      optional: step.optional,
-      costCapCents: step.costCapCents,
-      highValueOnly: step.highValueOnly,
-      allowCompanyMainPhone: step.allowCompanyMainPhone
-    }))
-  });
-}

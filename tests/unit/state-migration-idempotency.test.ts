@@ -53,4 +53,14 @@ describe("migrateState idempotency", () => {
     migrateState(state);
     expect(migrateState(state).changed).toBe(false);
   });
+
+  it("is idempotent across a JSON round-trip (the blob persist + reload cycle)", () => {
+    // The prod self-heal loop only reproduced after a persist+reload: a stored
+    // state that migrate reports settled in-memory must ALSO report settled when
+    // re-read from the blob, or every readState re-triggers a full projection.
+    const state = createSeedState();
+    migrateState(state);
+    const reloaded = JSON.parse(JSON.stringify(state));
+    expect(migrateState(reloaded).changed).toBe(false);
+  });
 });
