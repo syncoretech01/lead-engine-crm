@@ -53,6 +53,22 @@ const dataDir = path.join(process.cwd(), ".syncore-data");
 const dataFile = path.join(dataDir, "store.json");
 export const stateSnapshotId = "syncore-primary-state";
 
+// The tables mergePrismaIdentityRows reconciles from the normalized store back
+// into the blob. When a read only advances one of these (e.g. an active
+// session's lastSeenAt, bumped by the auth fast path on every request), the
+// self-heal write is scoped to just these tables instead of re-projecting all
+// ~71 tables. Re-projecting everything on every read is what made readState a
+// full projection (~20-35s and a large transient footprint on big states →
+// the OOM). See readStateFromPrisma.
+const identityReconcileTables: ProjectionTableName[] = [
+  "workspaces",
+  "users",
+  "workspaceMembers",
+  "authAccounts",
+  "authSessions",
+  "userInvites"
+];
+
 type PrismaStoreClient = PrismaClient | Prisma.TransactionClient;
 type UpdateStateOptions = {
   normalizedTables?: ProjectionTableName[];
@@ -492,8 +508,14 @@ async function readStateFromPrisma(client: PrismaStoreClient): Promise<AppState>
   const parsed = snapshot.state as unknown as AppState;
   const { state, changed } = migrateState(parsed);
   const identityMerge = await mergePrismaIdentityRows(client, state);
-  if (changed || identityMerge.changed || snapshot.version !== state.version) {
+  if (changed || snapshot.version !== state.version) {
+    // A schema migration or version bump can touch any table — re-project all.
     await writeStateToPrisma(state, client);
+  } else if (identityMerge.changed) {
+    // Only identity rows were reconciled (commonly a session lastSeenAt bump).
+    // Persist the snapshot + just those tables; re-projecting all ~71 tables on
+    // every read is what made readState a full projection (OOM + latency).
+    await writeStateToPrisma(state, client, { tables: identityReconcileTables });
   }
 
   return state;
