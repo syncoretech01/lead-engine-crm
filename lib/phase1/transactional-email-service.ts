@@ -24,7 +24,6 @@ export type TransactionalSendResult = {
 function resolveAppBaseUrl(): string {
   const explicit = process.env.SYNCORE_APP_URL;
   if (explicit) return explicit.replace(/\/$/, "");
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return "";
 }
 

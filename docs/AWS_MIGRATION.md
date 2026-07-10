@@ -1,6 +1,9 @@
 # AWS Migration Runbook (Neon + Vercel → lean AWS-native)
 
-Status: **in progress.** This runbook moves the app off Neon (Postgres) + Vercel
+Status: **complete (2026-07-10).** Neon + Vercel are decommissioned; the app runs
+entirely on AWS (EC2 + RDS, us-east-1). The final Neon `AppStateSnapshot` was
+archived to the app S3 bucket under `decommission/` before deletion. The plan below
+is retained for reference. This runbook moved the app off Neon (Postgres) + Vercel
 (web) onto a cost-minimal all-AWS stack co-located in one region, so the metered
 egress that capped Neon disappears (app↔DB traffic becomes intra-VPC). Sized for
 ~6 concurrent users — "only what's absolutely necessary."
@@ -164,12 +167,18 @@ Only after the smoke test passes: point the app domain (Route53) at the Elastic
 IP / CloudFront. Lower the DNS TTL beforehand. DNS is last so rollback = one
 revert. Caddy obtains the TLS cert automatically on first request.
 
-## Phase 6 — Decommission  [YOU], after 24–72h soak
+## Phase 6 — Decommission  ✅ DONE (2026-07-10)
 
-Confirm Aurora/RDS healthy under real use, take a final `pg_dump` of Neon as a
-cold archive, remove Neon strings from all env + CI, delete the Vercel project,
-then delete the Neon project. **[ME] follow-ups:** SES instance-role support;
-optional exports→S3 with presigned URLs.
+- Final Neon `AppStateSnapshot` (the source-of-truth row — all the migration
+  copied) archived to the app S3 bucket at `decommission/neon-appstate-20260710.json`.
+- Vercel project (`leadenginecrm`) and Neon project (`Syncore CRM`) both deleted.
+- Repo scrubbed: Neon/Vercel values out of `deploy/ec2/worker.env.example`, the
+  `VERCEL_URL` fallback removed from `transactional-email-service.ts` /
+  `unsubscribe-token.ts`, and the stale "on Vercel" comment out of `next.config.mjs`;
+  CI has no Neon/Vercel references.
+
+**Remaining [ME] follow-ups (not blockers):** SES via instance IAM role instead of
+static keys; optional exports→S3 with presigned URLs.
 
 ---
 
