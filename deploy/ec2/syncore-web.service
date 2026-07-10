@@ -23,6 +23,12 @@ ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
+# Memory guard — encodes the on-box fix applied after the 2026-07-09 OOM outage,
+# where web + worker co-peaked past the 2 GB (t4g.small) instance RAM and swap-died.
+# Keep web MemoryMax + worker MemoryMax comfortably under total RAM. Previously this
+# lived only in a `systemctl set-property` drop-in and was lost on any repo rebuild.
+MemoryHigh=1152M
+MemoryMax=1400M
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true

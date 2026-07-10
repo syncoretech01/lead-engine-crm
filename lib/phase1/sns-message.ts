@@ -51,6 +51,30 @@ export function isValidSnsUrl(url: string): boolean {
   }
 }
 
+/**
+ * Whether an SNS message's TopicArn is one of our own SES→SNS topics. A valid SNS
+ * signature only proves the message came from *some* AWS account — not ours — so
+ * without this an attacker could point their own topic's (validly AWS-signed)
+ * forged bounce/complaint at the webhook and suppress arbitrary contacts. Enforced
+ * only when SYNCORE_SES_TOPIC_ARNS is configured (comma-separated); when unset it
+ * is permissive so existing deployments are not broken before the ARNs are set.
+ */
+export function isAllowedSnsTopic(
+  topicArn: string | undefined,
+  env: { SYNCORE_SES_TOPIC_ARNS?: string } = process.env as { SYNCORE_SES_TOPIC_ARNS?: string }
+): boolean {
+  const configured = (env.SYNCORE_SES_TOPIC_ARNS ?? "")
+    .split(",")
+    .map((arn) => arn.trim())
+    .filter(Boolean);
+
+  if (configured.length === 0) {
+    return true;
+  }
+
+  return Boolean(topicArn) && configured.includes(topicArn as string);
+}
+
 const certificateCache = new Map<string, string>();
 
 async function fetchCertificate(url: string): Promise<string | null> {

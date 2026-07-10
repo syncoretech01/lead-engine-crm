@@ -33,3 +33,7 @@ export function isSignedWebhookPath(pathname: string) {
 export function isPublicUnsubscribePath(pathname: string) {
   return pathname === "/api/unsubscribe" || pathname.startsWith("/unsubscribe/");
 }
+
+export function isPublicHealthPath(pathname: string) {
+  return pathname === "/api/health";
+}

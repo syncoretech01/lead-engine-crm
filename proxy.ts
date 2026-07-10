@@ -1,5 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isPublicAssetPath, isPublicAuthPath, isPublicUnsubscribePath, isSignedWebhookPath } from "@/lib/phase1/auth-routes";
+import {
+  isPublicAssetPath,
+  isPublicAuthPath,
+  isPublicHealthPath,
+  isPublicUnsubscribePath,
+  isSignedWebhookPath
+} from "@/lib/phase1/auth-routes";
 
 const authSessionCookieName = "syncore_auth_session";
 
@@ -8,7 +14,13 @@ export function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-syncore-pathname", pathname);
 
-  if (isPublicAssetPath(pathname) || isPublicAuthPath(pathname) || isSignedWebhookPath(pathname) || isPublicUnsubscribePath(pathname)) {
+  if (
+    isPublicAssetPath(pathname) ||
+    isPublicAuthPath(pathname) ||
+    isSignedWebhookPath(pathname) ||
+    isPublicUnsubscribePath(pathname) ||
+    isPublicHealthPath(pathname)
+  ) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 

@@ -44,9 +44,12 @@ export function detectWorkspaceDuplicates(state: AppState, workspaceId: string) 
   };
 }
 
-export function mergeDedupeMatch(state: AppState, matchId: string) {
+export function mergeDedupeMatch(state: AppState, workspaceId: string, matchId: string) {
   const match = state.dedupeMatches.find((item) => item.id === matchId);
-  if (!match || match.status !== "Open") {
+  // Match ids are globally unique across the shared state, so scope by workspace:
+  // without this a caller in workspace A could pass a workspace-B match id and merge
+  // B's records (audit misattributed to A). See A-DATA-4.
+  if (!match || match.workspaceId !== workspaceId || match.status !== "Open") {
     return false;
   }
 
@@ -61,9 +64,9 @@ export function mergeDedupeMatch(state: AppState, matchId: string) {
   return true;
 }
 
-export function ignoreDedupeMatch(state: AppState, matchId: string) {
+export function ignoreDedupeMatch(state: AppState, workspaceId: string, matchId: string) {
   const match = state.dedupeMatches.find((item) => item.id === matchId);
-  if (!match || match.status !== "Open") {
+  if (!match || match.workspaceId !== workspaceId || match.status !== "Open") {
     return false;
   }
 

@@ -36,9 +36,27 @@ describe("rate limiter", () => {
     expect(rateLimitingEnabled({ NODE_ENV: "production", NEXT_PHASE: "phase-production-build" })).toBe(false);
   });
 
-  it("reads the client IP from forwarded headers", () => {
-    expect(clientIpFromHeaders(new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }))).toBe("203.0.113.7");
-    expect(clientIpFromHeaders(new Headers({ "x-real-ip": "198.51.100.4" }))).toBe("198.51.100.4");
-    expect(clientIpFromHeaders(new Headers())).toBe("unknown");
+  it("behind a trusted proxy, uses the proxy-appended (rightmost) IP and ignores spoofable earlier entries", () => {
+    const env = { NODE_ENV: "production" }; // one trusted hop (Caddy) by default
+    expect(clientIpFromHeaders(new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }), env)).toBe("10.0.0.1");
+  });
+
+  it("honors a configured trusted-proxy-hop count", () => {
+    const env = { NODE_ENV: "production", SYNCORE_TRUSTED_PROXY_HOPS: "2" };
+    expect(clientIpFromHeaders(new Headers({ "x-forwarded-for": "9.9.9.9, 203.0.113.7, 10.0.0.1" }), env)).toBe(
+      "203.0.113.7"
+    );
+  });
+
+  it("fails closed to 'unknown' when the forwarded chain is shorter than the trusted hop count", () => {
+    const env = { NODE_ENV: "production", SYNCORE_TRUSTED_PROXY_HOPS: "2" };
+    expect(clientIpFromHeaders(new Headers({ "x-forwarded-for": "10.0.0.1" }), env)).toBe("unknown");
+  });
+
+  it("never trusts X-Forwarded-For without a trusted proxy (dev/test), falling back to x-real-ip", () => {
+    const env = { NODE_ENV: "test" };
+    expect(clientIpFromHeaders(new Headers({ "x-forwarded-for": "203.0.113.7" }), env)).toBe("unknown");
+    expect(clientIpFromHeaders(new Headers({ "x-real-ip": "198.51.100.4" }), env)).toBe("198.51.100.4");
+    expect(clientIpFromHeaders(new Headers(), env)).toBe("unknown");
   });
 });
