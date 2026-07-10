@@ -494,12 +494,37 @@ function ensureFileStore() {
   }
 }
 
+type StateSeedEnv = { NODE_ENV?: string; SYNCORE_SEED_SNAPSHOT?: string };
+
+/**
+ * Whether an empty store may be auto-seeded on read. In dev/test this is the
+ * expected behaviour; in production it must be opted into via SYNCORE_SEED_SNAPSHOT
+ * (the same flag the seed-prisma script honours) so a fresh or wiped database can
+ * never silently recreate the seeded demo workspace — which ships a well-known
+ * superadmin credential. Provisioning and tests seed explicitly via
+ * writeState/createSeedState and do not depend on this read-path fallback.
+ */
+export function stateSeedingAllowed(env: StateSeedEnv = process.env as StateSeedEnv): boolean {
+  if (env.SYNCORE_SEED_SNAPSHOT?.toLowerCase() === "true") {
+    return true;
+  }
+
+  return env.NODE_ENV !== "production";
+}
+
 async function readStateFromPrisma(client: PrismaStoreClient): Promise<AppState> {
   const snapshot = await timeAsync("state.prisma.snapshotRead", () => client.appStateSnapshot.findUnique({
     where: { id: stateSnapshotId }
   }), { snapshotId: stateSnapshotId });
 
   if (!snapshot) {
+    if (!stateSeedingAllowed()) {
+      throw new Error(
+        "No AppState snapshot found and auto-seeding is disabled in production. Provision explicitly " +
+          "(scripts/provision-workspace.ts) or set SYNCORE_SEED_SNAPSHOT=true. Refusing to silently seed " +
+          "demo state, which includes a well-known seeded superadmin."
+      );
+    }
     const state = readInitialStateForPrisma();
     await writeStateToPrisma(state, client);
     return state;

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { outreachEmailWriteTables } from "@/lib/phase1/normalized-write-tables";
 import { captureError } from "@/lib/phase1/observability";
 import { matchSesSuppressionContact, parseSesEvent } from "@/lib/phase1/ses-events";
-import { isValidSnsUrl, verifySnsMessage, type SnsMessage } from "@/lib/phase1/sns-message";
+import { isAllowedSnsTopic, isValidSnsUrl, verifySnsMessage, type SnsMessage } from "@/lib/phase1/sns-message";
 import { updateAuthState } from "@/lib/phase1/store";
 import { appendWorkspaceAudit, systemActorForWorkspace } from "@/lib/phase1/tenant-isolation";
 import { processEmailWebhook } from "@/lib/phase1/webhooks";
@@ -38,6 +38,16 @@ export async function POST(request: Request) {
     message = JSON.parse(body) as SnsMessage;
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+
+  // Reject every message — subscription confirmations included — whose TopicArn is
+  // not one of our own SES→SNS topics. A valid SNS signature only proves the event
+  // came from some AWS account; without this an attacker's own topic could
+  // auto-confirm here and then publish validly-signed forged bounces to suppress
+  // arbitrary contacts cross-tenant. Enforced only when SYNCORE_SES_TOPIC_ARNS is
+  // configured (see .env.example) so existing deploys are not broken before it is set.
+  if (!isAllowedSnsTopic(message.TopicArn)) {
+    return NextResponse.json({ error: "Untrusted SNS topic." }, { status: 403 });
   }
 
   // Subscription confirmation is authorized by the SNS-issued token embedded in

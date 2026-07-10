@@ -66,7 +66,12 @@ export function estimateLeadJobCost(input: {
   budgetCapCents?: number;
   enrichmentBudgetCents?: number;
 }): LeadJobCostEstimate {
-  const baselineRecords = Math.max(0, Math.round(input.requestedRecords)) || 100;
+  // A legitimate 0-record request must stay 0 (the Build List UI allows it, and it
+  // drives both the cost preview and the server budget cap). Only fall back to 100
+  // when the requested count is not a finite number — `|| 100` mistook a real 0 for
+  // "unset" and inflated the estimate.
+  const rounded = Math.round(input.requestedRecords);
+  const baselineRecords = Number.isFinite(rounded) ? Math.max(0, rounded) : 100;
   const sourceEstimates = input.sources.map((source) => estimateLeadSource(source, baselineRecords, input.sources.length));
   const estimatedRecords = sourceEstimates.reduce((total, estimate) => total + estimate.estimatedRecords, 0);
   const estimatedAcquisitionCostCents = sourceEstimates.reduce((total, estimate) => total + estimate.estimatedCostCents, 0);

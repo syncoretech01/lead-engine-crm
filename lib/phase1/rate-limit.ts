@@ -14,6 +14,7 @@ type RateLimitEnv = {
   NODE_ENV?: string;
   NEXT_PHASE?: string;
   npm_lifecycle_event?: string;
+  SYNCORE_TRUSTED_PROXY_HOPS?: string;
 };
 
 const hitsByKey = new Map<string, number[]>();
@@ -55,14 +56,61 @@ export function rateLimitingEnabled(env: RateLimitEnv = process.env as RateLimit
   return env.NEXT_PHASE !== "phase-production-build" && env.npm_lifecycle_event !== "build";
 }
 
-export function clientIpFromHeaders(headers: { get(name: string): string | null }): string {
-  const forwarded = headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) {
-      return first;
+/**
+ * Number of trusted reverse-proxy hops in front of the app. In the AWS deployment
+ * that is exactly one (Caddy on the instance); locally there is none. Overridable
+ * via SYNCORE_TRUSTED_PROXY_HOPS if the topology changes (e.g. an ALB or CDN is
+ * placed in front of Caddy).
+ */
+export function trustedProxyHops(env: RateLimitEnv = process.env as RateLimitEnv): number {
+  const raw = env.SYNCORE_TRUSTED_PROXY_HOPS;
+  if (raw !== undefined) {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
     }
   }
 
+  return env.NODE_ENV === "production" ? 1 : 0;
+}
+
+/**
+ * Resolve the client IP used for rate-limit bucketing. `X-Forwarded-For` is only
+ * trusted for the hops our own proxies append: with N trusted hops the client is
+ * the Nth entry from the right, and everything to its left is client-controllable
+ * and must be ignored. Trusting the leftmost entry (the previous behaviour) let an
+ * attacker mint a fresh bucket per request by spoofing the header, defeating the
+ * login / reset / invite and webhook throttles.
+ */
+export function clientIpFromHeaders(
+  headers: { get(name: string): string | null },
+  env: RateLimitEnv = process.env as RateLimitEnv
+): string {
+  const hops = trustedProxyHops(env);
+
+  if (hops > 0) {
+    const forwarded = headers.get("x-forwarded-for");
+    if (forwarded) {
+      const parts = forwarded
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      const index = parts.length - hops;
+      const ip = index >= 0 ? parts[index] : undefined;
+      if (ip) {
+        return ip;
+      }
+    }
+
+    // Behind a trusted proxy the client IP must come from the proxy-appended
+    // X-Forwarded-For. A missing or too-short chain means the request did not
+    // traverse the expected hops — fail closed to a shared bucket rather than
+    // trust a client-settable header.
+    return "unknown";
+  }
+
+  // No trusted proxy (local/dev/test): X-Forwarded-For is fully client-controlled,
+  // so it is never trusted here. Rate limiting is disabled outside production
+  // anyway (see rateLimitingEnabled).
   return headers.get("x-real-ip")?.trim() || "unknown";
 }

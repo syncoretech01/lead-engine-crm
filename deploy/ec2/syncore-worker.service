@@ -18,6 +18,11 @@ Restart=always
 RestartSec=10
 TimeoutStopSec=30
 KillSignal=SIGINT
+# Memory guard — see syncore-web.service. The worker peaked ~970M during the
+# full-projection-on-read incident; cap it below that co-peak so web + worker can
+# never again sum past instance RAM. Kept in the repo so a rebuild can't drop it.
+MemoryHigh=700M
+MemoryMax=768M
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true

@@ -28,7 +28,7 @@ describe("dedupe and outreach suppression", () => {
 
     expect(result.open).toBeGreaterThan(0);
     expect(match?.reason).toBe("Email address match");
-    expect(match && mergeDedupeMatch(state, match.id)).toBe(true);
+    expect(match && mergeDedupeMatch(state, workspaceId, match.id)).toBe(true);
     expect(state.contacts.length).toBe(beforeCount - 1);
     expect(state.contacts.some((contact) => contact.id === duplicate.id)).toBe(false);
   });

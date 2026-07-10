@@ -14,7 +14,12 @@ export function parseCsv(input: string): Record<string, string>[] {
       continue;
     }
 
-    if (char === '"') {
+    if (char === '"' && (inQuotes || field === "")) {
+      // A quote is only structural at a field boundary: it opens a quoted field
+      // when the field is still empty, and closes one while we are inside it. A
+      // stray quote mid-field (e.g. `6" Sub Shop`) is a literal character — without
+      // this guard it flipped `inQuotes`, swallowed the next delimiter, and silently
+      // misaligned every downstream column.
       inQuotes = !inQuotes;
       continue;
     }

@@ -406,7 +406,7 @@ export async function mergeDuplicateAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "run_jobs");
     const id = stringValue(formData.get("id"));
-    const merged = mergeDedupeMatch(state, id);
+    const merged = mergeDedupeMatch(state, session.workspace.id, id);
 
     if (merged) {
       appendAudit(state, session, {
@@ -424,7 +424,7 @@ export async function ignoreDuplicateAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "run_jobs");
     const id = stringValue(formData.get("id"));
-    const ignored = ignoreDedupeMatch(state, id);
+    const ignored = ignoreDedupeMatch(state, session.workspace.id, id);
 
     if (ignored) {
       appendAudit(state, session, {
@@ -445,7 +445,7 @@ export async function mergeDuplicateGroupAction(formData: FormData) {
     let merged = 0;
 
     for (const id of ids) {
-      if (mergeDedupeMatch(state, id)) {
+      if (mergeDedupeMatch(state, session.workspace.id, id)) {
         merged += 1;
       }
     }
@@ -470,7 +470,7 @@ export async function ignoreDuplicateGroupAction(formData: FormData) {
     let ignored = 0;
 
     for (const id of ids) {
-      if (ignoreDedupeMatch(state, id)) {
+      if (ignoreDedupeMatch(state, session.workspace.id, id)) {
         ignored += 1;
       }
     }
