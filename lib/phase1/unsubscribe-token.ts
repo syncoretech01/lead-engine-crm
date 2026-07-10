@@ -19,7 +19,7 @@ function fromB64url(value: string): Buffer {
 }
 
 function resolveAppBaseUrl(env: UnsubscribeEnv = process.env): string {
-  return (env.SYNCORE_APP_URL || (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : "")).replace(/\/$/, "");
+  return (env.SYNCORE_APP_URL || "").replace(/\/$/, "");
 }
 
 export function signUnsubscribeToken(workspaceId: string, contactId: string, env: UnsubscribeEnv = process.env): string {
