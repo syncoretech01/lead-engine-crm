@@ -114,15 +114,37 @@ jobs:
         run: npm run test:integration
 
   e2e:
-    # Playwright smoke suite. Runs against `next dev` with the file storage
-    # driver + seeded login (no Postgres needed). Informational for now: the
-    # smoke step uses step-level continue-on-error so failures are surfaced in
-    # the logs but do not fail the job/block the merge, because the suite is not
-    # yet stable in CI (mobile responsive-overflow + SDR-scoped routing). Remove
-    # continue-on-error from the smoke step to make it blocking once green. See P1.2.
+    # Playwright smoke suite. Runs against `next dev` on the PRISMA driver + a
+    # postgres:16 service (matching prod), seeded via db:seed (native tables +
+    # snapshot). The file storage driver is being retired (blob migration), so
+    # e2e now exercises the same storage path as production.
+    #
+    # Informational for now: the smoke step uses step-level continue-on-error so
+    # failures are surfaced in the logs but do not fail the job/block the merge,
+    # because the suite is not yet stable in CI (mobile responsive-overflow +
+    # SDR-scoped routing). Remove continue-on-error to make it blocking once green.
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lead_engine_crm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       CI: "true"
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
+      SYNCORE_STORAGE_DRIVER: prisma
+      # Lets db:seed write the AppStateSnapshot (readStateFromPrisma needs it) and
+      # keeps the dev server from refusing to auto-seed.
+      SYNCORE_SEED_SNAPSHOT: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -138,6 +160,12 @@ jobs:
 
       - name: Generate Prisma client
         run: npm run prisma:generate
+
+      - name: Apply migrations
+        run: npm run prisma:migrate:deploy
+
+      - name: Seed Prisma (native tables + snapshot)
+        run: npm run db:seed
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
