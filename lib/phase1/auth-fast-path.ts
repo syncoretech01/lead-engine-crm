@@ -716,6 +716,62 @@ export async function deactivateUserPrismaFast(input: { userId: string }): Promi
   return true;
 }
 
+// Not an admin op — any member may switch to a workspace they belong to — so it
+// resolves the session directly rather than through requireManageWorkspaceSessionFast.
+// Re-points the caller's existing (non-revoked) session to the target workspace,
+// mirroring the blob switchAuthWorkspace (same session id, same expiry).
+export async function switchWorkspacePrismaFast(input: {
+  workspaceId: string;
+}): Promise<AuthLoginResult | undefined> {
+  if (resolveStorageDriver() !== "prisma") {
+    return undefined;
+  }
+  const { getPrismaSession } = await import("@/lib/phase1/store");
+  const session = await getPrismaSession();
+  const authSessionId = session?.authSessionId;
+  if (!session || !authSessionId) {
+    throw new Error("Authenticated session is required.");
+  }
+  const { prisma } = await import("@/lib/prisma");
+  const now = new Date();
+
+  return prisma.$transaction(async (tx) => {
+    const membership = await tx.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId: input.workspaceId, userId: session.user.id } },
+      include: { workspace: true }
+    });
+    if (!membership) {
+      throw new Error("User is not a member of that workspace.");
+    }
+    const repointed = await tx.authSession.updateMany({
+      where: { id: authSessionId, userId: session.user.id, revokedAt: null },
+      data: { workspaceId: input.workspaceId, lastSeenAt: now }
+    });
+    if (repointed.count !== 1) {
+      throw new Error("Authenticated session is required.");
+    }
+    const authSession = await tx.authSession.findUniqueOrThrow({ where: { id: authSessionId } });
+    const account = await tx.authAccount.findUnique({
+      where: { userId: session.user.id },
+      include: { user: true }
+    });
+    if (!account) {
+      throw new Error("Authenticated session is required.");
+    }
+    const resolved = sessionFromRows(account, membership, authSession.id);
+    return {
+      cookieValue: createSignedAuthSessionCookie({
+        sessionId: authSession.id,
+        userId: authSession.userId,
+        workspaceId: authSession.workspaceId,
+        expiresAt: authSession.expiresAt.toISOString()
+      }),
+      expiresAt: authSession.expiresAt.toISOString(),
+      session: resolved
+    };
+  });
+}
+
 type ManageWorkspaceFastContext = {
   session: Session;
   prisma: PrismaClient;

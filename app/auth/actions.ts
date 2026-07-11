@@ -14,6 +14,7 @@ import {
   loginWithPasswordPrismaFast,
   resetPasswordWithTokenPrismaFast,
   revokeAuthSessionPrismaFast,
+  switchWorkspacePrismaFast,
   updateMemberRolePrismaFast,
   updateUserTelephonyPrismaFast
 } from "@/lib/phase1/auth-fast-path";
@@ -92,16 +93,16 @@ export async function logoutAction() {
 
 export async function switchWorkspaceAction(formData: FormData) {
   const workspaceId = stringValue(formData.get("workspaceId"));
-  let nextPath = "/";
-  const result = await updateState((state, session) => {
-    const switched = switchAuthWorkspace(state, session, workspaceId);
-    nextPath = defaultWorkspacePath(switched.session);
-    return switched;
-  }, { normalizedTables: authWriteTables });
+  const result =
+    (await switchWorkspacePrismaFast({ workspaceId })) ??
+    (await updateState(
+      (state, session) => switchAuthWorkspace(state, session, workspaceId),
+      { normalizedTables: authWriteTables }
+    ));
 
   const cookieStore = await cookies();
   cookieStore.set(authSessionCookieName, result.cookieValue, authCookieOptions(result.expiresAt));
-  redirect(nextPath);
+  redirect(defaultWorkspacePath(result.session));
 }
 
 export async function createUserInviteAction(formData: FormData) {
