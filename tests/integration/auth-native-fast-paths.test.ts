@@ -247,12 +247,14 @@ describe.skipIf(!enabled)("native auth admin fast paths", () => {
     }
   });
 
-  it("returns undefined in file-driver mode so the caller falls back to the blob path", async () => {
+  it("fails loudly on the removed file-driver mode (no silent blob fallback)", async () => {
     const previous = process.env.SYNCORE_STORAGE_DRIVER;
     process.env.SYNCORE_STORAGE_DRIVER = "file";
     try {
       const { updateMemberRolePrismaFast } = await import("@/lib/phase1/auth-fast-path");
-      expect(await updateMemberRolePrismaFast({ userId: "whoever", role: "Manager" })).toBeUndefined();
+      await expect(updateMemberRolePrismaFast({ userId: "whoever", role: "Manager" })).rejects.toThrow(
+        /file storage driver has been removed/i
+      );
     } finally {
       process.env.SYNCORE_STORAGE_DRIVER = previous;
     }

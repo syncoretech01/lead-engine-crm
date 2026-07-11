@@ -1,5 +1,3 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { cache } from "react";
@@ -37,7 +35,7 @@ import { createSeedState } from "@/lib/phase1/seed";
 import { defaultSegmentRules } from "@/lib/phase1/scoring";
 import { ensureSdrDefaults } from "@/lib/phase1/sdr";
 import { ensureWaterfallDefaults, pruneWaterfallTemplateProviders } from "@/lib/phase1/waterfall-templates";
-import { timeAsync, timeSync } from "@/lib/phase1/performance";
+import { timeAsync } from "@/lib/phase1/performance";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import type { AppState, AuditLog, AuthAccountStatus, Permission, Session, UserInviteStatus } from "@/lib/phase1/types";
 import {
@@ -50,8 +48,6 @@ import {
 } from "@/lib/phase1/auth";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
 
-const dataDir = path.join(process.cwd(), ".syncore-data");
-const dataFile = path.join(dataDir, "store.json");
 export const stateSnapshotId = "syncore-primary-state";
 
 type PrismaStoreClient = PrismaClient | Prisma.TransactionClient;
@@ -67,25 +63,18 @@ export const sessionCookieNames = {
 } as const;
 
 export async function readState(): Promise<AppState> {
+  // resolveStorageDriver() validates the env (throws on the removed "file" driver)
+  // and is the metadata label; prisma is now the only storage backend.
   const driver = resolveStorageDriver();
   return timeAsync("state.read", async () => {
-    if (driver === "prisma") {
-      return (await readStateFromPrisma(await getPrismaClient())).state;
-    }
-
-    return timeSync("state.file.read", readStateFromFile, { driver });
+    return (await readStateFromPrisma(await getPrismaClient())).state;
   }, { driver });
 }
 
 export async function writeState(state: AppState) {
   const driver = resolveStorageDriver();
   await timeAsync("state.write", async () => {
-    if (driver === "prisma") {
-      await writeStateToPrisma(state, await getPrismaClient());
-      return;
-    }
-
-    timeSync("state.file.write", () => writeStateToFile(state), { driver, ...stateCountMetadata(state) });
+    await writeStateToPrisma(state, await getPrismaClient());
   }, { driver, ...stateCountMetadata(state) });
 }
 
@@ -129,39 +118,31 @@ export async function updateState<T>(
 ): Promise<T> {
   const driver = resolveStorageDriver();
   return timeAsync("state.update", async () => {
-    if (driver === "prisma") {
-      const client = await getPrismaClient();
-      return runWithWriteConflictRetry(() =>
-        client.$transaction(
-          async (tx) => {
-            const { state, writeSeq } = await readStateFromPrisma(tx);
-            const session = await resolveCurrentRequestSession(state, tx);
-            const syncOptions = normalizedSyncOptions(options);
-            // Capture the pre-mutation baseline for the scoped tables so the diff
-            // write path can upsert only the rows this mutation changes.
-            const previousRowStrings =
-              projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
-                ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
-                : undefined;
-            const result = mutator(state, session);
-            await writeStateToPrisma(
-              state,
-              tx,
-              previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions,
-              writeSeq
-            );
-            return result;
-          },
-          { maxWait: 10_000, timeout: 30_000 }
-        )
-      );
-    }
-
-    const state = readStateFromFile();
-    const session = await resolveCurrentRequestSession(state);
-    const result = mutator(state, session);
-    writeStateToFile(state);
-    return result;
+    const client = await getPrismaClient();
+    return runWithWriteConflictRetry(() =>
+      client.$transaction(
+        async (tx) => {
+          const { state, writeSeq } = await readStateFromPrisma(tx);
+          const session = await resolveCurrentRequestSession(state, tx);
+          const syncOptions = normalizedSyncOptions(options);
+          // Capture the pre-mutation baseline for the scoped tables so the diff
+          // write path can upsert only the rows this mutation changes.
+          const previousRowStrings =
+            projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
+              ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
+              : undefined;
+          const result = mutator(state, session);
+          await writeStateToPrisma(
+            state,
+            tx,
+            previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions,
+            writeSeq
+          );
+          return result;
+        },
+        { maxWait: 10_000, timeout: 30_000 }
+      )
+    );
   }, { driver, tables: normalizedTablesLabel(options.normalizedTables) });
 }
 
@@ -171,39 +152,32 @@ export async function updateAuthState<T>(
 ): Promise<T> {
   const driver = resolveStorageDriver();
   return timeAsync("state.authUpdate", async () => {
-    if (driver === "prisma") {
-      const client = await getPrismaClient();
-      return runWithWriteConflictRetry(() =>
-        client.$transaction(
-          async (tx) => {
-            const { state, writeSeq } = await readStateFromPrisma(tx);
-            const syncOptions = normalizedSyncOptions(options);
-            // Capture the pre-mutation baseline for the scoped tables so the diff
-            // write path upserts only the rows this mutation changes — parity with
-            // updateState. Without it, a worker flipping one field (e.g. a call's
-            // recordingId) re-syncs entire append-only tables (activities/auditLogs).
-            const previousRowStrings =
-              projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
-                ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
-                : undefined;
-            const result = mutator(state);
-            await writeStateToPrisma(
-              state,
-              tx,
-              previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions,
-              writeSeq
-            );
-            return result;
-          },
-          { maxWait: 10_000, timeout: 30_000 }
-        )
-      );
-    }
-
-    const state = readStateFromFile();
-    const result = mutator(state);
-    writeStateToFile(state);
-    return result;
+    const client = await getPrismaClient();
+    return runWithWriteConflictRetry(() =>
+      client.$transaction(
+        async (tx) => {
+          const { state, writeSeq } = await readStateFromPrisma(tx);
+          const syncOptions = normalizedSyncOptions(options);
+          // Capture the pre-mutation baseline for the scoped tables so the diff
+          // write path upserts only the rows this mutation changes — parity with
+          // updateState. Without it, a worker flipping one field (e.g. a call's
+          // recordingId) re-syncs entire append-only tables (activities/auditLogs).
+          const previousRowStrings =
+            projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
+              ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
+              : undefined;
+          const result = mutator(state);
+          await writeStateToPrisma(
+            state,
+            tx,
+            previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions,
+            writeSeq
+          );
+          return result;
+        },
+        { maxWait: 10_000, timeout: 30_000 }
+      )
+    );
   }, { driver, tables: normalizedTablesLabel(options.normalizedTables) });
 }
 
@@ -396,13 +370,10 @@ export async function resetStore() {
  * effect of being called.
  */
 export async function persistedStateExists(): Promise<boolean> {
-  if (resolveStorageDriver() === "prisma") {
-    const client = await getPrismaClient();
-    const snapshot = await client.appStateSnapshot.findUnique({ where: { id: stateSnapshotId } });
-    return Boolean(snapshot);
-  }
-
-  return existsSync(dataFile);
+  resolveStorageDriver();
+  const client = await getPrismaClient();
+  const snapshot = await client.appStateSnapshot.findUnique({ where: { id: stateSnapshotId } });
+  return Boolean(snapshot);
 }
 
 async function resolveCurrentSession(state: AppState) {
@@ -475,39 +446,6 @@ export function allowLegacyDemoSession(
 
 function isAuthRequiredError(error: unknown) {
   return error instanceof Error && /Authentication required/i.test(error.message);
-}
-
-function readStateFromFile(): AppState {
-  ensureFileStore();
-  const raw = readFileSync(dataFile, "utf8");
-  const parsed = JSON.parse(raw) as AppState;
-  const { state, changed } = migrateState(parsed);
-  if (changed) {
-    writeStateToFile(state);
-  }
-  return state;
-}
-
-function writeStateToFile(state: AppState) {
-  mkdirSync(dataDir, { recursive: true });
-  // Write to a per-process temp file then atomically rename, so concurrent
-  // writers (e.g. parallel build/test workers) can never leave a torn or empty
-  // store.json behind.
-  const tempFile = `${dataFile}.${process.pid}.tmp`;
-  writeFileSync(tempFile, JSON.stringify(state, null, 2));
-  renameSync(tempFile, dataFile);
-}
-
-function ensureFileStore() {
-  if (!existsSync(dataDir)) {
-    mkdirSync(dataDir, { recursive: true });
-  }
-
-  // Reseed when the store is missing OR empty. An empty file would otherwise
-  // make JSON.parse throw "Unexpected end of JSON input" on every request.
-  if (!existsSync(dataFile) || readFileSync(dataFile, "utf8").trim() === "") {
-    writeStateToFile(createSeedState());
-  }
 }
 
 type StateSeedEnv = { NODE_ENV?: string; SYNCORE_SEED_SNAPSHOT?: string };
@@ -858,10 +796,6 @@ function stateCountMetadata(state: AppState) {
 }
 
 function readInitialStateForPrisma() {
-  if (existsSync(dataFile)) {
-    return readStateFromFile();
-  }
-
   return createSeedState();
 }
 
