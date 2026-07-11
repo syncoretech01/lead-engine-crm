@@ -55,7 +55,6 @@ describe("normalized persistence projection", () => {
     expect(summary.tables.activities).toBe(state.activities.length);
     expect(summary.tables.tasks).toBe(state.tasks.length);
     expect(summary.tables.notes).toBe(state.notes.length);
-    expect(summary.tables.callLogs).toBe(state.callLogs.length);
     expect(summary.tables.customFields).toBe(state.customFields.length);
     expect(summary.tables.customFieldValues).toBe(state.customFieldValues.length);
     expect(summary.tables.sdrTeams).toBe(state.sdrTeams.length);

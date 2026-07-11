@@ -26,6 +26,20 @@ describe("normalized CRM event read path", () => {
       id: "task-other",
       workspaceId: otherWorkspaceId
     });
+    // callLogs is no longer seeded (peeled to native prisma.callLog); add one so the
+    // in-workspace extraction path is still exercised by this blob-fallback test.
+    state.callLogs.push({
+      id: "call-in-workspace",
+      workspaceId,
+      companyId: state.companies[0]?.id,
+      contactId: state.contacts[0]?.id,
+      phone: "+15551234567",
+      outcome: "Connected",
+      durationSeconds: 60,
+      notes: "Logged.",
+      createdById: state.users[0].id,
+      createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString()
+    });
 
     const rows = crmEventReadRowsFromState(state, workspaceId);
 

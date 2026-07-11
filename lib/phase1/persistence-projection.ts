@@ -49,7 +49,6 @@ export type ProjectionTableName =
   | "activities"
   | "tasks"
   | "notes"
-  | "callLogs"
   | "customFields"
   | "customFieldValues"
   | "sdrTeams"
@@ -147,7 +146,6 @@ const projectionTables: ProjectionTableName[] = [
   "activities",
   "tasks",
   "notes",
-  "callLogs",
   "customFields",
   "customFieldValues",
   "sdrTeams",
@@ -220,7 +218,6 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "activities", delegate: "activity", workspaceScoped: true },
   { table: "tasks", delegate: "task", workspaceScoped: true },
   { table: "notes", delegate: "note", workspaceScoped: true },
-  { table: "callLogs", delegate: "callLog", workspaceScoped: true },
   { table: "customFields", delegate: "customField", workspaceScoped: true },
   { table: "customFieldValues", delegate: "customFieldValue", workspaceScoped: true },
   { table: "sdrTeams", delegate: "sdrTeam", workspaceScoped: true },
@@ -942,22 +939,6 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       createdById: state.users.some((user) => user.id === note.createdById) ? note.createdById : undefined,
       createdAt: note.createdAt,
       updatedAt: note.updatedAt
-    }))),
-    callLogs: sortRows(state.callLogs.map((call) => ({
-      id: call.id,
-      workspaceId: call.workspaceId,
-      accountId: call.companyId && hasCompany(state, call.companyId)
-        ? call.companyId
-        : undefined,
-      contactId: call.contactId && hasCrmContact(state, call.contactId)
-        ? call.contactId
-        : undefined,
-      phone: call.phone,
-      outcome: call.outcome,
-      durationSeconds: call.durationSeconds,
-      notes: call.notes,
-      createdById: state.users.some((user) => user.id === call.createdById) ? call.createdById : undefined,
-      createdAt: call.createdAt
     }))),
     customFields: sortRows(state.customFields.map((field) => ({
       id: field.id,
@@ -1705,6 +1686,25 @@ function hasCompany(state: AppState, companyId: string) {
 function hasCrmContact(state: AppState, contactId: string) {
   const contact = state.contacts.find((item) => item.id === contactId);
   return Boolean(contact && hasCompany(state, contact.companyId));
+}
+
+// Extracted from the projection row-map so the callLogs peel (blob-migration Phase 2)
+// can flush callLogs natively with the SAME FK-safe mapping (null out refs whose
+// parent isn't projected). callLogs is no longer blob-projected; writeStateToPrisma
+// flushes it straight into prisma.callLog after the projection runs.
+export function mapCallLogsToRows(state: AppState) {
+  return state.callLogs.map((call) => ({
+    id: call.id,
+    workspaceId: call.workspaceId,
+    accountId: call.companyId && hasCompany(state, call.companyId) ? call.companyId : undefined,
+    contactId: call.contactId && hasCrmContact(state, call.contactId) ? call.contactId : undefined,
+    phone: call.phone,
+    outcome: call.outcome,
+    durationSeconds: call.durationSeconds,
+    notes: call.notes,
+    createdById: state.users.some((user) => user.id === call.createdById) ? call.createdById : undefined,
+    createdAt: call.createdAt
+  }));
 }
 
 function hasProjectedOpportunity(state: AppState, opportunityId: string) {
