@@ -16,7 +16,13 @@ import {
   verifySignedAuthSessionCookie
 } from "@/lib/phase1/auth-security";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import { MIN_PASSWORD_LENGTH, type AuthLoginResult, type AuthTokenResult } from "@/lib/phase1/auth-service";
+import {
+  MAX_SIGNATURE_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  isValidTimezone,
+  type AuthLoginResult,
+  type AuthTokenResult
+} from "@/lib/phase1/auth-service";
 import { encryptSecretString } from "@/lib/phase1/secret-box";
 import type { Session, WorkspaceRole } from "@/lib/phase1/types";
 
@@ -772,15 +778,152 @@ export async function switchWorkspacePrismaFast(input: {
   });
 }
 
-type ManageWorkspaceFastContext = {
+// --- Self-service settings fast paths (blob-migration Phase 1) ---------------
+// Mirror updateOwnProfile / changeOwnPassword in auth-service.ts, writing the
+// user's own identity rows straight to Prisma. Not admin ops — any authenticated
+// user edits their own profile/password — so they use requireSessionFast (no
+// manage_workspace assertion). Both update/upsert only (changeOwnPassword revokes
+// = soft update), so the upsert-only mergePrismaIdentityRows stays correct.
+
+export async function updateOwnProfilePrismaFast(input: {
+  name?: string;
+  emailSignature?: string;
+  timezone?: string;
+}): Promise<boolean | undefined> {
+  const ctx = await requireSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  const { session, prisma } = ctx;
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({ where: { id: session.user.id } });
+    if (!user) {
+      throw new Error("Your account could not be found.");
+    }
+    const before = {
+      name: user.name,
+      emailSignature: user.emailSignature ?? undefined,
+      timezone: user.timezone ?? undefined
+    };
+    const next = { ...before };
+    const data: Prisma.UserUncheckedUpdateInput = {};
+
+    if (input.name !== undefined) {
+      const name = input.name.trim();
+      if (!name) {
+        throw new Error("Name cannot be empty.");
+      }
+      data.name = name;
+      next.name = name;
+    }
+    if (input.emailSignature !== undefined) {
+      const signature = input.emailSignature.trim();
+      if (signature.length > MAX_SIGNATURE_LENGTH) {
+        throw new Error(`Email signature must be ${MAX_SIGNATURE_LENGTH} characters or fewer.`);
+      }
+      data.emailSignature = signature || null;
+      next.emailSignature = signature || undefined;
+    }
+    if (input.timezone !== undefined) {
+      const timezone = input.timezone.trim();
+      if (timezone && !isValidTimezone(timezone)) {
+        throw new Error("That timezone is not recognized.");
+      }
+      data.timezone = timezone || null;
+      next.timezone = timezone || undefined;
+    }
+
+    await tx.user.update({ where: { id: user.id }, data });
+    await writeAuthAuditLog(
+      tx,
+      {
+        workspaceId: session.workspace.id,
+        actorUserId: session.user.id,
+        objectType: "user",
+        objectId: user.id,
+        action: "profile_updated",
+        oldValue: before,
+        newValue: next
+      },
+      now
+    );
+  });
+
+  return true;
+}
+
+export async function changeOwnPasswordPrismaFast(input: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<boolean | undefined> {
+  const ctx = await requireSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  const { session, prisma } = ctx;
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    const account = await tx.authAccount.findUnique({ where: { userId: session.user.id } });
+    if (!account || account.status !== "Active") {
+      throw new Error("Your account could not be found.");
+    }
+    if (!verifyPassword(input.currentPassword, account.passwordHash)) {
+      throw new Error("Your current password is incorrect.");
+    }
+    if (input.newPassword.length < MIN_PASSWORD_LENGTH) {
+      throw new Error(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+    }
+    if (verifyPassword(input.newPassword, account.passwordHash)) {
+      throw new Error("New password must be different from your current password.");
+    }
+
+    await tx.authAccount.update({
+      where: { id: account.id },
+      data: {
+        passwordHash: hashPassword(input.newPassword),
+        passwordUpdatedAt: now,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        updatedAt: now
+      }
+    });
+    // Revoke every OTHER live session; keep the current one signed in.
+    await tx.authSession.updateMany({
+      where: {
+        userId: session.user.id,
+        revokedAt: null,
+        ...(session.authSessionId ? { id: { not: session.authSessionId } } : {})
+      },
+      data: { revokedAt: now, lastSeenAt: now }
+    });
+    await writeAuthAuditLog(
+      tx,
+      {
+        workspaceId: session.workspace.id,
+        actorUserId: session.user.id,
+        objectType: "auth_account",
+        objectId: account.id,
+        action: "password_changed"
+      },
+      now
+    );
+  });
+
+  return true;
+}
+
+type AuthSessionFastContext = {
   session: Session;
   prisma: PrismaClient;
 };
 
-// Resolve the current prisma-native session and assert manage_workspace, shared by
-// the post-auth admin fast paths. Returns undefined ONLY in file-driver mode (so the
-// caller falls back to the blob path); in prisma mode it resolves or throws.
-async function requireManageWorkspaceSessionFast(): Promise<ManageWorkspaceFastContext | undefined> {
+// Resolve the current prisma-native session (any authenticated user), shared by the
+// self-service fast paths. Returns undefined ONLY in file-driver mode (so the caller
+// falls back to the blob path); in prisma mode it resolves or throws.
+async function requireSessionFast(): Promise<AuthSessionFastContext | undefined> {
   if (resolveStorageDriver() !== "prisma") {
     return undefined;
   }
@@ -789,9 +932,18 @@ async function requireManageWorkspaceSessionFast(): Promise<ManageWorkspaceFastC
   if (!session) {
     throw new Error("Authentication required.");
   }
-  assertPermission(session, "manage_workspace");
   const { prisma } = await import("@/lib/prisma");
   return { session, prisma };
+}
+
+// As above, plus the manage_workspace assertion — shared by the post-auth admin fast paths.
+async function requireManageWorkspaceSessionFast(): Promise<AuthSessionFastContext | undefined> {
+  const ctx = await requireSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  assertPermission(ctx.session, "manage_workspace");
+  return ctx;
 }
 
 type AuthAuditInput = {

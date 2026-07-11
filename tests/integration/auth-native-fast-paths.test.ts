@@ -247,6 +247,83 @@ describe.skipIf(!enabled)("native auth admin fast paths", () => {
     }
   });
 
+  it("updateOwnProfilePrismaFast: updates the caller's own profile natively + via merge", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { readState } = await import("@/lib/phase1/store");
+    const { updateOwnProfilePrismaFast } = await import("@/lib/phase1/auth-fast-path");
+    const { admin } = await seedAndAuthenticate();
+
+    const before = await readSnapshotMeta();
+    const result = await updateOwnProfilePrismaFast({
+      name: "Nora Renamed",
+      emailSignature: "— Nora",
+      timezone: "America/New_York"
+    });
+    expect(result).toBe(true);
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: admin.userId } });
+    expect(user.name).toBe("Nora Renamed");
+    expect(user.emailSignature).toBe("— Nora");
+    expect(user.timezone).toBe("America/New_York");
+
+    const state = await readState();
+    const blobUser = state.users.find((u) => u.id === admin.userId);
+    expect(blobUser?.name).toBe("Nora Renamed");
+    expect(blobUser?.emailSignature).toBe("— Nora");
+
+    const after = await readSnapshotMeta();
+    expect(after.writeSeq).toBe(before.writeSeq);
+  });
+
+  it("updateOwnProfilePrismaFast: rejects an empty name and an invalid timezone", async () => {
+    const { updateOwnProfilePrismaFast } = await import("@/lib/phase1/auth-fast-path");
+    await seedAndAuthenticate();
+    await expect(updateOwnProfilePrismaFast({ name: "   " })).rejects.toThrow(/Name cannot be empty/);
+    await expect(updateOwnProfilePrismaFast({ timezone: "Not/AZone" })).rejects.toThrow(/not recognized/);
+  });
+
+  it("changeOwnPasswordPrismaFast: rehashes, revokes other sessions, keeps the current one", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { changeOwnPasswordPrismaFast, loginWithPasswordPrismaFast } = await import("@/lib/phase1/auth-fast-path");
+    const { admin } = await seedAndAuthenticate();
+
+    // A second live session for the caller that must be revoked.
+    const other = await prisma.authSession.create({
+      data: {
+        id: "auth-session-other-nora",
+        userId: admin.userId,
+        workspaceId: admin.workspaceId,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        createdAt: new Date(),
+        lastSeenAt: new Date()
+      }
+    });
+
+    const done = await changeOwnPasswordPrismaFast({ currentPassword: "Syncore!2026", newPassword: "MyNewPassw0rd!" });
+    expect(done).toBe(true);
+
+    // Other session revoked, current (actor) session kept.
+    expect((await prisma.authSession.findUniqueOrThrow({ where: { id: other.id } })).revokedAt).not.toBeNull();
+    expect(
+      (await prisma.authSession.findUniqueOrThrow({ where: { id: `auth-session-actor-${admin.userId}` } })).revokedAt
+    ).toBeNull();
+
+    // New password works, old one rejected.
+    await expect(
+      loginWithPasswordPrismaFast({ email: "nora@syncore.tech", password: "Syncore!2026" })
+    ).rejects.toThrow();
+    const relogin = await loginWithPasswordPrismaFast({ email: "nora@syncore.tech", password: "MyNewPassw0rd!" });
+    expect(relogin?.session.user.id).toBe(admin.userId);
+  });
+
+  it("changeOwnPasswordPrismaFast: rejects a wrong current password", async () => {
+    const { changeOwnPasswordPrismaFast } = await import("@/lib/phase1/auth-fast-path");
+    await seedAndAuthenticate();
+    await expect(
+      changeOwnPasswordPrismaFast({ currentPassword: "WrongPass!", newPassword: "MyNewPassw0rd!" })
+    ).rejects.toThrow(/current password is incorrect/);
+  });
+
   it("native password reset: issues a token, resets the password, revokes the target's sessions", async () => {
     const { prisma } = await import("@/lib/prisma");
     const { resetStore } = await import("@/lib/phase1/store");
