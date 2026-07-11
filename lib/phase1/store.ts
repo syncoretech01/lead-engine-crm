@@ -39,12 +39,13 @@ import { ensureSdrDefaults } from "@/lib/phase1/sdr";
 import { ensureWaterfallDefaults, pruneWaterfallTemplateProviders } from "@/lib/phase1/waterfall-templates";
 import { timeAsync, timeSync } from "@/lib/phase1/performance";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import type { AppState, AuditLog, AuthAccountStatus, Permission, Session, UserInviteStatus, WorkspaceRole } from "@/lib/phase1/types";
+import type { AppState, AuditLog, AuthAccountStatus, Permission, Session, UserInviteStatus } from "@/lib/phase1/types";
 import {
   defaultWorkspacePath,
   hasPermission,
   resolveSession,
   rolePermissions,
+  workspaceRoleFromPrisma,
   type SessionSelection
 } from "@/lib/phase1/auth";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
@@ -286,7 +287,11 @@ async function getRequestStateSession() {
   return timeAsync("state.requestContext", () => getCachedRequestStateSession());
 }
 
-async function getPrismaSession(client?: PrismaStoreClient): Promise<Session | undefined> {
+// Exported so the native auth fast paths (auth-fast-path.ts) can resolve the
+// current session without a full blob read. Returns undefined in file-driver
+// mode or when there is no auth cookie; throws when the cookie is present but
+// the session/membership/account is invalid.
+export async function getPrismaSession(client?: PrismaStoreClient): Promise<Session | undefined> {
   if (resolveStorageDriver() !== "prisma") {
     return undefined;
   }
@@ -364,19 +369,6 @@ async function readSignedAuthPayload() {
   } catch {
     return undefined;
   }
-}
-
-function workspaceRoleFromPrisma(role: string): WorkspaceRole {
-  const roles: Record<string, WorkspaceRole> = {
-    ADMIN: "Admin",
-    MANAGER: "Manager",
-    SDR: "SDR",
-    DATA_OPERATOR: "Data Operator",
-    VIEWER: "Viewer",
-    COMPLIANCE_ADMIN: "Compliance Admin"
-  };
-
-  return roles[role] ?? "Viewer";
 }
 
 function authAccountStatusFromPrisma(status: string): AuthAccountStatus {
@@ -619,15 +611,35 @@ async function mergePrismaIdentityRows(client: PrismaStoreClient, state: AppStat
 
   for (const user of users) {
     const existing = state.users.find((item) => item.id === user.id);
+    // Hydrate the full native user, including telephony/signature/timezone — the
+    // /access page reads those off state.users, and the native auth fast paths
+    // (updateUserTelephonyPrismaFast) write them straight to Prisma, so the merge
+    // is now the only thing that surfaces them back into the blob.
     const next = {
       id: user.id,
       email: user.email,
       name: user.name,
+      ringCentralPhoneNumber: user.ringCentralPhoneNumber ?? undefined,
+      ringCentralExtensionId: user.ringCentralExtensionId ?? undefined,
+      ringCentralCallerId: user.ringCentralCallerId ?? undefined,
+      ringCentralJwt: user.ringCentralJwt ?? undefined,
+      emailSignature: user.emailSignature ?? undefined,
+      timezone: user.timezone ?? undefined,
       createdAt: user.createdAt.toISOString()
     };
 
     if (existing) {
-      if (existing.email !== next.email || existing.name !== next.name || existing.createdAt !== next.createdAt) {
+      if (
+        existing.email !== next.email ||
+        existing.name !== next.name ||
+        existing.ringCentralPhoneNumber !== next.ringCentralPhoneNumber ||
+        existing.ringCentralExtensionId !== next.ringCentralExtensionId ||
+        existing.ringCentralCallerId !== next.ringCentralCallerId ||
+        existing.ringCentralJwt !== next.ringCentralJwt ||
+        existing.emailSignature !== next.emailSignature ||
+        existing.timezone !== next.timezone ||
+        existing.createdAt !== next.createdAt
+      ) {
         Object.assign(existing, next);
         changed = true;
       }

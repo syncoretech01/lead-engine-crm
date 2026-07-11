@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { workspaceRoleToPrisma } from "@/lib/phase1/auth";
 import { ownerUserIdForName } from "@/lib/phase1/crm";
 import { startPerformanceTimer, timeAsync, timeSync } from "@/lib/phase1/performance";
 import type {
@@ -1671,15 +1672,7 @@ function projectionTablesLabel(tables: ProjectionTableName[] | undefined) {
 }
 
 function workspaceRoleValue(role: WorkspaceRole) {
-  const map: Record<WorkspaceRole, string> = {
-    Admin: "ADMIN",
-    Manager: "MANAGER",
-    SDR: "SDR",
-    "Data Operator": "DATA_OPERATOR",
-    Viewer: "VIEWER",
-    "Compliance Admin": "COMPLIANCE_ADMIN"
-  };
-  return map[role];
+  return workspaceRoleToPrisma(role);
 }
 
 function jobStatusValue(status: JobStatus) {

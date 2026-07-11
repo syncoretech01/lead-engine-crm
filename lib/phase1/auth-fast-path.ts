@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma, PrismaClient } from "@prisma/client";
-import { rolePermissions } from "@/lib/phase1/auth";
+import type { $Enums, Prisma, PrismaClient } from "@prisma/client";
+import {
+  assertPermission,
+  rolePermissions,
+  workspaceRoleFromPrisma,
+  workspaceRoleToPrisma
+} from "@/lib/phase1/auth";
 import {
   createSignedAuthSessionCookie,
   defaultAuthSessionMaxAgeSeconds,
@@ -11,7 +16,8 @@ import {
   verifySignedAuthSessionCookie
 } from "@/lib/phase1/auth-security";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import type { AuthLoginResult, AuthTokenResult } from "@/lib/phase1/auth-service";
+import { MIN_PASSWORD_LENGTH, type AuthLoginResult, type AuthTokenResult } from "@/lib/phase1/auth-service";
+import { encryptSecretString } from "@/lib/phase1/secret-box";
 import type { Session, WorkspaceRole } from "@/lib/phase1/types";
 
 type LoginInput = {
@@ -433,6 +439,249 @@ export async function resetPasswordWithTokenPrismaFast(input: PasswordResetInput
   });
 }
 
+// --- Post-auth admin fast paths (blob-migration Phase 1) --------------------
+// These mirror the blob helpers in auth-service.ts (updateMemberRole,
+// adminResetUserPassword, updateUserTelephony) but write the identity rows
+// directly to Prisma so they no longer round-trip through the AppState blob +
+// projection. Each returns `undefined` ONLY in file-driver mode, so the server
+// action falls back to the blob path; in prisma mode it always resolves or
+// throws (matching the blob helper's error messages verbatim so the callers'
+// try/catch redirects are unchanged).
+
+export async function updateMemberRolePrismaFast(input: {
+  userId: string;
+  role: WorkspaceRole;
+}): Promise<boolean | undefined> {
+  const ctx = await requireManageWorkspaceSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  const { session, prisma } = ctx;
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    const member = await tx.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId: session.workspace.id, userId: input.userId }
+      }
+    });
+    if (!member) {
+      throw new Error("Workspace member not found.");
+    }
+    const oldRole = workspaceRoleFromPrisma(member.role);
+    await tx.workspaceMember.update({
+      where: { id: member.id },
+      data: { role: workspaceRoleToPrisma(input.role) as $Enums.WorkspaceRole }
+    });
+    await writeAuthAuditLog(
+      tx,
+      {
+        workspaceId: session.workspace.id,
+        actorUserId: session.user.id,
+        objectType: "workspace_member",
+        objectId: member.id,
+        action: "role_updated",
+        oldValue: { role: oldRole },
+        newValue: { role: input.role }
+      },
+      now
+    );
+  });
+
+  return true;
+}
+
+export async function adminResetPasswordPrismaFast(input: {
+  userId: string;
+  newPassword: string;
+}): Promise<{ name: string } | undefined> {
+  const ctx = await requireManageWorkspaceSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  const { session, prisma } = ctx;
+  if (input.userId === session.user.id) {
+    throw new Error("Use your own Settings page to change your password.");
+  }
+  if (input.newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+  const now = new Date();
+
+  return prisma.$transaction(async (tx) => {
+    const member = await tx.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId: session.workspace.id, userId: input.userId }
+      },
+      include: { user: true }
+    });
+    if (!member) {
+      throw new Error("That user is not a member of this workspace.");
+    }
+    const account = await tx.authAccount.findUnique({ where: { userId: input.userId } });
+    if (!account) {
+      throw new Error("That user's account could not be found.");
+    }
+
+    await tx.authAccount.update({
+      where: { id: account.id },
+      data: {
+        passwordHash: hashPassword(input.newPassword),
+        passwordUpdatedAt: now,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        updatedAt: now
+      }
+    });
+    // Force the target to re-authenticate everywhere with the new password.
+    await tx.authSession.updateMany({
+      where: { userId: input.userId, revokedAt: null },
+      data: { revokedAt: now, lastSeenAt: now }
+    });
+    await writeAuthAuditLog(
+      tx,
+      {
+        workspaceId: session.workspace.id,
+        actorUserId: session.user.id,
+        objectType: "auth_account",
+        objectId: account.id,
+        action: "password_reset_by_admin",
+        newValue: { targetUserId: input.userId }
+      },
+      now
+    );
+
+    return { name: member.user.name };
+  });
+}
+
+export async function updateUserTelephonyPrismaFast(input: {
+  userId: string;
+  phoneNumber: string;
+  callerId: string;
+  jwt: string;
+  clientId?: string;
+  clientSecret?: string;
+}): Promise<boolean | undefined> {
+  const ctx = await requireManageWorkspaceSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  const { session, prisma } = ctx;
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    const member = await tx.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId: session.workspace.id, userId: input.userId }
+      },
+      include: { user: true }
+    });
+    if (!member) {
+      throw new Error("Workspace member not found.");
+    }
+    const user = member.user;
+    // Audit records only whether a JWT is present, never the secret itself.
+    const oldValue = {
+      ringCentralPhoneNumber: user.ringCentralPhoneNumber ?? undefined,
+      ringCentralCallerId: user.ringCentralCallerId ?? undefined,
+      hasJwt: Boolean(user.ringCentralJwt)
+    };
+    const nextPhone = input.phoneNumber.trim() || null;
+    const nextCallerId = input.callerId.trim() || null;
+    const jwt = input.jwt.trim();
+    const data: Prisma.UserUncheckedUpdateInput = {
+      ringCentralPhoneNumber: nextPhone,
+      ringCentralCallerId: nextCallerId
+    };
+    if (jwt) {
+      // A pasted JWT replaces the stored one (encrypted at rest). Blank keeps the
+      // existing JWT so an admin can edit the number without re-pasting the key.
+      const clientId = input.clientId?.trim() ?? "";
+      const clientSecret = input.clientSecret?.trim() ?? "";
+      const payload = clientId || clientSecret ? JSON.stringify({ jwt, clientId, clientSecret }) : jwt;
+      data.ringCentralJwt = encryptSecretString(payload);
+    }
+    await tx.user.update({ where: { id: user.id }, data });
+    await writeAuthAuditLog(
+      tx,
+      {
+        workspaceId: session.workspace.id,
+        actorUserId: session.user.id,
+        objectType: "user",
+        objectId: user.id,
+        action: "telephony_updated",
+        oldValue,
+        newValue: {
+          ringCentralPhoneNumber: nextPhone ?? undefined,
+          ringCentralCallerId: nextCallerId ?? undefined,
+          hasJwt: jwt ? true : oldValue.hasJwt
+        }
+      },
+      now
+    );
+  });
+
+  return true;
+}
+
+type ManageWorkspaceFastContext = {
+  session: Session;
+  prisma: PrismaClient;
+};
+
+// Resolve the current prisma-native session and assert manage_workspace, shared by
+// the post-auth admin fast paths. Returns undefined ONLY in file-driver mode (so the
+// caller falls back to the blob path); in prisma mode it resolves or throws.
+async function requireManageWorkspaceSessionFast(): Promise<ManageWorkspaceFastContext | undefined> {
+  if (resolveStorageDriver() !== "prisma") {
+    return undefined;
+  }
+  const { getPrismaSession } = await import("@/lib/phase1/store");
+  const session = await getPrismaSession();
+  if (!session) {
+    throw new Error("Authentication required.");
+  }
+  assertPermission(session, "manage_workspace");
+  const { prisma } = await import("@/lib/prisma");
+  return { session, prisma };
+}
+
+type AuthAuditInput = {
+  workspaceId: string;
+  actorUserId: string;
+  objectType: string;
+  objectId: string;
+  action: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  reason?: string;
+};
+
+// Native audit row matching the blob appendAuthAudit shape. auditLogs is still
+// blob-projected today, so on a full reproject these native-only rows are pruned —
+// the same latent gap the existing login/accept fast paths already have; resolved
+// when the audit stream is peeled to native-only (blob-migration Phase 2).
+async function writeAuthAuditLog(client: PrismaAuthClient, input: AuthAuditInput, now: Date) {
+  const data: Prisma.AuditLogUncheckedCreateInput = {
+    id: `audit-${randomUUID()}`,
+    workspaceId: input.workspaceId,
+    actorUserId: input.actorUserId,
+    objectType: input.objectType,
+    objectId: input.objectId,
+    action: input.action,
+    reason: input.reason,
+    createdAt: now
+  };
+  if (input.oldValue !== undefined) {
+    data.oldValue = input.oldValue as Prisma.InputJsonValue;
+  }
+  if (input.newValue !== undefined) {
+    data.newValue = input.newValue as Prisma.InputJsonValue;
+  }
+  await client.auditLog.create({ data });
+}
+
 async function registerFailedLogin(accountId: string, currentFailedCount: number, now: Date) {
   const failedLoginCount = currentFailedCount + 1;
   const lockedUntil = failedLoginCount >= 5 ? new Date(now.getTime() + 10 * 60 * 1000) : null;
@@ -555,19 +804,6 @@ function sessionFromRows(
     authSessionId,
     superadmin: account.superadmin
   };
-}
-
-function workspaceRoleFromPrisma(role: string): WorkspaceRole {
-  const roles: Record<string, WorkspaceRole> = {
-    ADMIN: "Admin",
-    MANAGER: "Manager",
-    SDR: "SDR",
-    DATA_OPERATOR: "Data Operator",
-    VIEWER: "Viewer",
-    COMPLIANCE_ADMIN: "Compliance Admin"
-  };
-
-  return roles[role] ?? "Viewer";
 }
 
 function normalizeEmail(email: string) {

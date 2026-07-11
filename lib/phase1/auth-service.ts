@@ -387,7 +387,7 @@ export function resetPasswordWithToken(
 // target from `session.user.id`, so a caller can only ever mutate their own row.
 
 const MAX_SIGNATURE_LENGTH = 2000;
-const MIN_PASSWORD_LENGTH = 10;
+export const MIN_PASSWORD_LENGTH = 10;
 
 function isValidTimezone(tz: string): boolean {
   if (!tz) return false;
