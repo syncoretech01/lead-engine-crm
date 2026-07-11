@@ -2,54 +2,26 @@ import { describe, expect, it } from "vitest";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 
 describe("storage driver resolution", () => {
-  it("defaults to file storage when no driver is configured", () => {
-    expect(resolveStorageDriver({})).toBe("file");
+  it("defaults to prisma when no driver is configured", () => {
+    expect(resolveStorageDriver({})).toBe("prisma");
   });
 
-  it("allows explicit file storage without a database URL", () => {
-    expect(resolveStorageDriver({ SYNCORE_STORAGE_DRIVER: "file" })).toBe("file");
+  it("returns prisma when explicitly configured", () => {
+    expect(resolveStorageDriver({ SYNCORE_STORAGE_DRIVER: "prisma" })).toBe("prisma");
   });
 
-  it("blocks implicit or explicit file storage in production unless explicitly allowed", () => {
-    expect(() => resolveStorageDriver({ NODE_ENV: "production" })).toThrow(/prisma is required/);
-    expect(() =>
-      resolveStorageDriver({ NODE_ENV: "production", SYNCORE_STORAGE_DRIVER: "file" })
-    ).toThrow(/File storage is disabled/);
-    expect(
-      resolveStorageDriver({
-        NODE_ENV: "production",
-        SYNCORE_STORAGE_DRIVER: "file",
-        SYNCORE_ALLOW_FILE_STORAGE_IN_PRODUCTION: "true"
-      })
-    ).toBe("file");
+  it("throws for the removed file driver", () => {
+    expect(() => resolveStorageDriver({ SYNCORE_STORAGE_DRIVER: "file" })).toThrow(
+      /file storage driver has been removed/i
+    );
   });
 
-  it("allows local file storage during the production build phase", () => {
-    expect(
-      resolveStorageDriver({
-        NODE_ENV: "production",
-        NEXT_PHASE: "phase-production-build"
-      })
-    ).toBe("file");
-    expect(
-      resolveStorageDriver({
-        NODE_ENV: "production",
-        npm_lifecycle_event: "build",
-        SYNCORE_STORAGE_DRIVER: "file"
-      })
-    ).toBe("file");
+  it("throws for an unknown driver", () => {
+    expect(() => resolveStorageDriver({ SYNCORE_STORAGE_DRIVER: "sqlite" })).toThrow(/must be "prisma"/);
   });
 
-  it("requires DATABASE_URL for prisma storage", () => {
-    expect(() => resolveStorageDriver({ SYNCORE_STORAGE_DRIVER: "prisma" })).toThrow(/DATABASE_URL/);
-  });
-
-  it("uses prisma storage when explicitly configured with a database URL", () => {
-    expect(
-      resolveStorageDriver({
-        SYNCORE_STORAGE_DRIVER: "prisma",
-        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/lead_engine_crm"
-      })
-    ).toBe("prisma");
+  it("is case-insensitive and trims whitespace", () => {
+    expect(resolveStorageDriver({ SYNCORE_STORAGE_DRIVER: "  PRISMA  " })).toBe("prisma");
+    expect(() => resolveStorageDriver({ SYNCORE_STORAGE_DRIVER: "FILE" })).toThrow(/removed/i);
   });
 });
