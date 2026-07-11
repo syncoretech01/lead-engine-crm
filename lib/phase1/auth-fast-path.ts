@@ -625,6 +625,97 @@ export async function updateUserTelephonyPrismaFast(input: {
   return true;
 }
 
+export async function createUserInvitePrismaFast(input: {
+  email: string;
+  role: WorkspaceRole;
+}): Promise<{ url: string; workspaceId: string; workspaceName: string } | undefined> {
+  const ctx = await requireManageWorkspaceSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  const { session, prisma } = ctx;
+  const now = new Date();
+  const token = randomToken();
+  const inviteId = `invite-${randomUUID()}`;
+  const email = normalizeEmail(input.email);
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.userInvite.create({
+      data: {
+        id: inviteId,
+        workspaceId: session.workspace.id,
+        email,
+        role: workspaceRoleToPrisma(input.role) as $Enums.WorkspaceRole,
+        tokenHash: hashToken(token),
+        invitedById: session.user.id,
+        status: "Pending",
+        expiresAt,
+        createdAt: now
+      }
+    });
+    await writeAuthAuditLog(
+      tx,
+      {
+        workspaceId: session.workspace.id,
+        actorUserId: session.user.id,
+        objectType: "user_invite",
+        objectId: inviteId,
+        action: "created",
+        newValue: { email, role: input.role, expiresAt: expiresAt.toISOString() }
+      },
+      now
+    );
+  });
+
+  return {
+    url: `/invite/${token}`,
+    workspaceId: session.workspace.id,
+    workspaceName: session.workspace.name
+  };
+}
+
+export async function deactivateUserPrismaFast(input: { userId: string }): Promise<boolean | undefined> {
+  const ctx = await requireManageWorkspaceSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  const { session, prisma } = ctx;
+  if (input.userId === session.user.id) {
+    throw new Error("You cannot deactivate your own account.");
+  }
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    // Matches the blob helper: look the account up by userId (no workspace scope).
+    const account = await tx.authAccount.findUnique({ where: { userId: input.userId } });
+    if (!account) {
+      throw new Error("Auth account not found.");
+    }
+    await tx.authAccount.update({
+      where: { id: account.id },
+      data: { status: "Disabled", updatedAt: now }
+    });
+    await tx.authSession.updateMany({
+      where: { userId: input.userId, revokedAt: null },
+      data: { revokedAt: now, lastSeenAt: now }
+    });
+    await writeAuthAuditLog(
+      tx,
+      {
+        workspaceId: session.workspace.id,
+        actorUserId: session.user.id,
+        objectType: "auth_account",
+        objectId: account.id,
+        action: "disabled"
+      },
+      now
+    );
+  });
+
+  return true;
+}
+
 type ManageWorkspaceFastContext = {
   session: Session;
   prisma: PrismaClient;

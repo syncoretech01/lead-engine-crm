@@ -9,6 +9,8 @@ import {
   acceptInvitePrismaFast,
   adminResetPasswordPrismaFast,
   createPasswordResetTokenPrismaFast,
+  createUserInvitePrismaFast,
+  deactivateUserPrismaFast,
   loginWithPasswordPrismaFast,
   resetPasswordWithTokenPrismaFast,
   revokeAuthSessionPrismaFast,
@@ -104,18 +106,23 @@ export async function switchWorkspaceAction(formData: FormData) {
 
 export async function createUserInviteAction(formData: FormData) {
   const email = stringValue(formData.get("email"));
+  const role = roleValue(formData.get("role"));
   let inviteUrl = "";
   let workspaceId = "";
   let workspaceName = "";
-  await updateState((state, session) => {
-    const invite = createUserInvite(state, session, {
-      email,
-      role: roleValue(formData.get("role"))
-    });
-    inviteUrl = invite.url;
-    workspaceId = session.workspace.id;
-    workspaceName = session.workspace.name;
-  }, { normalizedTables: authWriteTables });
+  const fast = await createUserInvitePrismaFast({ email, role });
+  if (fast) {
+    inviteUrl = fast.url;
+    workspaceId = fast.workspaceId;
+    workspaceName = fast.workspaceName;
+  } else {
+    await updateState((state, session) => {
+      const invite = createUserInvite(state, session, { email, role });
+      inviteUrl = invite.url;
+      workspaceId = session.workspace.id;
+      workspaceName = session.workspace.name;
+    }, { normalizedTables: authWriteTables });
+  }
 
   // Out-of-band: email the invite link via SES when configured live; otherwise
   // a no-op and the link is still shown on /access. A send failure never blocks
@@ -237,9 +244,13 @@ export async function updateMemberRoleAction(formData: FormData) {
 }
 
 export async function deactivateUserAction(formData: FormData) {
-  await updateState((state, session) => {
-    deactivateUserAccount(state, session, stringValue(formData.get("userId")));
-  }, { normalizedTables: authWriteTables });
+  const userId = stringValue(formData.get("userId"));
+  const done = await deactivateUserPrismaFast({ userId });
+  if (!done) {
+    await updateState((state, session) => {
+      deactivateUserAccount(state, session, userId);
+    }, { normalizedTables: authWriteTables });
+  }
 
   revalidatePath("/access");
 }
