@@ -202,6 +202,51 @@ describe.skipIf(!enabled)("native auth admin fast paths", () => {
     await expect(deactivateUserPrismaFast({ userId: admin.userId })).rejects.toThrow(/your own account/);
   });
 
+  it("switchWorkspacePrismaFast: re-points the caller's session to another of their workspaces", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { switchWorkspacePrismaFast } = await import("@/lib/phase1/auth-fast-path");
+    const { admin } = await seedAndAuthenticate();
+
+    // A second workspace the actor also belongs to (upsert = idempotent across reruns;
+    // deleted in finally so it can't leak — diff-mode resetStore won't prune it).
+    const secondWsId = "workspace-second";
+    try {
+      await prisma.workspace.upsert({
+        where: { id: secondWsId },
+        update: {},
+        create: { id: secondWsId, name: "Second WS" }
+      });
+      await prisma.workspaceMember.upsert({
+        where: { workspaceId_userId: { workspaceId: secondWsId, userId: admin.userId } },
+        update: { role: "ADMIN" },
+        create: { id: `member-second-${admin.userId}`, workspaceId: secondWsId, userId: admin.userId, role: "ADMIN" }
+      });
+
+      const before = await readSnapshotMeta();
+      const result = await switchWorkspacePrismaFast({ workspaceId: secondWsId });
+      expect(result?.session.workspace.id).toBe(secondWsId);
+      expect(result?.cookieValue).toBeTruthy();
+
+      // The SAME session row is now pointed at the second workspace (no new session).
+      const actorSession = await prisma.authSession.findUniqueOrThrow({
+        where: { id: `auth-session-actor-${admin.userId}` }
+      });
+      expect(actorSession.workspaceId).toBe(secondWsId);
+
+      const after = await readSnapshotMeta();
+      expect(after.writeSeq).toBe(before.writeSeq);
+
+      // Present the freshly-issued cookie (as the action would after setting it) so the
+      // next resolve matches the re-pointed session row, then confirm you cannot switch
+      // to a workspace you don't belong to.
+      authCookie.value = result?.cookieValue;
+      await expect(switchWorkspacePrismaFast({ workspaceId: "workspace-nonexistent" })).rejects.toThrow(/not a member/);
+    } finally {
+      // Cascade removes member-second + the re-pointed actor session.
+      await prisma.workspace.delete({ where: { id: secondWsId } }).catch(() => {});
+    }
+  });
+
   it("returns undefined in file-driver mode so the caller falls back to the blob path", async () => {
     const previous = process.env.SYNCORE_STORAGE_DRIVER;
     process.env.SYNCORE_STORAGE_DRIVER = "file";
@@ -224,9 +269,15 @@ async function seedAndAuthenticate() {
   await resetStore();
   await readState(); // settle migrateState so the snapshot is in steady state
 
-  const admin = await prisma.workspaceMember.findFirstOrThrow({ where: { role: "ADMIN" } });
+  // Scope to the seed workspace explicitly — in diff mode resetStore does not prune
+  // native-only rows a test created directly, so a stray workspace/membership must
+  // never change which Admin/SDR these lookups resolve.
+  const seedWorkspaceId = "workspace-syncore";
+  const admin = await prisma.workspaceMember.findFirstOrThrow({
+    where: { role: "ADMIN", workspaceId: seedWorkspaceId }
+  });
   const target = await prisma.workspaceMember.findFirstOrThrow({
-    where: { role: "SDR", workspaceId: admin.workspaceId },
+    where: { role: "SDR", workspaceId: seedWorkspaceId },
     include: { user: true }
   });
 
@@ -234,7 +285,9 @@ async function seedAndAuthenticate() {
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
   await prisma.authSession.upsert({
     where: { id: sessionId },
-    update: { revokedAt: null, expiresAt, lastSeenAt: new Date() },
+    // Reset workspaceId too — a prior test may have re-pointed this session; the
+    // cookie below is signed for admin.workspaceId and getPrismaSession requires them to match.
+    update: { workspaceId: admin.workspaceId, revokedAt: null, expiresAt, lastSeenAt: new Date() },
     create: {
       id: sessionId,
       userId: admin.userId,
