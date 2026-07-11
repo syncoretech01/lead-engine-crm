@@ -19,7 +19,6 @@ export type ProjectionTableName =
   | "authAccounts"
   | "authSessions"
   | "userInvites"
-  | "passwordResetTokens"
   | "providerConnections"
   | "providerCredentialAudits"
   | "providerEncryptedSecrets"
@@ -118,7 +117,6 @@ const projectionTables: ProjectionTableName[] = [
   "authAccounts",
   "authSessions",
   "userInvites",
-  "passwordResetTokens",
   "providerConnections",
   "providerCredentialAudits",
   "providerEncryptedSecrets",
@@ -192,7 +190,6 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "authAccounts", delegate: "authAccount", workspaceScoped: false },
   { table: "authSessions", delegate: "authSession", workspaceScoped: true },
   { table: "userInvites", delegate: "userInvite", workspaceScoped: true },
-  { table: "passwordResetTokens", delegate: "passwordResetToken", workspaceScoped: false },
   { table: "providerConnections", delegate: "providerConnection", workspaceScoped: true },
   { table: "providerCredentialAudits", delegate: "providerCredentialAudit", workspaceScoped: true },
   { table: "providerEncryptedSecrets", delegate: "providerEncryptedSecret", workspaceScoped: true },
@@ -343,16 +340,6 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
         expiresAt: invite.expiresAt,
         acceptedAt: invite.acceptedAt,
         createdAt: invite.createdAt
-      }))),
-    passwordResetTokens: sortRows(state.passwordResetTokens
-      .filter((token) => state.users.some((user) => user.id === token.userId))
-      .map((token) => ({
-        id: token.id,
-        userId: token.userId,
-        tokenHash: token.tokenHash,
-        expiresAt: token.expiresAt,
-        usedAt: token.usedAt,
-        createdAt: token.createdAt
       }))),
     providerConnections: sortRows(state.providerConnections.map((connection) => ({
       id: connection.id,

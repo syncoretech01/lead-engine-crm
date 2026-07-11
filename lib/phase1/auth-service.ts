@@ -14,7 +14,6 @@ import type {
   AppState,
   AuthAccount,
   AuthSessionRecord,
-  PasswordResetToken,
   Session,
   User,
   UserInvite,
@@ -55,7 +54,6 @@ export function ensureAuthDefaults(state: AppState, now = new Date().toISOString
   if (!Array.isArray(state.authAccounts)) state.authAccounts = [];
   if (!Array.isArray(state.authSessions)) state.authSessions = [];
   if (!Array.isArray(state.userInvites)) state.userInvites = [];
-  if (!Array.isArray(state.passwordResetTokens)) state.passwordResetTokens = [];
 
   for (const user of state.users) {
     if (state.authAccounts.some((account) => account.userId === user.id)) continue;
@@ -314,71 +312,6 @@ export function acceptUserInvite(
     password: input.password,
     workspaceId: invite.workspaceId,
     now
-  });
-}
-
-export function createPasswordResetToken(
-  state: AppState,
-  email: string,
-  now = new Date().toISOString()
-): AuthTokenResult | undefined {
-  ensureAuthDefaults(state);
-  const account = authAccountByEmail(state, email);
-  if (!account || account.status !== "Active") {
-    return undefined;
-  }
-
-  const token = randomToken();
-  const reset: PasswordResetToken = {
-    id: `reset-${randomUUID()}`,
-    userId: account.userId,
-    tokenHash: hashToken(token),
-    expiresAt: new Date(Date.parse(now) + 60 * 60 * 1000).toISOString(),
-    createdAt: now
-  };
-  state.passwordResetTokens.unshift(reset);
-  appendAuthAudit(state, {
-    workspaceId: firstWorkspaceIdForUser(state, account.userId),
-    actorUserId: account.userId,
-    objectType: "password_reset_token",
-    objectId: reset.id,
-    action: "created",
-    reason: "Password reset requested"
-  });
-  return { token, url: `/reset-password/${token}` };
-}
-
-export function resetPasswordWithToken(
-  state: AppState,
-  input: { token: string; password: string; now?: string }
-) {
-  ensureAuthDefaults(state);
-  const now = input.now ?? new Date().toISOString();
-  const reset = state.passwordResetTokens.find((record) => record.tokenHash === hashToken(input.token));
-  if (!reset || reset.usedAt || Date.parse(reset.expiresAt) <= Date.parse(now)) {
-    throw new Error("Reset link is invalid or expired.");
-  }
-  const account = state.authAccounts.find((record) => record.userId === reset.userId);
-  if (!account || account.status !== "Active") {
-    throw new Error("Reset link is invalid or expired.");
-  }
-
-  account.passwordHash = hashPassword(input.password);
-  account.passwordUpdatedAt = now;
-  account.failedLoginCount = 0;
-  account.lockedUntil = undefined;
-  account.updatedAt = now;
-  reset.usedAt = now;
-  for (const session of state.authSessions.filter((record) => record.userId === account.userId && !record.revokedAt)) {
-    session.revokedAt = now;
-    session.lastSeenAt = now;
-  }
-  appendAuthAudit(state, {
-    workspaceId: firstWorkspaceIdForUser(state, account.userId),
-    actorUserId: account.userId,
-    objectType: "auth_account",
-    objectId: account.id,
-    action: "password_reset"
   });
 }
 

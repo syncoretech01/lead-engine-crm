@@ -30,7 +30,6 @@ describe("normalized persistence projection", () => {
     expect(summary.tables.authAccounts).toBe(state.authAccounts.length);
     expect(summary.tables.authSessions).toBe(state.authSessions.length);
     expect(summary.tables.userInvites).toBe(state.userInvites.length);
-    expect(summary.tables.passwordResetTokens).toBe(state.passwordResetTokens.length);
     expect(summary.tables.providerConnections).toBe(state.providerConnections.length);
     expect(summary.tables.providerCredentialAudits).toBe(state.providerCredentialAudits.length);
     expect(summary.tables.providerEncryptedSecrets).toBe(state.providerEncryptedSecrets.length);
