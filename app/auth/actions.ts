@@ -21,12 +21,10 @@ import {
 import {
   acceptUserInvite,
   adminResetUserPassword,
-  createPasswordResetToken,
   createUserInvite,
   deactivateUserAccount,
   loginWithPassword,
   removeWorkspaceMember,
-  resetPasswordWithToken,
   revokeAuthSession,
   switchAuthWorkspace,
   updateMemberRole,
@@ -177,15 +175,8 @@ export async function requestPasswordResetAction(formData: FormData) {
     redirect(`/reset-password?error=${encodeURIComponent(rateLimitMessage(rate))}`);
   }
 
-  let resetUrl = "";
   const fastReset = await createPasswordResetTokenPrismaFast({ email });
-  if (fastReset === undefined) {
-    await updateAuthState((state) => {
-      resetUrl = createPasswordResetToken(state, email)?.url ?? "";
-    }, { normalizedTables: authWriteTables });
-  } else {
-    resetUrl = fastReset.url;
-  }
+  const resetUrl = fastReset?.url ?? "";
 
   // Out-of-band: email the reset link via SES when configured live; otherwise a
   // no-op and the link is still shown. A send failure never blocks the flow.
@@ -215,13 +206,7 @@ export async function resetPasswordAction(formData: FormData) {
   }
 
   try {
-    const fastReset = await resetPasswordWithTokenPrismaFast({ token, password });
-    if (fastReset === undefined) {
-      await updateAuthState(
-        (state) => resetPasswordWithToken(state, { token, password }),
-        { normalizedTables: authWriteTables }
-      );
-    }
+    await resetPasswordWithTokenPrismaFast({ token, password });
   } catch (error) {
     redirect(`/reset-password/${encodeURIComponent(token)}?error=${encodeURIComponent(errorMessage(error))}`);
   }

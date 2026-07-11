@@ -218,15 +218,6 @@ export type UserInvite = {
   createdAt: string;
 };
 
-export type PasswordResetToken = {
-  id: string;
-  userId: string;
-  tokenHash: string;
-  expiresAt: string;
-  usedAt?: string;
-  createdAt: string;
-};
-
 export type SearchProfile = {
   id: string;
   workspaceId: string;
@@ -1618,7 +1609,6 @@ export type AppState = {
   authSessions: AuthSessionRecord[];
   userInvites: UserInvite[];
   userTileLayouts: UserTileLayout[];
-  passwordResetTokens: PasswordResetToken[];
   providerConnections: ProviderConnection[];
   providerCredentialAudits: ProviderCredentialAudit[];
   providerEncryptedSecrets: ProviderEncryptedSecret[];

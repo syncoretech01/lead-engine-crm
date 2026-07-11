@@ -8,11 +8,9 @@ import {
 } from "@/lib/phase1/auth-security";
 import {
   acceptUserInvite,
-  createPasswordResetToken,
   createUserInvite,
   deactivateUserAccount,
   loginWithPassword,
-  resetPasswordWithToken,
   seededAuthPassword,
   updateMemberRole
 } from "@/lib/phase1/auth-service";
@@ -75,33 +73,10 @@ describe("production auth", () => {
     expect(state.authAccounts.some((account) => account.email === "new.sdr@syncore.tech" && account.status === "Active")).toBe(true);
   });
 
-  it("resets passwords and revokes existing sessions", () => {
-    const state = createSeedState();
-    const login = loginWithPassword(state, {
-      email: "ari@syncore.tech",
-      password: seededAuthPassword,
-      now: "2026-06-16T12:00:00.000Z"
-    });
-    const reset = createPasswordResetToken(state, "ari@syncore.tech", "2026-06-16T12:01:00.000Z");
-
-    resetPasswordWithToken(state, {
-      token: reset?.token ?? "",
-      password: "ChangedPassword!2026",
-      now: "2026-06-16T12:02:00.000Z"
-    });
-
-    expect(state.authSessions.find((session) => session.id === login.session.authSessionId)?.revokedAt).toBe("2026-06-16T12:02:00.000Z");
-    expect(() =>
-      loginWithPassword(state, {
-        email: "ari@syncore.tech",
-        password: seededAuthPassword
-      })
-    ).toThrow(/Invalid email or password/);
-    expect(loginWithPassword(state, {
-      email: "ari@syncore.tech",
-      password: "ChangedPassword!2026"
-    }).session.user.id).toBe("user-ari");
-  });
+  // Password reset now runs entirely through the native Prisma fast paths
+  // (createPasswordResetTokenPrismaFast / resetPasswordWithTokenPrismaFast); the
+  // blob reset helpers were removed with the passwordResetTokens peel. Native
+  // reset-flow coverage lives in tests/integration/auth-native-fast-paths.test.ts.
 
   it("updates roles and disables accounts with session revocation", () => {
     const state = createSeedState();

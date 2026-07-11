@@ -866,11 +866,6 @@ export function migrateState(input: AppState): { state: AppState; changed: boole
     changed = true;
   }
 
-  if (!Array.isArray(state.passwordResetTokens)) {
-    state.passwordResetTokens = [];
-    changed = true;
-  }
-
   const authAccountCount = state.authAccounts.length;
   ensureAuthDefaults(state);
   if (state.authAccounts.length !== authAccountCount) {

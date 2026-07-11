@@ -9,9 +9,7 @@ import {
 } from "@/lib/phase1/auth-fast-path";
 import {
   acceptUserInvite,
-  createPasswordResetToken,
   loginWithPassword,
-  resetPasswordWithToken,
   revokeAuthSession
 } from "@/lib/phase1/auth-service";
 import { authWriteTables } from "@/lib/phase1/normalized-write-tables";
@@ -118,15 +116,8 @@ export async function submitPasswordResetRequestForm(
     return { redirectTo: `/reset-password?error=${encodeURIComponent(rateLimitMessage(rate))}` };
   }
 
-  let resetUrl = "";
   const fastReset = await createPasswordResetTokenPrismaFast({ email });
-  if (fastReset === undefined) {
-    await updateAuthState((state) => {
-      resetUrl = createPasswordResetToken(state, email)?.url ?? "";
-    }, { normalizedTables: authWriteTables });
-  } else {
-    resetUrl = fastReset.url;
-  }
+  const resetUrl = fastReset?.url ?? "";
 
   if (resetUrl) {
     try {
@@ -151,13 +142,7 @@ export async function submitPasswordResetForm(formData: FormData, headers: Heade
   }
 
   try {
-    const fastReset = await resetPasswordWithTokenPrismaFast({ token, password });
-    if (fastReset === undefined) {
-      await updateAuthState(
-        (state) => resetPasswordWithToken(state, { token, password }),
-        { normalizedTables: authWriteTables }
-      );
-    }
+    await resetPasswordWithTokenPrismaFast({ token, password });
   } catch (error) {
     return { redirectTo: `/reset-password/${encodeURIComponent(token)}?error=${encodeURIComponent(errorMessage(error))}` };
   }

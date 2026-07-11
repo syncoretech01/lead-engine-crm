@@ -10,7 +10,6 @@ export const authWriteTables = [
   "authAccounts",
   "authSessions",
   "userInvites",
-  "passwordResetTokens",
   "auditLogs"
 ] satisfies ProjectionTableName[];
 

@@ -247,6 +247,41 @@ describe.skipIf(!enabled)("native auth admin fast paths", () => {
     }
   });
 
+  it("native password reset: issues a token, resets the password, revokes the target's sessions", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { resetStore } = await import("@/lib/phase1/store");
+    const { createPasswordResetTokenPrismaFast, resetPasswordWithTokenPrismaFast, loginWithPasswordPrismaFast } =
+      await import("@/lib/phase1/auth-fast-path");
+
+    await resetStore();
+
+    // A live session the reset must revoke.
+    const login = await loginWithPasswordPrismaFast({ email: "ari@syncore.tech", password: "Syncore!2026" });
+    expect(login?.session.user.id).toBe("user-ari");
+
+    const issued = await createPasswordResetTokenPrismaFast({ email: "ari@syncore.tech" });
+    expect(issued?.token).toBeTruthy();
+
+    const done = await resetPasswordWithTokenPrismaFast({ token: issued!.token, password: "ChangedPassw0rd!" });
+    expect(done).toBe(true);
+
+    // Token consumed + prior session revoked, native-side (no blob involved).
+    const token = await prisma.passwordResetToken.findFirst({
+      where: { userId: "user-ari" },
+      orderBy: { createdAt: "desc" }
+    });
+    expect(token?.usedAt).not.toBeNull();
+    const session = await prisma.authSession.findUniqueOrThrow({ where: { id: login!.session.authSessionId! } });
+    expect(session.revokedAt).not.toBeNull();
+
+    // Old password rejected, new one works.
+    await expect(
+      loginWithPasswordPrismaFast({ email: "ari@syncore.tech", password: "Syncore!2026" })
+    ).rejects.toThrow();
+    const relogin = await loginWithPasswordPrismaFast({ email: "ari@syncore.tech", password: "ChangedPassw0rd!" });
+    expect(relogin?.session.user.id).toBe("user-ari");
+  });
+
   it("fails loudly on the removed file-driver mode (no silent blob fallback)", async () => {
     const previous = process.env.SYNCORE_STORAGE_DRIVER;
     process.env.SYNCORE_STORAGE_DRIVER = "file";

@@ -119,8 +119,7 @@ describe("normalized write table scopes", () => {
       "workspaceMembers",
       "authAccounts",
       "authSessions",
-      "userInvites",
-      "passwordResetTokens"
+      "userInvites"
     ]));
   });
 });
