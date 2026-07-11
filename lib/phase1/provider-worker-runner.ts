@@ -12,7 +12,7 @@ import {
   type ProviderWorkerExecutionResult,
   type ProviderWorkerTickResult
 } from "@/lib/phase1/provider-worker";
-import { updateAuthState } from "@/lib/phase1/store";
+import { readState, updateAuthState } from "@/lib/phase1/store";
 import { resolveProviderExecutionMode } from "@/lib/providers/live-adapters";
 import type { AppState } from "@/lib/phase1/types";
 
@@ -34,6 +34,18 @@ export type ProviderWorkerTick = {
 };
 
 const defaultWorkerId = "syncore-provider-worker";
+
+/**
+ * Whether any provider run is claimable this tick (Queued, optionally scoped to a
+ * workspace). Both the mock queue and the live-plan collection only ever act on
+ * Queued runs, so when this is false the tick has no work and can skip its blob
+ * writes (idle-skip).
+ */
+export function hasClaimableProviderRun(state: AppState, workspaceId?: string): boolean {
+  return state.providerJobRuns.some(
+    (run) => run.status === "Queued" && (!workspaceId || run.workspaceId === workspaceId)
+  );
+}
 
 /**
  * Pure (sync, state-bound) selection of live runs that are due to execute this
@@ -90,6 +102,17 @@ export async function runProviderWorkerTick(
   options: ProviderWorkerRunnerOptions = {}
 ): Promise<ProviderWorkerTick> {
   const workerId = options.workerId ?? defaultWorkerId;
+
+  // Idle-skip: with nothing queued, don't run the two blob read-modify-write
+  // transactions below. A worker ticking every few minutes otherwise rewrites the
+  // whole ~3MB snapshot on every idle pass (the Neon-egress lineage). readState does
+  // not write in steady state, so an idle tick becomes read-only.
+  if (!hasClaimableProviderRun(await readState(), options.workspaceId)) {
+    return {
+      mock: { workerId, claimed: 0, completed: 0, failed: 0, deferred: 0, retried: 0, recovered: 0, results: [] },
+      live: { executed: 0, results: [] }
+    };
+  }
 
   const mock = await updateAuthState(
     (state) => processProviderJobQueue(state, { workerId, workspaceId: options.workspaceId, now: options.now }),
