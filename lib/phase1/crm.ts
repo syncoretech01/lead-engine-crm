@@ -168,7 +168,6 @@ export function ensureCrmDefaults(state: AppState, workspaceId: string) {
         updatedAt: offsetDate(now, -(index + 3), 11)
       }))
   );
-  seedIfEmpty(state.callLogs, (call) => call.workspaceId, () => seedCallLogs(state, workspaceId, now));
   seedIfEmpty(state.customFieldValues, (value) => value.workspaceId, () =>
     seedCustomFieldValues(state, workspaceId, now)
   );
@@ -242,23 +241,6 @@ function seedTasks(state: AppState, workspaceId: string, actorUserId: string, no
     }));
 }
 
-function seedCallLogs(state: AppState, workspaceId: string, now: string): CallLog[] {
-  return state.contacts
-    .filter((contact) => contact.workspaceId === workspaceId && contact.phone && !contact.isSuppressed)
-    .slice(0, 5)
-    .map((contact, index) => ({
-      id: `call-${slug(contact.id)}`,
-      workspaceId,
-      companyId: contact.companyId,
-      contactId: contact.id,
-      phone: contact.phone,
-      outcome: index % 3 === 0 ? "Connected" : index % 3 === 1 ? "Left voicemail" : "No answer",
-      durationSeconds: index % 3 === 0 ? 420 + index * 45 : 62,
-      notes: index % 3 === 0 ? "Confirmed fit and next-step timing." : "Left a concise follow-up with source context.",
-      createdById: ownerUserIdForName(state, contact.owner),
-      createdAt: offsetDate(now, -(index + 1), 14)
-    }));
-}
 
 function seedActivities(state: AppState, workspaceId: string, actorUserId: string, now: string): Activity[] {
   const activities: Activity[] = [];
