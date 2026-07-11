@@ -1,0 +1,33 @@
+# Local Postgres for the integration-test lane + Prisma-native (blob-migration) dev.
+# Mirrors the CI `integration` job (postgres:16, same creds/db) so local == CI.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#
+#   $env:DATABASE_URL="postgresql://postgres:postgres@localhost:5432/lead_engine_crm"
+#   npm run prisma:migrate:deploy
+#
+#   $env:SYNCORE_RUN_DB_INTEGRATION="1"; $env:SYNCORE_STORAGE_DRIVER="prisma"
+#   npm run test:integration
+#
+#   docker compose -f docker-compose.dev.yml down        # stop (keeps data)
+#   docker compose -f docker-compose.dev.yml down -v     # stop + wipe data
+services:
+  postgres:
+    image: postgres:16
+    container_name: syncore-dev-pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lead_engine_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - syncore-dev-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  syncore-dev-pgdata:

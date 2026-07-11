@@ -11,6 +11,11 @@ model AppStateSnapshot {
   id        String   @id
   version   Int
   state     Json
+  // Optimistic-concurrency counter: bumped on every transactional write via a
+  // compare-and-set (updateMany where writeSeq = readValue). A concurrent commit
+  // moves it, so the losing writer matches 0 rows, throws, and retries against the
+  // now-current state instead of silently overwriting the winner. See store.ts.
+  writeSeq  Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
