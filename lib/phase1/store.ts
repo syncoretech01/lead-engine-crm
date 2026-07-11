@@ -85,7 +85,7 @@ export async function readState(): Promise<AppState> {
   const driver = resolveStorageDriver();
   return timeAsync("state.read", async () => {
     if (driver === "prisma") {
-      return readStateFromPrisma(await getPrismaClient());
+      return (await readStateFromPrisma(await getPrismaClient())).state;
     }
 
     return timeSync("state.file.read", readStateFromFile, { driver });
@@ -104,6 +104,40 @@ export async function writeState(state: AppState) {
   }, { driver, ...stateCountMetadata(state) });
 }
 
+/**
+ * Thrown by the CAS write path when the snapshot's writeSeq moved between our read
+ * and our write — i.e. another transaction committed first. Caught by
+ * runWithWriteConflictRetry, which re-runs the whole transaction against the
+ * now-current state. Callers never see it.
+ */
+export class WriteConflictError extends Error {
+  constructor() {
+    super("AppState snapshot write conflict (a concurrent update committed first).");
+    this.name = "WriteConflictError";
+  }
+}
+
+// The single snapshot row serializes all writes (inherent to the blob until the
+// migration peels domains off it), so a burst of concurrent writers queue on it and
+// the later ones conflict cumulatively. Retry generously; exhausting this throws
+// (fail-loud) rather than losing a write.
+const MAX_WRITE_CONFLICT_RETRIES = 10;
+
+async function runWithWriteConflictRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      if (error instanceof WriteConflictError && attempt < MAX_WRITE_CONFLICT_RETRIES) {
+        // Brief jittered backoff so racing writers don't lock-step and livelock.
+        await new Promise((resolve) => setTimeout(resolve, attempt * 8 + Math.floor(Math.random() * 12)));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 export async function updateState<T>(
   mutator: (state: AppState, session: Session) => T,
   options: UpdateStateOptions = {}
@@ -112,26 +146,29 @@ export async function updateState<T>(
   return timeAsync("state.update", async () => {
     if (driver === "prisma") {
       const client = await getPrismaClient();
-      return client.$transaction(
-        async (tx) => {
-          const state = await readStateFromPrisma(tx);
-          const session = await resolveCurrentRequestSession(state, tx);
-          const syncOptions = normalizedSyncOptions(options);
-          // Capture the pre-mutation baseline for the scoped tables so the diff
-          // write path can upsert only the rows this mutation changes.
-          const previousRowStrings =
-            projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
-              ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
-              : undefined;
-          const result = mutator(state, session);
-          await writeStateToPrisma(
-            state,
-            tx,
-            previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions
-          );
-          return result;
-        },
-        { maxWait: 10_000, timeout: 30_000 }
+      return runWithWriteConflictRetry(() =>
+        client.$transaction(
+          async (tx) => {
+            const { state, writeSeq } = await readStateFromPrisma(tx);
+            const session = await resolveCurrentRequestSession(state, tx);
+            const syncOptions = normalizedSyncOptions(options);
+            // Capture the pre-mutation baseline for the scoped tables so the diff
+            // write path can upsert only the rows this mutation changes.
+            const previousRowStrings =
+              projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
+                ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
+                : undefined;
+            const result = mutator(state, session);
+            await writeStateToPrisma(
+              state,
+              tx,
+              previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions,
+              writeSeq
+            );
+            return result;
+          },
+          { maxWait: 10_000, timeout: 30_000 }
+        )
       );
     }
 
@@ -151,27 +188,30 @@ export async function updateAuthState<T>(
   return timeAsync("state.authUpdate", async () => {
     if (driver === "prisma") {
       const client = await getPrismaClient();
-      return client.$transaction(
-        async (tx) => {
-          const state = await readStateFromPrisma(tx);
-          const syncOptions = normalizedSyncOptions(options);
-          // Capture the pre-mutation baseline for the scoped tables so the diff
-          // write path upserts only the rows this mutation changes — parity with
-          // updateState. Without it, a worker flipping one field (e.g. a call's
-          // recordingId) re-syncs entire append-only tables (activities/auditLogs).
-          const previousRowStrings =
-            projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
-              ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
-              : undefined;
-          const result = mutator(state);
-          await writeStateToPrisma(
-            state,
-            tx,
-            previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions
-          );
-          return result;
-        },
-        { maxWait: 10_000, timeout: 30_000 }
+      return runWithWriteConflictRetry(() =>
+        client.$transaction(
+          async (tx) => {
+            const { state, writeSeq } = await readStateFromPrisma(tx);
+            const syncOptions = normalizedSyncOptions(options);
+            // Capture the pre-mutation baseline for the scoped tables so the diff
+            // write path upserts only the rows this mutation changes — parity with
+            // updateState. Without it, a worker flipping one field (e.g. a call's
+            // recordingId) re-syncs entire append-only tables (activities/auditLogs).
+            const previousRowStrings =
+              projectionDiffEnabled() && !syncOptions.skip && options.normalizedTables?.length
+                ? captureProjectionRowStrings(createNormalizedPersistenceProjection(state), options.normalizedTables)
+                : undefined;
+            const result = mutator(state);
+            await writeStateToPrisma(
+              state,
+              tx,
+              previousRowStrings ? { ...syncOptions, previousRowStrings } : syncOptions,
+              writeSeq
+            );
+            return result;
+          },
+          { maxWait: 10_000, timeout: 30_000 }
+        )
       );
     }
 
@@ -512,7 +552,11 @@ export function stateSeedingAllowed(env: StateSeedEnv = process.env as StateSeed
   return env.NODE_ENV !== "production";
 }
 
-async function readStateFromPrisma(client: PrismaStoreClient): Promise<AppState> {
+// Returns the migrated state AND the writeSeq from the SAME snapshot read, so the
+// caller's compare-and-set checks the exact baseline it mutated. Reading writeSeq
+// in a separate query would let a concurrent commit slip in between and defeat the
+// CAS (we'd mutate old state but check a newer seq).
+async function readStateFromPrisma(client: PrismaStoreClient): Promise<{ state: AppState; writeSeq: number }> {
   const snapshot = await timeAsync("state.prisma.snapshotRead", () => client.appStateSnapshot.findUnique({
     where: { id: stateSnapshotId }
   }), { snapshotId: stateSnapshotId });
@@ -527,7 +571,7 @@ async function readStateFromPrisma(client: PrismaStoreClient): Promise<AppState>
     }
     const state = readInitialStateForPrisma();
     await writeStateToPrisma(state, client);
-    return state;
+    return { state, writeSeq: 0 };
   }
 
   const parsed = snapshot.state as unknown as AppState;
@@ -543,7 +587,7 @@ async function readStateFromPrisma(client: PrismaStoreClient): Promise<AppState>
     await writeStateToPrisma(state, client, { tables: identityReconcileTables });
   }
 
-  return state;
+  return { state, writeSeq: snapshot.writeSeq };
 }
 
 async function mergePrismaIdentityRows(client: PrismaStoreClient, state: AppState) {
@@ -739,20 +783,42 @@ async function mergePrismaIdentityRows(client: PrismaStoreClient, state: AppStat
 async function writeStateToPrisma(
   state: AppState,
   client: PrismaStoreClient,
-  normalizedOptions: SyncNormalizedProjectionOptions = {}
+  normalizedOptions: SyncNormalizedProjectionOptions = {},
+  casWriteSeq?: number
 ) {
-  await timeAsync("state.prisma.snapshotUpsert", () => client.appStateSnapshot.upsert({
-    where: { id: stateSnapshotId },
-    update: {
-      version: state.version,
-      state: state as unknown as Prisma.InputJsonValue
-    },
-    create: {
-      id: stateSnapshotId,
-      version: state.version,
-      state: state as unknown as Prisma.InputJsonValue
+  if (casWriteSeq === undefined) {
+    // Unconditional write: first-boot seed, the read-path self-heal, and the
+    // non-transactional bulk writeState. Not the concurrent-mutation path, so they
+    // don't take part in the compare-and-set (writeSeq is left untouched here).
+    await timeAsync("state.prisma.snapshotUpsert", () => client.appStateSnapshot.upsert({
+      where: { id: stateSnapshotId },
+      update: {
+        version: state.version,
+        state: state as unknown as Prisma.InputJsonValue
+      },
+      create: {
+        id: stateSnapshotId,
+        version: state.version,
+        state: state as unknown as Prisma.InputJsonValue
+      }
+    }), { snapshotId: stateSnapshotId, ...stateCountMetadata(state) });
+  } else {
+    // Compare-and-set: persist only if writeSeq is still what we read at the start
+    // of this transaction. A concurrent commit bumped it, so this matches 0 rows —
+    // throw so updateState/updateAuthState retry the whole transaction against the
+    // now-current state instead of clobbering the other writer's changes.
+    const cas = await timeAsync("state.prisma.snapshotCas", () => client.appStateSnapshot.updateMany({
+      where: { id: stateSnapshotId, writeSeq: casWriteSeq },
+      data: {
+        version: state.version,
+        state: state as unknown as Prisma.InputJsonValue,
+        writeSeq: casWriteSeq + 1
+      }
+    }), { snapshotId: stateSnapshotId, expectedWriteSeq: casWriteSeq, ...stateCountMetadata(state) });
+    if (cas.count !== 1) {
+      throw new WriteConflictError();
     }
-  }), { snapshotId: stateSnapshotId, ...stateCountMetadata(state) });
+  }
   await syncNormalizedProjectionToPrisma(
     state,
     client as unknown as Parameters<typeof syncNormalizedProjectionToPrisma>[1],
