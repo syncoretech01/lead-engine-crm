@@ -141,6 +141,67 @@ describe.skipIf(!enabled)("native auth admin fast paths", () => {
     expect(after.writeSeq).toBe(before.writeSeq);
   });
 
+  it("createUserInvitePrismaFast: creates a native pending invite + returns url/workspace", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { createUserInvitePrismaFast } = await import("@/lib/phase1/auth-fast-path");
+    const { admin } = await seedAndAuthenticate();
+
+    const before = await readSnapshotMeta();
+    const result = await createUserInvitePrismaFast({ email: "New.Invitee@example.com", role: "SDR" });
+    expect(result?.url).toMatch(/^\/invite\//);
+    expect(result?.workspaceId).toBe(admin.workspaceId);
+    expect(result?.workspaceName).toBeTruthy();
+
+    const invite = await prisma.userInvite.findFirstOrThrow({
+      where: { workspaceId: admin.workspaceId, email: "new.invitee@example.com" }
+    });
+    expect(invite.status).toBe("Pending");
+    expect(invite.role).toBe("SDR");
+    expect(invite.invitedById).toBe(admin.userId);
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { objectType: "user_invite", objectId: invite.id, action: "created" }
+    });
+    expect(audit).not.toBeNull();
+
+    const after = await readSnapshotMeta();
+    expect(after.writeSeq).toBe(before.writeSeq);
+  });
+
+  it("deactivateUserPrismaFast: disables the account, revokes sessions, surfaces via merge, blocks self", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { readState } = await import("@/lib/phase1/store");
+    const { deactivateUserPrismaFast } = await import("@/lib/phase1/auth-fast-path");
+    const { admin, target } = await seedAndAuthenticate();
+
+    const liveSession = await prisma.authSession.create({
+      data: {
+        id: `auth-session-live-deact-${target.userId}`,
+        userId: target.userId,
+        workspaceId: admin.workspaceId,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        createdAt: new Date(),
+        lastSeenAt: new Date()
+      }
+    });
+
+    const result = await deactivateUserPrismaFast({ userId: target.userId });
+    expect(result).toBe(true);
+
+    const account = await prisma.authAccount.findUniqueOrThrow({ where: { userId: target.userId } });
+    expect(account.status).toBe("Disabled");
+
+    const revoked = await prisma.authSession.findUniqueOrThrow({ where: { id: liveSession.id } });
+    expect(revoked.revokedAt).not.toBeNull();
+
+    // Merge surfaces the disabled status on read (authAccounts merge).
+    const state = await readState();
+    expect(state.authAccounts.find((a) => a.userId === target.userId)?.status).toBe("Disabled");
+
+    // Cannot deactivate your own account.
+    await expect(deactivateUserPrismaFast({ userId: admin.userId })).rejects.toThrow(/your own account/);
+  });
+
   it("returns undefined in file-driver mode so the caller falls back to the blob path", async () => {
     const previous = process.env.SYNCORE_STORAGE_DRIVER;
     process.env.SYNCORE_STORAGE_DRIVER = "file";
