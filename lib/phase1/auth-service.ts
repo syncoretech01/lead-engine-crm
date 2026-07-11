@@ -319,10 +319,10 @@ export function acceptUserInvite(
 // These intentionally omit an `assertPermission(manage_*)` gate: they resolve the
 // target from `session.user.id`, so a caller can only ever mutate their own row.
 
-const MAX_SIGNATURE_LENGTH = 2000;
+export const MAX_SIGNATURE_LENGTH = 2000;
 export const MIN_PASSWORD_LENGTH = 10;
 
-function isValidTimezone(tz: string): boolean {
+export function isValidTimezone(tz: string): boolean {
   if (!tz) return false;
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: tz });
