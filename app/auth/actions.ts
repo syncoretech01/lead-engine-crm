@@ -7,10 +7,13 @@ import { defaultWorkspacePath, postLoginWorkspacePath } from "@/lib/phase1/auth"
 import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
 import {
   acceptInvitePrismaFast,
+  adminResetPasswordPrismaFast,
   createPasswordResetTokenPrismaFast,
   loginWithPasswordPrismaFast,
   resetPasswordWithTokenPrismaFast,
-  revokeAuthSessionPrismaFast
+  revokeAuthSessionPrismaFast,
+  updateMemberRolePrismaFast,
+  updateUserTelephonyPrismaFast
 } from "@/lib/phase1/auth-fast-path";
 import {
   acceptUserInvite,
@@ -221,12 +224,14 @@ export async function resetPasswordAction(formData: FormData) {
 }
 
 export async function updateMemberRoleAction(formData: FormData) {
-  await updateState((state, session) => {
-    updateMemberRole(state, session, {
-      userId: stringValue(formData.get("userId")),
-      role: roleValue(formData.get("role"))
-    });
-  }, { normalizedTables: authWriteTables });
+  const userId = stringValue(formData.get("userId"));
+  const role = roleValue(formData.get("role"));
+  const done = await updateMemberRolePrismaFast({ userId, role });
+  if (!done) {
+    await updateState((state, session) => {
+      updateMemberRole(state, session, { userId, role });
+    }, { normalizedTables: authWriteTables });
+  }
 
   revalidatePath("/access");
 }
@@ -270,16 +275,20 @@ export async function removeWorkspaceMemberAction(formData: FormData) {
 }
 
 export async function updateUserTelephonyAction(formData: FormData) {
-  await updateState((state, session) => {
-    updateUserTelephony(state, session, {
-      userId: stringValue(formData.get("userId")),
-      phoneNumber: stringValue(formData.get("phoneNumber")),
-      callerId: stringValue(formData.get("callerId")),
-      jwt: stringValue(formData.get("jwt")),
-      clientId: stringValue(formData.get("clientId")),
-      clientSecret: stringValue(formData.get("clientSecret"))
-    });
-  }, { normalizedTables: authWriteTables });
+  const input = {
+    userId: stringValue(formData.get("userId")),
+    phoneNumber: stringValue(formData.get("phoneNumber")),
+    callerId: stringValue(formData.get("callerId")),
+    jwt: stringValue(formData.get("jwt")),
+    clientId: stringValue(formData.get("clientId")),
+    clientSecret: stringValue(formData.get("clientSecret"))
+  };
+  const done = await updateUserTelephonyPrismaFast(input);
+  if (!done) {
+    await updateState((state, session) => {
+      updateUserTelephony(state, session, input);
+    }, { normalizedTables: authWriteTables });
+  }
 
   revalidatePath("/access");
 }
@@ -290,9 +299,14 @@ export async function adminResetPasswordAction(formData: FormData) {
   const newPassword = String(formData.get("newPassword") ?? "");
   let name = "";
   try {
-    await updateState((state, session) => {
-      name = adminResetUserPassword(state, session, { userId, newPassword }).name;
-    }, { normalizedTables: authWriteTables });
+    const fast = await adminResetPasswordPrismaFast({ userId, newPassword });
+    if (fast) {
+      name = fast.name;
+    } else {
+      await updateState((state, session) => {
+        name = adminResetUserPassword(state, session, { userId, newPassword }).name;
+      }, { normalizedTables: authWriteTables });
+    }
   } catch (error) {
     redirect(`/access?resetError=${encodeURIComponent(errorMessage(error))}`);
   }

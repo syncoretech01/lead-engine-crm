@@ -59,6 +59,36 @@ const permissionsByRole: Record<WorkspaceRole, Permission[]> = {
   "Compliance Admin": ["view_all_records", "view_records", "export_csv", "manage_compliance", "view_reports", "manage_retention"]
 };
 
+// Canonical mapping between the app's `WorkspaceRole` union and the Prisma enum
+// string stored on `WorkspaceMember.role`. Kept here (the lowest-level identity
+// module) so the projection, the store's session resolver, and the native auth
+// fast paths all convert roles the same way instead of each carrying a copy.
+const prismaRoleByWorkspaceRole: Record<WorkspaceRole, string> = {
+  Admin: "ADMIN",
+  Manager: "MANAGER",
+  SDR: "SDR",
+  "Data Operator": "DATA_OPERATOR",
+  Viewer: "VIEWER",
+  "Compliance Admin": "COMPLIANCE_ADMIN"
+};
+
+const workspaceRoleByPrismaRole: Record<string, WorkspaceRole> = {
+  ADMIN: "Admin",
+  MANAGER: "Manager",
+  SDR: "SDR",
+  DATA_OPERATOR: "Data Operator",
+  VIEWER: "Viewer",
+  COMPLIANCE_ADMIN: "Compliance Admin"
+};
+
+export function workspaceRoleToPrisma(role: WorkspaceRole): string {
+  return prismaRoleByWorkspaceRole[role];
+}
+
+export function workspaceRoleFromPrisma(value: string): WorkspaceRole {
+  return workspaceRoleByPrismaRole[value] ?? "Viewer";
+}
+
 export function getDemoSession(state: AppState): Session {
   return resolveSession(state, {});
 }
