@@ -153,21 +153,6 @@ export function ensureCrmDefaults(state: AppState, workspaceId: string) {
     seedOpportunities(state, workspaceId, now)
   );
   seedIfEmpty(state.tasks, (task) => task.workspaceId, () => seedTasks(state, workspaceId, actorUserId, now));
-  seedIfEmpty(state.notes, (note) => note.workspaceId, () =>
-    state.companies
-      .filter((company) => company.workspaceId === workspaceId)
-      .slice(0, 5)
-      .map((company, index) => ({
-        id: `note-${slug(company.id)}-${index + 1}`,
-        workspaceId,
-        companyId: company.id,
-        contactId: primaryContactForCompany(state, company.id)?.id,
-        body: noteForCompany(company),
-        createdById: ownerUserIdForName(state, primaryContactForCompany(state, company.id)?.owner),
-        createdAt: offsetDate(now, -(index + 3), 11),
-        updatedAt: offsetDate(now, -(index + 3), 11)
-      }))
-  );
   seedIfEmpty(state.customFieldValues, (value) => value.workspaceId, () =>
     seedCustomFieldValues(state, workspaceId, now)
   );
@@ -408,12 +393,6 @@ function taskTitleForContact(title: string, status: string) {
   }
 
   return "Complete first outbound touch";
-}
-
-function noteForCompany(company: Company) {
-  const source = company.sourceLineage[0] ?? "lead engine";
-  const signal = company.signals?.[0] ?? company.industry;
-  return `${source} identified ${signal} fit; keep source context visible in the next touch.`;
 }
 
 function territoryForCompany(company: Company) {

@@ -98,4 +98,43 @@ describe.skipIf(!enabled)("Phase 2: callLogs peel", () => {
     expect(native.contactId).toBeNull();
     expect(native.createdById).toBe(userId); // valid ref kept
   });
+
+  it("flushes notes to prisma.note, keeps the blob array empty, no re-seed on read", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { writeState, readState } = await import("@/lib/phase1/store");
+    const { createSeedState } = await import("@/lib/phase1/seed");
+
+    const state = createSeedState();
+    const contact = state.contacts.find((c) => c.companyId);
+    expect(contact).toBeTruthy();
+    const userId = state.users[0].id;
+
+    const noteId = "note-test-phase2";
+    state.notes.unshift({
+      id: noteId,
+      workspaceId: contact!.workspaceId,
+      companyId: contact!.companyId,
+      contactId: contact!.id,
+      body: "Phase 2 test note.",
+      createdById: userId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    await writeState(state);
+
+    const native = await prisma.note.findUnique({ where: { id: noteId } });
+    expect(native).not.toBeNull();
+    expect(native?.body).toBe("Phase 2 test note.");
+    expect(native?.createdById).toBe(userId);
+
+    const snap = await prisma.appStateSnapshot.findUniqueOrThrow({
+      where: { id: SNAPSHOT_ID },
+      select: { state: true }
+    });
+    expect((snap.state as { notes?: unknown[] }).notes ?? []).toHaveLength(0);
+
+    const stateAfter = await readState();
+    expect(stateAfter.notes).toHaveLength(0);
+  });
 });
