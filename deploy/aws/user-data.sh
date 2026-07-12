@@ -63,7 +63,14 @@ DOMAIN="${DOMAIN#http://}"
 cat > /etc/caddy/Caddyfile <<CADDY
 ${DOMAIN} {
     encode gzip
-    reverse_proxy 127.0.0.1:3000
+    reverse_proxy 127.0.0.1:3000 {
+        # Near-zero-downtime deploys: during the ~2s syncore-web restart the upstream
+        # refuses connections; keep retrying to select/dial it for up to 10s so a
+        # request in flight waits a moment instead of 502-ing. Safe — Caddy only
+        # retries when nothing was sent to the upstream yet (a dial failure).
+        lb_try_duration 10s
+        lb_try_interval 250ms
+    }
 }
 CADDY
 chown -R caddy:caddy /var/lib/caddy /etc/caddy
