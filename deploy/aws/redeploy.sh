@@ -56,11 +56,33 @@ sleep 3
 echo "web=$(systemctl is-active syncore-web) worker=$(systemctl is-active syncore-worker)"
 
 # Health-gate: poll a few times so a slightly-slow first request doesn't read as a fail.
+HEALTHY=0
 for i in 1 2 3 4 5 6; do
   code=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
   echo "health_attempt_${i}=${code}"
-  if [ "$code" = "200" ]; then echo "OK: healthy on new bundle."; exit 0; fi
+  if [ "$code" = "200" ]; then HEALTHY=1; break; fi
   sleep 2
 done
-echo "WARN: health not 200 after retries — check the app; rollback = 'mv /opt/syncore/web.old /opt/syncore/web && systemctl restart syncore-web'."
-exit 1
+if [ "$HEALTHY" -ne 1 ]; then
+  echo "WARN: health not 200 after retries — check the app; rollback = 'mv /opt/syncore/web.old /opt/syncore/web && systemctl restart syncore-web'."
+  exit 1
+fi
+echo "OK: healthy on new bundle."
+
+# Warm-up (best-effort — the app is ALREADY live and healthy; this never fails the deploy).
+# A fresh process + a page cache the build evicted means the FIRST hit of each route pays a
+# cold-start: Next compiles the route module, the Prisma pool/query-plans are cold, chunks
+# aren't cached. Prime them here — hit the app DIRECTLY (127.0.0.1:3000, no Caddy/TLS) so a
+# real user doesn't eat that. Unauth'd hits still warm the route module + middleware session
+# lookup + DB pool (the bulk of the cold cost); auth-only read models can't be primed without
+# a session. Two passes per route make the warming visible (pass 1 compiles, pass 2 is fast).
+echo "=== WARM-UP (best-effort) ==="
+WARM_BASE="http://127.0.0.1:3000"
+for path in / /login /crm /crm/contacts /crm/accounts /crm/opportunities /crm/calls /crm/my-contacts; do
+  for pass in 1 2; do
+    out=$(curl -s -o /dev/null -w "%{http_code} %{time_total}s" --max-time 15 "${WARM_BASE}${path}" 2>/dev/null || echo "000 -")
+    printf 'warm %-24s pass%s -> %s\n' "$path" "$pass" "$out"
+  done
+done
+echo "Warm-up complete. Deploy done."
+exit 0
