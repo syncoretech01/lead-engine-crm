@@ -77,7 +77,6 @@ export const crmWriteTables = [
   "opportunities",
   "activities",
   "tasks",
-  "notes",
   "customFields",
   "customFieldValues",
   "auditLogs"

@@ -87,7 +87,6 @@ describe("normalized write table scopes", () => {
       "opportunities",
       "activities",
       "tasks",
-      "notes",
       "customFields"
     ]));
     expect(sdrWriteTables).toEqual(expect.arrayContaining([

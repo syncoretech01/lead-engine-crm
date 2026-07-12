@@ -22,6 +22,7 @@ import {
   captureProjectionRowStrings,
   createNormalizedPersistenceProjection,
   mapCallLogsToRows,
+  mapNotesToRows,
   syncNormalizedProjectionToPrisma,
   type ProjectionTableName,
   type SyncNormalizedProjectionOptions
@@ -491,10 +492,11 @@ async function readStateFromPrisma(client: PrismaStoreClient): Promise<{ state: 
 
   const parsed = snapshot.state as unknown as AppState;
   const { state, changed } = migrateState(parsed);
-  // Blob-migration Phase 2: callLogs is native-only (flushed to prisma.callLog on
+  // Blob-migration Phase 2: callLogs + notes are native-only (flushed to prisma on
   // write). Drop any rows carried in the blob (pre-peel history, already native) so
   // reads never surface or re-flush them; new rows come from the mutator this cycle.
   state.callLogs = [];
+  state.notes = [];
   // Reconcile the natively-written identity rows (the auth fast path owns them) INTO
   // the in-memory state so callers see fresh identity — but do NOT persist that on
   // read. Blob migration Phase 1: reads stop writing. The old identity self-heal
@@ -728,12 +730,14 @@ async function writeStateToPrisma(
   normalizedOptions: SyncNormalizedProjectionOptions = {},
   casWriteSeq?: number
 ) {
-  // Blob-migration Phase 2: callLogs is native-only. Capture the append-only rows
-  // with the FK-safe mapping, then clear them from the state BEFORE the snapshot
-  // write (so the blob JSON stays small) and flush them into prisma.callLog AFTER
-  // the projection below (so their FK parents — accounts/crmContacts/users — exist).
+  // Blob-migration Phase 2: callLogs + notes are native-only. Capture the append-only
+  // rows with the FK-safe mapping, then clear them from the state BEFORE the snapshot
+  // write (so the blob JSON stays small) and flush them into prisma AFTER the
+  // projection below (so their FK parents — accounts/crmContacts/users — exist).
   const callLogRows = mapCallLogsToRows(state);
+  const noteRows = mapNotesToRows(state);
   state.callLogs = [];
+  state.notes = [];
 
   if (casWriteSeq === undefined) {
     // Unconditional write: first-boot seed, the read-path self-heal, and the
@@ -776,6 +780,9 @@ async function writeStateToPrisma(
 
   if (callLogRows.length > 0) {
     await client.callLog.createMany({ data: callLogRows, skipDuplicates: true });
+  }
+  if (noteRows.length > 0) {
+    await client.note.createMany({ data: noteRows, skipDuplicates: true });
   }
 }
 

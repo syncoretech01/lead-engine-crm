@@ -48,7 +48,6 @@ export type ProjectionTableName =
   | "opportunities"
   | "activities"
   | "tasks"
-  | "notes"
   | "customFields"
   | "customFieldValues"
   | "sdrTeams"
@@ -145,7 +144,6 @@ const projectionTables: ProjectionTableName[] = [
   "opportunities",
   "activities",
   "tasks",
-  "notes",
   "customFields",
   "customFieldValues",
   "sdrTeams",
@@ -217,7 +215,6 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "opportunities", delegate: "opportunity", workspaceScoped: true },
   { table: "activities", delegate: "activity", workspaceScoped: true },
   { table: "tasks", delegate: "task", workspaceScoped: true },
-  { table: "notes", delegate: "note", workspaceScoped: true },
   { table: "customFields", delegate: "customField", workspaceScoped: true },
   { table: "customFieldValues", delegate: "customFieldValue", workspaceScoped: true },
   { table: "sdrTeams", delegate: "sdrTeam", workspaceScoped: true },
@@ -925,20 +922,6 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       completedAt: task.completedAt
-    }))),
-    notes: sortRows(state.notes.map((note) => ({
-      id: note.id,
-      workspaceId: note.workspaceId,
-      accountId: note.companyId && hasCompany(state, note.companyId)
-        ? note.companyId
-        : undefined,
-      contactId: note.contactId && hasCrmContact(state, note.contactId)
-        ? note.contactId
-        : undefined,
-      body: note.body,
-      createdById: state.users.some((user) => user.id === note.createdById) ? note.createdById : undefined,
-      createdAt: note.createdAt,
-      updatedAt: note.updatedAt
     }))),
     customFields: sortRows(state.customFields.map((field) => ({
       id: field.id,
@@ -1704,6 +1687,21 @@ export function mapCallLogsToRows(state: AppState) {
     notes: call.notes,
     createdById: state.users.some((user) => user.id === call.createdById) ? call.createdById : undefined,
     createdAt: call.createdAt
+  }));
+}
+
+// Same FK-safe pattern as mapCallLogsToRows — notes is native-only (blob-migration
+// Phase 2), flushed into prisma.note by writeStateToPrisma after the projection.
+export function mapNotesToRows(state: AppState) {
+  return state.notes.map((note) => ({
+    id: note.id,
+    workspaceId: note.workspaceId,
+    accountId: note.companyId && hasCompany(state, note.companyId) ? note.companyId : undefined,
+    contactId: note.contactId && hasCrmContact(state, note.contactId) ? note.contactId : undefined,
+    body: note.body,
+    createdById: state.users.some((user) => user.id === note.createdById) ? note.createdById : undefined,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt
   }));
 }
 
