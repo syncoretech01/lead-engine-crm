@@ -80,12 +80,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "no-op" });
   }
 
-  // When a notification cannot be attributed to a workspace (no SES tag), the
-  // default keeps the legacy cross-workspace first-match so existing bounce
-  // handling is not regressed. Set SYNCORE_SES_QUARANTINE_UNSCOPED=true to
-  // quarantine untagged events instead of guessing a tenant. Tagged events are
-  // always matched strictly within their own workspace.
-  const quarantineUnscoped = process.env.SYNCORE_SES_QUARANTINE_UNSCOPED === "true";
+  // When a notification cannot be attributed to a workspace (no SES tag), quarantine
+  // it by default rather than guessing a tenant: applying a cross-workspace first-
+  // match would let a forged or mis-tagged event suppress an arbitrary tenant's
+  // contact. Set SYNCORE_SES_QUARANTINE_UNSCOPED=false to restore the legacy
+  // cross-workspace first-match. Tagged events are always matched strictly within
+  // their own workspace regardless of this flag.
+  const quarantineUnscoped = process.env.SYNCORE_SES_QUARANTINE_UNSCOPED !== "false";
 
   try {
     const results = await updateAuthState(

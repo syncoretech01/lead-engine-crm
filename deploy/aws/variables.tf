@@ -71,3 +71,9 @@ variable "hosted_zone_id" {
   default     = ""
   description = "Optional Route53 hosted zone ID for app_domain. If set, an A record to the Elastic IP is created."
 }
+
+variable "ses_topic_arns" {
+  type        = string
+  default     = ""
+  description = "Comma-separated ARNs of the SES->SNS topic(s) the bounce/complaint webhook trusts (SYNCORE_SES_TOPIC_ARNS). Leave empty until SES->SNS is wired: empty means the param is not written, so the webhook FAILS CLOSED in prod (rejects all topics). Set it when you create the topic."
+}
