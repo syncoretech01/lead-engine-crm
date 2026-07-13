@@ -23,6 +23,9 @@ export type FastCrmAccountView = {
   score: number;
   priority: Priority;
   owner: string;
+  /** Highest-score contact at the account, for the "Primary contact" column. */
+  primaryContactName?: string;
+  primaryContactTitle?: string;
   stage: OpportunityStage;
   amount: number;
   probability: number;
@@ -362,6 +365,8 @@ export async function readFastCrmOverviewModel(
       owner: primaryOpportunity
         ? userNames.get(primaryOpportunity.ownerUserId ?? "") ?? "Syncore user"
         : primaryContact?.owner ?? "Unassigned",
+      primaryContactName: primaryContact?.fullName ?? "",
+      primaryContactTitle: primaryContact?.title ?? "",
       stage,
       amount,
       probability: primaryOpportunity?.probability ?? 0,
