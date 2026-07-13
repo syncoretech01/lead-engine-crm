@@ -85,11 +85,6 @@ export function MyContactsView({
     });
   }, [rows, query, filter]);
 
-  // Keep the current page valid as the filtered set shrinks.
-  React.useEffect(() => {
-    setPage(0);
-  }, [query, filter]);
-
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(page, pageCount - 1);
   const start = current * PAGE_SIZE;
@@ -98,8 +93,22 @@ export function MyContactsView({
   return (
     <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5">
       <CoListHeader title={title} subline={subline}>
-        <CoSearch value={query} onChange={setQuery} placeholder="Search contacts…" />
-        <CoChips options={FILTERS} value={filter} onChange={setFilter} />
+        <CoSearch
+          value={query}
+          onChange={(value) => {
+            setQuery(value);
+            setPage(0);
+          }}
+          placeholder="Search contacts…"
+        />
+        <CoChips
+          options={FILTERS}
+          value={filter}
+          onChange={(value) => {
+            setFilter(value);
+            setPage(0);
+          }}
+        />
       </CoListHeader>
 
       <CoTableShell minWidth={980}>
