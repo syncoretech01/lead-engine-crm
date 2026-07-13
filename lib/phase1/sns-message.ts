@@ -55,13 +55,19 @@ export function isValidSnsUrl(url: string): boolean {
  * Whether an SNS message's TopicArn is one of our own SES→SNS topics. A valid SNS
  * signature only proves the message came from *some* AWS account — not ours — so
  * without this an attacker could point their own topic's (validly AWS-signed)
- * forged bounce/complaint at the webhook and suppress arbitrary contacts. Enforced
- * only when SYNCORE_SES_TOPIC_ARNS is configured (comma-separated); when unset it
- * is permissive so existing deployments are not broken before the ARNs are set.
+ * forged bounce/complaint at the webhook and suppress arbitrary contacts.
+ *
+ * When SYNCORE_SES_TOPIC_ARNS is configured (comma-separated), only those ARNs are
+ * trusted. When it is unset we FAIL CLOSED in production (reject every topic — an
+ * unconfigured allow-list must never silently trust every AWS-signed topic) and
+ * stay permissive outside production so local/dev SES testing isn't blocked.
  */
 export function isAllowedSnsTopic(
   topicArn: string | undefined,
-  env: { SYNCORE_SES_TOPIC_ARNS?: string } = process.env as { SYNCORE_SES_TOPIC_ARNS?: string }
+  env: { SYNCORE_SES_TOPIC_ARNS?: string; NODE_ENV?: string } = process.env as {
+    SYNCORE_SES_TOPIC_ARNS?: string;
+    NODE_ENV?: string;
+  }
 ): boolean {
   const configured = (env.SYNCORE_SES_TOPIC_ARNS ?? "")
     .split(",")
@@ -69,7 +75,8 @@ export function isAllowedSnsTopic(
     .filter(Boolean);
 
   if (configured.length === 0) {
-    return true;
+    // Unset allow-list: reject in prod (fail closed), allow in dev/test.
+    return env.NODE_ENV !== "production";
   }
 
   return Boolean(topicArn) && configured.includes(topicArn as string);
