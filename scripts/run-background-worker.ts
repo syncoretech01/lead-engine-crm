@@ -2,6 +2,7 @@ import { runLeadJobWorkerTick } from "@/lib/phase1/lead-job-worker-runner";
 import { runProviderWorkerTick } from "@/lib/phase1/provider-worker-runner";
 import { runRecordingWorkerTick } from "@/lib/phase1/recording-worker-runner";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { pingWorkerHeartbeat } from "@/lib/phase1/worker-heartbeat";
 
 type BackgroundWorkerArgs = {
   loopMs?: number;
@@ -66,8 +67,11 @@ async function main() {
   while (!stopping) {
     try {
       await runTick(args);
+      await pingWorkerHeartbeat(true);
     } catch (error) {
-      console.error(`Tick error: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Tick error: ${message}`);
+      await pingWorkerHeartbeat(false, message);
     }
     if (stopping) break;
     await new Promise((resolve) => setTimeout(resolve, args.loopMs));
