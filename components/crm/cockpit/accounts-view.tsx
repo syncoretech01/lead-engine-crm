@@ -14,6 +14,7 @@ import {
   coHeadCell,
   type CoTone
 } from "@/components/crm/cockpit/co-table";
+import { CoPeek, CoPeekRow, CoPeekSection, CoPeekSummary } from "@/components/crm/cockpit/co-peek";
 
 export type CockpitAccountRow = {
   id: string;
@@ -22,6 +23,9 @@ export type CockpitAccountRow = {
   industry: string;
   location: string;
   stage: string;
+  owner: string;
+  employees: string;
+  description: string;
   primaryContactName: string;
   primaryContactTitle: string;
   lastActivity: string;
@@ -53,6 +57,7 @@ export function AccountsView({
 }) {
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState<FilterId>("all");
+  const [peek, setPeek] = React.useState<CockpitAccountRow | null>(null);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -87,10 +92,15 @@ export function AccountsView({
           {filtered.map((row) => (
             <tr
               key={row.id}
-              className="border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
+              onClick={() => setPeek(row)}
+              className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
             >
               <td className={coBodyCell}>
-                <Link href={`/crm/accounts/${row.id}`} className="font-bold text-co-ink hover:text-co-blue">
+                <Link
+                  href={`/crm/accounts/${row.id}`}
+                  onClick={(event) => event.stopPropagation()}
+                  className="font-bold text-co-ink hover:text-co-blue"
+                >
                   {row.name}
                 </Link>
                 {row.domain ? <div className="text-[11px] text-co-muted-2">{row.domain}</div> : null}
@@ -120,6 +130,57 @@ export function AccountsView({
           ) : null}
         </tbody>
       </CoTableShell>
+
+      <CoPeek
+        open={peek !== null}
+        onClose={() => setPeek(null)}
+        title={peek?.name ?? ""}
+        subtitle={[peek?.domain, peek?.location].filter(Boolean).join(" · ")}
+        badges={peek ? <CoPill tone={stageTone(peek.stage)}>{peek.stage}</CoPill> : null}
+        footer={
+          peek ? (
+            <div className="flex flex-col gap-2">
+              <Link
+                href={`/crm/accounts/${peek.id}`}
+                className="flex h-10 items-center justify-center rounded-lg bg-co-blue text-[12.5px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+              >
+                Open full record
+              </Link>
+              <button
+                type="button"
+                disabled
+                title="Available when the Focus workspace ships"
+                className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-muted-2"
+              >
+                Open in Focus workspace · soon
+              </button>
+            </div>
+          ) : null
+        }
+      >
+        {peek ? (
+          <>
+            {peek.description ? <CoPeekSummary>{peek.description}</CoPeekSummary> : null}
+            <CoPeekSection label="Firmographics">
+              <CoPeekRow label="Industry" value={peek.industry} />
+              <CoPeekRow label="Company size" value={peek.employees} />
+              <CoPeekRow label="Location" value={peek.location} />
+              <CoPeekRow label="Account stage" value={peek.stage} />
+              <CoPeekRow label="Account owner" value={peek.owner} />
+            </CoPeekSection>
+            <CoPeekSection label="Open work">
+              <CoPeekRow label="Opportunity" value={peek.hasOpportunity ? "Open opportunity" : ""} />
+              <CoPeekRow label="Last activity" value={peek.lastActivity} />
+            </CoPeekSection>
+            <CoPeekSection label="Primary contact">
+              <CoPeekRow
+                label={peek.primaryContactTitle || "Contact"}
+                value={peek.primaryContactName}
+              />
+            </CoPeekSection>
+          </>
+        ) : null}
+      </CoPeek>
     </div>
   );
 }
