@@ -78,7 +78,7 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
     ]
   },
   SDR: {
-    crm: ["My Queue", "Focus", "My Contacts", "Accounts", "All Contacts", "Opportunities", "My Calls"]
+    crm: ["My Day", "Focus", "My Contacts", "Accounts", "All Contacts", "Opportunities", "My Calls"]
   },
   "Data Operator": {
     "lead-generation": [
@@ -119,10 +119,10 @@ describe("navigation access model (parity with the pre-redesign shell)", () => {
     expect(labels).toContain("Opportunities");
   });
 
-  it("renames SDR Queue to My Queue only for SDRs", () => {
+  it("renames SDR Queue to My Day only for SDRs", () => {
     const sdr = sessionForRole("SDR");
     const sdrCrm = accessibleNav(sdr).find((entry) => entry.group.id === "crm");
-    expect(sdrCrm?.items.map((item) => resolveNavLabel(item, sdr))).toContain("My Queue");
+    expect(sdrCrm?.items.map((item) => resolveNavLabel(item, sdr))).toContain("My Day");
 
     const manager = sessionForRole("Manager");
     const managerCrm = accessibleNav(manager).find((entry) => entry.group.id === "crm");

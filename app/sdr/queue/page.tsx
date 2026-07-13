@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/table";
 import { TileGrid, TileItem } from "@/components/tile-grid";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
+import { MyDay, type MyDayGroup, type MyDayLead } from "@/components/crm/cockpit/my-day";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,21 @@ export default async function SdrQueuePage() {
     .slice(0, 10);
   const callReady = activeAssignments.filter((assignment) => assignment.phone);
   const meetingFollowUps = activeAssignments.filter((assignment) => assignment.status === "Meeting Booked");
+
+  // SDRs get the redesigned "My Day" landing (SDR Cockpit §1); managers/admins keep
+  // the routing + bulk-email + assignment-directory tooling below.
+  if (isSdr) {
+    return (
+      <MyDay
+        {...buildMyDayProps({
+          assignments: activeAssignments,
+          reminders: openReminders,
+          allAssignments: snapshot.assignments,
+          metrics: snapshot.metrics
+        })}
+      />
+    );
+  }
   const bulkEligibleAssignments = fastModel ? activeAssignments.filter(isFastEmailEligible) : activeAssignments.filter((assignment) => {
     const contact = fallbackState?.contacts.find((item) => item.id === assignment.contactId && item.workspaceId === workspaceId);
     return Boolean(contact && !directEmailBlockReason(contact));
@@ -732,6 +748,118 @@ function slaTone(status: string): "default" | "info" | "success" | "warning" | "
   if (status === "Due soon") return "warning";
   if (status === "On track") return "success";
   return "default";
+}
+
+// Shapes the SDR "My Day" landing from the same queue snapshot the manager view
+// uses: each active lead lands in its first-matching work group (deep-linking to
+// the Focus workspace with the matching queue view), plus follow-ups, replies,
+// and today's progress.
+function buildMyDayProps({
+  assignments,
+  reminders,
+  allAssignments,
+  metrics
+}: {
+  assignments: AssignmentView[];
+  reminders: ReminderView[];
+  allAssignments: AssignmentView[];
+  metrics: { assigned: number; p1: number; dueToday: number; overdue: number };
+}) {
+  const groupDefs: Array<{
+    id: string;
+    label: string;
+    tone: MyDayGroup["tone"];
+    view: string;
+    match: (a: AssignmentView) => boolean;
+  }> = [
+    { id: "overdue", label: "Overdue", tone: "red", view: "overdue", match: (a) => a.slaStatus === "Overdue" },
+    { id: "p1", label: "P1 leads", tone: "blue", view: "p1", match: (a) => a.priority === "P1" },
+    { id: "due", label: "Due today", tone: "amber", view: "due", match: (a) => a.slaStatus === "Due soon" },
+    {
+      id: "replied",
+      label: "Recently replied",
+      tone: "teal",
+      view: "replied",
+      match: (a) => a.status === "Replied" || a.status === "Interested"
+    },
+    { id: "meeting", label: "Meeting follow-up", tone: "teal", view: "meeting", match: (a) => a.status === "Meeting Booked" },
+    { id: "nurture", label: "Nurture", tone: "gray", view: "nurture", match: (a) => a.status === "Nurture" },
+    { id: "other", label: "Working", tone: "gray", view: "all", match: () => true }
+  ];
+
+  const buckets = new Map<string, MyDayLead[]>(groupDefs.map((def) => [def.id, []]));
+  for (const a of assignments) {
+    const def = groupDefs.find((item) => item.match(a)) ?? groupDefs[groupDefs.length - 1];
+    const dueTone: MyDayLead["dueTone"] =
+      a.slaStatus === "Overdue" ? "red" : a.slaStatus === "Due soon" ? "amber" : "muted";
+    buckets.get(def.id)!.push({
+      contactId: a.contactId,
+      name: assignmentDisplayName(a),
+      title: a.title,
+      company: a.companyName,
+      dueLabel: a.dueLabel,
+      dueTone,
+      priority: a.priority,
+      sla: a.slaStatus,
+      status: a.status,
+      hasPhone: Boolean(a.phone),
+      blocked: a.status === "Suppressed" ? "Suppressed" : a.status === "Unsubscribed" ? "DNC" : undefined,
+      view: def.view
+    });
+  }
+
+  const groups: MyDayGroup[] = groupDefs
+    .map((def) => ({ id: def.id, label: def.label, tone: def.tone, leads: buckets.get(def.id)! }))
+    .filter((group) => group.leads.length > 0);
+
+  const completedToday = allAssignments.filter(
+    (a) => "lastTouchAt" in a && a.lastTouchAt && isToday(a.lastTouchAt)
+  ).length;
+
+  const followUps = reminders.slice(0, 6).map((reminder) => ({
+    id: reminder.id,
+    title: reminder.title,
+    company: reminder.companyName,
+    dueLabel: reminder.dueLabel,
+    contactId: reminder.contactId,
+    isMeeting: /meeting/i.test(reminder.title) || reminder.channel === "Meeting"
+  }));
+
+  const replies = assignments
+    .filter((a) => a.status === "Replied" || a.status === "Interested")
+    .slice(0, 6)
+    .map((a) => ({ contactId: a.contactId, name: assignmentDisplayName(a), company: a.companyName, status: a.status }));
+
+  return {
+    todayLabel: new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric"
+    }),
+    metrics: { overdue: metrics.overdue, p1: metrics.p1, dueToday: metrics.dueToday, completedToday },
+    groups,
+    followUps,
+    replies,
+    progress: [
+      { label: "Leads touched today", value: completedToday },
+      { label: "Due today", value: metrics.dueToday },
+      { label: "Open follow-ups", value: reminders.length },
+      { label: "Meetings booked", value: assignments.filter((a) => a.status === "Meeting Booked").length }
+    ],
+    startHref: "/sdr/focus",
+    queueCount: assignments.length
+  };
+}
+
+function isToday(iso: string) {
+  const date = new Date(iso);
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
 }
 
 function activityHref(activity: SdrQueueActivityReadRow) {

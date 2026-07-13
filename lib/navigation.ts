@@ -100,7 +100,7 @@ export const navGroups: NavGroup[] = [
         exact: true,
         visibleForRoles: ["Admin", "Manager"]
       },
-      { href: "/sdr/queue", label: "SDR Queue", sdrLabel: "My Queue", icon: ClipboardList, permission: "manage_sdr" },
+      { href: "/sdr/queue", label: "SDR Queue", sdrLabel: "My Day", icon: ClipboardList, permission: "manage_sdr" },
       { href: "/sdr/focus", label: "Focus", icon: Crosshair, permission: "manage_sdr" },
       {
         href: "/crm/my-contacts",

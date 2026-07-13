@@ -1,0 +1,264 @@
+import Link from "next/link";
+import { CalendarClock, Phone, PlayCircle } from "lucide-react";
+
+import { CoPill } from "@/components/crm/cockpit/co-table";
+import { priorityTone, slaTone, statusTone } from "@/components/crm/cockpit/focus/focus-types";
+
+// My Day — the SDR's landing (SDR Cockpit §1). A centered "start or resume work"
+// hub: counter strip + grouped work queue that deep-links into the Focus
+// workspace + a right column of follow-ups, replies, and today's progress. Pure
+// display (server component); all data is precomputed by the page.
+
+export type MyDayLead = {
+  contactId: string;
+  name: string;
+  title: string;
+  company: string;
+  dueLabel: string;
+  dueTone: "red" | "amber" | "muted";
+  priority: string;
+  sla: string;
+  status: string;
+  hasPhone: boolean;
+  blocked?: string;
+  view: string;
+};
+
+export type MyDayGroup = {
+  id: string;
+  label: string;
+  tone: "red" | "blue" | "amber" | "teal" | "gray";
+  leads: MyDayLead[];
+};
+
+export type MyDayFollowUp = {
+  id: string;
+  title: string;
+  company: string;
+  dueLabel: string;
+  contactId: string;
+  isMeeting: boolean;
+};
+
+export type MyDayReply = {
+  contactId: string;
+  name: string;
+  company: string;
+  status: string;
+};
+
+const groupHeadTone: Record<MyDayGroup["tone"], string> = {
+  red: "text-co-red-text",
+  blue: "text-co-blue-dark",
+  amber: "text-co-amber-text",
+  teal: "text-co-teal-text",
+  gray: "text-co-muted"
+};
+const groupDotTone: Record<MyDayGroup["tone"], string> = {
+  red: "bg-co-red",
+  blue: "bg-co-blue",
+  amber: "bg-co-amber-dot",
+  teal: "bg-co-teal",
+  gray: "bg-co-muted"
+};
+
+export function MyDay({
+  todayLabel,
+  metrics,
+  groups,
+  followUps,
+  replies,
+  progress,
+  startHref,
+  queueCount
+}: {
+  todayLabel: string;
+  metrics: { overdue: number; p1: number; dueToday: number; completedToday: number };
+  groups: MyDayGroup[];
+  followUps: MyDayFollowUp[];
+  replies: MyDayReply[];
+  progress: Array<{ label: string; value: number }>;
+  startHref: string;
+  queueCount: number;
+}) {
+  return (
+    <div className="cockpit min-h-full bg-co-page">
+      <div className="mx-auto w-full max-w-[1148px] px-6 py-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-co-blue">CRM · SDR Workspace</div>
+            <h1 className="mt-0.5 text-[22px] font-extrabold text-co-ink">My Day</h1>
+            <p className="mt-0.5 text-[12.5px] text-co-text-3">{todayLabel}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href={startHref}
+              className="flex h-[38px] items-center gap-2 rounded-[9px] bg-co-blue px-4 text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+            >
+              <PlayCircle className="size-4" aria-hidden="true" />
+              Start calling
+            </Link>
+          </div>
+        </div>
+
+        {/* Counter strip */}
+        <div className="mt-4 grid grid-cols-2 divide-y divide-co-divider rounded-[10px] border border-co-border bg-white sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+          <Counter tone="red" label="Overdue" value={metrics.overdue} />
+          <Counter tone="blue" label="P1 leads" value={metrics.p1} />
+          <Counter tone="amber" label="Due today" value={metrics.dueToday} />
+          <Counter tone="teal" label="Completed today" value={metrics.completedToday} />
+        </div>
+
+        {/* Main grid */}
+        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_316px]">
+          {/* Work queue */}
+          <div className="rounded-[10px] border border-co-border bg-white">
+            <div className="flex items-center justify-between border-b border-co-border px-4 py-3">
+              <h2 className="text-[13px] font-extrabold text-co-ink">Work queue</h2>
+              <span className="text-[11px] font-bold text-co-muted-2">{queueCount} active</span>
+            </div>
+            <div>
+              {groups.map((group) => (
+                <div key={group.id}>
+                  <div className="flex items-center gap-2 bg-co-sunken-2 px-4 py-1.5">
+                    <span className={`size-2 rounded-full ${groupDotTone[group.tone]}`} aria-hidden="true" />
+                    <span className={`text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${groupHeadTone[group.tone]}`}>
+                      {group.label}
+                    </span>
+                    <span className="text-[10.5px] font-bold text-co-muted-2">{group.leads.length}</span>
+                  </div>
+                  {group.leads.map((lead) => (
+                    <Link
+                      key={`${group.id}-${lead.contactId}`}
+                      href={`/sdr/focus?lead=${encodeURIComponent(lead.contactId)}&view=${lead.view}`}
+                      className="grid grid-cols-[64px_minmax(140px,1fr)_auto] items-center gap-3 border-b border-co-divider px-4 py-2.5 transition-colors last:border-0 hover:bg-[#f6faff]"
+                    >
+                      <span
+                        className={`text-[11px] font-bold ${
+                          lead.dueTone === "red"
+                            ? "text-co-red-text"
+                            : lead.dueTone === "amber"
+                              ? "text-co-amber-text"
+                              : "text-co-muted-2"
+                        }`}
+                      >
+                        {lead.dueLabel}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-bold text-co-ink">{lead.name}</span>
+                        <span className="block truncate text-[11.5px] text-co-muted-2">
+                          {[lead.title, lead.company].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      <span className="flex flex-wrap items-center justify-end gap-1.5">
+                        <CoPill tone={priorityTone(lead.priority)}>{lead.priority}</CoPill>
+                        <CoPill tone={slaTone(lead.sla)}>{lead.sla}</CoPill>
+                        <CoPill tone={statusTone(lead.status)}>{lead.status}</CoPill>
+                        {lead.blocked ? (
+                          <span className="text-[10.5px] font-bold text-co-red-text">{lead.blocked}</span>
+                        ) : lead.hasPhone ? (
+                          <Phone className="size-3.5 text-co-teal" aria-hidden="true" />
+                        ) : (
+                          <span className="text-[10.5px] font-bold text-co-red-text">No phone</span>
+                        )}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              ))}
+              {groups.length === 0 ? (
+                <div className="px-4 py-12 text-center text-[12.5px] text-co-muted">
+                  Your queue is clear — nothing needs attention right now.
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Right column */}
+          <div className="flex flex-col gap-5">
+            <SideCard title="Upcoming follow-ups">
+              {followUps.length ? (
+                followUps.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={`/crm/contacts/${item.contactId}`}
+                    className="flex flex-col gap-0.5 border-b border-co-divider py-2 last:border-0 hover:bg-[#f6faff]"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[12.5px] font-bold text-co-ink">{item.title}</span>
+                      <span className="shrink-0 text-[11px] text-co-text-3">{item.dueLabel}</span>
+                    </div>
+                    <span className="truncate text-[11px] text-co-muted-2">{item.company}</span>
+                    {item.isMeeting ? (
+                      <span className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full bg-co-teal-bg px-2 py-0.5 text-[10px] font-bold text-co-teal-text">
+                        <CalendarClock className="size-3" aria-hidden="true" />
+                        Meeting booked — reminder
+                      </span>
+                    ) : null}
+                  </Link>
+                ))
+              ) : (
+                <Empty>No upcoming follow-ups.</Empty>
+              )}
+            </SideCard>
+
+            <SideCard title="Recent replies">
+              {replies.length ? (
+                replies.map((reply) => (
+                  <Link
+                    key={reply.contactId}
+                    href={`/sdr/focus?lead=${encodeURIComponent(reply.contactId)}&view=replied`}
+                    className="flex items-center justify-between gap-2 border-b border-co-divider py-2 last:border-0 hover:bg-[#f6faff]"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-[12.5px] font-bold text-co-ink">{reply.name}</span>
+                      <span className="block truncate text-[11px] text-co-muted-2">{reply.company}</span>
+                    </span>
+                    <CoPill tone={statusTone(reply.status)}>{reply.status}</CoPill>
+                  </Link>
+                ))
+              ) : (
+                <Empty>No new replies.</Empty>
+              )}
+            </SideCard>
+
+            <SideCard title="Today's progress">
+              {progress.map((row) => (
+                <div key={row.label} className="flex items-center justify-between border-b border-co-divider py-1.5 last:border-0">
+                  <span className="text-[12px] text-co-text-3">{row.label}</span>
+                  <span className="text-[13px] font-extrabold tabular-nums text-co-ink">{row.value}</span>
+                </div>
+              ))}
+            </SideCard>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Counter({ tone, label, value }: { tone: MyDayGroup["tone"]; label: string; value: number }) {
+  return (
+    <div className="flex flex-col gap-1 px-4 py-3">
+      <div className="flex items-center gap-1.5">
+        <span className={`size-2 rounded-full ${groupDotTone[tone]}`} aria-hidden="true" />
+        <span className="text-[11px] font-bold text-co-text-3">{label}</span>
+      </div>
+      <span className="text-[22px] font-extrabold tabular-nums text-co-ink">{value}</span>
+    </div>
+  );
+}
+
+function SideCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-[10px] border border-co-border bg-white p-4">
+      <h3 className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">{title}</h3>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <div className="py-6 text-center text-[12px] text-co-muted-2">{children}</div>;
+}
