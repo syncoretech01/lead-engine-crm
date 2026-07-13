@@ -73,7 +73,18 @@ export function toCsv(rows: Record<string, string | number | boolean | undefined
 }
 
 export function escapeCsvValue(value: string | number | boolean) {
-  const stringValue = String(value);
+  let stringValue = String(value);
+
+  // Neutralize CSV/DDE formula injection: a cell beginning with = + - @ (or a leading
+  // tab/CR that spreadsheets strip before parsing) is executed as a formula when the
+  // file is opened in Excel/Sheets — a downloaded lead export could exfiltrate data or
+  // run a command. Prefix a single quote to force text. Leave plainly numeric / phone-
+  // like values (which legitimately start with + or -) untouched so numbers and phone
+  // numbers still render. See OWASP "CSV Injection".
+  if (/^[=+\-@\t\r]/.test(stringValue) && !/^[+-]?[\d\s().,-]+$/.test(stringValue)) {
+    stringValue = `'${stringValue}`;
+  }
+
   if (/[",\r\n]/.test(stringValue)) {
     return `"${stringValue.replaceAll('"', '""')}"`;
   }
