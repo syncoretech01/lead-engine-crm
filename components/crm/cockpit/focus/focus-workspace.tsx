@@ -2,36 +2,26 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Phone } from "lucide-react";
+import { Check, Phone } from "lucide-react";
 
-import { CoPill, type CoTone } from "@/components/crm/cockpit/co-table";
+import { useCall } from "@/components/call/call-context";
+import { CoPill } from "@/components/crm/cockpit/co-table";
+import { FocusDock } from "@/components/crm/cockpit/focus/focus-dock";
+import {
+  initials,
+  leadBlockReason,
+  leadCallTarget,
+  priorityTone,
+  slaTone,
+  statusTone,
+  type FocusLead
+} from "@/components/crm/cockpit/focus/focus-types";
+
+export type { FocusLead };
 
 // Focus workspace (SDR Cockpit) — the 3-zone calling surface: queue rail + lead
-// dossier + execution dock. This first cut ships the rail (queue-weight ordered,
-// view select, search, filter chips, J/K, URL-driven ?lead=&view=) + a dossier fed
-// from the lead row. The live-call dock + unified wrap-up land in the next PRs.
-export type FocusLead = {
-  id: string;
-  name: string;
-  title: string;
-  email: string;
-  phone: string;
-  hasPhone: boolean;
-  priority: string;
-  status: string;
-  slaStatus: string;
-  dueLabel: string;
-  dueAtMs: number;
-  overdue: boolean;
-  grade: string;
-  fitReason: string;
-  companyName: string;
-  companyDomain: string;
-  companyIndustry: string;
-  companyLocation: string;
-  lastTouchLabel: string;
-  owner: string;
-};
+// dossier + execution dock (live call → wrap-up → Save & next). Selection and
+// queue view are URL-driven (?lead=&view=) so refresh/deep-links preserve position.
 
 const VIEWS = [
   { id: "all", label: "All active" },
@@ -51,25 +41,6 @@ const CHIPS = [
   { id: "callready", label: "Call-ready" }
 ] as const;
 type ChipId = (typeof CHIPS)[number]["id"];
-
-function priorityTone(priority: string): CoTone {
-  if (priority === "P1") return "red";
-  if (priority === "P2") return "amber";
-  if (priority === "P3") return "sky";
-  return "neutral";
-}
-function slaTone(sla: string): CoTone {
-  if (sla === "Overdue") return "red";
-  if (sla === "Due soon") return "amber";
-  if (sla === "On track") return "teal";
-  return "neutral";
-}
-function statusTone(status: string): CoTone {
-  if (status === "Replied" || status === "Meeting Booked") return "teal";
-  if (status === "Suppressed") return "red";
-  if (status === "New" || status === "Nurture") return "neutral";
-  return "info";
-}
 
 function matchesView(lead: FocusLead, view: ViewId): boolean {
   switch (view) {
@@ -104,17 +75,23 @@ function queueSort(a: FocusLead, b: FocusLead): number {
 export function FocusWorkspace({
   leads,
   initialLeadId,
-  initialView
+  initialView,
+  callerLabel = null,
+  lineBlockReason = null
 }: {
   leads: FocusLead[];
   initialLeadId?: string;
   initialView?: string;
+  callerLabel?: string | null;
+  lineBlockReason?: string | null;
 }) {
+  const { openCallInline } = useCall();
   const [view, setView] = React.useState<ViewId>(
     VIEWS.some((v) => v.id === initialView) ? (initialView as ViewId) : "all"
   );
   const [chip, setChip] = React.useState<ChipId>("all");
   const [query, setQuery] = React.useState("");
+  const [completedIds, setCompletedIds] = React.useState<Set<string>>(() => new Set());
   const searchRef = React.useRef<HTMLInputElement>(null);
 
   const list = React.useMemo(() => {
@@ -153,6 +130,37 @@ export function FocusWorkspace({
     [list, indexInList]
   );
 
+  // Advance to the next not-yet-completed lead (Save & next / auto-advance).
+  const advance = React.useCallback(() => {
+    if (list.length === 0) return;
+    const start = indexInList < 0 ? -1 : indexInList;
+    for (let i = start + 1; i < list.length; i += 1) {
+      if (!completedIds.has(list[i].id)) {
+        setSelectedId(list[i].id);
+        return;
+      }
+    }
+    for (let i = 0; i <= start; i += 1) {
+      if (!completedIds.has(list[i].id)) {
+        setSelectedId(list[i].id);
+        return;
+      }
+    }
+  }, [list, indexInList, completedIds]);
+
+  const onComplete = React.useCallback((leadId: string) => {
+    setCompletedIds((current) => {
+      const next = new Set(current);
+      next.add(leadId);
+      return next;
+    });
+  }, []);
+
+  const callSelected = React.useCallback(() => {
+    if (!selected) return;
+    openCallInline(leadCallTarget(selected, callerLabel, lineBlockReason));
+  }, [selected, callerLabel, lineBlockReason, openCallInline]);
+
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const tag = (event.target as HTMLElement)?.tagName;
@@ -167,11 +175,16 @@ export function FocusWorkspace({
       } else if (key === "k") {
         event.preventDefault();
         move(-1);
+      } else if (key === "c") {
+        event.preventDefault();
+        callSelected();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [move]);
+  }, [move, callSelected]);
+
+  const selectedBlock = selected ? leadBlockReason(selected, lineBlockReason) : "No lead";
 
   return (
     <div className="cockpit flex h-[calc(100vh-3.5rem)] min-h-[560px] w-full overflow-hidden bg-co-page">
@@ -223,6 +236,7 @@ export function FocusWorkspace({
         <div className="flex-1 overflow-y-auto">
           {list.map((lead) => {
             const active = lead.id === selectedId;
+            const done = completedIds.has(lead.id);
             return (
               <button
                 key={lead.id}
@@ -230,11 +244,14 @@ export function FocusWorkspace({
                 onClick={() => setSelectedId(lead.id)}
                 className={`flex w-full flex-col gap-1 border-b border-co-divider px-3 py-2.5 text-left transition-colors ${
                   active ? "bg-[#eaf3ff]" : "hover:bg-co-sunken"
-                }`}
+                } ${done ? "opacity-55" : ""}`}
                 style={active ? { boxShadow: "inset 3px 0 0 var(--co-blue)" } : undefined}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-[12.5px] font-extrabold text-co-ink">{lead.name}</span>
+                  <span className={`flex items-center gap-1 truncate text-[12.5px] font-extrabold ${done ? "text-co-muted" : "text-co-ink"}`}>
+                    {done ? <Check className="size-3.5 shrink-0 text-co-teal" aria-hidden="true" /> : null}
+                    {lead.name}
+                  </span>
                   <CoPill tone={priorityTone(lead.priority)}>{lead.priority}</CoPill>
                 </div>
                 <span className="truncate text-[11px] text-co-muted-2">{lead.companyName}</span>
@@ -305,6 +322,16 @@ export function FocusWorkspace({
                   </p>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={callSelected}
+                disabled={Boolean(selectedBlock)}
+                title={selectedBlock || `Call ${selected.name}`}
+                className="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-co-blue px-4 text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-[#dce5ee] disabled:text-co-muted-2"
+              >
+                <Phone className="size-4" aria-hidden="true" />
+                Call
+              </button>
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -360,50 +387,16 @@ export function FocusWorkspace({
         )}
       </main>
 
-      {/* ───────────── Execution dock (pre-call placeholder; live dock next PR) ───────────── */}
+      {/* ───────────── Execution dock ───────────── */}
       <aside className="hidden w-[388px] shrink-0 flex-col border-l border-co-border bg-co-sunken xl:flex">
-        {selected ? (
-          <div className="flex flex-col gap-4 p-4">
-            <div className="rounded-[10px] border border-[#bcd8ff] bg-[#eaf3ff] p-3.5">
-              <div className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-blue-dark">
-                Next best action
-              </div>
-              <div className="mt-1 text-[13px] font-bold text-co-ink">
-                {selected.overdue ? "Call now — SLA overdue" : selected.hasPhone ? "Call now" : "No phone on file"}
-              </div>
-              <button
-                type="button"
-                disabled={!selected.hasPhone}
-                className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-[#dce5ee] disabled:text-co-muted-2"
-                title={selected.hasPhone ? "Live calling arrives in the next Focus PR" : "No phone on file"}
-              >
-                <Phone className="size-4" aria-hidden="true" />
-                {selected.hasPhone ? `Call ${selected.phone}` : "No phone"}
-              </button>
-            </div>
-            <div>
-              <div className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">
-                Quick actions
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {["1:1 Email", "1:1 SMS", "Add note", "Follow-up", "Create task", "Log touch"].map((label) => (
-                  <button
-                    key={label}
-                    type="button"
-                    disabled
-                    className="h-9 rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-muted-2"
-                    title="Wired up with the live dock in the next Focus PR"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <p className="text-[11px] italic text-co-muted-2">
-              The live-call dock, quick-action panels, and unified wrap-up land in the next Focus PRs.
-            </p>
-          </div>
-        ) : null}
+        <FocusDock
+          selected={selected}
+          leads={leads}
+          callerLabel={callerLabel}
+          lineBlockReason={lineBlockReason}
+          onAdvance={advance}
+          onComplete={onComplete}
+        />
       </aside>
     </div>
   );
@@ -418,11 +411,4 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       </span>
     </div>
   );
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }

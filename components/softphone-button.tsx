@@ -19,7 +19,13 @@ import {
 } from "lucide-react";
 
 import { createNoteAction, logSoftphoneCallAction, placeCallAction } from "@/app/actions";
-import { useCall, type CallTarget } from "@/components/call/call-context";
+import {
+  useCall,
+  type CallConsent,
+  type CallSnapshot,
+  type CallSurface,
+  type CallTarget
+} from "@/components/call/call-context";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -148,10 +154,26 @@ function formatClock(seconds: number): string {
   return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
-export type SoftphoneEngineHandle = { openCall: (target: CallTarget) => void };
+export type SoftphoneEngineHandle = {
+  /** Open the modal call dialog for a contact (legacy per-page buttons). */
+  openCall: (target: CallTarget) => void;
+  /** Start a call rendered inline in the Focus dock (no modal). */
+  openCallInline: (target: CallTarget) => void;
+  hangup: () => void;
+  toggleMute: () => void;
+  sendDtmf: (key: string) => void;
+  setConsent: (consent: CallConsent) => void;
+  retry: () => void;
+  reset: () => void;
+  ringMyPhone: () => void;
+};
 
 type SoftphoneEngineProps = {
-  onStateChange?: (state: { busy: boolean; activeContactId: string | null }) => void;
+  onStateChange?: (state: {
+    busy: boolean;
+    activeContactId: string | null;
+    snapshot: CallSnapshot;
+  }) => void;
 };
 
 // The live-call engine. Mounted ONCE by CallProvider (in the root layout) so the
@@ -166,6 +188,10 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
   const phone = target?.phone;
   const callerLabel = target?.callerLabel;
   const [open, setOpen] = React.useState(false);
+  // Which surface owns the call: the modal dialog (legacy per-page buttons) or the
+  // Focus cockpit dock. Default "dialog" so every existing SoftphoneButton path is
+  // byte-for-byte unchanged; the dock uses openCallInline to claim "dock".
+  const [surface, setSurface] = React.useState<CallSurface>("dialog");
   // Backgrounded call: the dialog is closed to a small floating bar while the
   // call keeps running (clicking outside during a call minimizes, never hangs up).
   const [minimized, setMinimized] = React.useState(false);
@@ -175,6 +201,9 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
   const [error, setError] = React.useState<string | null>(null);
   const [muted, setMuted] = React.useState(false);
   const [seconds, setSeconds] = React.useState(0);
+  // On-demand recording actually running (mirrors recordingStartedRef as state so
+  // the dock can show a live "Recording" indicator).
+  const [recording, setRecording] = React.useState(false);
   // Call notes the SDR jots down; saved to the contact timeline as a "Call note".
   const [notes, setNotes] = React.useState("");
   const [noteSaving, setNoteSaving] = React.useState(false);
@@ -198,6 +227,10 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
   const providerCallIdRef = React.useRef<string | undefined>(undefined);
   const telephonySessionIdRef = React.useRef<string | undefined>(undefined);
   const consentRef = React.useRef<(typeof CONSENTS)[number]>("Granted");
+  // The contact being called, held in a ref so the call-log closures use the
+  // CURRENT target even when the inline/dock path starts a call in the same tick
+  // as setTarget (the render's `contactId` closure would still be the old one).
+  const contactIdRef = React.useRef<string>("");
   // Records whether on-demand recording actually started, and the failure reason
   // if it didn't — so a silent startRecording() failure becomes diagnosable.
   const recordingStartedRef = React.useRef(false);
@@ -360,7 +393,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     async (durationSeconds: number, outcome: Outcome) => {
       try {
         const form = new FormData();
-        form.set("contactId", contactId);
+        form.set("contactId", contactIdRef.current || contactId);
         form.set("durationSeconds", String(durationSeconds));
         form.set("outcome", outcome);
         form.set("recordingConsent", consentRef.current);
@@ -408,6 +441,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     (final: "ended" | "error") => {
       if (finalize(final)) {
         setStatus(final);
+        setRecording(false);
         setMinimized(false); // call is over — drop the background bar
       }
     },
@@ -451,6 +485,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
             .startRecording()
             .then(() => {
               recordingStartedRef.current = true;
+              setRecording(true);
             })
             .catch((error: unknown) => {
               const message = error instanceof Error ? error.message : String(error);
@@ -510,6 +545,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     setError(null);
     setMuted(false);
     setSeconds(0);
+    setRecording(false);
     setMinimized(false);
     setNotes("");
     setNoteSaved(false);
@@ -560,8 +596,8 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     setOpen(false);
   }
 
-  async function startCall() {
-    const dial = toDialString(number);
+  const startCall = React.useCallback(async (dialOverride?: string) => {
+    const dial = toDialString(dialOverride ?? number);
     if (!dial) {
       setError("Enter a valid number to dial.");
       setStatus("error");
@@ -675,9 +711,9 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       setError("The call was rejected — the number or your line may not be permitted.");
       endCall("error");
     }
-  }
+  }, [number, consent, attachSession, clearConnectTimeout, endCall, finalize, terminateSession]);
 
-  function hangup() {
+  const hangup = React.useCallback(() => {
     const session = sessionRef.current;
     if (!session) return;
     try {
@@ -689,9 +725,9 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     // Finalize synchronously so the trailing 487/BYE-response event can't relabel
     // the outcome (its listeners are removed here).
     endCall("ended");
-  }
+  }, [endCall]);
 
-  function toggleMute() {
+  const toggleMute = React.useCallback(() => {
     const session = sessionRef.current;
     if (!session) return;
     if (muted) {
@@ -701,7 +737,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       session.mute();
       setMuted(true);
     }
-  }
+  }, [muted]);
 
   function onDialKey(key: string) {
     if (status === "in-call") {
@@ -713,16 +749,17 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
 
   // RingOut fallback: rings the SDR's own phone first, then bridges the lead.
   // Used when the browser softphone can't run (mic denied, no per-SDR line, etc.).
-  async function ringMyPhoneInstead() {
+  const ringMyPhoneInstead = React.useCallback(async () => {
+    const cid = contactIdRef.current || contactId;
     setError(null);
     blockCloseRef.current = false; // RingOut has no in-flight INVITE to strand
     setStatus("connecting");
     consentRef.current = consent;
     const form = new FormData();
-    form.set("contactId", contactId);
+    form.set("contactId", cid);
     form.set("toNumber", number);
     form.set("recordingConsent", consent);
-    form.set("requestId", `call-${contactId}-${Date.now()}`);
+    form.set("requestId", `call-${cid}-${Date.now()}`);
     try {
       const result = await placeCallAction(form);
       if (result.error) {
@@ -735,7 +772,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       setError(err instanceof Error ? err.message : "Could not place the call.");
       setStatus("error");
     }
-  }
+  }, [consent, number, contactId]);
 
   async function saveNote() {
     const body = notes.trim();
@@ -798,14 +835,22 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
 
   const inLiveCall = status === "connecting" || status === "ringing" || status === "in-call";
 
-  // Imperative entry point used by SoftphoneButton (via CallProvider) to start /
-  // re-surface a call. A live call is never dropped: opening the same contact
-  // just expands it; opening while idle sets up a fresh call.
+  const applyConsent = React.useCallback((next: CallConsent) => {
+    setConsent(next);
+    consentRef.current = next;
+  }, []);
+
+  // Imperative entry points used by SoftphoneButton (dialog) and the Focus dock
+  // (inline) via CallProvider. A live call is never dropped: opening the same
+  // contact just re-surfaces it; opening while idle sets up a fresh call. Controls
+  // are stable useCallbacks, so the handle stays current without ref-during-render.
   React.useImperativeHandle(
     ref,
     () => ({
       openCall(next: CallTarget) {
         const busy = status === "connecting" || status === "ringing" || status === "in-call";
+        contactIdRef.current = next.contactId;
+        setSurface("dialog");
         setTarget(next);
         setMinimized(false);
         setOpen(true);
@@ -816,17 +861,81 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
           setNotes("");
           setNoteSaved(false);
           setSeconds(0);
+          setRecording(false);
           resetTransferState();
         }
+      },
+      openCallInline(next: CallTarget) {
+        const busy = status === "connecting" || status === "ringing" || status === "in-call";
+        // One live call at a time — ignore a new inline start while busy so the
+        // current call is never dropped.
+        if (busy) return;
+        contactIdRef.current = next.contactId;
+        setSurface("dock");
+        setTarget(next);
+        setOpen(false);
+        setMinimized(false);
+        setNumber(next.phone ?? "");
+        setError(null);
+        setNotes("");
+        setNoteSaved(false);
+        setSeconds(0);
+        setRecording(false);
+        resetTransferState();
+        // Dial straight away with an explicit number: the setNumber above hasn't
+        // committed yet, and contactIdRef (set above) keeps the call log correct.
+        void startCall(next.phone);
+      },
+      hangup,
+      toggleMute,
+      sendDtmf: (key: string) => sessionRef.current?.sendDtmf(key),
+      setConsent: applyConsent,
+      retry: () => {
+        void startCall();
+      },
+      reset,
+      ringMyPhone: () => {
+        void ringMyPhoneInstead();
       }
     }),
-    [resetTransferState, status]
+    [status, applyConsent, hangup, reset, resetTransferState, ringMyPhoneInstead, startCall, toggleMute]
   );
 
-  // Report live-call state up so page-level Call buttons can reflect "on call".
+  // Report full live-call state up: `busy`/`activeContactId` keep the exact
+  // pre-existing meaning for page-level Call buttons; `snapshot` drives the dock.
   React.useEffect(() => {
-    onStateChange?.({ busy: inLiveCall, activeContactId: inLiveCall ? contactId : null });
-  }, [inLiveCall, contactId, onStateChange]);
+    onStateChange?.({
+      busy: inLiveCall,
+      activeContactId: inLiveCall ? contactId : null,
+      snapshot: {
+        surface,
+        status,
+        contactId: contactId || null,
+        contactName,
+        phone: number,
+        callerLabel: callerLabel ?? null,
+        seconds,
+        muted,
+        recording,
+        consent,
+        error
+      }
+    });
+  }, [
+    inLiveCall,
+    contactId,
+    contactName,
+    number,
+    callerLabel,
+    surface,
+    status,
+    seconds,
+    muted,
+    recording,
+    consent,
+    error,
+    onStateChange
+  ]);
 
   // The notes editor + save button, reused in the in-call and call-ended views.
   const notesEditor = (
@@ -857,7 +966,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open && surface === "dialog"} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Call {contactName}</DialogTitle>
@@ -923,7 +1032,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
                 Calls may be recorded. Confirm the contact consents before recording in two-party-consent regions.
               </p>
 
-              <Button type="button" onClick={startCall} disabled={!number.trim()}>
+              <Button type="button" onClick={() => startCall()} disabled={!number.trim()}>
                 <PhoneCall aria-hidden="true" />
                 Call {number.trim() || contactName}
               </Button>
@@ -1093,7 +1202,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
               <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
                 {status === "error" ? (
                   <>
-                    <Button type="button" size="sm" onClick={startCall}>
+                    <Button type="button" size="sm" onClick={() => startCall()}>
                       <PhoneCall aria-hidden="true" />
                       Try again
                     </Button>
@@ -1117,8 +1226,9 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       </Dialog>
 
       {/* Backgrounded call: a floating bar so the call keeps running while the SDR
-          works elsewhere on the page. Expand reopens the dialog. */}
-      {minimized && inLiveCall ? (
+          works elsewhere on the page. Expand reopens the dialog. Dock-surface calls
+          use the persistent dock instead, so the bar is dialog-only. */}
+      {minimized && inLiveCall && surface === "dialog" ? (
         <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-full border bg-popover px-4 py-2 shadow-lg">
           <span className="relative flex size-2.5" aria-hidden="true">
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--teal-700)] opacity-60" />
