@@ -199,7 +199,16 @@ describe("direct SDR email send planning", () => {
 
   it("explains why a contact is blocked before sending", () => {
     const contact = { ...baseContact("contact-blocked"), doNotContact: true };
-    expect(directEmailBlockReason(contact)).toBe("Contact is marked do-not-contact.");
+    const state = { suppressionRecords: [] } as unknown as AppState;
+    expect(directEmailBlockReason(contact, state)).toBe("Contact is marked do-not-contact.");
+  });
+
+  it("blocks a contact whose email is on the suppression list even when the flag is stale", () => {
+    const contact = { ...baseContact("stale-email"), email: "opted-out@example.com", isSuppressed: false };
+    const state = {
+      suppressionRecords: [{ workspaceId: contact.workspaceId, email: "opted-out@example.com" }]
+    } as unknown as AppState;
+    expect(directEmailBlockReason(contact, state)).toBe("Contact matches a suppression record.");
   });
 
   it("skips contacts when the sender user has no approved identity", () => {

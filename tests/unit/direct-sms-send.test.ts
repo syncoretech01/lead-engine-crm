@@ -107,10 +107,19 @@ describe("direct SDR SMS send planning", () => {
   });
 
   it("explains why a contact is blocked before SMS sending", () => {
-    expect(directSmsBlockReason({ ...baseContact("blocked"), phone: "" })).toBe("Contact has no phone number.");
-    expect(directSmsBlockReason({ ...baseContact("blocked"), doNotContact: true })).toBe(
+    const state = { suppressionRecords: [] } as unknown as AppState;
+    expect(directSmsBlockReason({ ...baseContact("blocked"), phone: "" }, state)).toBe("Contact has no phone number.");
+    expect(directSmsBlockReason({ ...baseContact("blocked"), doNotContact: true }, state)).toBe(
       "Contact is marked do-not-contact."
     );
+  });
+
+  it("blocks SMS to a phone on the workspace suppression list even when the flag is stale", () => {
+    const contact = { ...baseContact("stale-phone"), phone: "+13035551234", isSuppressed: false };
+    const state = {
+      suppressionRecords: [{ workspaceId: contact.workspaceId, phone: "+13035551234" }]
+    } as unknown as AppState;
+    expect(directSmsBlockReason(contact, state)).toBe("Contact matches a suppression record.");
   });
 });
 

@@ -69,4 +69,25 @@ describe("contact detail editing", () => {
       })
     ).toThrow("Enter a valid phone number.");
   });
+
+  it("marks the contact suppressed when its email is edited onto the suppression list", () => {
+    const state = createSeedState();
+    const contact = state.contacts[0];
+    const workspaceId = contact.workspaceId;
+    contact.isSuppressed = false;
+    state.suppressionRecords.push({
+      workspaceId,
+      email: "unsub@example.com"
+    } as unknown as (typeof state.suppressionRecords)[number]);
+
+    updateContactDetailsForWorkspace(state, {
+      workspaceId,
+      contactId: contact.id,
+      name: contact.name,
+      email: "unsub@example.com"
+    });
+
+    expect(contact.email).toBe("unsub@example.com");
+    expect(contact.isSuppressed).toBe(true);
+  });
 });

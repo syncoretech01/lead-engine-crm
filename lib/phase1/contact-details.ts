@@ -1,3 +1,4 @@
+import { isContactCurrentlySuppressed } from "@/lib/phase1/exporting";
 import { normalizeEmail, normalizePhone } from "@/lib/phase1/normalization";
 import type { AppState } from "@/lib/phase1/types";
 
@@ -66,6 +67,13 @@ export function updateContactDetailsForWorkspace(
   contact.email = after.email;
   contact.phone = after.phone;
   contact.updatedAt = now;
+
+  // If the edited email/phone now matches a workspace suppression record, mark the
+  // contact suppressed so a later send/export can't reach the opted-out address.
+  // Sticky: only sets, never clears (other suppression reasons must persist).
+  if (isContactCurrentlySuppressed(state, contact)) {
+    contact.isSuppressed = true;
+  }
 
   let normalizedRecordsUpdated = 0;
   for (const record of state.normalizedRecords) {

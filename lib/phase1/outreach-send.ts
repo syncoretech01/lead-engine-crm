@@ -6,6 +6,7 @@ import { buildOneClickUnsubscribeUrl, buildUnsubscribeUrl } from "@/lib/phase1/u
 import { amazonSesSendEmail } from "@/lib/providers/adapters/amazon-ses";
 import { resolveProviderExecutionMode } from "@/lib/providers/live-adapters";
 import { ensureLiveProviderAdaptersRegistered } from "@/lib/providers/register-live-adapters";
+import { isContactCurrentlySuppressed } from "@/lib/phase1/exporting";
 import type {
   AppState,
   CampaignSequence,
@@ -67,10 +68,14 @@ export function campaignAudience(state: AppState, campaign: OutreachCampaign): C
   });
 }
 
-export function isSendEligible(contact: Contact): boolean {
+export function isSendEligible(contact: Contact, state?: AppState): boolean {
+  // Pass `state` at SEND time to enforce the workspace suppression list — a contact
+  // whose email/phone was edited onto the list (without the cached flag being
+  // updated) is still blocked, matching the export path. The flag-only form (no
+  // state) is for display hints where the full AppState isn't loaded.
+  const suppressed = state ? isContactCurrentlySuppressed(state, contact) : contact.isSuppressed || contact.doNotContact;
   return Boolean(
-    !contact.isSuppressed &&
-      !contact.doNotContact &&
+    !suppressed &&
       contact.email &&
       contact.grade !== "S" &&
       contact.grade !== "D" &&
@@ -124,7 +129,7 @@ export function buildCampaignSendBatch(
     throw new Error("Campaign not found.");
   }
 
-  const eligible = campaignAudience(state, campaign).filter(isSendEligible);
+  const eligible = campaignAudience(state, campaign).filter((contact) => isSendEligible(contact, state));
   const alreadySent = new Set(
     state.emailEvents
       .filter(
@@ -320,7 +325,7 @@ export function recordCampaignSendResults(
   }
 
   const remaining = campaignAudience(state, campaign)
-    .filter(isSendEligible)
+    .filter((contact) => isSendEligible(contact, state))
     .filter((contact) => !hasSentEvent(state, workspaceId, campaignId, contact.id));
   const completed = remaining.length === 0;
   if (completed) {
