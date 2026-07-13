@@ -9,6 +9,8 @@ export type CallReadRow = {
   id: string;
   contactId: string;
   contactName: string;
+  /** Contact's company/account name, for the "contact · company" cell. */
+  companyName?: string;
   phoneNumber: string;
   durationSeconds: number;
   callStatus: string;
@@ -17,6 +19,8 @@ export type CallReadRow = {
   sdrName: string;
   recordingId?: string;
   recordingConsent: string;
+  /** Short call note (summary / next step), shown in the Calls table Note column. */
+  note?: string;
   createdAt: string;
 };
 
@@ -57,6 +61,8 @@ export async function readFastCallsModel(
       sdrUserId: true,
       recordingId: true,
       recordingConsent: true,
+      callSummary: true,
+      nextStep: true,
       createdAt: true
     }
   });
@@ -66,7 +72,10 @@ export async function readFastCallsModel(
 
   const [contacts, users, roster] = await Promise.all([
     contactIds.length
-      ? prisma.contact.findMany({ where: { workspaceId, id: { in: contactIds } }, select: { id: true, fullName: true, email: true } })
+      ? prisma.contact.findMany({
+          where: { workspaceId, id: { in: contactIds } },
+          select: { id: true, fullName: true, email: true, company: { select: { name: true } } }
+        })
       : Promise.resolve([]),
     userIds.length
       ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } })
@@ -77,6 +86,7 @@ export async function readFastCallsModel(
   ]);
 
   const contactName = new Map(contacts.map((c) => [c.id, displayContactName({ name: c.fullName, email: c.email ?? "" })]));
+  const companyName = new Map(contacts.map((c) => [c.id, c.company?.name ?? ""]));
   const userName = new Map(users.map((u) => [u.id, u.name]));
 
   let connected = 0;
@@ -88,6 +98,7 @@ export async function readFastCallsModel(
       id: call.id,
       contactId: call.contactId ?? "",
       contactName: call.contactId ? contactName.get(call.contactId) ?? "Unknown contact" : "Unknown contact",
+      companyName: call.contactId ? companyName.get(call.contactId) ?? "" : "",
       phoneNumber: call.phoneNumber || "",
       durationSeconds: call.durationSeconds ?? 0,
       callStatus: call.callStatus,
@@ -96,6 +107,7 @@ export async function readFastCallsModel(
       sdrName: call.sdrUserId ? userName.get(call.sdrUserId) ?? "—" : "—",
       recordingId: call.recordingId ?? undefined,
       recordingConsent: call.recordingConsent,
+      note: (call.callSummary || call.nextStep || "").trim(),
       createdAt: call.createdAt.toISOString()
     };
   });
