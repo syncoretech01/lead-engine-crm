@@ -247,6 +247,43 @@ describe.skipIf(!enabled)("native auth admin fast paths", () => {
     }
   });
 
+  it("workspacesForUser: lists the user's own workspaces and no others (switcher source)", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { workspacesForUser } = await import("@/lib/phase1/user-workspaces-read-model");
+    const { admin } = await seedAndAuthenticate();
+
+    const memberWsId = "workspace-switcher-member";
+    const foreignWsId = "workspace-switcher-foreign";
+    try {
+      await prisma.workspace.upsert({
+        where: { id: memberWsId },
+        update: {},
+        create: { id: memberWsId, name: "Zeta Workspace" }
+      });
+      await prisma.workspaceMember.upsert({
+        where: { workspaceId_userId: { workspaceId: memberWsId, userId: admin.userId } },
+        update: { role: "ADMIN" },
+        create: { id: `member-switcher-${admin.userId}`, workspaceId: memberWsId, userId: admin.userId, role: "ADMIN" }
+      });
+      // A workspace the admin is NOT a member of — must never appear.
+      await prisma.workspace.upsert({
+        where: { id: foreignWsId },
+        update: {},
+        create: { id: foreignWsId, name: "Foreign Workspace" }
+      });
+
+      const workspaces = await workspacesForUser(admin.userId);
+      const ids = workspaces.map((w) => w.id);
+      expect(ids).toContain(memberWsId);
+      expect(ids).not.toContain(foreignWsId);
+      expect(workspaces.find((w) => w.id === memberWsId)?.name).toBe("Zeta Workspace");
+      expect(workspaces.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      await prisma.workspace.delete({ where: { id: memberWsId } }).catch(() => {});
+      await prisma.workspace.delete({ where: { id: foreignWsId } }).catch(() => {});
+    }
+  });
+
   it("updateOwnProfilePrismaFast: updates the caller's own profile natively + via merge", async () => {
     const { prisma } = await import("@/lib/prisma");
     const { readState } = await import("@/lib/phase1/store");

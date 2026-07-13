@@ -9,6 +9,7 @@ import { Search } from "lucide-react";
 import { AppBreadcrumbs } from "@/components/app-breadcrumbs";
 import { CommandPalette } from "@/components/command-palette";
 import { UserMenu } from "@/components/user-menu";
+import { WorkspaceSwitcher, type WorkspaceOption } from "@/components/workspace-switcher";
 import {
   Sidebar,
   SidebarContent,
@@ -32,10 +33,11 @@ import type { Session } from "@/lib/phase1/types";
 type AppShellProps = {
   children: React.ReactNode;
   session: Session;
+  workspaces: WorkspaceOption[];
   defaultSidebarOpen?: boolean;
 };
 
-export function AppShell({ children, session, defaultSidebarOpen = true }: AppShellProps) {
+export function AppShell({ children, session, workspaces, defaultSidebarOpen = true }: AppShellProps) {
   const pathname = usePathname();
   const [paletteOpen, setPaletteOpen] = React.useState(false);
 
@@ -74,6 +76,11 @@ export function AppShell({ children, session, defaultSidebarOpen = true }: AppSh
               {syncoreBrand.shortName}
             </span>
           </Link>
+          <WorkspaceSwitcher
+            currentWorkspaceId={session.workspace.id}
+            currentWorkspaceName={session.workspace.name}
+            workspaces={workspaces}
+          />
         </SidebarHeader>
 
         <SidebarContent>
