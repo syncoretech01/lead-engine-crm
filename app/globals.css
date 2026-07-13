@@ -61,6 +61,42 @@
   /* Map Tailwind's `ease-out` utility to the brand curve so motion is
      consistent whether authored via the token or the utility. */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ── SDR Cockpit palette → Tailwind utilities (bg-co-*, text-co-*, border-co-*).
+     Exact values from the SDR Cockpit prototype; see the --co-* :root block below. */
+  --color-co-blue: var(--co-blue);
+  --color-co-blue-hover: var(--co-blue-hover);
+  --color-co-blue-dark: var(--co-blue-dark);
+  --color-co-teal: var(--co-teal);
+  --color-co-teal-bg: var(--co-teal-bg);
+  --color-co-teal-bg-strong: var(--co-teal-bg-strong);
+  --color-co-teal-border: var(--co-teal-border);
+  --color-co-teal-text: var(--co-teal-text);
+  --color-co-navy: var(--co-navy);
+  --color-co-page: var(--co-page);
+  --color-co-surface: var(--co-surface);
+  --color-co-sunken: var(--co-sunken);
+  --color-co-sunken-2: var(--co-sunken-2);
+  --color-co-border: var(--co-border);
+  --color-co-divider: var(--co-divider);
+  --color-co-divider-2: var(--co-divider-2);
+  --color-co-control: var(--co-control);
+  --color-co-ink: var(--co-ink);
+  --color-co-text-2: var(--co-text-2);
+  --color-co-text-3: var(--co-text-3);
+  --color-co-muted: var(--co-muted);
+  --color-co-muted-2: var(--co-muted-2);
+  --color-co-disabled: var(--co-disabled);
+  --color-co-amber-bg: var(--co-amber-bg);
+  --color-co-amber-bg-soft: var(--co-amber-bg-soft);
+  --color-co-amber-text: var(--co-amber-text);
+  --color-co-amber-dot: var(--co-amber-dot);
+  --color-co-red: var(--co-red);
+  --color-co-red-bg: var(--co-red-bg);
+  --color-co-red-bg-soft: var(--co-red-bg-soft);
+  --color-co-red-text: var(--co-red-text);
+  --color-co-p3-bg: var(--co-p3-bg);
+  --color-co-p3-text: var(--co-p3-text);
 }
 
 /* Motion vocabulary — pair with `ease-out` / `transition-colors`. Durations
@@ -289,6 +325,109 @@
    Toggled by a `dark` class on <html> (lib/theme.ts). MUST stay after the two
    :root blocks above: .dark and :root have equal specificity, so source order
    decides which wins. */
+
+/* ═══════════════════ SDR COCKPIT DESIGN TOKENS ═══════════════════════════════
+   EXACT values from the SDR Cockpit prototype (design_handoff_sdr_cockpit). The
+   brand core (blue/teal/navy/page) already equals --syn-*; these add the cockpit's
+   exact neutrals, tinted surfaces, and semantic tints so cockpit surfaces are
+   pixel-faithful. The design is LIGHT-ONLY, so these are fixed (not flipped by
+   .dark); the `.cockpit` scope below forces a light context for the whole surface. */
+:root {
+  --co-blue: #0076fe;
+  --co-blue-hover: #0064da;
+  --co-blue-dark: #0060ce;
+
+  --co-teal: #05dac3;
+  --co-teal-bg: #ecfdf8;
+  --co-teal-bg-strong: #d9fbf3;
+  --co-teal-border: #bdf0e4;
+  --co-teal-text: #0b7c6c;
+
+  --co-navy: #020626;
+
+  --co-page: #f5feff;
+  --co-surface: #ffffff;
+  --co-sunken: #fbfdfe;
+  --co-sunken-2: #fafcfe;
+
+  --co-border: #e1e9f0;
+  --co-divider: #f1f5f9;
+  --co-divider-2: #edf2f7;
+  --co-control: #d3dee8;
+
+  --co-ink: #0b1526;
+  --co-text-2: #3d4c5c;
+  --co-text-3: #5b6b7f;
+  --co-muted: #8896a6;
+  --co-muted-2: #93a3b4;
+  --co-disabled: #a5b2c0;
+
+  --co-amber-bg: #fef3c7;
+  --co-amber-bg-soft: #fff8eb;
+  --co-amber-text: #8a5a06;
+  --co-amber-dot: #e5a50a;
+
+  --co-red: #e5484d;
+  --co-red-bg: #fee2e2;
+  --co-red-bg-soft: #fef1f1;
+  --co-red-text: #b42323;
+
+  --co-p3-bg: #e0f2fe;
+  --co-p3-text: #0361a1;
+
+  --co-focus: #8fc2ff;
+}
+
+/* Cockpit motion vocabulary (prototype synPulse/synSpin/synUp/synBar/synIn). */
+@keyframes co-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(1.25); } }
+@keyframes co-spin { to { transform: rotate(360deg); } }
+@keyframes co-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes co-bar { from { width: 0%; } to { width: 100%; } }
+@keyframes co-in { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+
+/* The cockpit is a LIGHT-ONLY surface (the design has no dark variant). This scope
+   re-asserts the light values of the --ui-* tokens that .dark flips, so cockpit
+   pages render the prototype design regardless of the app-wide theme toggle. A
+   local declaration on .cockpit overrides the value inherited from html.dark. */
+.cockpit {
+  color-scheme: light;
+  background: var(--co-page);
+  color: var(--co-ink);
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+
+  --ui-background: #ffffff;
+  --ui-foreground: var(--co-ink);
+  --ui-card: #ffffff;
+  --ui-card-foreground: var(--co-ink);
+  --ui-popover: #ffffff;
+  --ui-popover-foreground: var(--co-ink);
+  --ui-primary: var(--co-blue);
+  --ui-primary-foreground: #ffffff;
+  --ui-secondary: var(--co-sunken);
+  --ui-secondary-foreground: var(--co-ink);
+  --ui-muted: var(--co-sunken);
+  --ui-muted-foreground: var(--co-muted);
+  --ui-accent: var(--co-sunken);
+  --ui-accent-foreground: var(--co-ink);
+  --ui-border: var(--co-border);
+  --ui-input: var(--co-control);
+  --ui-ring: var(--co-blue);
+  --ui-destructive: var(--co-red);
+}
+.cockpit ::-webkit-scrollbar { width: 8px; height: 8px; }
+.cockpit ::-webkit-scrollbar-thumb { background: var(--co-control); border-radius: 4px; }
+.cockpit ::-webkit-scrollbar-track { background: transparent; }
+.cockpit :is(input, select, textarea):focus { outline: 2px solid var(--co-focus); outline-offset: -1px; }
+.cockpit :is(input, textarea)::placeholder { color: var(--co-muted-2); }
+
+.co-anim-pulse { animation: co-pulse 1.4s ease-in-out infinite; }
+.co-anim-spin { animation: co-spin 0.7s linear infinite; }
+.co-anim-up { animation: co-up 0.25s ease; }
+.co-anim-in { animation: co-in 0.18s ease; }
+.co-anim-bar { animation: co-bar 1.5s linear forwards; }
+
 .dark {
   color-scheme: dark;
 
