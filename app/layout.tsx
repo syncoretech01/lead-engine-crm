@@ -13,7 +13,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { syncoreBrand } from "@/lib/brand";
 import { isPublicAuthPath, isPublicUnsubscribePath } from "@/lib/phase1/auth-routes";
 import { getSession } from "@/lib/phase1/store";
-import { workspacesForUser } from "@/lib/phase1/user-workspaces-read-model";
 import { readThemePref, THEME_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
@@ -55,7 +54,6 @@ export default async function RootLayout({
   }
 
   const session = await getSession();
-  const workspaces = await workspacesForUser(session.user.id);
   // Restore the sidebar collapsed/expanded state from the cookie shadcn sets,
   // so the first server render matches the user's last choice (no flash).
   const defaultSidebarOpen = cookieStore.get("sidebar_state")?.value !== "false";
@@ -66,7 +64,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <ThemeProvider initialPref={themePref}>
           <CallProvider>
-            <AppShell session={session} workspaces={workspaces} defaultSidebarOpen={defaultSidebarOpen}>
+            <AppShell session={session} defaultSidebarOpen={defaultSidebarOpen}>
               {children}
             </AppShell>
           </CallProvider>
