@@ -14,6 +14,7 @@ import {
   coHeadCell,
   type CoTone
 } from "@/components/crm/cockpit/co-table";
+import { CoPeek, CoPeekRow, CoPeekSection } from "@/components/crm/cockpit/co-peek";
 
 export type CockpitMyContactRow = {
   contactId: string;
@@ -73,6 +74,7 @@ export function MyContactsView({
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState<FilterId>("all");
   const [page, setPage] = React.useState(0);
+  const [peek, setPeek] = React.useState<CockpitMyContactRow | null>(null);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -127,10 +129,15 @@ export function MyContactsView({
           {pageRows.map((row) => (
             <tr
               key={row.contactId}
-              className="border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
+              onClick={() => setPeek(row)}
+              className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
             >
               <td className={coBodyCell}>
-                <Link href={`/crm/contacts/${row.contactId}`} className="font-bold text-co-ink hover:text-co-blue">
+                <Link
+                  href={`/crm/contacts/${row.contactId}`}
+                  onClick={(event) => event.stopPropagation()}
+                  className="font-bold text-co-ink hover:text-co-blue"
+                >
                   {row.contactName}
                 </Link>
                 {row.title ? <div className="text-[11px] text-co-muted-2">{row.title}</div> : null}
@@ -192,6 +199,60 @@ export function MyContactsView({
           </div>
         </div>
       ) : null}
+
+      <CoPeek
+        open={peek !== null}
+        onClose={() => setPeek(null)}
+        title={peek?.contactName ?? ""}
+        subtitle={peek ? [peek.title, peek.companyName].filter(Boolean).join(" · ") : undefined}
+        badges={
+          peek ? (
+            <>
+              <CoPill tone={priorityTone(peek.priority)}>{peek.priority}</CoPill>
+              <CoPill tone={statusTone(peek.status)}>{peek.status}</CoPill>
+              <CoPill tone={slaTone(peek.slaStatus)}>{peek.slaStatus}</CoPill>
+            </>
+          ) : null
+        }
+        footer={
+          peek ? (
+            <div className="flex flex-col gap-2">
+              <Link
+                href={`/crm/contacts/${peek.contactId}`}
+                className="flex h-10 items-center justify-center rounded-lg bg-co-blue text-[12.5px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+              >
+                Open full record
+              </Link>
+              <button
+                type="button"
+                disabled
+                title="Available when the Focus workspace ships"
+                className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-muted-2"
+              >
+                Open in Focus workspace · soon
+              </button>
+            </div>
+          ) : null
+        }
+      >
+        {peek ? (
+          <>
+            <CoPeekSection label="Contact">
+              <CoPeekRow
+                label="Phone"
+                value={peek.hasPhone ? peek.phone : <span className="text-co-red-text">No phone</span>}
+              />
+              <CoPeekRow label="Account" value={peek.companyName} />
+              {peek.companyDomain ? <CoPeekRow label="Domain" value={peek.companyDomain} /> : null}
+            </CoPeekSection>
+            <CoPeekSection label="Engagement">
+              <CoPeekRow label="Status" value={peek.status} />
+              <CoPeekRow label="SLA" value={peek.slaStatus} />
+              <CoPeekRow label="Last touch" value={peek.lastTouchLabel} />
+            </CoPeekSection>
+          </>
+        ) : null}
+      </CoPeek>
     </div>
   );
 }

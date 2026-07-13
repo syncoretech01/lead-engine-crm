@@ -14,6 +14,7 @@ import {
   coHeadCell,
   type CoTone
 } from "@/components/crm/cockpit/co-table";
+import { CoPeek, CoPeekRow, CoPeekSection } from "@/components/crm/cockpit/co-peek";
 
 export type CockpitOpportunityRow = {
   id: string;
@@ -63,6 +64,7 @@ export function OpportunitiesView({
 }) {
   const [view, setView] = React.useState<"list" | "board">("list");
   const [query, setQuery] = React.useState("");
+  const [peek, setPeek] = React.useState<CockpitOpportunityRow | null>(null);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -109,10 +111,15 @@ export function OpportunitiesView({
             {filtered.map((row) => (
               <tr
                 key={row.id}
-                className="border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
+                onClick={() => setPeek(row)}
+                className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
               >
                 <td className={coBodyCell}>
-                  <Link href={`/crm/accounts/${row.companyId}`} className="font-bold text-co-ink hover:text-co-blue">
+                  <Link
+                    href={`/crm/accounts/${row.companyId}`}
+                    onClick={(event) => event.stopPropagation()}
+                    className="font-bold text-co-ink hover:text-co-blue"
+                  >
                     {row.name}
                   </Link>
                   <div className="text-[11px] text-co-muted-2">{row.companyName}</div>
@@ -192,6 +199,40 @@ export function OpportunitiesView({
           })}
         </div>
       )}
+
+      <CoPeek
+        open={peek !== null}
+        onClose={() => setPeek(null)}
+        title={peek?.name ?? ""}
+        subtitle={peek?.companyName}
+        badges={peek ? <CoPill tone={stageTone(peek.stage)}>{peek.stage}</CoPill> : null}
+        footer={
+          peek ? (
+            <Link
+              href={`/crm/accounts/${peek.companyId}`}
+              className="flex h-10 items-center justify-center rounded-lg bg-co-blue text-[12.5px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+            >
+              Open account
+            </Link>
+          ) : null
+        }
+      >
+        {peek ? (
+          <>
+            <CoPeekSection label="Deal">
+              <CoPeekRow label="Amount" value={peek.amountLabel} />
+              <CoPeekRow label="Probability" value={`${peek.probability}%`} />
+              <CoPeekRow label="Stage" value={peek.stage} />
+              <CoPeekRow label="Close" value={peek.closeLabel} />
+            </CoPeekSection>
+            <CoPeekSection label="Context">
+              <CoPeekRow label="Account" value={peek.companyName} />
+              <CoPeekRow label="Contact" value={peek.contactName} />
+              <CoPeekRow label="Next step" value={peek.nextStep} />
+            </CoPeekSection>
+          </>
+        ) : null}
+      </CoPeek>
     </div>
   );
 }

@@ -13,10 +13,11 @@ import {
   coBodyCell,
   coHeadCell
 } from "@/components/crm/cockpit/co-table";
+import { CoPeek, CoPeekRow, CoPeekSection, CoPeekSummary } from "@/components/crm/cockpit/co-peek";
 
 // Cockpit Calls table — the redesigned dense call log. Plain, serializable rows
 // (display strings precomputed server-side); client-side search + All/Connected/
-// Recorded chips. Built on the shared cockpit list primitives.
+// Recorded chips; click a row for the call peek.
 export type CockpitCallRow = {
   id: string;
   contactId: string;
@@ -50,6 +51,7 @@ export function CallsView({
 }) {
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState<FilterId>("all");
+  const [peek, setPeek] = React.useState<CockpitCallRow | null>(null);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -83,11 +85,16 @@ export function CallsView({
           {filtered.map((row) => (
             <tr
               key={row.id}
-              className="border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
+              onClick={() => setPeek(row)}
+              className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
             >
               <td className={coBodyCell}>
                 {row.contactId ? (
-                  <Link href={`/crm/contacts/${row.contactId}`} className="font-bold text-co-ink hover:text-co-blue">
+                  <Link
+                    href={`/crm/contacts/${row.contactId}`}
+                    onClick={(event) => event.stopPropagation()}
+                    className="font-bold text-co-ink hover:text-co-blue"
+                  >
                     {row.contactName}
                   </Link>
                 ) : (
@@ -117,6 +124,42 @@ export function CallsView({
           ) : null}
         </tbody>
       </CoTableShell>
+
+      <CoPeek
+        open={peek !== null}
+        onClose={() => setPeek(null)}
+        title={peek?.contactName ?? ""}
+        subtitle={peek?.companyName}
+        badges={peek ? <CoPill tone={peek.outcomeTone}>{peek.outcomeLabel}</CoPill> : null}
+        footer={
+          peek?.contactId ? (
+            <Link
+              href={`/crm/contacts/${peek.contactId}`}
+              className="flex h-10 items-center justify-center rounded-lg bg-co-blue text-[12.5px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+            >
+              Open contact
+            </Link>
+          ) : null
+        }
+      >
+        {peek ? (
+          <>
+            <CoPeekSection label="Call">
+              <CoPeekRow label="Outcome" value={peek.outcomeLabel} />
+              <CoPeekRow label="Duration" value={peek.durationLabel} />
+              <CoPeekRow label="When" value={peek.whenLabel} />
+              <CoPeekRow label="Recording" value={peek.recorded ? peek.recordingLabel : ""} />
+            </CoPeekSection>
+            <CoPeekSection label="Note">
+              {peek.note ? (
+                <CoPeekSummary>{peek.note}</CoPeekSummary>
+              ) : (
+                <p className="text-[12.5px] italic text-co-muted-2">No note captured for this call.</p>
+              )}
+            </CoPeekSection>
+          </>
+        ) : null}
+      </CoPeek>
     </div>
   );
 }
