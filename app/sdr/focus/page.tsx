@@ -1,5 +1,6 @@
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
 import { getWorkspaceSessionContext } from "@/lib/phase1/store";
+import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
 import { FocusWorkspace, type FocusLead } from "@/components/crm/cockpit/focus/focus-workspace";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +18,18 @@ export default async function FocusPage({
   const model = await readAssignedContactsModel(session, workspaceId);
   const rows = model?.rows ?? [];
 
+  // The SDR's own RingCentral line (mirrors the contact-record Call button): the
+  // caller label to show, or the reason their line can't place calls.
+  const identity = resolveUserTelephonyIdentity(session.user);
+  const callerLabel = identity ? `${identity.displayName} · ${identity.phoneNumber}` : null;
+  const lineBlockReason = identity ? null : telephonyIdentityBlockReason(session.user);
+
   const leads: FocusLead[] = rows.map((row) => {
     const dueIso = row.dueAt ?? row.firstTouchDueAt ?? row.followUpDueAt;
     const parsed = dueIso ? Date.parse(dueIso) : Number.NaN;
     return {
       id: row.contactId,
+      assignmentId: row.id,
       name: row.contactName,
       title: row.title,
       email: row.email,
@@ -35,16 +43,26 @@ export default async function FocusPage({
       overdue: row.slaStatus === "Overdue",
       grade: row.grade,
       fitReason: row.notes ?? "",
+      companyId: row.companyId,
       companyName: row.companyName,
       companyDomain: row.companyDomain,
       companyIndustry: row.companyIndustry,
       companyLocation: row.companyState,
       lastTouchLabel: lastTouchLabel(row.lastTouchAt, row.touchCount),
-      owner: row.ownerName
+      owner: row.ownerName,
+      emailEligible: row.emailEligible
     };
   });
 
-  return <FocusWorkspace leads={leads} initialLeadId={sp.lead} initialView={sp.view} />;
+  return (
+    <FocusWorkspace
+      leads={leads}
+      initialLeadId={sp.lead}
+      initialView={sp.view}
+      callerLabel={callerLabel}
+      lineBlockReason={lineBlockReason}
+    />
+  );
 }
 
 // Precomputed server-side (Date.now here never reaches the client).

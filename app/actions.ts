@@ -1216,6 +1216,183 @@ export async function logFirstTouchAction(formData: FormData) {
   revalidateSdrPages();
 }
 
+export type CallWrapupResult =
+  | { ok: true; message: string; created: string[] }
+  | { ok: false; error: string };
+
+/**
+ * Unified SDR call wrap-up (SDR Cockpit). Composes the existing building blocks in
+ * ONE snapshot transaction (atomic — never a half-saved wrap-up): recordFirstTouch
+ * (lead status + SLA reset + follow-up reminder & task + touch activity) plus an
+ * optional call note, explicit task, and opportunity. The call itself is already
+ * logged separately by logSoftphoneCallAction on hang-up, so it is not re-logged
+ * here. Returns the list of what was created for the success checklist.
+ */
+export async function saveCallWrapupAction(input: {
+  assignmentId: string;
+  contactId: string;
+  companyId: string;
+  /** Call disposition label (Connected, No answer, Voicemail, …) — for the audit. */
+  outcome: string;
+  /** The SdrLeadStatus to set on the assignment. */
+  leadStatus: string;
+  notes: string;
+  /** ISO datetime for the follow-up reminder + task (omit for none). */
+  followUpDueAt?: string;
+  task?: { title: string; dueAt?: string } | null;
+  opportunity?: {
+    name: string;
+    stage: string;
+    amount?: number;
+    expectedCloseDate?: string;
+    nextStep?: string;
+  } | null;
+}): Promise<CallWrapupResult> {
+  const created: string[] = [];
+  try {
+    await updateState(
+      (state, session) => {
+        assertPermission(session, "manage_sdr");
+        assertPermission(session, "manage_crm");
+
+        // 1. First touch: status, SLA reset, completes old reminders, creates the
+        //    follow-up reminder + task (when the status stays active), touch activity.
+        const leadStatus = sdrLeadStatuses.includes(input.leadStatus as SdrLeadStatus)
+          ? (input.leadStatus as SdrLeadStatus)
+          : "Contacted";
+        const assignment = recordFirstTouch(state, {
+          workspaceId: session.workspace.id,
+          assignmentId: input.assignmentId,
+          actorUserId: session.user.id,
+          channel: "Call",
+          outcome: leadStatus,
+          notes: input.notes.trim() || `Call wrap-up: ${input.outcome}.`,
+          followUpDueAt: input.followUpDueAt
+        });
+        created.push(`Lead status → ${assignment.status}`);
+        if (input.followUpDueAt) {
+          created.push("Follow-up reminder + task");
+        }
+
+        const companyId = assignment.companyId || input.companyId;
+        const contactId = assignment.contactId || input.contactId;
+        const now = new Date().toISOString();
+
+        // 2. Call note on the timeline (distinct from the touch activity so it shows
+        //    in the contact's Notes).
+        if (input.notes.trim()) {
+          state.notes.unshift({
+            id: `note-${randomUUID()}`,
+            workspaceId: session.workspace.id,
+            companyId,
+            contactId,
+            body: input.notes.trim(),
+            createdById: session.user.id,
+            createdAt: now,
+            updatedAt: now
+          });
+          addActivity(state, {
+            workspaceId: session.workspace.id,
+            companyId,
+            contactId,
+            type: "Note",
+            title: "Call note",
+            body: input.notes.trim(),
+            actorUserId: session.user.id
+          });
+          created.push("Call note");
+        }
+
+        // 3. Optional explicit follow-up task (beyond the auto reminder task).
+        if (input.task && input.task.title.trim()) {
+          const task: CrmTask = {
+            id: `task-${randomUUID()}`,
+            workspaceId: session.workspace.id,
+            companyId,
+            contactId,
+            title: input.task.title.trim(),
+            status: "Open",
+            priority: taskPriorityValue(null),
+            dueAt: dateTimeValue(input.task.dueAt ?? null),
+            ownerUserId: session.user.id,
+            createdById: session.user.id,
+            createdAt: now,
+            updatedAt: now
+          };
+          state.tasks.unshift(task);
+          addActivity(state, {
+            workspaceId: session.workspace.id,
+            companyId,
+            contactId,
+            type: "Task",
+            title: `Task created: ${task.title}`,
+            body: task.dueAt ? `Due ${task.dueAt.slice(0, 10)}.` : undefined,
+            actorUserId: session.user.id,
+            metadata: { priority: task.priority }
+          });
+          created.push(`Task: ${task.title}`);
+        }
+
+        // 4. Optional opportunity (Qualified / Meeting-booked flows).
+        if (input.opportunity && input.opportunity.name.trim()) {
+          const company = state.companies.find(
+            (item) => item.id === companyId && item.workspaceId === session.workspace.id
+          );
+          if (!company) {
+            throw new Error("Account not found for the opportunity.");
+          }
+          const stage = opportunityStageValue(input.opportunity.stage);
+          const opportunity: Opportunity = {
+            id: `opp-${randomUUID()}`,
+            workspaceId: session.workspace.id,
+            companyId,
+            contactId: contactId || undefined,
+            name: input.opportunity.name.trim(),
+            stage,
+            amount: Math.max(0, Math.round(input.opportunity.amount ?? 0)),
+            probability: stageProbability(stage),
+            expectedCloseDate: dateValue(input.opportunity.expectedCloseDate ?? null),
+            ownerUserId: session.user.id,
+            source: company.sourceLineage[0] ?? "Call wrap-up",
+            createdAt: now,
+            updatedAt: now
+          };
+          state.opportunities.unshift(opportunity);
+          addActivity(state, {
+            workspaceId: session.workspace.id,
+            companyId,
+            contactId: contactId || undefined,
+            opportunityId: opportunity.id,
+            type: "Opportunity",
+            title: `${stage} opportunity created`,
+            body: input.opportunity.nextStep?.trim() || opportunity.name,
+            actorUserId: session.user.id,
+            metadata: { amount: opportunity.amount, probability: opportunity.probability }
+          });
+          created.push(`Opportunity: ${opportunity.name}`);
+        }
+
+        appendAudit(state, session, {
+          objectType: "sdr_assignment",
+          objectId: assignment.id,
+          action: "call_wrapup_saved",
+          newValue: { outcome: input.outcome, leadStatus: assignment.status, created }
+        });
+      },
+      { normalizedTables: [...new Set([...sdrWriteTables, ...crmWriteTables])] }
+    );
+
+    revalidateSdrPages();
+    revalidateCrmPages([
+      `/crm/contacts/${input.contactId}`,
+      input.companyId ? `/crm/accounts/${input.companyId}` : ""
+    ]);
+    return { ok: true, message: "Call wrap-up saved.", created };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Could not save the wrap-up." };
+  }
+}
+
 export async function completeFollowUpReminderAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_sdr");
