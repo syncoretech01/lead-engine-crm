@@ -819,6 +819,10 @@ model Contact {
 
   @@index([workspaceId, email])
   @@index([workspaceId, fullName])
+  // Serves the main CRM contacts list (orderBy score desc) and SDR row-scoping
+  // (where owner = <display name>) — both scan+sort the whole workspace otherwise.
+  @@index([workspaceId, score])
+  @@index([workspaceId, owner])
 }
 
 model FieldSource {
@@ -1140,6 +1144,9 @@ model Activity {
   @@index([workspaceId, accountId, occurredAt])
   @@index([workspaceId, contactId, occurredAt])
   @@index([workspaceId, opportunityId, occurredAt])
+  // Serves the workspace-wide activity feed (where workspaceId orderBy occurredAt
+  // desc) on /crm + /crm/contacts — the prefixed composites above can't serve it.
+  @@index([workspaceId, occurredAt])
 }
 
 model Task {
@@ -1579,6 +1586,9 @@ model TrackedCall {
   @@index([workspaceId, leadContactId, createdAt])
   @@index([workspaceId, companyId, createdAt])
   @@index([workspaceId, sdrUserId, createdAt])
+  // Serves the manager/admin unfiltered calls list + outreach dashboard
+  // (where workspaceId orderBy createdAt desc).
+  @@index([workspaceId, createdAt])
 }
 
 model ReportSnapshot {
