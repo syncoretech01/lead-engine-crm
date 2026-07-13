@@ -38,7 +38,12 @@ export async function readAssignedContactsModel(
       },
       include: sdrAssignmentRowInclude,
       orderBy: [{ assignedAt: "desc" }, { id: "asc" }],
-      take: 500
+      // Fetch the full assigned book so no SDR's older assignments fall past the cap
+      // in the unfiltered manager view (a 692-broker import once buried an SDR's 136
+      // earlier assignments below a take:500 — the "Sam's leads invisible" bug). The
+      // cockpit view paginates client-side. True server-side pagination (P1.11) is the
+      // eventual fix once a workspace exceeds this bound.
+      take: 2000
     }),
     isSdr
       ? Promise.resolve([])
