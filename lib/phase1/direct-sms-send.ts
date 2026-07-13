@@ -9,6 +9,7 @@ import {
   ringCentralSmsLiveBlockReason,
   type RingCentralSmsCredential
 } from "@/lib/providers/adapters/ringcentral-sms";
+import { isContactCurrentlySuppressed } from "@/lib/phase1/exporting";
 import type { AppState, Contact, SdrLeadStatus, User } from "@/lib/phase1/types";
 import type { ProviderCredential } from "@/lib/providers/types";
 
@@ -80,7 +81,7 @@ export function buildDirectSmsSendPlan(
   if (!contact) {
     skipped.push({ contactId: input.contactId, reason: "Contact not found." });
   } else {
-    const blockReason = directSmsBlockReason(contact);
+    const blockReason = directSmsBlockReason(contact, state);
     if (blockReason) {
       skipped.push({ contactId: contact.id, reason: blockReason });
     } else if (hasDirectSmsSentEvent(state, input.workspaceId, input.requestId, contact.id)) {
@@ -248,9 +249,11 @@ export function recordDirectSmsSendResults(
   return { sent, failed, skipped: input.skipped.length };
 }
 
-export function directSmsBlockReason(contact: Contact): string | undefined {
+export function directSmsBlockReason(contact: Contact, state?: AppState): string | undefined {
   if (contact.isSuppressed) return "Contact is suppressed.";
   if (contact.doNotContact) return "Contact is marked do-not-contact.";
+  // Pass `state` at send time to also block against the workspace suppression list.
+  if (state && isContactCurrentlySuppressed(state, contact)) return "Contact matches a suppression record.";
   if (!contact.phone) return "Contact has no phone number.";
   return undefined;
 }

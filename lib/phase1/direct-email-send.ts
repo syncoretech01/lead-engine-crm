@@ -14,6 +14,7 @@ import { resolveUserSenderIdentity, senderIdentityBlockReason } from "@/lib/phas
 import { buildOneClickUnsubscribeUrl, buildUnsubscribeUrl } from "@/lib/phase1/unsubscribe-token";
 import { amazonSesSendEmail, type EmailAttachment } from "@/lib/providers/adapters/amazon-ses";
 import { ensureLiveProviderAdaptersRegistered } from "@/lib/providers/register-live-adapters";
+import { isContactCurrentlySuppressed } from "@/lib/phase1/exporting";
 import type { AppState, Contact, SdrLeadStatus, User } from "@/lib/phase1/types";
 import type { ProviderCredential } from "@/lib/providers/types";
 
@@ -94,7 +95,7 @@ export function buildDirectEmailSendPlan(
   const recipients: DirectEmailRecipient[] = [];
 
   for (const contact of contacts) {
-    const blockReason = directEmailBlockReason(contact);
+    const blockReason = directEmailBlockReason(contact, state);
     if (blockReason) {
       skipped.push({ contactId: contact.id, reason: blockReason });
       continue;
@@ -325,7 +326,7 @@ export function assignedBulkEmailContactIds(
       const contact = state.contacts.find(
         (item) => item.id === assignment.contactId && item.workspaceId === input.workspaceId
       );
-      return Boolean(contact && !directEmailBlockReason(contact));
+      return Boolean(contact && !directEmailBlockReason(contact, state));
     })
     .filter((assignment) => {
       if (input.audience === "p1") {
@@ -347,13 +348,15 @@ export function assignedBulkEmailContactIds(
     .map((assignment) => assignment.contactId);
 }
 
-export function directEmailBlockReason(contact: Contact): string | undefined {
+export function directEmailBlockReason(contact: Contact, state?: AppState): string | undefined {
   if (contact.isSuppressed) return "Contact is suppressed.";
   if (contact.doNotContact) return "Contact is marked do-not-contact.";
+  // Pass `state` at send time to also block against the workspace suppression list.
+  if (state && isContactCurrentlySuppressed(state, contact)) return "Contact matches a suppression record.";
   if (!contact.email) return "Contact has no email address.";
   if (contact.grade === "S" || contact.grade === "D") return `Contact grade ${contact.grade} is blocked.`;
   if (contact.priority === "S") return "Contact priority is suppressed.";
-  if (!isSendEligible(contact)) return "Contact is not eligible for email.";
+  if (!isSendEligible(contact, state)) return "Contact is not eligible for email.";
   return undefined;
 }
 

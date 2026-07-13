@@ -50,11 +50,21 @@ describe("outreach send planning", () => {
     const noEmail = { ...eligible, id: "no-email", email: "" };
     const gradeD = { ...eligible, id: "grade-d", grade: "D" as const };
     const suppressed = { ...eligible, id: "suppressed", isSuppressed: true };
+    const noSuppression = { suppressionRecords: [] } as unknown as AppState;
 
-    expect(isSendEligible(eligible)).toBe(true);
-    expect(isSendEligible(noEmail)).toBe(false);
-    expect(isSendEligible(gradeD)).toBe(false);
-    expect(isSendEligible(suppressed)).toBe(false);
+    expect(isSendEligible(eligible, noSuppression)).toBe(true);
+    expect(isSendEligible(noEmail, noSuppression)).toBe(false);
+    expect(isSendEligible(gradeD, noSuppression)).toBe(false);
+    expect(isSendEligible(suppressed, noSuppression)).toBe(false);
+  });
+
+  it("blocks a contact whose email is on the workspace suppression list even when the flag is stale", () => {
+    const contact = baseContact("stale", "workspace-syncore", ["source:job-a"]);
+    const state = {
+      suppressionRecords: [{ workspaceId: "workspace-syncore", email: contact.email }]
+    } as unknown as AppState;
+    expect(contact.isSuppressed).toBe(false);
+    expect(isSendEligible(contact, state)).toBe(false);
   });
 
   it("plans an idempotent live SES batch with signed unsubscribe headers", () => {
