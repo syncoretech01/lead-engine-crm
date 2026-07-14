@@ -182,11 +182,11 @@ export default async function ContactsPage({
     <>
       <PageHeader
         kicker="Sales CRM"
-        title={isSdr ? "My contacts" : "All Contacts"}
+        title="Contacts"
         copy={
           isSdr
-            ? "Assigned people with account context, channel readiness, and the next practical action."
-            : "Every contact in the workspace — assigned or unassigned. Search verification and channel readiness, and keep each person tied to account context."
+            ? "Your contacts with account context, channel readiness, and the next practical action. Click a contact to open its record."
+            : "Every contact in the workspace — assigned or unassigned. Search, sort, and filter the full directory; click a contact to open its record."
         }
         actions={
           <>

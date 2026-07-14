@@ -30,7 +30,7 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
       "Exports"
     ],
     crm: ["CRM Dashboard", "SDR Queue", "Focus", "Manager Dashboard"],
-    records: ["Assigned Contacts", "Accounts", "All Contacts", "Opportunities", "Call Log"],
+    records: ["Contacts", "Accounts", "Opportunities", "Call Log"],
     outreach: ["Campaigns", "Outreach Events"],
     admin: [
       "Integration Center",
@@ -54,12 +54,12 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
       "Exports"
     ],
     crm: ["CRM Dashboard", "SDR Queue", "Focus", "Manager Dashboard"],
-    records: ["Assigned Contacts", "Accounts", "All Contacts", "Opportunities", "Call Log"],
+    records: ["Contacts", "Accounts", "Opportunities", "Call Log"],
     outreach: ["Campaigns", "Outreach Events"]
   },
   SDR: {
     crm: ["My Day", "Focus"],
-    records: ["My Contacts", "Accounts", "All Contacts", "Opportunities", "My Calls"]
+    records: ["Contacts", "Accounts", "Opportunities", "My Calls"]
   },
   "Data Operator": {
     "lead-generation": [
