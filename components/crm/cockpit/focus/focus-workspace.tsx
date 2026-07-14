@@ -170,13 +170,14 @@ export function FocusWorkspace({
 
   // Begin a session when the SDR arrives via "Start calling" (autoStart) or places
   // their first live call. The session is a client-side concept (localStorage).
+  const queueTotal = leads.length;
   React.useEffect(() => {
-    if (autoStart) startSession();
-  }, [autoStart, startSession]);
+    if (autoStart) startSession(queueTotal);
+  }, [autoStart, startSession, queueTotal]);
   const callActive = call.status === "connecting" || call.status === "ringing" || call.status === "in-call";
   React.useEffect(() => {
-    if (callActive && !sessionActive) startSession();
-  }, [callActive, sessionActive, startSession]);
+    if (callActive && !sessionActive) startSession(queueTotal);
+  }, [callActive, sessionActive, startSession, queueTotal]);
 
   const callSelected = React.useCallback(() => {
     if (!selected) return;

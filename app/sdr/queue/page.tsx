@@ -103,7 +103,8 @@ export default async function SdrQueuePage() {
           assignments: activeAssignments,
           reminders: openReminders,
           allAssignments: snapshot.assignments,
-          metrics: snapshot.metrics
+          metrics: snapshot.metrics,
+          sdrName: session.user.name
         })}
       />
     );
@@ -758,12 +759,14 @@ function buildMyDayProps({
   assignments,
   reminders,
   allAssignments,
-  metrics
+  metrics,
+  sdrName
 }: {
   assignments: AssignmentView[];
   reminders: ReminderView[];
   allAssignments: AssignmentView[];
   metrics: { assigned: number; p1: number; dueToday: number; overdue: number };
+  sdrName: string;
 }) {
   const groupDefs: Array<{
     id: string;
@@ -837,16 +840,11 @@ function buildMyDayProps({
       day: "numeric",
       year: "numeric"
     }),
+    sdrName,
     metrics: { overdue: metrics.overdue, p1: metrics.p1, dueToday: metrics.dueToday, completedToday },
     groups,
     followUps,
     replies,
-    progress: [
-      { label: "Leads touched today", value: completedToday },
-      { label: "Due today", value: metrics.dueToday },
-      { label: "Open follow-ups", value: reminders.length },
-      { label: "Meetings booked", value: assignments.filter((a) => a.status === "Meeting Booked").length }
-    ],
     startHref: "/sdr/focus?start=1",
     queueCount: assignments.length
   };

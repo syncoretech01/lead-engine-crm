@@ -25,6 +25,7 @@ import {
   SidebarRail,
   SidebarTrigger
 } from "@/components/ui/sidebar";
+import { useFocusSession } from "@/components/crm/cockpit/focus/use-focus-session";
 import { syncoreBrand } from "@/lib/brand";
 import { accessibleNav, findActiveNav, resolveNavLabel } from "@/lib/navigation";
 import type { Session } from "@/lib/phase1/types";
@@ -33,14 +34,30 @@ type AppShellProps = {
   children: React.ReactNode;
   session: Session;
   defaultSidebarOpen?: boolean;
+  /** The signed-in user's RingCentral number, shown in the top bar. */
+  ringCentralLabel?: string | null;
 };
 
-export function AppShell({ children, session, defaultSidebarOpen = true }: AppShellProps) {
+export function AppShell({ children, session, defaultSidebarOpen = true, ringCentralLabel = null }: AppShellProps) {
   const pathname = usePathname();
   const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const focusSession = useFocusSession();
 
   const groups = React.useMemo(() => accessibleNav(session), [session]);
   const activeHref = findActiveNav(pathname, session)?.item.href ?? null;
+
+  // Auto-collapse the sidebar to the icon rail on the Focus cockpit (it needs the
+  // width), and re-expand on any other route — controlled via the shadcn provider.
+  // Route transitions adjust the open state during render (React's blessed pattern
+  // for deriving state from a changing prop) so the SDR can still re-open it while
+  // in Focus without it being forced back.
+  const inFocus = pathname.startsWith("/sdr/focus");
+  const [sidebarOpen, setSidebarOpen] = React.useState(!inFocus && defaultSidebarOpen);
+  const [prevInFocus, setPrevInFocus] = React.useState(inFocus);
+  if (inFocus !== prevInFocus) {
+    setPrevInFocus(inFocus);
+    setSidebarOpen(!inFocus && defaultSidebarOpen);
+  }
 
   // ⌘K / Ctrl+K opens the command palette (the sidebar owns ⌘B for collapse).
   React.useEffect(() => {
@@ -55,7 +72,7 @@ export function AppShell({ children, session, defaultSidebarOpen = true }: AppSh
   }, []);
 
   return (
-    <SidebarProvider defaultOpen={defaultSidebarOpen}>
+    <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
       <Sidebar collapsible="icon">
         <SidebarHeader>
           <Link
@@ -116,18 +133,36 @@ export function AppShell({ children, session, defaultSidebarOpen = true }: AppSh
         <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4">
           <SidebarTrigger className="-ml-1 text-muted-foreground" />
           <AppBreadcrumbs session={session} />
-          <button
-            type="button"
-            onClick={() => setPaletteOpen(true)}
-            className="ml-auto inline-flex h-9 items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-muted-foreground transition-colors hover:bg-[var(--bg-subtle)]"
-            aria-label="Search or jump to a page"
-          >
-            <Search className="size-4" aria-hidden="true" />
-            <span className="hidden sm:inline">Search or jump to…</span>
-            <kbd className="ml-4 hidden rounded border border-[var(--border-default)] bg-[var(--bg-subtle)] px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground sm:inline">
-              ⌘K
-            </kbd>
-          </button>
+          {focusSession.active ? (
+            <span className="hidden h-7 items-center gap-1.5 rounded-full border border-[var(--teal-700)]/35 bg-[var(--teal-700)]/10 px-2.5 sm:flex">
+              <span className="relative flex size-2" aria-hidden="true">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--teal-700)] opacity-60" />
+                <span className="relative inline-flex size-2 rounded-full bg-[var(--teal-700)]" />
+              </span>
+              <span className="text-[11.5px] font-bold text-[var(--teal-700)]">
+                Session · {focusSession.completedCount}/{focusSession.total || "—"}
+              </span>
+            </span>
+          ) : null}
+          <div className="ml-auto flex items-center gap-3">
+            {ringCentralLabel ? (
+              <span className="hidden text-[11.5px] font-medium text-muted-foreground md:inline">
+                RC · {ringCentralLabel}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-muted-foreground transition-colors hover:bg-[var(--bg-subtle)]"
+              aria-label="Search or jump to a page"
+            >
+              <Search className="size-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Search or jump to…</span>
+              <kbd className="ml-4 hidden rounded border border-[var(--border-default)] bg-[var(--bg-subtle)] px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground sm:inline">
+                ⌘K
+              </kbd>
+            </button>
+          </div>
         </header>
 
         <div className="content" style={{ overflow: "visible" }}>

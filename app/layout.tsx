@@ -7,6 +7,7 @@ import "@fontsource/manrope/800.css";
 import "./globals.css";
 import { cookies, headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
+import { resolveUserTelephonyIdentity } from "@/lib/phase1/telephony-identities";
 import { CallProvider } from "@/components/call/call-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -57,6 +58,7 @@ export default async function RootLayout({
   // Restore the sidebar collapsed/expanded state from the cookie shadcn sets,
   // so the first server render matches the user's last choice (no flash).
   const defaultSidebarOpen = cookieStore.get("sidebar_state")?.value !== "false";
+  const telephony = resolveUserTelephonyIdentity(session.user);
 
   return (
     <html lang="en" className={htmlClassName} suppressHydrationWarning>
@@ -64,7 +66,11 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <ThemeProvider initialPref={themePref}>
           <CallProvider>
-            <AppShell session={session} defaultSidebarOpen={defaultSidebarOpen}>
+            <AppShell
+              session={session}
+              defaultSidebarOpen={defaultSidebarOpen}
+              ringCentralLabel={telephony?.phoneNumber ?? null}
+            >
               {children}
             </AppShell>
           </CallProvider>
