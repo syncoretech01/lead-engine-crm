@@ -6,10 +6,12 @@ import { toast } from "sonner";
 import {
   Check,
   Circle,
+  Grid3x3,
   Loader2,
   Mic,
   MicOff,
   Phone,
+  PhoneForwarded,
   PhoneOff,
   Radio,
   StickyNote,
@@ -36,21 +38,22 @@ const DIAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 type OutcomeDef = {
   id: string;
   status: string;
+  nextAction: string;
   followUp?: FollowUpPreset;
   opp?: boolean;
   meeting?: boolean;
 };
 const OUTCOMES: OutcomeDef[] = [
-  { id: "Connected", status: "Contacted" },
-  { id: "No answer", status: "Working" },
-  { id: "Voicemail", status: "Contacted" },
-  { id: "Busy", status: "Working" },
-  { id: "Wrong number", status: "Invalid" },
-  { id: "Not interested", status: "Disqualified" },
-  { id: "Follow-up required", status: "Working", followUp: "tomorrow" },
-  { id: "Qualified", status: "Qualified", opp: true },
-  { id: "Meeting booked", status: "Meeting Booked", meeting: true },
-  { id: "Do not contact", status: "Suppressed" }
+  { id: "Connected", status: "Contacted", nextAction: "Log the call and set a follow-up" },
+  { id: "No answer", status: "Working", nextAction: "Try again later or send a 1:1 email" },
+  { id: "Voicemail", status: "Contacted", nextAction: "Follow up after the voicemail" },
+  { id: "Busy", status: "Working", nextAction: "Retry shortly" },
+  { id: "Wrong number", status: "Invalid", nextAction: "Verify the number on the record" },
+  { id: "Not interested", status: "Disqualified", nextAction: "Nurture or disqualify" },
+  { id: "Follow-up required", status: "Working", followUp: "tomorrow", nextAction: "Complete the follow-up you set" },
+  { id: "Qualified", status: "Qualified", opp: true, nextAction: "Advance the opportunity" },
+  { id: "Meeting booked", status: "Meeting Booked", meeting: true, nextAction: "Prep the meeting" },
+  { id: "Do not contact", status: "Suppressed", nextAction: "Suppress and stop outreach" }
 ];
 
 const LEAD_STATUSES = [
@@ -576,6 +579,18 @@ function LiveCall({
     call.status === "connecting" ? "Connecting…" : call.status === "ringing" ? "Ringing…" : "Connected";
   const stateDot =
     call.status === "in-call" ? "bg-co-teal" : call.status === "ringing" ? "bg-co-blue" : "bg-co-amber-dot";
+  const connected = call.status === "in-call";
+
+  const [keypadOpen, setKeypadOpen] = React.useState(false);
+  const [transferOpen, setTransferOpen] = React.useState(false);
+  const { loadTransferTargets } = controls;
+  const targetCount = call.transfer.targets.length;
+  function toggleTransfer() {
+    setTransferOpen((open) => {
+      if (!open && targetCount === 0) loadTransferTargets();
+      return !open;
+    });
+  }
 
   return (
     <div className="flex h-full flex-col gap-3 p-4">
@@ -596,39 +611,31 @@ function LiveCall({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-6 gap-1.5">
-          {DIAL_KEYS.map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => controls.sendDtmf(key)}
-              disabled={call.status !== "in-call"}
-              className="h-8 rounded-md bg-white/10 text-[13px] font-bold text-white transition-colors hover:bg-white/20 disabled:opacity-40"
-            >
-              {key}
-            </button>
-          ))}
-        </div>
+        {keypadOpen ? (
+          <div className="mt-3 grid grid-cols-6 gap-1.5">
+            {DIAL_KEYS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => controls.sendDtmf(key)}
+                disabled={!connected}
+                className="h-8 rounded-md bg-white/10 text-[13px] font-bold text-white transition-colors hover:bg-white/20 disabled:opacity-40"
+              >
+                {key}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={controls.toggleMute}
-            disabled={call.status !== "in-call"}
-            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-white/10 text-[12px] font-bold text-white transition-colors hover:bg-white/20 disabled:opacity-40"
-          >
+          <StripButton onClick={controls.toggleMute} disabled={!connected} active={call.muted}>
             {call.muted ? <MicOff className="size-4" aria-hidden="true" /> : <Mic className="size-4" aria-hidden="true" />}
             {call.muted ? "Unmute" : "Mute"}
-          </button>
-          <div
-            className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-[12px] font-bold ${
-              call.recording ? "bg-[#e5484d] text-white" : "bg-white/10 text-white/70"
-            }`}
-            title={call.recording ? "Recording" : "Not recording"}
-          >
-            <Radio className="size-4" aria-hidden="true" />
-            {call.recording ? "Rec" : "Off"}
-          </div>
+          </StripButton>
+          <StripButton onClick={() => setKeypadOpen((open) => !open)} disabled={!connected} active={keypadOpen}>
+            <Grid3x3 className="size-4" aria-hidden="true" />
+            Keypad
+          </StripButton>
           <button
             type="button"
             onClick={controls.hangup}
@@ -639,6 +646,30 @@ function LiveCall({
             {call.status === "ringing" ? "Cancel" : "Hang up"}
           </button>
         </div>
+
+        {/* Consent + recording status */}
+        <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-white/55">
+          <Radio className={`size-3.5 ${call.recording ? "text-[#ff9d9d]" : ""}`} aria-hidden="true" />
+          <span className={call.recording ? "text-[#ff9d9d]" : ""}>{call.recording ? "Recording" : "Not recording"}</span>
+          <span>· Consent {call.consent}</span>
+        </div>
+
+        {/* Transfer to manager */}
+        {connected ? (
+          <div className="mt-3 border-t border-white/10 pt-3">
+            <button
+              type="button"
+              onClick={toggleTransfer}
+              aria-expanded={transferOpen}
+              className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-white/10 text-[12px] font-bold text-white transition-colors hover:bg-white/20"
+            >
+              <PhoneForwarded className="size-4" aria-hidden="true" />
+              Transfer to manager
+            </button>
+            {transferOpen ? <TransferPanel transfer={call.transfer} controls={controls} /> : null}
+          </div>
+        ) : null}
+
         {call.error ? <p className="mt-2 text-[11px] text-[#ffb4b4]">{call.error}</p> : null}
       </div>
 
@@ -668,6 +699,94 @@ function LiveCall({
           className="min-h-[120px] flex-1 resize-none rounded-[10px] border border-co-control bg-white p-2.5 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
         />
       </div>
+    </div>
+  );
+}
+
+function StripButton({
+  onClick,
+  disabled,
+  active,
+  children
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={`flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg text-[12px] font-bold text-white transition-colors disabled:opacity-40 ${
+        active ? "bg-white/25" : "bg-white/10 hover:bg-white/20"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function TransferPanel({
+  transfer,
+  controls
+}: {
+  transfer: ReturnType<typeof useCall>["call"]["transfer"];
+  controls: ReturnType<typeof useCall>["controls"];
+}) {
+  return (
+    <div className="mt-2 rounded-[10px] bg-white p-2.5 text-co-ink">
+      {transfer.loading ? (
+        <div className="flex items-center gap-2 text-[12px] text-co-text-3">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Loading manager RingCentral lines…
+        </div>
+      ) : transfer.targets.length ? (
+        <div className="flex flex-col gap-0.5">
+          {transfer.targets.map((target) => (
+            <label
+              key={target.id}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-co-sunken"
+            >
+              <input
+                type="radio"
+                name="dock-transfer-target"
+                checked={transfer.selectedId === target.id}
+                onChange={() => controls.selectTransferTarget(target.id)}
+              />
+              <span className="min-w-0">
+                <span className="block truncate text-[12px] font-bold">
+                  {target.name} · {target.role}
+                </span>
+                <span className="block truncate text-[11px] text-co-muted-2">RingCentral · {target.phoneNumber}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[11.5px] text-co-muted-2">No manager RingCentral line configured.</p>
+      )}
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          value={transfer.number}
+          onChange={(event) => controls.setTransferNumber(event.target.value)}
+          inputMode="tel"
+          placeholder="+1 (___) ___-____"
+          aria-label="Transfer number"
+          className="h-8 min-w-0 flex-1 rounded-md border border-co-control px-2 text-[12px] text-co-ink"
+        />
+        <button
+          type="button"
+          onClick={controls.transferCall}
+          disabled={transfer.pending || !transfer.number.trim()}
+          className="h-8 rounded-md bg-co-blue px-3 text-[12px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-[#dce5ee] disabled:text-co-muted-2"
+        >
+          {transfer.pending ? "Transferring…" : "Transfer"}
+        </button>
+      </div>
+      {transfer.error ? <p className="mt-1.5 text-[11px] text-co-red-text">{transfer.error}</p> : null}
+      {transfer.message ? <p className="mt-1.5 text-[11px] text-co-teal-text">{transfer.message}</p> : null}
     </div>
   );
 }
@@ -706,6 +825,7 @@ function Wrapup({
   const [oppStage, setOppStage] = React.useState("Qualified");
   const [oppAmount, setOppAmount] = React.useState("");
   const [oppClose, setOppClose] = React.useState("");
+  const [oppNextStep, setOppNextStep] = React.useState("");
   const [meetingAt, setMeetingAt] = React.useState("");
   const [pending, setPending] = React.useState(false);
   const [saved, setSaved] = React.useState<string[] | null>(null);
@@ -743,7 +863,8 @@ function Wrapup({
               name: oppName.trim(),
               stage: oppStage,
               amount: oppAmount ? Number(oppAmount) : undefined,
-              expectedCloseDate: oppClose || undefined
+              expectedCloseDate: oppClose || undefined,
+              nextStep: oppNextStep.trim() || undefined
             }
           : null
     });
@@ -764,6 +885,23 @@ function Wrapup({
       onDismiss();
     }
   }
+
+  // ⌘/Ctrl+Enter = Save & next lead (the footer hint). Uses a ref so the listener
+  // never goes stale without rebinding every render.
+  const saveRef = React.useRef(save);
+  React.useEffect(() => {
+    saveRef.current = save;
+  });
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        void saveRef.current(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   if (saved) {
     return <Success created={saved} name={lead.name} hasNext={hasNext} onAdvance={onAdvance} onStay={onDismiss} />;
@@ -820,7 +958,7 @@ function Wrapup({
         className="mt-1.5 w-full resize-none rounded-[10px] border border-co-control bg-white p-2.5 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
       />
 
-      {/* Lead status */}
+      {/* Lead status + suggested next action */}
       <div className="mt-3 grid grid-cols-[118px_1fr] items-center gap-2">
         <span className="text-[11.5px] font-semibold text-co-text-3">Lead status</span>
         <select value={status} onChange={(event) => setStatus(event.target.value)} className={field}>
@@ -830,6 +968,12 @@ function Wrapup({
             </option>
           ))}
         </select>
+      </div>
+      <div className="mt-1.5 grid grid-cols-[118px_1fr] items-center gap-2">
+        <span className="text-[11.5px] font-semibold text-co-text-3">Next action</span>
+        <span className="rounded-md bg-[#eaf3ff] px-2 py-1.5 text-[11.5px] font-semibold text-co-blue-dark">
+          {def.nextAction}
+        </span>
       </div>
 
       {/* Follow-up */}
@@ -885,6 +1029,9 @@ function Wrapup({
 
       {/* Collapsible opportunity */}
       <Collapsible open={oppOpen} onToggle={() => setOppOpen((v) => !v)} label="Opportunity">
+        <div className="mb-1.5 text-[10.5px] text-co-muted-2">
+          {[lead.companyName, lead.name, `Owner ${lead.owner}`].filter(Boolean).join(" · ")}
+        </div>
         <input value={oppName} onChange={(e) => setOppName(e.target.value)} placeholder="Opportunity name" className={field} />
         <div className="mt-1.5 grid grid-cols-2 gap-1.5">
           <select value={oppStage} onChange={(e) => setOppStage(e.target.value)} className={field}>
@@ -903,27 +1050,56 @@ function Wrapup({
           />
         </div>
         <input type="date" value={oppClose} onChange={(e) => setOppClose(e.target.value)} className={`${field} mt-1.5`} />
+        <input
+          value={oppNextStep}
+          onChange={(e) => setOppNextStep(e.target.value)}
+          placeholder="Next step"
+          className={`${field} mt-1.5`}
+        />
+        <p className="mt-1.5 text-[10.5px] text-co-muted-2">Probability auto-maps to the stage.</p>
       </Collapsible>
 
       {/* Footer */}
-      <div className="mt-4 flex items-center gap-2 border-t border-co-border pt-3">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => save(true)}
-          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-[#dce5ee] disabled:text-co-muted-2"
-        >
-          {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-          Save &amp; next lead
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => save(false)}
-          className="h-10 rounded-lg border border-co-control bg-white px-3 text-[12.5px] font-semibold text-co-text-3 hover:bg-co-sunken disabled:opacity-50"
-        >
-          Save &amp; stay
-        </button>
+      <div className="mt-4 border-t border-co-border pt-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => save(true)}
+            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-[#dce5ee] disabled:text-co-muted-2"
+          >
+            {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            Save &amp; next lead
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => save(false)}
+            className="h-10 rounded-lg border border-co-control bg-white px-3 text-[12.5px] font-semibold text-co-text-3 hover:bg-co-sunken disabled:opacity-50"
+          >
+            Save &amp; stay
+          </button>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              onDismiss();
+              onAdvance();
+            }}
+            className="h-8 rounded-md border border-co-control bg-white px-3 text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken disabled:opacity-50"
+          >
+            Skip
+          </button>
+          <a
+            href="/sdr/queue"
+            className="flex h-8 items-center rounded-md border border-co-control bg-white px-3 text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken"
+          >
+            Queue
+          </a>
+          <span className="ml-auto text-[10.5px] text-co-muted-2">⌘↵ save &amp; next</span>
+        </div>
       </div>
     </div>
   );

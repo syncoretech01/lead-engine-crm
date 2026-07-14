@@ -19,6 +19,27 @@ export type CallStatus = "idle" | "connecting" | "ringing" | "in-call" | "ended"
 export type CallSurface = "dialog" | "dock";
 export type CallConsent = "Granted" | "Denied" | "Unknown";
 
+/** A manager RingCentral line the SDR can warm/blind transfer a live call to. */
+export type CallTransferTarget = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  phoneNumber: string;
+  label: string;
+};
+
+/** Transfer-to-manager sub-state (published inside the snapshot). */
+export type CallTransferState = {
+  targets: CallTransferTarget[];
+  loading: boolean;
+  selectedId: string;
+  number: string;
+  pending: boolean;
+  error: string | null;
+  message: string | null;
+};
+
 /** The full live-call state the engine publishes on every change. The Focus dock
  *  renders entirely from this snapshot (§State Management: "dock renders from its
  *  state-change callback"); the dialog surface keeps its own internal state. */
@@ -34,6 +55,7 @@ export type CallSnapshot = {
   recording: boolean;
   consent: CallConsent;
   error: string | null;
+  transfer: CallTransferState;
 };
 
 /** Imperative controls the dock drives the live call with. Each proxies to the
@@ -46,6 +68,10 @@ export type CallControls = {
   retry: () => void;
   reset: () => void;
   ringMyPhone: () => void;
+  loadTransferTargets: () => void;
+  selectTransferTarget: (id: string) => void;
+  setTransferNumber: (value: string) => void;
+  transferCall: () => void;
 };
 
 export type CallContextValue = {
@@ -62,6 +88,16 @@ export type CallContextValue = {
   controls: CallControls;
 };
 
+export const IDLE_TRANSFER_STATE: CallTransferState = {
+  targets: [],
+  loading: false,
+  selectedId: "",
+  number: "",
+  pending: false,
+  error: null,
+  message: null
+};
+
 export const IDLE_CALL_SNAPSHOT: CallSnapshot = {
   surface: "dialog",
   status: "idle",
@@ -73,7 +109,8 @@ export const IDLE_CALL_SNAPSHOT: CallSnapshot = {
   muted: false,
   recording: false,
   consent: "Granted",
-  error: null
+  error: null,
+  transfer: IDLE_TRANSFER_STATE
 };
 
 const NOOP_CONTROLS: CallControls = {
@@ -83,7 +120,11 @@ const NOOP_CONTROLS: CallControls = {
   setConsent: () => {},
   retry: () => {},
   reset: () => {},
-  ringMyPhone: () => {}
+  ringMyPhone: () => {},
+  loadTransferTargets: () => {},
+  selectTransferTarget: () => {},
+  setTransferNumber: () => {},
+  transferCall: () => {}
 };
 
 export const CallContext = React.createContext<CallContextValue | null>(null);
