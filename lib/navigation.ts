@@ -43,7 +43,7 @@ import type { Permission, Session, WorkspaceRole } from "@/lib/phase1/types";
  * `workspaceRoleLabel` are unchanged).
  */
 
-export type NavGroupId = "lead-generation" | "crm" | "admin";
+export type NavGroupId = "lead-generation" | "crm" | "records" | "outreach" | "admin";
 
 export type NavItem = {
   href: string;
@@ -89,7 +89,7 @@ export const navGroups: NavGroup[] = [
   {
     id: "crm",
     label: "CRM",
-    description: "Accounts, contacts, opportunities, SDR work, and outreach.",
+    description: "Your day, the calling cockpit, and team overview.",
     canAccess: canUseCrmWorkspace,
     items: [
       {
@@ -102,6 +102,15 @@ export const navGroups: NavGroup[] = [
       },
       { href: "/sdr/queue", label: "SDR Queue", sdrLabel: "My Day", icon: ClipboardList, permission: "manage_sdr" },
       { href: "/sdr/focus", label: "Focus", icon: Crosshair, permission: "manage_sdr" },
+      { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr_team" }
+    ]
+  },
+  {
+    id: "records",
+    label: "Records",
+    description: "Contacts, accounts, opportunities, and call history.",
+    canAccess: canUseCrmWorkspace,
+    items: [
       {
         href: "/crm/my-contacts",
         label: "Assigned Contacts",
@@ -118,8 +127,15 @@ export const navGroups: NavGroup[] = [
         permission: "view_records",
         visibleForRoles: ["Admin", "Manager", "SDR"]
       },
-      { href: "/crm/calls", label: "Call Log", sdrLabel: "My Calls", icon: PhoneCall, permission: "manage_sdr" },
-      { href: "/sdr/manager", label: "Manager Dashboard", icon: BarChart3, permission: "manage_sdr_team" },
+      { href: "/crm/calls", label: "Call Log", sdrLabel: "My Calls", icon: PhoneCall, permission: "manage_sdr" }
+    ]
+  },
+  {
+    id: "outreach",
+    label: "Outreach",
+    description: "Campaigns and direct outreach.",
+    canAccess: canUseCrmWorkspace,
+    items: [
       { href: "/outreach/campaigns", label: "Campaigns", icon: Megaphone, permission: "manage_outreach" },
       {
         href: "/outreach/events",
