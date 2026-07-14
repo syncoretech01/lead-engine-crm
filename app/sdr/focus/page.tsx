@@ -1,6 +1,7 @@
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
 import { readFocusContext } from "@/lib/phase1/focus-context-read-model";
 import { readFocusTimelines } from "@/lib/phase1/focus-timeline-read-model";
+import { readKeyAccountFields } from "@/lib/phase1/key-account-fields-read-model";
 import { localTimeForState } from "@/lib/phase1/us-timezones";
 import { getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
@@ -23,9 +24,11 @@ export default async function FocusPage({
 
   // Recent activity + open opportunity/work per contact for the dossier.
   const contactIds = rows.map((row) => row.contactId);
-  const [timelines, context] = await Promise.all([
+  const companyIds = rows.map((row) => row.companyId);
+  const [timelines, context, keyFields] = await Promise.all([
     readFocusTimelines(workspaceId, contactIds),
-    readFocusContext(workspaceId, contactIds)
+    readFocusContext(workspaceId, contactIds),
+    readKeyAccountFields(workspaceId, companyIds)
   ]);
 
   // The SDR's own RingCentral line (mirrors the contact-record Call button): the
@@ -66,6 +69,7 @@ export default async function FocusPage({
       outsideWindow: local?.outsideWindow ?? false,
       openOpportunity: context.get(row.contactId)?.openOpportunity ?? "",
       openWork: context.get(row.contactId)?.openWork ?? "",
+      keyAccountFields: keyFields.get(row.companyId) ?? [],
       timeline: timelines.get(row.contactId) ?? []
     };
   });

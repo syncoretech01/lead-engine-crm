@@ -6,6 +6,7 @@ import { Check, Phone } from "lucide-react";
 
 import { useCall } from "@/components/call/call-context";
 import { CoPill } from "@/components/crm/cockpit/co-table";
+import { KeyAccountFields } from "@/components/crm/cockpit/key-account-fields";
 import { FocusDock } from "@/components/crm/cockpit/focus/focus-dock";
 import { SessionBar } from "@/components/crm/cockpit/focus/session-bar";
 import { useFocusSession, type WrapupSummary } from "@/components/crm/cockpit/focus/use-focus-session";
@@ -429,6 +430,11 @@ export function FocusWorkspace({
                   <Row label="Open opportunity" value={selected.openOpportunity} />
                   <Row label="Open work" value={selected.openWork} />
                 </div>
+                {selected.keyAccountFields.length ? (
+                  <div className="mt-4">
+                    <KeyAccountFields fields={selected.keyAccountFields} />
+                  </div>
+                ) : null}
                 <Link
                   href={`/crm/contacts/${selected.id}`}
                   className="mt-2 inline-block text-[12px] font-semibold text-co-blue hover:underline"
