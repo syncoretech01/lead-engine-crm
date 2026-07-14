@@ -421,6 +421,13 @@
 .cockpit ::-webkit-scrollbar-track { background: transparent; }
 .cockpit :is(input, select, textarea):focus { outline: 2px solid var(--co-focus); outline-offset: -1px; }
 .cockpit :is(input, textarea)::placeholder { color: var(--co-muted-2); }
+/* Keyboard focus ring on the cockpit's custom buttons/links (form fields handled
+   above). Mouse clicks don't trigger :focus-visible, so it stays keyboard-only. */
+.cockpit :is(button, a, [role="button"]):focus-visible {
+  outline: 2px solid var(--co-focus);
+  outline-offset: 2px;
+  border-radius: 7px;
+}
 
 .co-anim-pulse { animation: co-pulse 1.4s ease-in-out infinite; }
 .co-anim-spin { animation: co-spin 0.7s linear infinite; }

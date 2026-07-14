@@ -94,6 +94,17 @@ export type LeadCompliance = {
   copy: string;
 };
 
+// The "Recommended action" cell of the dossier pre-call scan strip (SDR Cockpit
+// §38) — derived from the lead's state, never invented.
+export function recommendedAction(lead: FocusLead, blocked: boolean): string {
+  if (blocked) return "Blocked — review the guardrail";
+  if (lead.overdue) return "Call now — SLA overdue";
+  if (lead.status === "Replied" || lead.status === "Interested") return "Reply, then call";
+  if (lead.status === "Meeting Booked") return "Prep the meeting";
+  if (!lead.hasPhone) return "Send a 1:1 email";
+  return "Call — first touch";
+}
+
 export function leadCompliance(lead: FocusLead): LeadCompliance {
   if (lead.status === "Suppressed") {
     return {

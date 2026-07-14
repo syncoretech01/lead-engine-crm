@@ -15,6 +15,7 @@ import {
   leadCallTarget,
   leadCompliance,
   priorityTone,
+  recommendedAction,
   slaTone,
   statusTone,
   type FocusLead,
@@ -338,7 +339,7 @@ export function FocusWorkspace({
                     <CoPill tone={statusTone(selected.status)}>{selected.status}</CoPill>
                     <CoPill tone={priorityTone(selected.priority)}>{selected.priority}</CoPill>
                     {selected.grade ? <CoPill tone="neutral">Grade {selected.grade}</CoPill> : null}
-                    <CoPill tone={slaTone(selected.slaStatus)}>{selected.slaStatus}</CoPill>
+                    <CoPill tone={slaTone(selected.slaStatus)}>SLA {selected.slaStatus}</CoPill>
                   </div>
                   <p className="mt-1 text-[12.5px] text-co-text-3">
                     {[selected.title, selected.companyName, selected.companyDomain].filter(Boolean).join(" · ")}
@@ -365,15 +366,24 @@ export function FocusWorkspace({
 
             <ComplianceBand compliance={leadCompliance(selected)} />
 
-            <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {/* Pre-call scan strip — the three things to know before dialing. */}
+            <div className="mt-4 grid grid-cols-1 divide-y divide-co-divider overflow-hidden rounded-[9px] border border-co-border bg-co-sunken-2 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              <ScanCell label="Recommended action" value={recommendedAction(selected, Boolean(selectedBlock))} tone="blue" />
+              <ScanCell label="Next follow-up" value={selected.dueLabel} tone={selected.overdue ? "red" : "ink"} />
+              <ScanCell label="Opportunity" value="None yet — create in wrap-up" tone="muted" />
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-6 xl:grid-cols-2">
               <section>
                 <h2 className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Call brief</h2>
                 <div className="rounded-[10px] border border-co-border bg-co-sunken p-3.5">
                   <Row label="Fit reason" value={selected.fitReason} />
-                  <Row label="Industry" value={selected.companyIndustry} />
-                  <Row label="Priority" value={selected.priority} />
+                  <Row label="Talking point" value="" accent />
                   <Row label="Last interaction" value={selected.lastTouchLabel} />
-                  <Row label="Due" value={selected.dueLabel} />
+                  <Row label="Pain point" value="" />
+                  <Row label="Objection" value="" />
+                  <Row label="Decision maker" value="" />
+                  <Row label="Expected next step" value="" />
                 </div>
               </section>
               <section>
@@ -381,26 +391,13 @@ export function FocusWorkspace({
                   Company &amp; account
                 </h2>
                 <div className="rounded-[10px] border border-co-border bg-co-sunken p-3.5">
-                  <Row label="Company" value={selected.companyName} />
                   <Row label="Industry" value={selected.companyIndustry} />
                   <Row label="Location" value={selected.companyLocation} />
-                  <Row
-                    label="Domain"
-                    value={
-                      selected.companyDomain ? (
-                        <a
-                          href={`https://${selected.companyDomain}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-co-blue"
-                        >
-                          {selected.companyDomain}
-                        </a>
-                      ) : (
-                        ""
-                      )
-                    }
-                  />
+                  <Row label="Company size" value="" />
+                  <Row label="Account stage" value="" />
+                  <Row label="Account owner" value={selected.owner} />
+                  <Row label="Open opportunity" value="" />
+                  <Row label="Open work" value="" />
                 </div>
                 <Link
                   href={`/crm/contacts/${selected.id}`}
@@ -454,13 +451,38 @@ function ComplianceBand({ compliance }: { compliance: LeadCompliance }) {
   );
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function Row({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
   return (
-    <div className="grid grid-cols-[118px_1fr] gap-3 py-1">
-      <span className="text-[12px] text-co-text-3">{label}</span>
-      <span className="text-[12.5px] font-semibold text-co-ink">
-        {value || <span className="italic text-co-muted-2">Not captured yet</span>}
+    <div className="grid grid-cols-[118px_1fr] gap-3 border-b border-co-divider py-1.5 last:border-0">
+      <span className="text-[11px] font-bold text-co-muted">{label}</span>
+      <span className={`text-[12.5px] font-semibold ${accent ? "text-co-blue-dark" : "text-co-ink"}`}>
+        {value || <span className="font-normal italic text-co-muted-2">Not captured yet</span>}
       </span>
+    </div>
+  );
+}
+
+function ScanCell({
+  label,
+  value,
+  tone
+}: {
+  label: string;
+  value: string;
+  tone: "blue" | "red" | "ink" | "muted";
+}) {
+  const toneClass =
+    tone === "blue"
+      ? "text-co-blue-dark"
+      : tone === "red"
+        ? "text-co-red-text"
+        : tone === "muted"
+          ? "text-co-muted-2"
+          : "text-co-ink";
+  return (
+    <div className="p-3.5">
+      <div className="text-[10px] font-extrabold uppercase tracking-[0.06em] text-co-muted">{label}</div>
+      <div className={`mt-1 text-[12.5px] font-bold ${toneClass}`}>{value}</div>
     </div>
   );
 }
