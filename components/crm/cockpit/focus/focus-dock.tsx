@@ -305,6 +305,18 @@ function PreCall({
             label="Compliance"
             value={lead.status === "Suppressed" ? "Suppressed" : lead.status === "Unsubscribed" ? "Unsubscribed" : "Clear to contact"}
           />
+          <ReadyRow
+            ok={Boolean(lead.localTimeLabel) && !lead.outsideWindow}
+            tone={lead.outsideWindow ? "warn" : undefined}
+            label="Local time"
+            value={
+              lead.localTimeLabel
+                ? lead.outsideWindow
+                  ? `${lead.localTimeLabel} · outside window`
+                  : lead.localTimeLabel
+                : "Unknown"
+            }
+          />
           <ReadyRow ok={consent === "Granted"} label="Recording consent" value={consent} tone={consent === "Granted" ? "ok" : "warn"} />
         </div>
       </div>
