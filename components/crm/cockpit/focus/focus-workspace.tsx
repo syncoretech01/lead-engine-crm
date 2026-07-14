@@ -377,7 +377,11 @@ export function FocusWorkspace({
             <div className="mt-4 grid grid-cols-1 divide-y divide-co-divider overflow-hidden rounded-[9px] border border-co-border bg-co-sunken-2 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               <ScanCell label="Recommended action" value={recommendedAction(selected, Boolean(selectedBlock))} tone="blue" />
               <ScanCell label="Next follow-up" value={selected.dueLabel} tone={selected.overdue ? "red" : "ink"} />
-              <ScanCell label="Opportunity" value="None yet — create in wrap-up" tone="muted" />
+              <ScanCell
+                label="Opportunity"
+                value={selected.openOpportunity || "None yet — create in wrap-up"}
+                tone={selected.openOpportunity ? "teal" : "muted"}
+              />
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -422,8 +426,8 @@ export function FocusWorkspace({
                   <Row label="Company size" value="" />
                   <Row label="Account stage" value="" />
                   <Row label="Account owner" value={selected.owner} />
-                  <Row label="Open opportunity" value="" />
-                  <Row label="Open work" value="" />
+                  <Row label="Open opportunity" value={selected.openOpportunity} />
+                  <Row label="Open work" value={selected.openWork} />
                 </div>
                 <Link
                   href={`/crm/contacts/${selected.id}`}
@@ -518,16 +522,18 @@ function ScanCell({
 }: {
   label: string;
   value: string;
-  tone: "blue" | "red" | "ink" | "muted";
+  tone: "blue" | "red" | "ink" | "muted" | "teal";
 }) {
   const toneClass =
     tone === "blue"
       ? "text-co-blue-dark"
       : tone === "red"
         ? "text-co-red-text"
-        : tone === "muted"
-          ? "text-co-muted-2"
-          : "text-co-ink";
+        : tone === "teal"
+          ? "text-co-teal-text"
+          : tone === "muted"
+            ? "text-co-muted-2"
+            : "text-co-ink";
   return (
     <div className="p-3.5">
       <div className="text-[10px] font-extrabold uppercase tracking-[0.06em] text-co-muted">{label}</div>

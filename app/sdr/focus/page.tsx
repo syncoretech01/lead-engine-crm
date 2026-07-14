@@ -1,4 +1,5 @@
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
+import { readFocusContext } from "@/lib/phase1/focus-context-read-model";
 import { readFocusTimelines } from "@/lib/phase1/focus-timeline-read-model";
 import { localTimeForState } from "@/lib/phase1/us-timezones";
 import { getWorkspaceSessionContext } from "@/lib/phase1/store";
@@ -20,11 +21,12 @@ export default async function FocusPage({
   const model = await readAssignedContactsModel(session, workspaceId);
   const rows = model?.rows ?? [];
 
-  // Recent activity per contact for the dossier "Recent engagement" timeline.
-  const timelines = await readFocusTimelines(
-    workspaceId,
-    rows.map((row) => row.contactId)
-  );
+  // Recent activity + open opportunity/work per contact for the dossier.
+  const contactIds = rows.map((row) => row.contactId);
+  const [timelines, context] = await Promise.all([
+    readFocusTimelines(workspaceId, contactIds),
+    readFocusContext(workspaceId, contactIds)
+  ]);
 
   // The SDR's own RingCentral line (mirrors the contact-record Call button): the
   // caller label to show, or the reason their line can't place calls.
@@ -62,6 +64,8 @@ export default async function FocusPage({
       emailEligible: row.emailEligible,
       localTimeLabel: local?.label ?? "",
       outsideWindow: local?.outsideWindow ?? false,
+      openOpportunity: context.get(row.contactId)?.openOpportunity ?? "",
+      openWork: context.get(row.contactId)?.openWork ?? "",
       timeline: timelines.get(row.contactId) ?? []
     };
   });

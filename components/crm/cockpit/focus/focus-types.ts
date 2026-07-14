@@ -30,6 +30,8 @@ export type FocusLead = {
   emailEligible: boolean;
   localTimeLabel: string; // "" when the timezone can't be derived
   outsideWindow: boolean;
+  openOpportunity: string; // "" when none
+  openWork: string; // "" when none
   timeline: FocusTimelineItem[];
 };
 
