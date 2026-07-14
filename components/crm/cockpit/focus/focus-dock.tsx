@@ -130,6 +130,7 @@ export function FocusDock({
   leads,
   callerLabel,
   lineBlockReason,
+  hasNext,
   onAdvance,
   onComplete
 }: {
@@ -137,6 +138,7 @@ export function FocusDock({
   leads: FocusLead[];
   callerLabel: string | null;
   lineBlockReason: string | null;
+  hasNext: boolean;
   onAdvance: () => void;
   onComplete: (leadId: string, summary: WrapupSummary) => void;
 }) {
@@ -176,6 +178,7 @@ export function FocusDock({
         call={call}
         notes={notes}
         setNotes={setNotes}
+        hasNext={hasNext}
         onAdvance={onAdvance}
         onComplete={onComplete}
         onDismiss={() => {
@@ -675,6 +678,7 @@ function Wrapup({
   call,
   notes,
   setNotes,
+  hasNext,
   onAdvance,
   onComplete,
   onDismiss
@@ -683,6 +687,7 @@ function Wrapup({
   call: ReturnType<typeof useCall>["call"];
   notes: string;
   setNotes: (value: string) => void;
+  hasNext: boolean;
   onAdvance: () => void;
   onComplete: (leadId: string, summary: WrapupSummary) => void;
   onDismiss: () => void;
@@ -761,7 +766,7 @@ function Wrapup({
   }
 
   if (saved) {
-    return <Success created={saved} name={lead.name} onAdvance={onAdvance} onStay={onDismiss} />;
+    return <Success created={saved} name={lead.name} hasNext={hasNext} onAdvance={onAdvance} onStay={onDismiss} />;
   }
 
   const chip = (active: boolean) =>
@@ -781,6 +786,13 @@ function Wrapup({
           <X className="size-4" aria-hidden="true" />
         </button>
       </div>
+
+      {call.status === "error" ? (
+        <div className="mt-2 rounded-[10px] border border-[#f5b5b5] bg-co-red-bg-soft px-3 py-2 text-[11.5px] text-co-red-text">
+          <span className="font-extrabold">Call failed.</span> {call.error || "The call couldn't connect."} Pick the outcome
+          below, or retry from the dossier.
+        </div>
+      ) : null}
 
       <div className="mt-2 flex flex-wrap gap-1.5">
         <CoPill tone={connected ? "teal" : "neutral"}>{connected ? `Connected · ${formatClock(call.seconds)}` : "Not connected"}</CoPill>
@@ -947,23 +959,27 @@ function Collapsible({
 function Success({
   created,
   name,
+  hasNext,
   onAdvance,
   onStay
 }: {
   created: string[];
   name: string;
+  hasNext: boolean;
   onAdvance: () => void;
   onStay: () => void;
 }) {
-  // Auto-advance after a short beat; the SDR can stay to stop it.
+  // Auto-advance after a short beat (only when there IS a next lead); the SDR can
+  // stay to stop it.
   const advanceRef = React.useRef(onAdvance);
   React.useEffect(() => {
     advanceRef.current = onAdvance;
   });
   React.useEffect(() => {
+    if (!hasNext) return;
     const timer = setTimeout(() => advanceRef.current(), 1600);
     return () => clearTimeout(timer);
-  }, []);
+  }, [hasNext]);
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -983,19 +999,43 @@ function Success({
           ))}
         </ul>
       </div>
-      <div className="rounded-[10px] border border-co-border bg-white p-3">
-        <div className="text-[12px] font-semibold text-co-text-3">Advancing to next lead…</div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-co-sunken-2">
-          <div className="h-full animate-[co-bar_1.6s_linear] rounded-full bg-co-blue" style={{ width: "100%" }} />
+      {hasNext ? (
+        <div className="rounded-[10px] border border-co-border bg-white p-3">
+          <div className="text-[12px] font-semibold text-co-text-3">Advancing to next lead…</div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-co-sunken-2">
+            <div className="h-full animate-[co-bar_1.6s_linear] rounded-full bg-co-blue" style={{ width: "100%" }} />
+          </div>
+          <button
+            type="button"
+            onClick={onStay}
+            className="mt-2.5 h-8 w-full rounded-md border border-co-control bg-white text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken"
+          >
+            Stay on this lead
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onStay}
-          className="mt-2.5 h-8 w-full rounded-md border border-co-control bg-white text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken"
-        >
-          Stay on this lead
-        </button>
-      </div>
+      ) : (
+        <div className="rounded-[10px] border border-co-border bg-white p-4 text-center">
+          <div className="text-[13px] font-extrabold text-co-ink">Queue complete</div>
+          <p className="mt-1 text-[12px] text-co-text-3">
+            You&apos;ve worked every lead in this view. Nice work — end the session or head back to My Day.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <a
+              href="/sdr/queue"
+              className="flex h-9 flex-1 items-center justify-center rounded-lg bg-co-blue text-[12.5px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+            >
+              Back to My Day
+            </a>
+            <button
+              type="button"
+              onClick={onStay}
+              className="h-9 rounded-lg border border-co-control bg-white px-3 text-[12.5px] font-semibold text-co-text-3 hover:bg-co-sunken"
+            >
+              Stay
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

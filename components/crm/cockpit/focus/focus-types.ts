@@ -83,3 +83,54 @@ export function leadCallTarget(
     blockReason: leadBlockReason(lead, lineBlockReason) ?? undefined
   };
 }
+
+// The compliance guardrail band shown across the top of the dossier (SDR Cockpit
+// §37): the current contactability state + who resolves it. Derived from the data
+// the queue row carries (status + phone availability).
+export type LeadCompliance = {
+  clear: boolean;
+  tone: "teal" | "red" | "amber" | "gray";
+  title: string;
+  copy: string;
+};
+
+export function leadCompliance(lead: FocusLead): LeadCompliance {
+  if (lead.status === "Suppressed") {
+    return {
+      clear: false,
+      tone: "red",
+      title: "Suppressed — do not contact",
+      copy: "This contact is on the workspace suppression list. A workspace admin can review or lift the suppression."
+    };
+  }
+  if (lead.status === "Unsubscribed") {
+    return {
+      clear: false,
+      tone: "red",
+      title: "Do not contact",
+      copy: "This contact has opted out. Outreach stays blocked until they opt back in."
+    };
+  }
+  if (lead.status === "Invalid") {
+    return {
+      clear: false,
+      tone: "amber",
+      title: "Phone flagged invalid",
+      copy: "The number on file didn't validate. Confirm a correct number on the record before calling."
+    };
+  }
+  if (!lead.hasPhone) {
+    return {
+      clear: false,
+      tone: "gray",
+      title: "No phone on file",
+      copy: "There's no phone number for this contact. Add one on the record, or reach out by email."
+    };
+  }
+  return {
+    clear: true,
+    tone: "teal",
+    title: "Clear to contact",
+    copy: "No compliance blocks on file — good to call."
+  };
+}

@@ -13,10 +13,12 @@ import {
   initials,
   leadBlockReason,
   leadCallTarget,
+  leadCompliance,
   priorityTone,
   slaTone,
   statusTone,
-  type FocusLead
+  type FocusLead,
+  type LeadCompliance
 } from "@/components/crm/cockpit/focus/focus-types";
 
 export type { FocusLead };
@@ -205,6 +207,8 @@ export function FocusWorkspace({
   }, [move, callSelected]);
 
   const selectedBlock = selected ? leadBlockReason(selected, lineBlockReason) : "No lead";
+  // Is there another not-yet-completed lead to advance to after the current call?
+  const hasNext = list.some((lead) => lead.id !== call.contactId && !completedIds.has(lead.id));
 
   return (
     <div className="cockpit flex h-[calc(100vh-3.5rem)] min-h-[560px] w-full flex-col overflow-hidden bg-co-page">
@@ -358,6 +362,8 @@ export function FocusWorkspace({
               </button>
             </div>
 
+            <ComplianceBand compliance={leadCompliance(selected)} />
+
             <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
               <section>
                 <h2 className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Call brief</h2>
@@ -418,10 +424,30 @@ export function FocusWorkspace({
           leads={leads}
           callerLabel={callerLabel}
           lineBlockReason={lineBlockReason}
+          hasNext={hasNext}
           onAdvance={advance}
           onComplete={onComplete}
         />
       </aside>
+      </div>
+    </div>
+  );
+}
+
+const bandTone: Record<LeadCompliance["tone"], string> = {
+  teal: "border-co-teal-border bg-co-teal-bg text-co-teal-text",
+  red: "border-[#f5b5b5] bg-co-red-bg-soft text-co-red-text",
+  amber: "border-[#f3d998] bg-co-amber-bg-soft text-co-amber-text",
+  gray: "border-co-border bg-co-sunken-2 text-co-text-3"
+};
+
+function ComplianceBand({ compliance }: { compliance: LeadCompliance }) {
+  return (
+    <div className={`mt-4 flex items-start gap-2.5 rounded-[10px] border px-3.5 py-2.5 ${bandTone[compliance.tone]}`}>
+      <span className="mt-1 size-2 shrink-0 rounded-full bg-current" aria-hidden="true" />
+      <div>
+        <div className="text-[12.5px] font-extrabold">{compliance.title}</div>
+        <p className="mt-0.5 text-[11.5px] opacity-90">{compliance.copy}</p>
       </div>
     </div>
   );
