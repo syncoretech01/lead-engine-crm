@@ -166,6 +166,10 @@ export type SoftphoneEngineHandle = {
   retry: () => void;
   reset: () => void;
   ringMyPhone: () => void;
+  loadTransferTargets: () => void;
+  selectTransferTarget: (id: string) => void;
+  setTransferNumber: (value: string) => void;
+  transferCall: () => void;
 };
 
 type SoftphoneEngineProps = {
@@ -792,18 +796,29 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     }
   }
 
-  function selectTransferTarget(targetId: string) {
-    setSelectedTransferTargetId(targetId);
+  const selectTransferTarget = React.useCallback(
+    (targetId: string) => {
+      setSelectedTransferTargetId(targetId);
+      setTransferError(null);
+      setTransferMessage(null);
+
+      const target = transferTargets.find((item) => item.id === targetId);
+      if (target) {
+        setTransferNumber(target.phoneNumber);
+      }
+    },
+    [transferTargets]
+  );
+
+  // Typing a custom manager number clears any radio selection (mirrors the dialog).
+  const applyTransferNumber = React.useCallback((value: string) => {
+    setTransferNumber(value);
+    setSelectedTransferTargetId("");
     setTransferError(null);
     setTransferMessage(null);
+  }, []);
 
-    const target = transferTargets.find((item) => item.id === targetId);
-    if (target) {
-      setTransferNumber(target.phoneNumber);
-    }
-  }
-
-  async function transferCall() {
+  const transferCall = React.useCallback(async () => {
     const dial = toDialString(transferNumber);
     if (!dial) {
       setTransferError("Enter a valid manager number to transfer the call.");
@@ -831,7 +846,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     } finally {
       setTransferPending(false);
     }
-  }
+  }, [transferNumber, status]);
 
   const inLiveCall = status === "connecting" || status === "ringing" || status === "in-call";
 
@@ -896,9 +911,30 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       reset,
       ringMyPhone: () => {
         void ringMyPhoneInstead();
+      },
+      loadTransferTargets: () => {
+        void loadTransferTargets();
+      },
+      selectTransferTarget,
+      setTransferNumber: applyTransferNumber,
+      transferCall: () => {
+        void transferCall();
       }
     }),
-    [status, applyConsent, hangup, reset, resetTransferState, ringMyPhoneInstead, startCall, toggleMute]
+    [
+      status,
+      applyConsent,
+      hangup,
+      reset,
+      resetTransferState,
+      ringMyPhoneInstead,
+      startCall,
+      toggleMute,
+      loadTransferTargets,
+      selectTransferTarget,
+      applyTransferNumber,
+      transferCall
+    ]
   );
 
   // Report full live-call state up: `busy`/`activeContactId` keep the exact
@@ -918,7 +954,16 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
         muted,
         recording,
         consent,
-        error
+        error,
+        transfer: {
+          targets: transferTargets,
+          loading: transferTargetsLoading,
+          selectedId: selectedTransferTargetId,
+          number: transferNumber,
+          pending: transferPending,
+          error: transferError,
+          message: transferMessage
+        }
       }
     });
   }, [
@@ -934,6 +979,13 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     recording,
     consent,
     error,
+    transferTargets,
+    transferTargetsLoading,
+    selectedTransferTargetId,
+    transferNumber,
+    transferPending,
+    transferError,
+    transferMessage,
     onStateChange
   ]);
 

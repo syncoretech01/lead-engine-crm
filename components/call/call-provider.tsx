@@ -51,7 +51,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       setConsent: (consent: CallConsent) => engineRef.current?.setConsent(consent),
       retry: () => engineRef.current?.retry(),
       reset: () => engineRef.current?.reset(),
-      ringMyPhone: () => engineRef.current?.ringMyPhone()
+      ringMyPhone: () => engineRef.current?.ringMyPhone(),
+      loadTransferTargets: () => engineRef.current?.loadTransferTargets(),
+      selectTransferTarget: (id: string) => engineRef.current?.selectTransferTarget(id),
+      setTransferNumber: (value: string) => engineRef.current?.setTransferNumber(value),
+      transferCall: () => engineRef.current?.transferCall()
     }),
     []
   );
