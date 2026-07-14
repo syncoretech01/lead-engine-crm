@@ -42,7 +42,7 @@ export async function readFocusTimelines(
       meta: relativeLabel(activity.occurredAt)
     };
     if (existing) {
-      if (existing.length < 3) existing.push(item);
+      if (existing.length < 10) existing.push(item);
     } else {
       map.set(contactId, [item]);
     }

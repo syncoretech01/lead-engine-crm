@@ -1,11 +1,15 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 
-// Fills the dossier's "Opportunity" scan cell + "Open opportunity" / "Open work"
-// rows with real per-contact data (SDR Cockpit §38, §42). One opportunity + one
-// task query for the whole queue, grouped by contact.
+// Fills the dossier's Opportunity scan cell + "Open opportunity"/"Open work" rows
+// AND the Tasks / Opportunities tabs (SDR Cockpit §38, §42) with real per-contact
+// data. One opportunity + one task query for the whole queue, grouped by contact.
+export type FocusTask = { title: string; dueLabel: string; overdue: boolean };
+export type FocusOpp = { name: string; stage: string; amountLabel: string; closeLabel: string };
 export type FocusContextItem = {
   openOpportunity: string; // "" when none
   openWork: string; // "" when none
+  tasks: FocusTask[];
+  opportunities: FocusOpp[];
 };
 
 const STAGE_LABEL: Record<string, string> = {
@@ -17,6 +21,17 @@ const STAGE_LABEL: Record<string, string> = {
   CLOSED_LOST: "Closed lost"
 };
 const CLOSED = new Set(["CLOSED_WON", "CLOSED_LOST"]);
+
+function money(cents: number): string {
+  return `$${Math.round(cents / 100).toLocaleString("en-US")}`;
+}
+
+function dayLabel(date: Date | null): string {
+  if (!date) return "No due date";
+  const iso = date.toISOString().slice(0, 10);
+  const overdue = date.getTime() < Date.now();
+  return `${iso}${overdue ? " · overdue" : ""}`;
+}
 
 export async function readFocusContext(
   workspaceId: string,
@@ -33,7 +48,7 @@ export async function readFocusContext(
     prisma.opportunity.findMany({
       where: { workspaceId, contactId: { in: ids } },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      select: { contactId: true, name: true, stage: true, amountCents: true }
+      select: { contactId: true, name: true, stage: true, amountCents: true, expectedCloseDate: true }
     }),
     prisma.task.findMany({
       where: { workspaceId, contactId: { in: ids }, status: "open" },
@@ -42,25 +57,36 @@ export async function readFocusContext(
     })
   ]);
 
-  const oppByContact = new Map<string, (typeof opportunities)[number]>();
+  const oppsByContact = new Map<string, FocusOpp[]>();
   for (const opp of opportunities) {
-    if (!opp.contactId || CLOSED.has(opp.stage)) continue;
-    if (!oppByContact.has(opp.contactId)) oppByContact.set(opp.contactId, opp);
+    if (!opp.contactId) continue;
+    const list = oppsByContact.get(opp.contactId) ?? [];
+    list.push({
+      name: opp.name,
+      stage: STAGE_LABEL[opp.stage] ?? opp.stage,
+      amountLabel: money(opp.amountCents),
+      closeLabel: opp.expectedCloseDate ? opp.expectedCloseDate.toISOString().slice(0, 10) : "No close date"
+    });
+    oppsByContact.set(opp.contactId, list);
   }
-  const taskByContact = new Map<string, (typeof tasks)[number]>();
+  const tasksByContact = new Map<string, FocusTask[]>();
   for (const task of tasks) {
     if (!task.contactId) continue;
-    if (!taskByContact.has(task.contactId)) taskByContact.set(task.contactId, task);
+    const list = tasksByContact.get(task.contactId) ?? [];
+    list.push({ title: task.title, dueLabel: dayLabel(task.dueAt), overdue: Boolean(task.dueAt && task.dueAt.getTime() < Date.now()) });
+    tasksByContact.set(task.contactId, list);
   }
 
   for (const id of ids) {
-    const opp = oppByContact.get(id);
-    const task = taskByContact.get(id);
+    const opps = oppsByContact.get(id) ?? [];
+    const contactTasks = tasksByContact.get(id) ?? [];
+    const openOpp = opportunities.find((opp) => opp.contactId === id && !CLOSED.has(opp.stage));
+    const firstTask = contactTasks[0];
     map.set(id, {
-      openOpportunity: opp
-        ? `${opp.name} · ${STAGE_LABEL[opp.stage] ?? opp.stage} · $${Math.round(opp.amountCents / 100).toLocaleString("en-US")}`
-        : "",
-      openWork: task ? `${task.title}${task.dueAt ? ` · due ${task.dueAt.toISOString().slice(0, 10)}` : ""}` : ""
+      openOpportunity: openOpp ? `${openOpp.name} · ${STAGE_LABEL[openOpp.stage] ?? openOpp.stage} · ${money(openOpp.amountCents)}` : "",
+      openWork: firstTask ? `${firstTask.title} · ${firstTask.dueLabel}` : "",
+      tasks: contactTasks.slice(0, 8),
+      opportunities: opps.slice(0, 8)
     });
   }
 

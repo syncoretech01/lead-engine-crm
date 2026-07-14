@@ -1,4 +1,5 @@
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
+import { parseBrokerNotes } from "@/lib/phase1/broker-notes";
 import { readFocusContext } from "@/lib/phase1/focus-context-read-model";
 import { readFocusTimelines } from "@/lib/phase1/focus-timeline-read-model";
 import { readKeyAccountFields } from "@/lib/phase1/key-account-fields-read-model";
@@ -40,7 +41,13 @@ export default async function FocusPage({
   const leads: FocusLead[] = rows.map((row) => {
     const dueIso = row.dueAt ?? row.firstTouchDueAt ?? row.followUpDueAt;
     const parsed = dueIso ? Date.parse(dueIso) : Number.NaN;
-    const local = localTimeForState(row.companyState);
+    // Some workspaces store account attributes as a raw notes blob; parse it into
+    // structured Key Account Fields + a clean fit reason + the state for local time
+    // (fixes the raw-dump fit reason + empty KAF + "Unknown" local time).
+    const broker = parseBrokerNotes(row.notes ?? "");
+    const local = localTimeForState(broker?.state || row.companyState);
+    const customFields = keyFields.get(row.companyId) ?? [];
+    const context_ = context.get(row.contactId);
     return {
       id: row.contactId,
       assignmentId: row.id,
@@ -56,21 +63,25 @@ export default async function FocusPage({
       dueAtMs: Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER,
       overdue: row.slaStatus === "Overdue",
       grade: row.grade,
-      fitReason: row.notes ?? "",
+      fitReason: broker?.fitReason || (row.notes ?? ""),
       companyId: row.companyId,
       companyName: row.companyName,
       companyDomain: row.companyDomain,
       companyIndustry: row.companyIndustry,
-      companyLocation: row.companyState,
+      companyLocation: broker?.location || row.companyState,
       lastTouchLabel: lastTouchLabel(row.lastTouchAt, row.touchCount),
       owner: row.ownerName,
       emailEligible: row.emailEligible,
       localTimeLabel: local?.label ?? "",
       outsideWindow: local?.outsideWindow ?? false,
-      openOpportunity: context.get(row.contactId)?.openOpportunity ?? "",
-      openWork: context.get(row.contactId)?.openWork ?? "",
-      keyAccountFields: keyFields.get(row.companyId) ?? [],
-      timeline: timelines.get(row.contactId) ?? []
+      openOpportunity: context_?.openOpportunity ?? "",
+      openWork: context_?.openWork ?? "",
+      // Prefer real custom fields; fall back to the parsed broker blob so the card
+      // is populated for the broker-import workspace.
+      keyAccountFields: customFields.length ? customFields : broker?.fields ?? [],
+      timeline: timelines.get(row.contactId) ?? [],
+      tasks: context_?.tasks ?? [],
+      opportunities: context_?.opportunities ?? []
     };
   });
 
