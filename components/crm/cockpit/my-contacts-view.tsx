@@ -223,14 +223,12 @@ export function MyContactsView({
               >
                 Open full record
               </Link>
-              <button
-                type="button"
-                disabled
-                title="Available when the Focus workspace ships"
-                className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-muted-2"
+              <Link
+                href={`/sdr/focus?lead=${encodeURIComponent(peek.contactId)}`}
+                className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-text-3 transition-colors hover:bg-co-sunken"
               >
-                Open in Focus workspace · soon
-              </button>
+                Open in Focus workspace
+              </Link>
             </div>
           ) : null
         }

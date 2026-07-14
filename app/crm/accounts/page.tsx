@@ -23,6 +23,7 @@ export default async function AccountsPage() {
     description: account.description,
     primaryContactName: account.primaryContactName ?? "",
     primaryContactTitle: account.primaryContactTitle ?? "",
+    primaryContactId: account.primaryContactId,
     lastActivity: account.lastActivity,
     hasOpportunity: account.opportunities > 0
   }));
