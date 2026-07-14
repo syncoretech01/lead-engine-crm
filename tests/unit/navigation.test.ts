@@ -29,19 +29,9 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
       "Waterfalls",
       "Exports"
     ],
-    crm: [
-      "CRM Dashboard",
-      "SDR Queue",
-      "Focus",
-      "Assigned Contacts",
-      "Accounts",
-      "All Contacts",
-      "Opportunities",
-      "Call Log",
-      "Manager Dashboard",
-      "Campaigns",
-      "Outreach Events"
-    ],
+    crm: ["CRM Dashboard", "SDR Queue", "Focus", "Manager Dashboard"],
+    records: ["Assigned Contacts", "Accounts", "All Contacts", "Opportunities", "Call Log"],
+    outreach: ["Campaigns", "Outreach Events"],
     admin: [
       "Integration Center",
       "User Access",
@@ -63,22 +53,13 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
       "Waterfalls",
       "Exports"
     ],
-    crm: [
-      "CRM Dashboard",
-      "SDR Queue",
-      "Focus",
-      "Assigned Contacts",
-      "Accounts",
-      "All Contacts",
-      "Opportunities",
-      "Call Log",
-      "Manager Dashboard",
-      "Campaigns",
-      "Outreach Events"
-    ]
+    crm: ["CRM Dashboard", "SDR Queue", "Focus", "Manager Dashboard"],
+    records: ["Assigned Contacts", "Accounts", "All Contacts", "Opportunities", "Call Log"],
+    outreach: ["Campaigns", "Outreach Events"]
   },
   SDR: {
-    crm: ["My Day", "Focus", "My Contacts", "Accounts", "All Contacts", "Opportunities", "My Calls"]
+    crm: ["My Day", "Focus"],
+    records: ["My Contacts", "Accounts", "All Contacts", "Opportunities", "My Calls"]
   },
   "Data Operator": {
     "lead-generation": [
@@ -112,11 +93,12 @@ describe("navigation access model (parity with the pre-redesign shell)", () => {
     });
   });
 
-  it("hides CRM Dashboard from SDRs but keeps Opportunities", () => {
-    const crm = accessibleNav(sessionForRole("SDR")).find((entry) => entry.group.id === "crm");
-    const labels = crm?.items.map((item) => item.label) ?? [];
-    expect(labels).not.toContain("CRM Dashboard");
-    expect(labels).toContain("Opportunities");
+  it("hides CRM Dashboard from SDRs but keeps Opportunities in Records", () => {
+    const nav = accessibleNav(sessionForRole("SDR"));
+    const crmLabels = nav.find((entry) => entry.group.id === "crm")?.items.map((item) => item.label) ?? [];
+    const recordLabels = nav.find((entry) => entry.group.id === "records")?.items.map((item) => item.label) ?? [];
+    expect(crmLabels).not.toContain("CRM Dashboard");
+    expect(recordLabels).toContain("Opportunities");
   });
 
   it("renames SDR Queue to My Day only for SDRs", () => {
