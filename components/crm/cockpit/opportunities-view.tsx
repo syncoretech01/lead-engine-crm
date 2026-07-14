@@ -22,6 +22,7 @@ export type CockpitOpportunityRow = {
   companyId: string;
   companyName: string;
   contactName: string;
+  contactId?: string;
   stage: string;
   amount: number;
   amountLabel: string;
@@ -205,15 +206,37 @@ export function OpportunitiesView({
         onClose={() => setPeek(null)}
         title={peek?.name ?? ""}
         subtitle={peek?.companyName}
-        badges={peek ? <CoPill tone={stageTone(peek.stage)}>{peek.stage}</CoPill> : null}
+        badges={
+          peek ? (
+            <>
+              <CoPill tone={stageTone(peek.stage)}>{peek.stage}</CoPill>
+              <CoPill tone="neutral">{peek.amountLabel}</CoPill>
+              <CoPill tone="info">{peek.probability}% probability</CoPill>
+            </>
+          ) : null
+        }
         footer={
           peek ? (
-            <Link
-              href={`/crm/accounts/${peek.companyId}`}
-              className="flex h-10 items-center justify-center rounded-lg bg-co-blue text-[12.5px] font-bold text-white transition-colors hover:bg-co-blue-hover"
-            >
-              Open account
-            </Link>
+            <div className="flex flex-col gap-2">
+              {peek.contactId ? (
+                <Link
+                  href={`/sdr/focus?lead=${encodeURIComponent(peek.contactId)}`}
+                  className="flex h-10 items-center justify-center rounded-lg bg-co-blue text-[12.5px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+                >
+                  Open in Focus workspace
+                </Link>
+              ) : null}
+              <Link
+                href={`/crm/accounts/${peek.companyId}`}
+                className={`flex items-center justify-center rounded-lg text-[12px] font-semibold transition-colors ${
+                  peek.contactId
+                    ? "h-9 border border-co-control bg-white text-co-text-3 hover:bg-co-sunken"
+                    : "h-10 bg-co-blue text-[12.5px] font-bold text-white hover:bg-co-blue-hover"
+                }`}
+              >
+                Open account
+              </Link>
+            </div>
           ) : null
         }
       >

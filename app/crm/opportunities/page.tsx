@@ -33,6 +33,7 @@ export default async function OpportunitiesPage() {
     companyId: opportunity.companyId,
     companyName: opportunity.companyName,
     contactName: opportunity.contactName === "No primary contact" ? "" : opportunity.contactName,
+    contactId: opportunity.contactId,
     stage: opportunity.stage,
     amount: opportunity.amount,
     amountLabel: money(opportunity.amount),
