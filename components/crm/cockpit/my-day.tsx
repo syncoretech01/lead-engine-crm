@@ -3,6 +3,7 @@ import { CalendarClock, Phone, PlayCircle } from "lucide-react";
 
 import { CoPill } from "@/components/crm/cockpit/co-table";
 import { priorityTone, slaTone, statusTone } from "@/components/crm/cockpit/focus/focus-types";
+import { MyDayProgress, MyDayResume } from "@/components/crm/cockpit/my-day-client";
 
 // My Day — the SDR's landing (SDR Cockpit §1). A centered "start or resume work"
 // hub: counter strip + grouped work queue that deep-links into the Focus
@@ -64,20 +65,20 @@ const groupDotTone: Record<MyDayGroup["tone"], string> = {
 
 export function MyDay({
   todayLabel,
+  sdrName,
   metrics,
   groups,
   followUps,
   replies,
-  progress,
   startHref,
   queueCount
 }: {
   todayLabel: string;
+  sdrName: string;
   metrics: { overdue: number; p1: number; dueToday: number; completedToday: number };
   groups: MyDayGroup[];
   followUps: MyDayFollowUp[];
   replies: MyDayReply[];
-  progress: Array<{ label: string; value: number }>;
   startHref: string;
   queueCount: number;
 }) {
@@ -89,9 +90,13 @@ export function MyDay({
           <div>
             <div className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-co-blue">CRM · SDR Workspace</div>
             <h1 className="mt-0.5 text-[22px] font-extrabold text-co-ink">My Day</h1>
-            <p className="mt-0.5 text-[12.5px] text-co-text-3">{todayLabel}</p>
+            <p className="mt-0.5 text-[12.5px] text-co-text-3">
+              {todayLabel}
+              {sdrName ? ` · ${sdrName} · SDR` : ""}
+            </p>
           </div>
           <div className="flex items-center gap-2">
+            <MyDayResume />
             <Link
               href={startHref}
               className="flex h-[38px] items-center gap-2 rounded-[9px] bg-co-blue px-4 text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover"
@@ -201,6 +206,10 @@ export function MyDay({
               ) : (
                 <Empty>No upcoming follow-ups.</Empty>
               )}
+              <p className="mt-2 border-t border-co-divider pt-2 text-[10.5px] text-co-muted-2">
+                Booked meetings are tracked as follow-up reminders. Calendar invitations require future calendar
+                integration.
+              </p>
             </SideCard>
 
             <SideCard title="Recent replies">
@@ -224,12 +233,7 @@ export function MyDay({
             </SideCard>
 
             <SideCard title="Today's progress">
-              {progress.map((row) => (
-                <div key={row.label} className="flex items-center justify-between border-b border-co-divider py-1.5 last:border-0">
-                  <span className="text-[12px] text-co-text-3">{row.label}</span>
-                  <span className="text-[13px] font-extrabold tabular-nums text-co-ink">{row.value}</span>
-                </div>
-              ))}
+              <MyDayProgress />
             </SideCard>
           </div>
         </div>

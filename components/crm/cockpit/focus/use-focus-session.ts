@@ -11,6 +11,7 @@ type SdrSessionState = {
   startedAt: number;
   pausedAt: number | null; // timestamp while paused, null while running
   pausedMs: number; // accumulated paused duration
+  total: number; // queue size at session start (the N in "n/N")
   completed: string[]; // lead ids completed this session
   connected: number;
   followUps: number;
@@ -23,11 +24,12 @@ export type FocusSession = {
   active: boolean;
   running: boolean;
   elapsedMs: number;
+  total: number;
   completedCount: number;
   connected: number;
   followUps: number;
   opps: number;
-  start: () => void;
+  start: (total?: number) => void;
   pause: () => void;
   resume: () => void;
   end: () => void;
@@ -96,12 +98,13 @@ export function useFocusSession(): FocusSession {
     };
   }, [state]);
 
-  const start = React.useCallback(() => {
+  const start = React.useCallback((total = 0) => {
     if (readRaw()) return; // already running — never restart mid-session
     mutate({
       startedAt: Date.now(),
       pausedAt: null,
       pausedMs: 0,
+      total,
       completed: [],
       connected: 0,
       followUps: 0,
@@ -145,6 +148,7 @@ export function useFocusSession(): FocusSession {
     active: state !== null,
     running,
     elapsedMs,
+    total: state?.total ?? 0,
     completedCount: state?.completed.length ?? 0,
     connected: state?.connected ?? 0,
     followUps: state?.followUps ?? 0,
