@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function FocusPage({
   searchParams
 }: {
-  searchParams: Promise<{ lead?: string; view?: string }>;
+  searchParams: Promise<{ lead?: string; view?: string; start?: string }>;
 }) {
   const sp = await searchParams;
   const { session, workspaceId } = await getWorkspaceSessionContext("manage_sdr");
@@ -61,6 +61,7 @@ export default async function FocusPage({
       initialView={sp.view}
       callerLabel={callerLabel}
       lineBlockReason={lineBlockReason}
+      autoStart={sp.start === "1"}
     />
   );
 }

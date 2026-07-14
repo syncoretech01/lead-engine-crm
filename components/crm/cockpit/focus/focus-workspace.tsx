@@ -7,6 +7,8 @@ import { Check, Phone } from "lucide-react";
 import { useCall } from "@/components/call/call-context";
 import { CoPill } from "@/components/crm/cockpit/co-table";
 import { FocusDock } from "@/components/crm/cockpit/focus/focus-dock";
+import { SessionBar } from "@/components/crm/cockpit/focus/session-bar";
+import { useFocusSession, type WrapupSummary } from "@/components/crm/cockpit/focus/use-focus-session";
 import {
   initials,
   leadBlockReason,
@@ -77,15 +79,18 @@ export function FocusWorkspace({
   initialLeadId,
   initialView,
   callerLabel = null,
-  lineBlockReason = null
+  lineBlockReason = null,
+  autoStart = false
 }: {
   leads: FocusLead[];
   initialLeadId?: string;
   initialView?: string;
   callerLabel?: string | null;
   lineBlockReason?: string | null;
+  autoStart?: boolean;
 }) {
-  const { openCallInline } = useCall();
+  const { openCallInline, call } = useCall();
+  const session = useFocusSession();
   const [view, setView] = React.useState<ViewId>(
     VIEWS.some((v) => v.id === initialView) ? (initialView as ViewId) : "all"
   );
@@ -148,13 +153,28 @@ export function FocusWorkspace({
     }
   }, [list, indexInList, completedIds]);
 
-  const onComplete = React.useCallback((leadId: string) => {
-    setCompletedIds((current) => {
-      const next = new Set(current);
-      next.add(leadId);
-      return next;
-    });
-  }, []);
+  const { recordComplete, start: startSession, active: sessionActive } = session;
+  const onComplete = React.useCallback(
+    (leadId: string, summary: WrapupSummary) => {
+      setCompletedIds((current) => {
+        const next = new Set(current);
+        next.add(leadId);
+        return next;
+      });
+      recordComplete(leadId, summary);
+    },
+    [recordComplete]
+  );
+
+  // Begin a session when the SDR arrives via "Start calling" (autoStart) or places
+  // their first live call. The session is a client-side concept (localStorage).
+  React.useEffect(() => {
+    if (autoStart) startSession();
+  }, [autoStart, startSession]);
+  const callActive = call.status === "connecting" || call.status === "ringing" || call.status === "in-call";
+  React.useEffect(() => {
+    if (callActive && !sessionActive) startSession();
+  }, [callActive, sessionActive, startSession]);
 
   const callSelected = React.useCallback(() => {
     if (!selected) return;
@@ -187,7 +207,11 @@ export function FocusWorkspace({
   const selectedBlock = selected ? leadBlockReason(selected, lineBlockReason) : "No lead";
 
   return (
-    <div className="cockpit flex h-[calc(100vh-3.5rem)] min-h-[560px] w-full overflow-hidden bg-co-page">
+    <div className="cockpit flex h-[calc(100vh-3.5rem)] min-h-[560px] w-full flex-col overflow-hidden bg-co-page">
+      {session.active ? (
+        <SessionBar session={session} position={indexInList < 0 ? 1 : indexInList + 1} total={list.length} />
+      ) : null}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* ───────────── Queue rail ───────────── */}
       <aside className="flex w-[300px] shrink-0 flex-col border-r border-co-border bg-white">
         <div className="flex flex-col gap-2 border-b border-co-border p-3">
@@ -398,6 +422,7 @@ export function FocusWorkspace({
           onComplete={onComplete}
         />
       </aside>
+      </div>
     </div>
   );
 }
