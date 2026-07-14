@@ -27,6 +27,7 @@ import {
 import { useCall } from "@/components/call/call-context";
 import { CoPill } from "@/components/crm/cockpit/co-table";
 import { leadBlockReason, leadCallTarget, type FocusLead } from "@/components/crm/cockpit/focus/focus-types";
+import type { WrapupSummary } from "@/components/crm/cockpit/focus/use-focus-session";
 
 const DIAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 
@@ -137,7 +138,7 @@ export function FocusDock({
   callerLabel: string | null;
   lineBlockReason: string | null;
   onAdvance: () => void;
-  onComplete: (leadId: string) => void;
+  onComplete: (leadId: string, summary: WrapupSummary) => void;
 }) {
   const { openCallInline, call, controls } = useCall();
 
@@ -683,7 +684,7 @@ function Wrapup({
   notes: string;
   setNotes: (value: string) => void;
   onAdvance: () => void;
-  onComplete: (leadId: string) => void;
+  onComplete: (leadId: string, summary: WrapupSummary) => void;
   onDismiss: () => void;
 }) {
   const connected = call.seconds > 0 && call.status !== "error";
@@ -746,7 +747,11 @@ function Wrapup({
       toast.error(result.error);
       return;
     }
-    onComplete(lead.id);
+    onComplete(lead.id, {
+      connected,
+      followUp: Boolean(followUpDueAt),
+      opp: Boolean(oppOpen && oppName.trim())
+    });
     toast.success("Wrap-up saved.");
     if (advance) {
       setSaved(result.created);

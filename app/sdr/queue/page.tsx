@@ -847,7 +847,7 @@ function buildMyDayProps({
       { label: "Open follow-ups", value: reminders.length },
       { label: "Meetings booked", value: assignments.filter((a) => a.status === "Meeting Booked").length }
     ],
-    startHref: "/sdr/focus",
+    startHref: "/sdr/focus?start=1",
     queueCount: assignments.length
   };
 }
