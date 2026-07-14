@@ -1,29 +1,9 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  BadgeCheck,
-  Building2,
-  Calendar,
-  Mail,
-  Phone,
-  ShieldCheck,
-  Users
-} from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { MeterBar } from "@/components/ui/meter-bar";
-import { Panel } from "@/components/ui/panel";
-import { StatCard, ToneIcon } from "@/components/ui/stat-card";
-import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from "@/components/ui/table";
+import { ArrowRight, Building2, Calendar, Mail } from "lucide-react";
+
+import { CoPill, type CoTone } from "@/components/crm/cockpit/co-table";
+import { priorityTone, statusTone } from "@/components/crm/cockpit/focus/focus-types";
 import { readFastCrmContactsModel, type CrmContactListRow } from "@/lib/phase1/crm-contacts-read-model";
 import { hasPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { readWorkspaceSdrRoster, type SdrRosterEntry } from "@/lib/phase1/sdr-roster-read-model";
@@ -36,21 +16,23 @@ import {
 import { contactViewsForWorkspace, ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { formatNumber } from "@/lib/utils";
-import { TileGrid, TileItem } from "@/components/tile-grid";
-import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import { ContactsTable } from "@/components/crm/contacts-table";
 import {
   buildPeekAssignment,
   contactDisplayName,
   contactEmailAvailable,
   contactNextAction,
-  gradeTone,
   priorityWeight,
   type PeekAssignment
 } from "@/lib/crm-contact-presentation";
 
 export const dynamic = "force-dynamic";
 
+type ContactView = CrmContactListRow;
+
+// The Contacts records page in the cockpit idiom (matches My Day / the contact &
+// account records): a light `.cockpit` surface with a header, counter strip, the
+// comprehensive directory table, and cockpit insight cards — no legacy TileGrid.
 export default async function ContactsPage({
   searchParams
 }: {
@@ -92,367 +74,273 @@ export default async function ContactsPage({
       assignments[row.contactId] = buildPeekAssignment(row);
     }
   }
+
   const isSdr = session.role === "SDR";
   const canManageBulk = hasPermission(session, "manage_sdr_team");
 
   // Caller line for the peek's in-line dialer: the current user's own RC number.
   const callerIdentity = resolveUserTelephonyIdentity(session.user);
-  const callerLabel = callerIdentity
-    ? `${callerIdentity.displayName} · ${callerIdentity.phoneNumber}`
-    : undefined;
+  const callerLabel = callerIdentity ? `${callerIdentity.displayName} · ${callerIdentity.phoneNumber}` : undefined;
   const callBlockReason = callerIdentity ? undefined : telephonyIdentityBlockReason(session.user);
+
   const verified = contacts.filter((contact) => contact.grade === "A" || contact.grade === "B");
   const emailAvailable = contacts.filter((contact) => contactEmailAvailable(contact));
   const callReady = contacts.filter((contact) => Boolean(contact.phone) && !contact.isSuppressed);
   const needsAttention = contacts.filter(
     (contact) => contact.isSuppressed || contact.grade === "C" || contact.grade === "D" || contact.openTasks > 0
   );
+  const suppressed = contacts.filter((contact) => contact.isSuppressed);
   const priorityContacts = [...contacts]
     .sort((a, b) => b.openTasks - a.openTasks || priorityWeight(a.priority) - priorityWeight(b.priority) || b.score - a.score)
     .slice(0, 8);
   const ownerRows = ownerSummary(contacts).slice(0, 6);
-  const suppressed = contacts.filter((contact) => contact.isSuppressed);
+  const accountCount = new Set(contacts.map((contact) => contact.companyId)).size;
 
-  const metrics = [
-    {
-      label: isSdr ? "My contacts" : "Total contacts",
-      value: formatNumber(isSdr ? contacts.length : totalContacts),
-      note: isSdr ? "Assigned people in scope" : "All contacts — assigned or unassigned",
-      icon: Users,
-      tone: "info" as const
-    },
-    {
-      label: isSdr ? "Email available" : "Verified A/B",
-      value: formatNumber(isSdr ? emailAvailable.length : verified.length),
-      note: isSdr ? "Contacts you can email now" : "Email-ready for controlled outreach",
-      icon: BadgeCheck,
-      tone: "success" as const
-    },
-    {
-      label: "Call-ready",
-      value: formatNumber(callReady.length),
-      note: "Phone-present contacts not suppressed",
-      icon: Phone,
-      tone: "info" as const
-    },
-    {
-      label: isSdr ? "Needs action" : "Open tasks",
-      value: formatNumber(openTasks),
-      note: `${formatNumber(needsAttention.length)} contacts need review`,
-      icon: Calendar,
-      tone: openTasks ? "warning" as const : "success" as const
-    }
+  const counters: Array<{ tone: CounterTone; label: string; value: number }> = [
+    { tone: "blue", label: isSdr ? "My contacts" : "Total contacts", value: isSdr ? contacts.length : totalContacts },
+    { tone: "teal", label: isSdr ? "Email available" : "Verified A/B", value: isSdr ? emailAvailable.length : verified.length },
+    { tone: "blue", label: "Call-ready", value: callReady.length },
+    { tone: needsAttention.length ? "amber" : "teal", label: isSdr ? "Needs review" : "Open tasks", value: isSdr ? needsAttention.length : openTasks }
   ];
-
-  const lanes = [
-    {
-      label: isSdr ? "Email available" : "Email-ready",
-      value: isSdr ? emailAvailable.length : verified.length,
-      note: isSdr ? "Not suppressed" : "A/B grade contacts",
-      icon: Mail,
-      tone: "success" as const
-    },
-    {
-      label: "Call-ready",
-      value: callReady.length,
-      note: "Phone present",
-      icon: Phone,
-      tone: "info" as const
-    },
-    {
-      label: "Needs review",
-      value: needsAttention.length,
-      note: "Tasks or quality flags",
-      icon: ShieldCheck,
-      tone: needsAttention.length ? "warning" as const : "success" as const
-    },
-    {
-      label: isSdr ? "Queued focus" : "Owners",
-      value: isSdr ? priorityContacts.length : ownerRows.length,
-      note: isSdr ? "Visible next contacts" : "Active contact owners",
-      icon: Users,
-      tone: "info" as const
-    }
-  ];
-
-  const canCustomize = canCustomizeTiles(session);
-  const savedLayout = await readUserTileLayout(session.user.id, "crm-contacts");
 
   return (
-    <>
-      <PageHeader
-        kicker="Sales CRM"
-        title="Contacts"
-        copy={
-          isSdr
-            ? "Your contacts with account context, channel readiness, and the next practical action. Click a contact to open its record."
-            : "Every contact in the workspace — assigned or unassigned. Search, sort, and filter the full directory; click a contact to open its record."
-        }
-        actions={
-          <>
-            <Button asChild variant="outline">
-              <Link href="/crm/accounts">
-                <Building2 aria-hidden="true" />
-                Accounts
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link href="/sdr/queue">
-                <ArrowRight aria-hidden="true" />
-                {isSdr ? "My queue" : "SDR queue"}
-              </Link>
-            </Button>
-          </>
-        }
-      />
-
-      <TileGrid pageKey="crm-contacts" canCustomize={canCustomize} saved={savedLayout}>
-        <TileItem id="contact-directory" x={0} y={0} w={12} h={11} minW={6} minH={5}>
-          <Panel
-            title="Contact directory"
-            subtitle={
-              isSdr
-                ? "Assigned people with channel readiness and the next recommended action. Search, sort, and page through your book."
-                : "Search, sort, and page the full contact book. Account context, channel readiness, owner, and activity in one table."
-            }
-            action={<StatusBadge label={`${formatNumber(contacts.length)} contacts`} tone="info" />}
-            flush
-            fill
-          >
-            <ContactsTable
-              rows={contacts}
-              isSdr={isSdr}
-              canManage={canManageBulk}
-              roster={roster}
-              callerLabel={callerLabel}
-              callBlockReason={callBlockReason}
-              assignments={assignments}
-              initialQuery={sp.q}
-              initialSort={sp.sort}
-              initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
-            />
-          </Panel>
-        </TileItem>
-        {metrics.map((metric, index) => (
-          <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={11} w={3} h={2} minW={2}>
-            <StatCard
-              fill
-              icon={metric.icon}
-              label={metric.label}
-              value={metric.value}
-              note={metric.note}
-              tone={metric.tone}
-            />
-          </TileItem>
-        ))}
-        {lanes.map((lane, index) => (
-          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={13} w={3} h={2} minW={2}>
-            <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
-              <ToneIcon icon={lane.icon} tone={lane.tone} />
-              <div className="min-w-0">
-                <div className="text-lg font-semibold text-foreground">{formatNumber(lane.value)}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {lane.label} · {lane.note}
-                </div>
-              </div>
-            </div>
-          </TileItem>
-        ))}
-
-        <TileItem id="priority-contacts" x={0} y={15} w={7} h={8} minW={4} minH={4}>
-        <Panel
-          title={isSdr ? "Next contacts" : "Priority contacts"}
-          subtitle={
-            isSdr
-              ? "Start with active tasks, priority records, then contacts with a reachable channel."
-              : "Contacts with open tasks, high priority, or strong score appear first."
-          }
-          action={<StatusBadge label={`${priorityContacts.length} focus`} tone="info" />}
-          flush
-          fill
-        >
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Contact</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>{isSdr ? "Priority" : "Grade"}</TableHead>
-                <TableHead>{isSdr ? "Next action" : "Status"}</TableHead>
-                {!isSdr ? <TableHead>Owner</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {priorityContacts.map((contact) => (
-                <TableRow key={contact.id}>
-                  <TableCell>
-                    <Link href={`/crm/contacts/${contact.id}`} className="flex flex-col">
-                      <span className="font-medium text-foreground">{contactDisplayName(contact)}</span>
-                      <span className="text-xs text-muted-foreground">{contact.title}</span>
-                      <span className="text-xs text-muted-foreground">{contact.email}</span>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link href={`/crm/accounts/${contact.companyId}`} className="flex flex-col">
-                      <span className="font-medium text-foreground">{contact.companyName}</span>
-                      <span className="text-xs text-muted-foreground">{contact.domain}</span>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    {isSdr ? (
-                      <StatusBadge label={contact.priority} />
-                    ) : (
-                      <StatusBadge label={contact.grade} tone={gradeTone(contact.grade)} />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isSdr ? (
-                      <StatusBadge label={contactNextAction(contact).label} tone={contactNextAction(contact).tone} />
-                    ) : (
-                      <StatusBadge label={contact.status} />
-                    )}
-                  </TableCell>
-                  {!isSdr ? <TableCell className="text-muted-foreground">{contact.owner}</TableCell> : null}
-                </TableRow>
-              ))}
-              {priorityContacts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isSdr ? 4 : 5} className="text-muted-foreground">
-                    No contacts to prioritize right now.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </Panel>
-        </TileItem>
-
-        <TileItem id="channel-readiness" x={7} y={15} w={5} h={8} minW={3} minH={4}>
-        <Panel
-          title="Channel readiness"
-          subtitle="How the contact database breaks down for email, phone, review, and compliance blocks."
-          action={<ToneIcon icon={ShieldCheck} tone="info" />}
-          fill
-        >
-          <div className="flex flex-col gap-4">
-            <ReadinessRow
-              label={isSdr ? "Email available" : "Email-ready"}
-              count={isSdr ? emailAvailable.length : verified.length}
-              total={contacts.length}
-              tone="success"
-            />
-            <ReadinessRow label="Call-ready" count={callReady.length} total={contacts.length} tone="info" />
-            <ReadinessRow label="Needs review" count={needsAttention.length} total={contacts.length} tone="warning" />
-            <ReadinessRow label="Suppressed" count={suppressed.length} total={contacts.length} tone="danger" />
+    <div className="cockpit min-h-full bg-co-page">
+      <div className="mx-auto w-full max-w-[1280px] px-6 py-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-co-blue">CRM · Records</div>
+            <h1 className="mt-0.5 text-[22px] font-extrabold text-co-ink">Contacts</h1>
+            <p className="mt-0.5 max-w-[660px] text-[12.5px] text-co-text-3">
+              {isSdr
+                ? "Your contacts with account context, channel readiness, and the next practical action. Click a contact to open its record."
+                : "Every contact in the workspace — assigned or unassigned. Search, sort, and filter the full directory; click a contact to open its record."}
+            </p>
           </div>
-        </Panel>
-        </TileItem>
-
-        <TileItem id="secondary-left" x={0} y={23} w={7} h={6} minW={4} minH={3}>
-        {isSdr ? (
-          <Panel
-            title="Work focus"
-            subtitle="Queue items, account context, and reachable contacts stay in one path."
-            action={<ToneIcon icon={Calendar} tone="info" />}
-            fill
-          >
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5 border-b pb-4">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-foreground">My queue</span>
-                  <StatusBadge label={`${formatNumber(priorityContacts.length)} visible`} tone="info" />
-                </div>
-                <p className="text-xs text-muted-foreground">First touches, follow-ups, and bulk email start there.</p>
-              </div>
-              <div className="flex flex-col gap-1.5 border-b pb-4">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-foreground">Reachable contacts</span>
-                  <StatusBadge label={`${formatNumber(emailAvailable.length + callReady.length)} channels`} tone="success" />
-                </div>
-                <p className="text-xs text-muted-foreground">Email and phone availability are visible before opening a record.</p>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-foreground">Account context</span>
-                  <StatusBadge label={`${formatNumber(new Set(contacts.map((contact) => contact.companyId)).size)} accounts`} tone="info" />
-                </div>
-                <p className="text-xs text-muted-foreground">Open an account when company context matters for the message.</p>
-              </div>
-            </div>
-          </Panel>
-        ) : (
-          <Panel
-            title="Owner coverage"
-            subtitle="Contact load and quality by owner."
-            action={<ToneIcon icon={Users} tone="info" />}
-            fill
-          >
-            <div className="flex flex-col gap-4">
-              {ownerRows.map((row) => (
-                <div key={row.owner} className="flex flex-col gap-1.5 border-b pb-4 last:border-0 last:pb-0">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium text-foreground">{row.owner}</span>
-                    <StatusBadge label={`${formatNumber(row.contacts)} contacts`} tone="info" />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {formatNumber(row.verified)} verified, {formatNumber(row.tasks)} open tasks, average score {row.averageScore}.
-                  </p>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        )}
-        </TileItem>
-
-        <TileItem id="contact-actions" x={7} y={23} w={5} h={6} minW={3} minH={3}>
-        <Panel
-          title="Contact actions"
-          subtitle={
-            isSdr
-              ? "The SDR path stays focused on active work and account context."
-              : "Common places SDRs and managers go from the contact list."
-          }
-          action={<ToneIcon icon={ArrowRight} tone="info" />}
-          fill
-        >
-          <div className={`grid grid-cols-1 gap-4 ${isSdr ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
-            <Link
-              href="/sdr/queue"
-              className="group bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
-            >
-              <ToneIcon icon={Calendar} tone="info" />
-              <h3 className="text-sm font-semibold text-foreground">{isSdr ? "My queue" : "Queue"}</h3>
-              <p className="text-xs text-muted-foreground">Work first touches and follow-ups.</p>
-            </Link>
-            {!isSdr ? (
-              <Link
-                href="/outreach/campaigns"
-                className="group bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
-              >
-                <ToneIcon icon={Mail} tone="info" />
-                <h3 className="text-sm font-semibold text-foreground">Campaigns</h3>
-                <p className="text-xs text-muted-foreground">Open sequences and campaign setup.</p>
-              </Link>
-            ) : null}
+          <div className="flex items-center gap-2">
             <Link
               href="/crm/accounts"
-              className="group bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-sm transition-colors hover:border-[var(--syn-primary)]"
+              className="flex h-[38px] items-center gap-2 rounded-[9px] border border-co-control bg-white px-4 text-[13px] font-bold text-co-text-3 transition-colors hover:bg-co-sunken"
             >
-              <ToneIcon icon={Building2} tone="info" />
-              <h3 className="text-sm font-semibold text-foreground">Accounts</h3>
-              <p className="text-xs text-muted-foreground">Review company context.</p>
+              <Building2 className="size-4" aria-hidden="true" />
+              Accounts
+            </Link>
+            <Link
+              href="/sdr/queue"
+              className="flex h-[38px] items-center gap-2 rounded-[9px] bg-co-blue px-4 text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+            >
+              <ArrowRight className="size-4" aria-hidden="true" />
+              {isSdr ? "My queue" : "SDR queue"}
             </Link>
           </div>
-        </Panel>
-        </TileItem>
+        </div>
 
-      </TileGrid>
-    </>
+        {/* Counter strip */}
+        <div className="mt-4 grid grid-cols-2 divide-y divide-co-divider rounded-[10px] border border-co-border bg-white sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+          {counters.map((counter) => (
+            <Counter key={counter.label} tone={counter.tone} label={counter.label} value={counter.value} />
+          ))}
+        </div>
+
+        {/* Contact directory */}
+        <section className="mt-5 overflow-hidden rounded-[10px] border border-co-border bg-white">
+          <div className="flex items-start justify-between gap-3 border-b border-co-border px-4 py-3">
+            <div>
+              <h2 className="text-[13px] font-extrabold text-co-ink">Contact directory</h2>
+              <p className="mt-0.5 text-[11.5px] text-co-text-3">
+                {isSdr
+                  ? "Assigned people with channel readiness and the next recommended action. Search, sort, and page through your book."
+                  : "Search, sort, and page the full contact book — account context, channel readiness, owner, and activity in one table."}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-co-sunken px-2.5 py-1 text-[11px] font-bold text-co-text-3 ring-1 ring-inset ring-co-border">
+              {formatNumber(contacts.length)} contacts
+            </span>
+          </div>
+          <ContactsTable
+            rows={contacts}
+            isSdr={isSdr}
+            canManage={canManageBulk}
+            roster={roster}
+            callerLabel={callerLabel}
+            callBlockReason={callBlockReason}
+            assignments={assignments}
+            initialQuery={sp.q}
+            initialSort={sp.sort}
+            initialPage={sp.page ? Math.max(0, Number(sp.page) - 1) : 0}
+          />
+        </section>
+
+        {/* Insights */}
+        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
+          <CockpitCard
+            title={isSdr ? "Next contacts" : "Priority contacts"}
+            subtitle={
+              isSdr
+                ? "Start with active tasks, priority records, then contacts with a reachable channel."
+                : "Contacts with open tasks, high priority, or strong score appear first."
+            }
+            badge={<CoPill tone="info">{priorityContacts.length} focus</CoPill>}
+          >
+            {priorityContacts.length ? (
+              <div>
+                {priorityContacts.map((contact) => (
+                  <Link
+                    key={contact.id}
+                    href={`/crm/contacts/${contact.id}`}
+                    className="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-co-divider py-2.5 last:border-0 hover:bg-[#f6faff]"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-[12.5px] font-bold text-co-ink">{contactDisplayName(contact)}</span>
+                      <span className="block truncate text-[11px] text-co-muted-2">
+                        {[contact.companyName, contact.domain].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <CoPill tone={priorityTone(contact.priority)}>{contact.priority}</CoPill>
+                      {isSdr ? (
+                        <CoPill tone="info">{contactNextAction(contact).label}</CoPill>
+                      ) : (
+                        <CoPill tone={gradeToCoTone(contact.grade)}>{contact.grade}</CoPill>
+                      )}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="py-6 text-center text-[12px] text-co-muted-2">No contacts to prioritize right now.</p>
+            )}
+          </CockpitCard>
+
+          <CockpitCard
+            title="Channel readiness"
+            subtitle="How the contact database breaks down for email, phone, review, and compliance blocks."
+          >
+            <div className="flex flex-col gap-3.5">
+              <ReadinessBar
+                label={isSdr ? "Email available" : "Email-ready"}
+                count={isSdr ? emailAvailable.length : verified.length}
+                total={contacts.length}
+                tone="teal"
+              />
+              <ReadinessBar label="Call-ready" count={callReady.length} total={contacts.length} tone="blue" />
+              <ReadinessBar label="Needs review" count={needsAttention.length} total={contacts.length} tone="amber" />
+              <ReadinessBar label="Suppressed" count={suppressed.length} total={contacts.length} tone="red" />
+            </div>
+          </CockpitCard>
+        </div>
+
+        {/* Work focus + actions */}
+        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {isSdr ? (
+            <CockpitCard title="Work focus" subtitle="Queue items, account context, and reachable contacts stay in one path.">
+              <div className="flex flex-col gap-3">
+                <FocusRow
+                  title="My queue"
+                  badge={`${formatNumber(priorityContacts.length)} visible`}
+                  tone="info"
+                  desc="First touches, follow-ups, and bulk email start there."
+                />
+                <FocusRow
+                  title="Reachable contacts"
+                  badge={`${formatNumber(emailAvailable.length + callReady.length)} channels`}
+                  tone="teal"
+                  desc="Email and phone availability are visible before opening a record."
+                />
+                <FocusRow
+                  title="Account context"
+                  badge={`${formatNumber(accountCount)} accounts`}
+                  tone="info"
+                  desc="Open an account when company context matters for the message."
+                />
+              </div>
+            </CockpitCard>
+          ) : (
+            <CockpitCard title="Owner coverage" subtitle="Contact load and quality by owner.">
+              <div className="flex flex-col gap-3">
+                {ownerRows.map((row) => (
+                  <FocusRow
+                    key={row.owner}
+                    title={row.owner}
+                    badge={`${formatNumber(row.contacts)} contacts`}
+                    tone="info"
+                    desc={`${formatNumber(row.verified)} verified · ${formatNumber(row.tasks)} open tasks · avg score ${row.averageScore}`}
+                  />
+                ))}
+                {ownerRows.length === 0 ? (
+                  <p className="py-6 text-center text-[12px] text-co-muted-2">No owners to summarize.</p>
+                ) : null}
+              </div>
+            </CockpitCard>
+          )}
+
+          <CockpitCard
+            title="Contact actions"
+            subtitle={
+              isSdr
+                ? "The SDR path stays focused on active work and account context."
+                : "Common places SDRs and managers go from the contact list."
+            }
+          >
+            <div className={`grid gap-3 ${isSdr ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
+              <QuickLink href="/sdr/queue" icon={Calendar} title={isSdr ? "My queue" : "Queue"} desc="Work first touches and follow-ups." />
+              {!isSdr ? <QuickLink href="/outreach/campaigns" icon={Mail} title="Campaigns" desc="Open sequences and campaign setup." /> : null}
+              <QuickLink href="/crm/accounts" icon={Building2} title="Accounts" desc="Review company context." />
+            </div>
+          </CockpitCard>
+        </div>
+      </div>
+    </div>
   );
 }
 
-type ContactView = CrmContactListRow;
+type CounterTone = "blue" | "teal" | "amber" | "red";
 
-function ReadinessRow({
+const dotTone: Record<CounterTone, string> = {
+  blue: "bg-co-blue",
+  teal: "bg-co-teal",
+  amber: "bg-co-amber-dot",
+  red: "bg-co-red"
+};
+
+function Counter({ tone, label, value }: { tone: CounterTone; label: string; value: number }) {
+  return (
+    <div className="flex flex-col gap-1 px-4 py-3">
+      <div className="flex items-center gap-1.5">
+        <span className={`size-2 rounded-full ${dotTone[tone]}`} aria-hidden="true" />
+        <span className="text-[11px] font-bold text-co-text-3">{label}</span>
+      </div>
+      <span className="text-[22px] font-extrabold tabular-nums text-co-ink">{formatNumber(value)}</span>
+    </div>
+  );
+}
+
+function CockpitCard({
+  title,
+  subtitle,
+  badge,
+  children
+}: {
+  title: string;
+  subtitle?: string;
+  badge?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-[10px] border border-co-border bg-white">
+      <div className="flex items-start justify-between gap-3 border-b border-co-border px-4 py-3">
+        <div>
+          <h2 className="text-[13px] font-extrabold text-co-ink">{title}</h2>
+          {subtitle ? <p className="mt-0.5 text-[11.5px] text-co-text-3">{subtitle}</p> : null}
+        </div>
+        {badge ? <span className="shrink-0">{badge}</span> : null}
+      </div>
+      <div className="p-4">{children}</div>
+    </section>
+  );
+}
+
+function ReadinessBar({
   label,
   count,
   total,
@@ -461,20 +349,65 @@ function ReadinessRow({
   label: string;
   count: number;
   total: number;
-  tone: "success" | "info" | "warning" | "danger";
+  tone: CounterTone;
 }) {
   const percent = total ? Math.round((count / total) * 100) : 0;
-
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-medium text-foreground">{label}</span>
-        <StatusBadge label={`${formatNumber(count)} contacts`} tone={tone} />
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12.5px] font-bold text-co-ink">{label}</span>
+        <span className="text-[11px] font-bold text-co-text-3">{formatNumber(count)} contacts</span>
       </div>
-      <MeterBar value={percent} />
-      <span className="text-xs text-muted-foreground">{percent}% of CRM contacts</span>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-co-sunken-2">
+        <div className={`h-full rounded-full ${dotTone[tone]}`} style={{ width: `${percent}%` }} aria-hidden="true" />
+      </div>
+      <span className="mt-1 block text-[10.5px] text-co-muted-2">{percent}% of CRM contacts</span>
     </div>
   );
+}
+
+function FocusRow({ title, badge, tone, desc }: { title: string; badge: string; tone: CoTone; desc: string }) {
+  return (
+    <div className="border-b border-co-divider pb-3 last:border-0 last:pb-0">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12.5px] font-bold text-co-ink">{title}</span>
+        <CoPill tone={tone}>{badge}</CoPill>
+      </div>
+      <p className="mt-0.5 text-[11.5px] text-co-text-3">{desc}</p>
+    </div>
+  );
+}
+
+function QuickLink({
+  href,
+  icon: Icon,
+  title,
+  desc
+}: {
+  href: string;
+  icon: typeof Building2;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex flex-col gap-2 rounded-[10px] border border-co-border bg-co-sunken p-3.5 transition-colors hover:border-co-blue hover:bg-[#f6faff]"
+    >
+      <span className="flex size-8 items-center justify-center rounded-lg bg-[#eaf3ff] text-co-blue">
+        <Icon className="size-4" aria-hidden="true" />
+      </span>
+      <span className="text-[12.5px] font-bold text-co-ink">{title}</span>
+      <span className="text-[11px] text-co-text-3">{desc}</span>
+    </Link>
+  );
+}
+
+function gradeToCoTone(grade: string): CoTone {
+  if (grade === "A" || grade === "B") return "teal";
+  if (grade === "C") return "amber";
+  if (grade === "D" || grade === "S") return "red";
+  return "neutral";
 }
 
 function ownerSummary(contacts: ContactView[]) {
@@ -496,4 +429,3 @@ function ownerSummary(contacts: ContactView[]) {
     }))
     .sort((a, b) => b.tasks - a.tasks || b.verified - a.verified || b.contacts - a.contacts);
 }
-
