@@ -13,7 +13,8 @@ import {
   coBodyCell,
   coHeadCell
 } from "@/components/crm/cockpit/co-table";
-import { CoPeek, CoPeekRow, CoPeekSection, CoPeekSummary } from "@/components/crm/cockpit/co-peek";
+import { CoPeek, CoPeekRow, CoPeekSection } from "@/components/crm/cockpit/co-peek";
+import { RecordingPlayer } from "@/components/recording-player";
 
 // Cockpit Calls table — the redesigned dense call log. Plain, serializable rows
 // (display strings precomputed server-side); client-side search + All/Connected/
@@ -130,15 +131,34 @@ export function CallsView({
         onClose={() => setPeek(null)}
         title={peek?.contactName ?? ""}
         subtitle={peek?.companyName}
-        badges={peek ? <CoPill tone={peek.outcomeTone}>{peek.outcomeLabel}</CoPill> : null}
+        badges={
+          peek ? (
+            <>
+              <CoPill tone={peek.outcomeTone}>{peek.outcomeLabel}</CoPill>
+              {peek.recorded ? <CoPill tone="teal">Recorded</CoPill> : null}
+            </>
+          ) : null
+        }
         footer={
-          peek?.contactId ? (
-            <Link
-              href={`/crm/contacts/${peek.contactId}`}
-              className="flex h-10 items-center justify-center rounded-lg bg-co-blue text-[12.5px] font-bold text-white transition-colors hover:bg-co-blue-hover"
-            >
-              Open contact
-            </Link>
+          peek ? (
+            <div className="flex flex-col gap-2">
+              {peek.contactId ? (
+                <Link
+                  href={`/sdr/focus?lead=${encodeURIComponent(peek.contactId)}`}
+                  className="flex h-10 items-center justify-center rounded-lg bg-co-blue text-[12.5px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+                >
+                  Open in Focus workspace
+                </Link>
+              ) : null}
+              {peek.contactId ? (
+                <Link
+                  href={`/crm/contacts/${peek.contactId}`}
+                  className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-text-3 transition-colors hover:bg-co-sunken"
+                >
+                  Open contact
+                </Link>
+              ) : null}
+            </div>
           ) : null
         }
       >
@@ -148,11 +168,18 @@ export function CallsView({
               <CoPeekRow label="Outcome" value={peek.outcomeLabel} />
               <CoPeekRow label="Duration" value={peek.durationLabel} />
               <CoPeekRow label="When" value={peek.whenLabel} />
-              <CoPeekRow label="Recording" value={peek.recorded ? peek.recordingLabel : ""} />
+              <CoPeekRow label="Recording" value={peek.recordingLabel} />
             </CoPeekSection>
-            <CoPeekSection label="Note">
+            {peek.recorded ? (
+              <CoPeekSection label="Recording">
+                <RecordingPlayer callId={peek.id} />
+              </CoPeekSection>
+            ) : null}
+            <CoPeekSection label="Call note">
               {peek.note ? (
-                <CoPeekSummary>{peek.note}</CoPeekSummary>
+                <div className="rounded-[10px] border border-co-border bg-co-sunken p-3 text-[12.5px] text-co-text-2">
+                  {peek.note}
+                </div>
               ) : (
                 <p className="text-[12.5px] italic text-co-muted-2">No note captured for this call.</p>
               )}
