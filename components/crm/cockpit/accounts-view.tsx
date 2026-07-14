@@ -28,6 +28,7 @@ export type CockpitAccountRow = {
   description: string;
   primaryContactName: string;
   primaryContactTitle: string;
+  primaryContactId?: string;
   lastActivity: string;
   hasOpportunity: boolean;
 };
@@ -146,14 +147,23 @@ export function AccountsView({
               >
                 Open full record
               </Link>
-              <button
-                type="button"
-                disabled
-                title="Available when the Focus workspace ships"
-                className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-muted-2"
-              >
-                Open in Focus workspace · soon
-              </button>
+              {peek.primaryContactId ? (
+                <Link
+                  href={`/sdr/focus?lead=${encodeURIComponent(peek.primaryContactId)}`}
+                  className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-text-3 transition-colors hover:bg-co-sunken"
+                >
+                  Open primary contact in Focus
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  title="No primary contact on this account to work in Focus."
+                  className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-muted-2"
+                >
+                  No contact to open in Focus
+                </button>
+              )}
             </div>
           ) : null
         }

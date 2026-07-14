@@ -26,6 +26,8 @@ export type FastCrmAccountView = {
   /** Highest-score contact at the account, for the "Primary contact" column. */
   primaryContactName?: string;
   primaryContactTitle?: string;
+  /** …and its id, so records surfaces can jump to it in the Focus workspace. */
+  primaryContactId?: string;
   stage: OpportunityStage;
   amount: number;
   probability: number;
@@ -367,6 +369,7 @@ export async function readFastCrmOverviewModel(
         : primaryContact?.owner ?? "Unassigned",
       primaryContactName: primaryContact?.fullName ?? "",
       primaryContactTitle: primaryContact?.title ?? "",
+      primaryContactId: primaryContact?.id,
       stage,
       amount,
       probability: primaryOpportunity?.probability ?? 0,
