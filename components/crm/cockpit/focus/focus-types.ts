@@ -30,8 +30,13 @@ export type FocusLead = {
   emailEligible: boolean;
   localTimeLabel: string; // "" when the timezone can't be derived
   outsideWindow: boolean;
+  openOpportunity: string; // "" when none
+  openWork: string; // "" when none
+  keyAccountFields: KeyAccountFieldRow[];
   timeline: FocusTimelineItem[];
 };
+
+export type KeyAccountFieldRow = { label: string; value: string };
 
 // Mirror of lib/phase1/focus-timeline-read-model's item (client-safe: `type` is a
 // plain string so this file stays free of server imports).
