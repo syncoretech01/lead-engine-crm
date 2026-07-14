@@ -116,14 +116,17 @@ export function MyDay({
         </div>
 
         {/* Main grid */}
-        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_316px]">
-          {/* Work queue */}
-          <div className="rounded-[10px] border border-co-border bg-white">
-            <div className="flex items-center justify-between border-b border-co-border px-4 py-3">
-              <h2 className="text-[13px] font-extrabold text-co-ink">Work queue</h2>
-              <span className="text-[11px] font-bold text-co-muted-2">{queueCount} active</span>
-            </div>
-            <div>
+        <div className="mt-5 grid grid-cols-1 items-stretch gap-5 lg:grid-cols-[1fr_316px]">
+          {/* Work queue — on large screens it fills the right column's height and
+              scrolls internally (the inner card is absolutely positioned, so its
+              intrinsic height doesn't stretch the row past the right column). */}
+          <div className="lg:relative">
+            <div className="flex flex-col overflow-hidden rounded-[10px] border border-co-border bg-white lg:absolute lg:inset-0">
+              <div className="flex shrink-0 items-center justify-between border-b border-co-border px-4 py-3">
+                <h2 className="text-[13px] font-extrabold text-co-ink">Work queue</h2>
+                <span className="text-[11px] font-bold text-co-muted-2">{queueCount} active</span>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
               {groups.map((group) => (
                 <div key={group.id}>
                   <div className="flex items-center gap-2 bg-co-sunken-2 px-4 py-1.5">
@@ -177,6 +180,7 @@ export function MyDay({
                   Your queue is clear — nothing needs attention right now.
                 </div>
               ) : null}
+              </div>
             </div>
           </div>
 

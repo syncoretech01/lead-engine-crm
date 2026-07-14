@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -71,6 +72,7 @@ function QuickPanel({
   const [message, setMessage] = React.useState("");
   const [title, setTitle] = React.useState("");
   const [due, setDue] = React.useState("");
+  const [files, setFiles] = React.useState<File[]>([]);
 
   async function run(build: () => FormData, act: (form: FormData) => Promise<unknown>, success: string) {
     if (pending) return;
@@ -100,10 +102,45 @@ function QuickPanel({
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          rows={3}
+          rows={12}
           placeholder="Message… ({{first_name}}, {{company}})"
-          className={`${area} mt-2`}
+          className={`${area} mt-2 min-h-[220px] resize-y`}
         />
+        {/* Attachments */}
+        <div className="mt-2">
+          <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-co-control bg-white px-2.5 text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken">
+            <Paperclip className="size-3.5" aria-hidden="true" />
+            Attach files
+            <input
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => setFiles((prev) => [...prev, ...Array.from(e.target.files ?? [])])}
+            />
+          </label>
+          {files.length ? (
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {files.map((file, index) => (
+                <li
+                  key={`${file.name}-${index}`}
+                  className="flex items-center justify-between gap-2 rounded-md bg-white px-2 py-1 text-[11.5px] text-co-text-2"
+                >
+                  <span className="truncate">
+                    {file.name} <span className="text-co-muted-2">({Math.max(1, Math.round(file.size / 1024))} KB)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
+                    aria-label={`Remove ${file.name}`}
+                    className="shrink-0 text-co-muted-2 hover:text-co-red-text"
+                  >
+                    <X className="size-3.5" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
         <div className="mt-2 flex justify-end gap-2">
           <PanelCancel onClose={onClose} />
           <button
@@ -117,6 +154,7 @@ function QuickPanel({
                   f.set("contactId", lead.id);
                   f.set("subject", subject);
                   f.set("bodySnapshot", message || "Hi {{first_name}}, quick question about {{company}}.");
+                  for (const file of files) f.append("attachments", file);
                   return f;
                 },
                 sendDirectEmailAction,
