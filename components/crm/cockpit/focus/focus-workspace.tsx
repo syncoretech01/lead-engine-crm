@@ -49,6 +49,9 @@ const CHIPS = [
 ] as const;
 type ChipId = (typeof CHIPS)[number]["id"];
 
+const DOSSIER_TABS = ["Overview", "Activity", "Tasks", "Opportunities", "Details"] as const;
+type DossierTab = (typeof DOSSIER_TABS)[number];
+
 function matchesView(lead: FocusLead, view: ViewId): boolean {
   switch (view) {
     case "p1":
@@ -101,6 +104,7 @@ export function FocusWorkspace({
   );
   const [chip, setChip] = React.useState<ChipId>("all");
   const [query, setQuery] = React.useState("");
+  const [tab, setTab] = React.useState<DossierTab>("Overview");
   const [completedIds, setCompletedIds] = React.useState<Set<string>>(() => new Set());
   const searchRef = React.useRef<HTMLInputElement>(null);
 
@@ -385,63 +389,37 @@ export function FocusWorkspace({
               />
             </div>
 
-            <div className="mt-5 grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <section>
-                <h2 className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Call brief</h2>
-                <div className="rounded-[10px] border border-co-border bg-co-sunken p-3.5">
-                  <Row label="Fit reason" value={selected.fitReason} />
-                  <Row label="Talking point" value="" accent />
-                  <Row label="Last interaction" value={selected.lastTouchLabel} />
-                  <Row label="Pain point" value="" />
-                  <Row label="Objection" value="" />
-                  <Row label="Decision maker" value="" />
-                  <Row label="Expected next step" value="" />
-                </div>
-
-                <div className="mt-4 flex items-center justify-between">
-                  <h2 className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">
-                    Recent engagement
-                  </h2>
-                  <Link
-                    href={`/crm/contacts/${selected.id}`}
-                    className="text-[11px] font-semibold text-co-blue hover:underline"
-                  >
-                    View all activity
-                  </Link>
-                </div>
-                <div className="mt-2 rounded-[10px] border border-co-border bg-co-sunken p-3.5">
-                  {selected.timeline.length ? (
-                    selected.timeline.map((item) => <TimelineRow key={item.id} item={item} />)
-                  ) : (
-                    <p className="text-[12px] italic text-co-muted-2">No recent activity yet.</p>
-                  )}
-                </div>
-              </section>
-              <section>
-                <h2 className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">
-                  Company &amp; account
-                </h2>
-                <div className="rounded-[10px] border border-co-border bg-co-sunken p-3.5">
-                  <Row label="Industry" value={selected.companyIndustry} />
-                  <Row label="Location" value={selected.companyLocation} />
-                  <Row label="Company size" value="" />
-                  <Row label="Account stage" value="" />
-                  <Row label="Account owner" value={selected.owner} />
-                  <Row label="Open opportunity" value={selected.openOpportunity} />
-                  <Row label="Open work" value={selected.openWork} />
-                </div>
-                {selected.keyAccountFields.length ? (
-                  <div className="mt-4">
-                    <KeyAccountFields fields={selected.keyAccountFields} />
-                  </div>
-                ) : null}
-                <Link
-                  href={`/crm/contacts/${selected.id}`}
-                  className="mt-2 inline-block text-[12px] font-semibold text-co-blue hover:underline"
+            {/* Tabs */}
+            <div className="mt-5 flex gap-5 border-b border-co-border">
+              {DOSSIER_TABS.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setTab(item)}
+                  aria-pressed={tab === item}
+                  className={`-mb-px border-b-2 pb-2 text-[13px] font-bold transition-colors ${
+                    tab === item
+                      ? "border-co-blue text-co-blue-dark"
+                      : "border-transparent text-co-text-3 hover:text-co-ink"
+                  }`}
                 >
-                  Open full record →
-                </Link>
-              </section>
+                  {item}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4">
+              {tab === "Overview" ? (
+                <OverviewGrid lead={selected} onViewActivity={() => setTab("Activity")} />
+              ) : tab === "Activity" ? (
+                <ActivityTab lead={selected} />
+              ) : tab === "Tasks" ? (
+                <TasksTab lead={selected} />
+              ) : tab === "Opportunities" ? (
+                <OpportunitiesTab lead={selected} />
+              ) : (
+                <DetailsTab lead={selected} />
+              )}
             </div>
           </div>
         ) : (
@@ -483,6 +461,151 @@ function ComplianceBand({ compliance }: { compliance: LeadCompliance }) {
         <div className="text-[12.5px] font-extrabold">{compliance.title}</div>
         <p className="mt-0.5 text-[11.5px] opacity-90">{compliance.copy}</p>
       </div>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <h2 className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">{children}</h2>;
+}
+
+function EmptyTab({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-[10px] border border-co-border bg-co-sunken p-6 text-center text-[12.5px] text-co-muted-2">
+      {children}
+    </div>
+  );
+}
+
+function OverviewGrid({ lead, onViewActivity }: { lead: FocusLead; onViewActivity: () => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <section>
+        <SectionLabel>Call brief</SectionLabel>
+        <div className="rounded-[10px] border border-co-border bg-co-sunken p-3.5">
+          <Row label="Fit reason" value={lead.fitReason} />
+          <Row label="Talking point" value="" accent />
+          <Row label="Last interaction" value={lead.lastTouchLabel} />
+          <Row label="Pain point" value="" />
+          <Row label="Objection" value="" />
+          <Row label="Decision maker" value="" />
+          <Row label="Expected next step" value="" />
+        </div>
+        <div className="mt-4 flex items-center justify-between">
+          <SectionLabel>Recent engagement</SectionLabel>
+          <button
+            type="button"
+            onClick={onViewActivity}
+            className="mb-2 text-[11px] font-semibold text-co-blue hover:underline"
+          >
+            View all activity ({lead.timeline.length})
+          </button>
+        </div>
+        <div className="rounded-[10px] border border-co-border bg-co-sunken p-3.5">
+          {lead.timeline.length ? (
+            lead.timeline.slice(0, 3).map((item) => <TimelineRow key={item.id} item={item} />)
+          ) : (
+            <p className="text-[12px] italic text-co-muted-2">No recent activity yet.</p>
+          )}
+        </div>
+      </section>
+      <section>
+        <SectionLabel>Company &amp; account</SectionLabel>
+        <div className="rounded-[10px] border border-co-border bg-co-sunken p-3.5">
+          <Row label="Industry" value={lead.companyIndustry} />
+          <Row label="Location" value={lead.companyLocation} />
+          <Row label="Company size" value="" />
+          <Row label="Account stage" value="" />
+          <Row label="Account owner" value={lead.owner} />
+          <Row label="Open opportunity" value={lead.openOpportunity} />
+          <Row label="Open work" value={lead.openWork} />
+        </div>
+        {lead.keyAccountFields.length ? (
+          <div className="mt-4">
+            <KeyAccountFields fields={lead.keyAccountFields} />
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function ActivityTab({ lead }: { lead: FocusLead }) {
+  if (!lead.timeline.length) return <EmptyTab>No activity recorded yet.</EmptyTab>;
+  return (
+    <div className="rounded-[10px] border border-co-border bg-co-sunken p-3.5">
+      {lead.timeline.map((item) => (
+        <TimelineRow key={item.id} item={item} />
+      ))}
+    </div>
+  );
+}
+
+function TasksTab({ lead }: { lead: FocusLead }) {
+  if (!lead.tasks.length) return <EmptyTab>No open tasks for this lead.</EmptyTab>;
+  return (
+    <div className="rounded-[10px] border border-co-border bg-white">
+      {lead.tasks.map((task, index) => (
+        <div
+          key={`${task.title}-${index}`}
+          className="flex items-start gap-2.5 border-b border-co-divider px-3.5 py-2.5 last:border-0"
+        >
+          <span className="mt-0.5 size-4 shrink-0 rounded border border-co-control" aria-hidden="true" />
+          <div>
+            <div className="text-[13px] font-bold text-co-ink">{task.title}</div>
+            <div className={`text-[11.5px] ${task.overdue ? "text-co-red-text" : "text-co-text-3"}`}>{task.dueLabel}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OpportunitiesTab({ lead }: { lead: FocusLead }) {
+  if (!lead.opportunities.length) {
+    return (
+      <EmptyTab>No opportunity yet. When this lead qualifies, create one inside the call wrap-up — no separate form.</EmptyTab>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {lead.opportunities.map((opp, index) => (
+        <div key={`${opp.name}-${index}`} className="rounded-[10px] border border-co-border bg-white p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[13px] font-bold text-co-ink">{opp.name}</span>
+            <span className="text-[12.5px] font-bold tabular-nums text-co-ink">{opp.amountLabel}</span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-co-text-3">
+            <CoPill tone="info">{opp.stage}</CoPill>
+            <span>Close {opp.closeLabel}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DetailsTab({ lead }: { lead: FocusLead }) {
+  return (
+    <div className="flex flex-col gap-5">
+      {lead.keyAccountFields.length ? <KeyAccountFields fields={lead.keyAccountFields} /> : null}
+      <section>
+        <SectionLabel>Contact record</SectionLabel>
+        <div className="rounded-[10px] border border-co-border bg-co-sunken p-3.5">
+          <Row label="Email" value={lead.email} />
+          <Row label="Phone" value={lead.hasPhone ? lead.phone : ""} />
+          <Row label="Location" value={lead.companyLocation} />
+          <Row label="Local time" value={lead.localTimeLabel} />
+          <Row label="Owner" value={lead.owner} />
+          <Row label="Status" value={lead.status} />
+        </div>
+        <Link
+          href={`/crm/contacts/${lead.id}`}
+          className="mt-2 inline-block text-[12px] font-semibold text-co-blue hover:underline"
+        >
+          Open full record →
+        </Link>
+      </section>
     </div>
   );
 }

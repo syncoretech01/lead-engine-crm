@@ -34,9 +34,13 @@ export type FocusLead = {
   openWork: string; // "" when none
   keyAccountFields: KeyAccountFieldRow[];
   timeline: FocusTimelineItem[];
+  tasks: FocusTaskRow[];
+  opportunities: FocusOppRow[];
 };
 
 export type KeyAccountFieldRow = { label: string; value: string };
+export type FocusTaskRow = { title: string; dueLabel: string; overdue: boolean };
+export type FocusOppRow = { name: string; stage: string; amountLabel: string; closeLabel: string };
 
 // Mirror of lib/phase1/focus-timeline-read-model's item (client-safe: `type` is a
 // plain string so this file stays free of server imports).
