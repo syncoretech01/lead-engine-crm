@@ -1,4 +1,5 @@
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
+import { readFocusTimelines } from "@/lib/phase1/focus-timeline-read-model";
 import { getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
 import { FocusWorkspace, type FocusLead } from "@/components/crm/cockpit/focus/focus-workspace";
@@ -17,6 +18,12 @@ export default async function FocusPage({
   // model scopes by role). Ordering into the queue-weight is done in the client.
   const model = await readAssignedContactsModel(session, workspaceId);
   const rows = model?.rows ?? [];
+
+  // Recent activity per contact for the dossier "Recent engagement" timeline.
+  const timelines = await readFocusTimelines(
+    workspaceId,
+    rows.map((row) => row.contactId)
+  );
 
   // The SDR's own RingCentral line (mirrors the contact-record Call button): the
   // caller label to show, or the reason their line can't place calls.
@@ -50,7 +57,8 @@ export default async function FocusPage({
       companyLocation: row.companyState,
       lastTouchLabel: lastTouchLabel(row.lastTouchAt, row.touchCount),
       owner: row.ownerName,
-      emailEligible: row.emailEligible
+      emailEligible: row.emailEligible,
+      timeline: timelines.get(row.contactId) ?? []
     };
   });
 

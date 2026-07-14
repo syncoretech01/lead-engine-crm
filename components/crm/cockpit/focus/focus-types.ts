@@ -28,6 +28,17 @@ export type FocusLead = {
   lastTouchLabel: string;
   owner: string;
   emailEligible: boolean;
+  timeline: FocusTimelineItem[];
+};
+
+// Mirror of lib/phase1/focus-timeline-read-model's item (client-safe: `type` is a
+// plain string so this file stays free of server imports).
+export type FocusTimelineItem = {
+  id: string;
+  type: string;
+  title: string;
+  body?: string;
+  meta: string;
 };
 
 export function priorityTone(priority: string): CoTone {

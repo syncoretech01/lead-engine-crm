@@ -19,6 +19,7 @@ import {
   slaTone,
   statusTone,
   type FocusLead,
+  type FocusTimelineItem,
   type LeadCompliance
 } from "@/components/crm/cockpit/focus/focus-types";
 
@@ -385,6 +386,25 @@ export function FocusWorkspace({
                   <Row label="Decision maker" value="" />
                   <Row label="Expected next step" value="" />
                 </div>
+
+                <div className="mt-4 flex items-center justify-between">
+                  <h2 className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">
+                    Recent engagement
+                  </h2>
+                  <Link
+                    href={`/crm/contacts/${selected.id}`}
+                    className="text-[11px] font-semibold text-co-blue hover:underline"
+                  >
+                    View all activity
+                  </Link>
+                </div>
+                <div className="mt-2 rounded-[10px] border border-co-border bg-co-sunken p-3.5">
+                  {selected.timeline.length ? (
+                    selected.timeline.map((item) => <TimelineRow key={item.id} item={item} />)
+                  ) : (
+                    <p className="text-[12px] italic text-co-muted-2">No recent activity yet.</p>
+                  )}
+                </div>
               </section>
               <section>
                 <h2 className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">
@@ -458,6 +478,29 @@ function Row({ label, value, accent }: { label: string; value: React.ReactNode; 
       <span className={`text-[12.5px] font-semibold ${accent ? "text-co-blue-dark" : "text-co-ink"}`}>
         {value || <span className="font-normal italic text-co-muted-2">Not captured yet</span>}
       </span>
+    </div>
+  );
+}
+
+function timelineDot(type: string): string {
+  const t = type.toLowerCase();
+  if (t.includes("call")) return "bg-co-teal";
+  if (t.includes("email")) return "bg-co-blue";
+  if (t.includes("note")) return "bg-co-amber-dot";
+  return "bg-co-muted";
+}
+
+function TimelineRow({ item }: { item: FocusTimelineItem }) {
+  return (
+    <div className="flex items-start gap-2 border-b border-co-divider py-1.5 last:border-0">
+      <span className={`mt-1 size-2 shrink-0 rounded-full ${timelineDot(item.type)}`} aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-[12.5px] font-bold text-co-ink">{item.title}</span>
+          <span className="shrink-0 text-[11px] text-co-muted-2">{item.meta}</span>
+        </div>
+        {item.body ? <p className="mt-0.5 line-clamp-1 text-[11.5px] text-co-text-2">{item.body}</p> : null}
+      </div>
     </div>
   );
 }
