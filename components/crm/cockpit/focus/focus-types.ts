@@ -28,6 +28,8 @@ export type FocusLead = {
   lastTouchLabel: string;
   owner: string;
   emailEligible: boolean;
+  localTimeLabel: string; // "" when the timezone can't be derived
+  outsideWindow: boolean;
   timeline: FocusTimelineItem[];
 };
 

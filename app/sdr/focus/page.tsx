@@ -1,5 +1,6 @@
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
 import { readFocusTimelines } from "@/lib/phase1/focus-timeline-read-model";
+import { localTimeForState } from "@/lib/phase1/us-timezones";
 import { getWorkspaceSessionContext } from "@/lib/phase1/store";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
 import { FocusWorkspace, type FocusLead } from "@/components/crm/cockpit/focus/focus-workspace";
@@ -34,6 +35,7 @@ export default async function FocusPage({
   const leads: FocusLead[] = rows.map((row) => {
     const dueIso = row.dueAt ?? row.firstTouchDueAt ?? row.followUpDueAt;
     const parsed = dueIso ? Date.parse(dueIso) : Number.NaN;
+    const local = localTimeForState(row.companyState);
     return {
       id: row.contactId,
       assignmentId: row.id,
@@ -58,6 +60,8 @@ export default async function FocusPage({
       lastTouchLabel: lastTouchLabel(row.lastTouchAt, row.touchCount),
       owner: row.ownerName,
       emailEligible: row.emailEligible,
+      localTimeLabel: local?.label ?? "",
+      outsideWindow: local?.outsideWindow ?? false,
       timeline: timelines.get(row.contactId) ?? []
     };
   });

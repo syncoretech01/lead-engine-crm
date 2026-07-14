@@ -220,7 +220,7 @@ export function FocusWorkspace({
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* ───────────── Queue rail ───────────── */}
-      <aside className="flex w-[300px] shrink-0 flex-col border-r border-co-border bg-white">
+      <aside className="flex w-[300px] shrink-0 flex-col border-r border-co-border bg-white [@media(max-width:1380px)]:w-[264px]">
         <div className="flex flex-col gap-2 border-b border-co-border p-3">
           <div className="flex items-center gap-2">
             <select
@@ -349,6 +349,12 @@ export function FocusWorkspace({
                     {selected.hasPhone ? <span>{selected.phone}</span> : <span className="text-co-red-text">No phone</span>}
                     {selected.email ? <span>{selected.email}</span> : null}
                     {selected.companyLocation ? <span>{selected.companyLocation}</span> : null}
+                    {selected.localTimeLabel ? (
+                      <span className={selected.outsideWindow ? "font-semibold text-co-amber-text" : ""}>
+                        {selected.localTimeLabel}
+                        {selected.outsideWindow ? " · outside calling window" : ""}
+                      </span>
+                    ) : null}
                     <span className="text-co-muted-2">Owner · {selected.owner}</span>
                   </p>
                 </div>
@@ -436,7 +442,7 @@ export function FocusWorkspace({
       </main>
 
       {/* ───────────── Execution dock ───────────── */}
-      <aside className="hidden w-[388px] shrink-0 flex-col border-l border-co-border bg-co-sunken xl:flex">
+      <aside className="hidden w-[388px] shrink-0 flex-col border-l border-co-border bg-co-sunken xl:flex [@media(max-width:1380px)]:w-[360px] [@media(max-width:1200px)]:w-[332px]">
         <FocusDock
           selected={selected}
           leads={leads}
