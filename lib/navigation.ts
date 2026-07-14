@@ -18,7 +18,6 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
-  UserCheck,
   UserCog,
   Users,
   Workflow
@@ -111,15 +110,8 @@ export const navGroups: NavGroup[] = [
     description: "Contacts, accounts, opportunities, and call history.",
     canAccess: canUseCrmWorkspace,
     items: [
-      {
-        href: "/crm/my-contacts",
-        label: "Assigned Contacts",
-        sdrLabel: "My Contacts",
-        icon: UserCheck,
-        permission: "manage_sdr"
-      },
+      { href: "/crm/contacts", label: "Contacts", icon: Users, permission: "view_records" },
       { href: "/crm/accounts", label: "Accounts", icon: Building2, permission: "view_records" },
-      { href: "/crm/contacts", label: "All Contacts", icon: Users, permission: "view_records" },
       {
         href: "/crm/opportunities",
         label: "Opportunities",
