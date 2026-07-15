@@ -7,11 +7,13 @@ import { defaultWorkspacePath, postLoginWorkspacePath } from "@/lib/phase1/auth"
 import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
 import {
   acceptInvitePrismaFast,
+  addManagerTransferContactPrismaFast,
   adminResetPasswordPrismaFast,
   createPasswordResetTokenPrismaFast,
   createUserInvitePrismaFast,
   deactivateUserPrismaFast,
   loginWithPasswordPrismaFast,
+  removeManagerTransferContactPrismaFast,
   resetPasswordWithTokenPrismaFast,
   revokeAuthSessionPrismaFast,
   switchWorkspacePrismaFast,
@@ -287,6 +289,26 @@ export async function updateUserTelephonyAction(formData: FormData) {
     }, { normalizedTables: authWriteTables });
   }
 
+  revalidatePath("/access");
+}
+
+// Standalone "Transfer to manager" lines (no CRM login) — Prisma-native only.
+export async function addManagerTransferContactAction(formData: FormData) {
+  const done = await addManagerTransferContactPrismaFast({
+    name: stringValue(formData.get("name")),
+    phoneNumber: stringValue(formData.get("phoneNumber"))
+  });
+  if (done === undefined) {
+    throw new Error("Manager transfer lines require the database backend.");
+  }
+  revalidatePath("/access");
+}
+
+export async function removeManagerTransferContactAction(formData: FormData) {
+  const done = await removeManagerTransferContactPrismaFast({ id: stringValue(formData.get("id")) });
+  if (done === undefined) {
+    throw new Error("Manager transfer lines require the database backend.");
+  }
   revalidatePath("/access");
 }
 

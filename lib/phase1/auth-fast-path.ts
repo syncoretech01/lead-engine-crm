@@ -7,6 +7,11 @@ import {
   workspaceRoleToPrisma
 } from "@/lib/phase1/auth";
 import {
+  MANAGER_TRANSFER_PROVIDER,
+  normalizeTransferNumber,
+  parseTransferContacts
+} from "@/lib/phase1/manager-transfer-contacts";
+import {
   createSignedAuthSessionCookie,
   defaultAuthSessionMaxAgeSeconds,
   hashPassword,
@@ -628,6 +633,62 @@ export async function updateUserTelephonyPrismaFast(input: {
     );
   });
 
+  return true;
+}
+
+// Standalone "Transfer to manager" lines (no CRM login) — stored per-workspace on
+// the generic Integration config row. manage_workspace-gated, Prisma-native.
+export async function addManagerTransferContactPrismaFast(input: {
+  name: string;
+  phoneNumber: string;
+}): Promise<boolean | undefined> {
+  const ctx = await requireManageWorkspaceSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  const { session, prisma } = ctx;
+  const name = input.name.trim();
+  const phoneNumber = normalizeTransferNumber(input.phoneNumber);
+  if (!name || !phoneNumber) {
+    throw new Error("A manager name and phone number are both required.");
+  }
+  const workspaceId = session.workspace.id;
+  const existing = await prisma.integration.findUnique({
+    where: { workspaceId_provider: { workspaceId, provider: MANAGER_TRANSFER_PROVIDER } },
+    select: { config: true }
+  });
+  const contacts = parseTransferContacts(existing?.config);
+  contacts.push({ id: `line-${randomUUID()}`, name, phoneNumber });
+  const config = { contacts } as Prisma.InputJsonValue;
+  await prisma.integration.upsert({
+    where: { workspaceId_provider: { workspaceId, provider: MANAGER_TRANSFER_PROVIDER } },
+    update: { config, status: "active" },
+    create: { workspaceId, provider: MANAGER_TRANSFER_PROVIDER, status: "active", config }
+  });
+  return true;
+}
+
+export async function removeManagerTransferContactPrismaFast(input: {
+  id: string;
+}): Promise<boolean | undefined> {
+  const ctx = await requireManageWorkspaceSessionFast();
+  if (!ctx) {
+    return undefined;
+  }
+  const { session, prisma } = ctx;
+  const workspaceId = session.workspace.id;
+  const existing = await prisma.integration.findUnique({
+    where: { workspaceId_provider: { workspaceId, provider: MANAGER_TRANSFER_PROVIDER } },
+    select: { config: true }
+  });
+  if (!existing) {
+    return true;
+  }
+  const contacts = parseTransferContacts(existing.config).filter((contact) => contact.id !== input.id);
+  await prisma.integration.update({
+    where: { workspaceId_provider: { workspaceId, provider: MANAGER_TRANSFER_PROVIDER } },
+    data: { config: { contacts } as Prisma.InputJsonValue }
+  });
   return true;
 }
 
