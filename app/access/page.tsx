@@ -1,8 +1,10 @@
-import { KeyRound, Link2, Phone, ShieldCheck, Trash2, UserMinus, UserPlus } from "lucide-react";
+import { KeyRound, Link2, Phone, PhoneForwarded, ShieldCheck, Trash2, UserMinus, UserPlus } from "lucide-react";
 import {
+  addManagerTransferContactAction,
   adminResetPasswordAction,
   createUserInviteAction,
   deactivateUserAction,
+  removeManagerTransferContactAction,
   removeWorkspaceMemberAction,
   updateMemberRoleAction,
   updateUserTelephonyAction
@@ -10,6 +12,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { readFastDevSettingsState } from "@/lib/phase1/dev-dashboard-read-model";
+import { readManagerTransferContacts } from "@/lib/phase1/manager-transfer-contacts";
 import { getDeveloperWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { WorkspaceRole } from "@/lib/phase1/types";
 
@@ -48,6 +51,7 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
   const pendingInvites = state.userInvites.filter(
     (invite) => invite.workspaceId === workspaceId && invite.status === "Pending"
   );
+  const transferContacts = await readManagerTransferContacts(workspaceId);
 
   return (
     <>
@@ -350,6 +354,71 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="section-title">Manager transfer lines</h2>
+            <p className="section-subtitle">
+              Numbers an SDR can hand a live call to mid-call, from the dock&apos;s{" "}
+              <strong>Transfer to manager</strong> panel — standalone lines that need no CRM login. Enter a name and an
+              E.164 number (e.g. +12057295456). The transfer is a <strong>blind hand-off</strong>: the lead is bridged to
+              this number and the SDR&apos;s leg drops. Managers/Admins who have a &quot;Phone to ring&quot; set above
+              also appear as transfer targets automatically.
+            </p>
+          </div>
+          <PhoneForwarded size={20} aria-hidden="true" />
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Manager</th>
+                <th>Transfer number</th>
+                <th aria-label="Remove" />
+              </tr>
+            </thead>
+            <tbody>
+              {transferContacts.map((contact) => (
+                <tr key={contact.id}>
+                  <td>
+                    <div className="entity">
+                      <strong>{contact.name}</strong>
+                    </div>
+                  </td>
+                  <td>{contact.phoneNumber}</td>
+                  <td>
+                    <form action={removeManagerTransferContactAction} className="inline-form">
+                      <input type="hidden" name="id" value={contact.id} />
+                      <button className="button subtle" type="submit">
+                        Remove
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+              {transferContacts.length === 0 ? (
+                <tr>
+                  <td colSpan={3}>No transfer lines yet — add one below.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+        <form action={addManagerTransferContactAction} className="inline-form" style={{ marginTop: "14px" }}>
+          <input name="name" type="text" placeholder="Manager name (e.g. Bobby Jones)" aria-label="Manager name" required />
+          <input
+            name="phoneNumber"
+            type="tel"
+            placeholder="Transfer number +12057295456"
+            aria-label="Transfer number"
+            required
+          />
+          <button className="button" type="submit">
+            Add transfer line
+          </button>
+        </form>
       </section>
 
       <section className="panel">
