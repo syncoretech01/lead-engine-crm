@@ -9,7 +9,7 @@ export function KeyAccountFields({ fields }: { fields: KeyAccountFieldRow[] }) {
     <div className="rounded-[10px] border border-co-border bg-co-sunken-2 p-3.5">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Key account fields</span>
-        <span className="rounded-full bg-[#eaf3ff] px-2 py-0.5 text-[10px] font-bold text-co-blue-dark">
+        <span className="rounded-full bg-co-accent-bg px-2 py-0.5 text-[10px] font-bold text-co-blue-dark">
           Workspace fields
         </span>
       </div>

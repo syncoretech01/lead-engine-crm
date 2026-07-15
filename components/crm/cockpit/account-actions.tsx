@@ -56,8 +56,8 @@ export function AccountActions({
             aria-pressed={panel === action.id}
             className={`h-9 rounded-lg border text-[12px] font-semibold transition-colors ${
               panel === action.id
-                ? "border-co-blue bg-[#eaf3ff] text-co-blue-dark"
-                : "border-co-control bg-white text-co-text-3 hover:bg-co-sunken"
+                ? "border-co-blue bg-co-accent-bg text-co-blue-dark"
+                : "border-co-control bg-co-surface text-co-text-3 hover:bg-co-sunken"
             }`}
           >
             {action.label}
@@ -129,10 +129,10 @@ function AccountPanel({
 
   const wrap = "mt-2 rounded-[10px] border border-co-border bg-co-sunken p-3";
   const field =
-    "h-8 w-full rounded-md border border-co-control bg-white px-2 text-[12px] text-co-ink placeholder:text-co-muted-2";
-  const area = "w-full rounded-md border border-co-control bg-white px-2 py-1.5 text-[12px] text-co-ink placeholder:text-co-muted-2";
+    "h-8 w-full rounded-md border border-co-control bg-co-surface px-2 text-[12px] text-co-ink placeholder:text-co-muted-2";
+  const area = "w-full rounded-md border border-co-control bg-co-surface px-2 py-1.5 text-[12px] text-co-ink placeholder:text-co-muted-2";
   const submit =
-    "h-8 rounded-md bg-co-blue px-3 text-[12px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-[#dce5ee] disabled:text-co-muted-2";
+    "h-8 rounded-md bg-co-blue px-3 text-[12px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-co-disabled-bg disabled:text-co-muted-2";
 
   const contactSelect = (label: string, allowNone: boolean) => (
     <label className="mt-2 block">
@@ -326,7 +326,7 @@ function PanelCancel({ onClose }: { onClose: () => void }) {
     <button
       type="button"
       onClick={onClose}
-      className="h-8 rounded-md border border-co-control bg-white px-3 text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken"
+      className="h-8 rounded-md border border-co-control bg-co-surface px-3 text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken"
     >
       Cancel
     </button>

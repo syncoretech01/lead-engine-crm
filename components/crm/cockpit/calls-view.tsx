@@ -87,7 +87,7 @@ export function CallsView({
             <tr
               key={row.id}
               onClick={() => setPeek(row)}
-              className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
+              className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-co-hover"
             >
               <td className={coBodyCell}>
                 {row.contactId ? (
@@ -153,7 +153,7 @@ export function CallsView({
               {peek.contactId ? (
                 <Link
                   href={`/crm/contacts/${peek.contactId}`}
-                  className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-text-3 transition-colors hover:bg-co-sunken"
+                  className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-co-surface text-[12px] font-semibold text-co-text-3 transition-colors hover:bg-co-sunken"
                 >
                   Open contact
                 </Link>

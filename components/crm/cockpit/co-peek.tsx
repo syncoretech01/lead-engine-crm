@@ -42,7 +42,7 @@ export function CoPeek({
   return (
     <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-[rgba(2,6,38,0.35)]" onClick={onClose} aria-hidden="true" />
-      <div className="co-anim-in absolute right-0 top-0 flex h-full w-[440px] max-w-[92vw] flex-col bg-white shadow-[-14px_0_36px_rgba(2,6,38,0.2)]">
+      <div className="co-anim-in absolute right-0 top-0 flex h-full w-[440px] max-w-[92vw] flex-col bg-co-surface shadow-[-14px_0_36px_rgba(2,6,38,0.2)]">
         <div className="flex items-start justify-between gap-3 border-b border-co-border px-5 py-4">
           <div className="min-w-0">
             <h2 className="text-[16px] font-extrabold leading-tight text-co-ink">{title}</h2>

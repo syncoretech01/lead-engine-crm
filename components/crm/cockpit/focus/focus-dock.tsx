@@ -207,7 +207,7 @@ function PreCall({
   return (
     <div className="flex flex-col gap-4 p-4">
       {/* Next best action */}
-      <div className="rounded-[10px] border border-[#bcd8ff] bg-[#eaf3ff] p-3.5">
+      <div className="rounded-[10px] border border-co-accent-border bg-co-accent-bg p-3.5">
         <div className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-blue-dark">Next best action</div>
         <div className="mt-1 text-[13px] font-bold text-co-ink">
           {block ? block : lead.overdue ? "Call now — SLA overdue" : "Call now"}
@@ -216,7 +216,7 @@ function PreCall({
           type="button"
           disabled={Boolean(block)}
           onClick={() => onCall(lead)}
-          className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-[#dce5ee] disabled:text-co-muted-2"
+          className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-co-disabled-bg disabled:text-co-muted-2"
         >
           <Phone className="size-4" aria-hidden="true" />
           {block ? "Call unavailable" : `Call ${lead.phone}`}
@@ -229,7 +229,7 @@ function PreCall({
             id="dock-consent"
             value={consent}
             onChange={(event) => onConsent(event.target.value as "Granted" | "Denied" | "Unknown")}
-            className="h-7 rounded-md border border-co-control bg-white px-2 text-[11px] font-semibold text-co-ink"
+            className="h-7 rounded-md border border-co-control bg-co-surface px-2 text-[11px] font-semibold text-co-ink"
           >
             <option value="Granted">Granted</option>
             <option value="Denied">Denied</option>
@@ -244,7 +244,7 @@ function PreCall({
       {/* Call readiness */}
       <div>
         <div className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Call readiness</div>
-        <div className="flex flex-col gap-1.5 rounded-[10px] border border-co-border bg-white p-3">
+        <div className="flex flex-col gap-1.5 rounded-[10px] border border-co-border bg-co-surface p-3">
           <ReadyRow ok={!lineBlockReason} label="Your line" value={callerLabel ?? lineBlockReason ?? "No line configured"} />
           <ReadyRow ok={lead.hasPhone} label="Contact phone" value={lead.hasPhone ? lead.phone : "No phone on file"} />
           <ReadyRow
@@ -416,7 +416,7 @@ function LiveCall({
               key={chip}
               type="button"
               onClick={() => setNotes(`${notes}${notes && !notes.endsWith("\n") ? "\n" : ""}${chip}: `)}
-              className="rounded-full border border-co-control bg-white px-2 py-0.5 text-[10.5px] font-semibold text-co-text-3 hover:bg-co-sunken"
+              className="rounded-full border border-co-control bg-co-surface px-2 py-0.5 text-[10.5px] font-semibold text-co-text-3 hover:bg-co-sunken"
             >
               {chip}
             </button>
@@ -426,7 +426,7 @@ function LiveCall({
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
           placeholder="Capture what the prospect says…"
-          className="min-h-[120px] flex-1 resize-none rounded-[10px] border border-co-control bg-white p-2.5 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
+          className="min-h-[120px] flex-1 resize-none rounded-[10px] border border-co-control bg-co-surface p-2.5 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
         />
       </div>
     </div>
@@ -467,7 +467,7 @@ function TransferPanel({
   controls: ReturnType<typeof useCall>["controls"];
 }) {
   return (
-    <div className="mt-2 rounded-[10px] bg-white p-2.5 text-co-ink">
+    <div className="mt-2 rounded-[10px] bg-co-surface p-2.5 text-co-ink">
       {transfer.loading ? (
         <div className="flex items-center gap-2 text-[12px] text-co-text-3">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Loading manager RingCentral lines…
@@ -510,7 +510,7 @@ function TransferPanel({
           type="button"
           onClick={controls.transferCall}
           disabled={transfer.pending || !transfer.number.trim()}
-          className="h-8 rounded-md bg-co-blue px-3 text-[12px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-[#dce5ee] disabled:text-co-muted-2"
+          className="h-8 rounded-md bg-co-blue px-3 text-[12px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-co-disabled-bg disabled:text-co-muted-2"
         >
           {transfer.pending ? "Transferring…" : "Transfer"}
         </button>
@@ -639,9 +639,9 @@ function Wrapup({
 
   const chip = (active: boolean) =>
     `rounded-lg border px-2.5 py-2 text-[12px] font-bold transition-colors ${
-      active ? "border-co-blue bg-co-blue text-white" : "border-co-control bg-white text-co-text-3 hover:bg-co-sunken"
+      active ? "border-co-blue bg-co-blue text-white" : "border-co-control bg-co-surface text-co-text-3 hover:bg-co-sunken"
     }`;
-  const field = "h-8 w-full rounded-md border border-co-control bg-white px-2 text-[12px] text-co-ink";
+  const field = "h-8 w-full rounded-md border border-co-control bg-co-surface px-2 text-[12px] text-co-ink";
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4 [&>*]:shrink-0">
@@ -656,7 +656,7 @@ function Wrapup({
       </div>
 
       {call.status === "error" ? (
-        <div className="mt-2 rounded-[10px] border border-[#f5b5b5] bg-co-red-bg-soft px-3 py-2 text-[11.5px] text-co-red-text">
+        <div className="mt-2 rounded-[10px] border border-co-red-border bg-co-red-bg-soft px-3 py-2 text-[11.5px] text-co-red-text">
           <span className="font-extrabold">Call failed.</span> {call.error || "The call couldn't connect."} Pick the outcome
           below, or retry from the dossier.
         </div>
@@ -689,7 +689,7 @@ function Wrapup({
             key={chipLabel}
             type="button"
             onClick={() => setNotes(`${notes}${notes && !notes.endsWith("\n") ? "\n" : ""}${chipLabel}: `)}
-            className="rounded-full border border-co-control bg-white px-2 py-0.5 text-[10.5px] font-semibold text-co-text-3 hover:bg-co-sunken"
+            className="rounded-full border border-co-control bg-co-surface px-2 py-0.5 text-[10.5px] font-semibold text-co-text-3 hover:bg-co-sunken"
           >
             {chipLabel}
           </button>
@@ -700,7 +700,7 @@ function Wrapup({
         onChange={(event) => setNotes(event.target.value)}
         rows={4}
         placeholder="What happened on the call…"
-        className="mt-1.5 min-h-[104px] w-full resize-y rounded-[10px] border border-co-control bg-white p-2.5 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
+        className="mt-1.5 min-h-[104px] w-full resize-y rounded-[10px] border border-co-control bg-co-surface p-2.5 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
       />
 
       {/* Lead status + suggested next action */}
@@ -716,7 +716,7 @@ function Wrapup({
       </div>
       <div className="mt-1.5 grid grid-cols-[118px_1fr] items-center gap-2">
         <span className="text-[11.5px] font-semibold text-co-text-3">Next action</span>
-        <span className="rounded-md bg-[#eaf3ff] px-2 py-1.5 text-[11.5px] font-semibold text-co-blue-dark">
+        <span className="rounded-md bg-co-accent-bg px-2 py-1.5 text-[11.5px] font-semibold text-co-blue-dark">
           {def.nextAction}
         </span>
       </div>
@@ -746,8 +746,8 @@ function Wrapup({
 
       {/* Meeting booked honesty panel */}
       {def.meeting ? (
-        <div className="mt-3 rounded-[10px] border border-[#bdf0e4] bg-[#ecfdf8] p-3">
-          <div className="text-[11.5px] font-bold text-[#0b7c6c]">What saves when you book this meeting</div>
+        <div className="mt-3 rounded-[10px] border border-co-teal-border bg-co-teal-bg p-3">
+          <div className="text-[11.5px] font-bold text-co-teal-text">What saves when you book this meeting</div>
           <ul className="mt-1 list-disc pl-4 text-[11.5px] text-co-text-2">
             <li>Status → Meeting Booked</li>
             <li>Follow-up reminder at the agreed time</li>
@@ -760,7 +760,7 @@ function Wrapup({
             className={`${field} mt-2`}
             aria-label="Meeting time"
           />
-          <p className="mt-2 text-[11px] text-[#8a5a06]">
+          <p className="mt-2 text-[11px] text-co-amber-text">
             Calendar event creation and attendee invitations require future calendar integration — not part of this release.
           </p>
         </div>
@@ -811,7 +811,7 @@ function Wrapup({
             type="button"
             disabled={pending}
             onClick={() => save(true)}
-            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-[#dce5ee] disabled:text-co-muted-2"
+            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-co-disabled-bg disabled:text-co-muted-2"
           >
             {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
             Save &amp; next lead
@@ -820,7 +820,7 @@ function Wrapup({
             type="button"
             disabled={pending}
             onClick={() => save(false)}
-            className="h-10 rounded-lg border border-co-control bg-white px-3 text-[12.5px] font-semibold text-co-text-3 hover:bg-co-sunken disabled:opacity-50"
+            className="h-10 rounded-lg border border-co-control bg-co-surface px-3 text-[12.5px] font-semibold text-co-text-3 hover:bg-co-sunken disabled:opacity-50"
           >
             Save &amp; stay
           </button>
@@ -833,13 +833,13 @@ function Wrapup({
               onDismiss();
               onAdvance();
             }}
-            className="h-8 rounded-md border border-co-control bg-white px-3 text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken disabled:opacity-50"
+            className="h-8 rounded-md border border-co-control bg-co-surface px-3 text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken disabled:opacity-50"
           >
             Skip
           </button>
           <a
             href="/sdr/queue"
-            className="flex h-8 items-center rounded-md border border-co-control bg-white px-3 text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken"
+            className="flex h-8 items-center rounded-md border border-co-control bg-co-surface px-3 text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken"
           >
             Queue
           </a>
@@ -904,12 +904,12 @@ function Success({
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <div className="rounded-[12px] border border-[#bdf0e4] bg-[#ecfdf8] p-4">
+      <div className="rounded-[12px] border border-co-teal-border bg-co-teal-bg p-4">
         <div className="flex items-center gap-2">
           <span className="flex size-6 items-center justify-center rounded-full bg-co-teal text-white">
             <Check className="size-4" aria-hidden="true" />
           </span>
-          <span className="text-[14px] font-extrabold text-[#0b7c6c]">Saved — {name}</span>
+          <span className="text-[14px] font-extrabold text-co-teal-text">Saved — {name}</span>
         </div>
         <ul className="mt-2.5 flex flex-col gap-1.5">
           {created.map((item) => (
@@ -921,7 +921,7 @@ function Success({
         </ul>
       </div>
       {hasNext ? (
-        <div className="rounded-[10px] border border-co-border bg-white p-3">
+        <div className="rounded-[10px] border border-co-border bg-co-surface p-3">
           <div className="text-[12px] font-semibold text-co-text-3">Advancing to next lead…</div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-co-sunken-2">
             <div className="h-full animate-[co-bar_1.6s_linear] rounded-full bg-co-blue" style={{ width: "100%" }} />
@@ -929,13 +929,13 @@ function Success({
           <button
             type="button"
             onClick={onStay}
-            className="mt-2.5 h-8 w-full rounded-md border border-co-control bg-white text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken"
+            className="mt-2.5 h-8 w-full rounded-md border border-co-control bg-co-surface text-[12px] font-semibold text-co-text-3 hover:bg-co-sunken"
           >
             Stay on this lead
           </button>
         </div>
       ) : (
-        <div className="rounded-[10px] border border-co-border bg-white p-4 text-center">
+        <div className="rounded-[10px] border border-co-border bg-co-surface p-4 text-center">
           <div className="text-[13px] font-extrabold text-co-ink">Queue complete</div>
           <p className="mt-1 text-[12px] text-co-text-3">
             You&apos;ve worked every lead in this view. Nice work — end the session or head back to My Day.
@@ -950,7 +950,7 @@ function Success({
             <button
               type="button"
               onClick={onStay}
-              className="h-9 rounded-lg border border-co-control bg-white px-3 text-[12.5px] font-semibold text-co-text-3 hover:bg-co-sunken"
+              className="h-9 rounded-lg border border-co-control bg-co-surface px-3 text-[12.5px] font-semibold text-co-text-3 hover:bg-co-sunken"
             >
               Stay
             </button>

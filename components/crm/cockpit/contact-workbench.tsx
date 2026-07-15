@@ -31,19 +31,19 @@ export function ContactWorkbench({
 
   return (
     <div className="cockpit flex min-h-[calc(100vh-3.5rem)] w-full bg-co-page">
-      <main className="min-w-0 flex-1 overflow-y-auto bg-white">
+      <main className="min-w-0 flex-1 overflow-y-auto bg-co-surface">
         <ContactDossier lead={lead} onCall={onCall} callBlocked={block} isFullRecord />
       </main>
 
       <aside className="hidden w-[360px] shrink-0 flex-col gap-4 border-l border-co-border bg-co-sunken p-4 xl:flex [@media(max-width:1200px)]:w-[320px]">
-        <div className="rounded-[10px] border border-[#bcd8ff] bg-[#eaf3ff] p-3.5">
+        <div className="rounded-[10px] border border-co-accent-border bg-co-accent-bg p-3.5">
           <div className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-blue-dark">Next best action</div>
           <div className="mt-1 text-[13px] font-bold text-co-ink">{block ? block : "Call now"}</div>
           <button
             type="button"
             disabled={Boolean(block)}
             onClick={onCall}
-            className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-[#dce5ee] disabled:text-co-muted-2"
+            className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-co-disabled-bg disabled:text-co-muted-2"
           >
             <Phone className="size-4" aria-hidden="true" />
             {block ? "Call unavailable" : lead.hasPhone ? `Call ${lead.phone}` : "No phone"}
@@ -54,7 +54,7 @@ export function ContactWorkbench({
 
         <div>
           <div className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Call readiness</div>
-          <div className="flex flex-col gap-1.5 rounded-[10px] border border-co-border bg-white p-3">
+          <div className="flex flex-col gap-1.5 rounded-[10px] border border-co-border bg-co-surface p-3">
             <ReadyRow ok={!lineBlockReason} label="Your line" value={callerLabel ?? lineBlockReason ?? "No line configured"} />
             <ReadyRow ok={lead.hasPhone} label="Contact phone" value={lead.hasPhone ? lead.phone : "No phone on file"} />
             <ReadyRow ok={compliance.clear} label="Compliance" value={compliance.title} />

@@ -130,7 +130,7 @@ export function MyContactsView({
             <tr
               key={row.contactId}
               onClick={() => setPeek(row)}
-              className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
+              className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-co-hover"
             >
               <td className={coBodyCell}>
                 <Link
@@ -181,7 +181,7 @@ export function MyContactsView({
               type="button"
               onClick={() => setPage((value) => Math.max(0, value - 1))}
               disabled={current === 0}
-              className="h-8 rounded-lg border border-co-control bg-white px-3 font-bold text-co-text-3 hover:bg-co-sunken disabled:opacity-40"
+              className="h-8 rounded-lg border border-co-control bg-co-surface px-3 font-bold text-co-text-3 hover:bg-co-sunken disabled:opacity-40"
             >
               Prev
             </button>
@@ -192,7 +192,7 @@ export function MyContactsView({
               type="button"
               onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
               disabled={current >= pageCount - 1}
-              className="h-8 rounded-lg border border-co-control bg-white px-3 font-bold text-co-text-3 hover:bg-co-sunken disabled:opacity-40"
+              className="h-8 rounded-lg border border-co-control bg-co-surface px-3 font-bold text-co-text-3 hover:bg-co-sunken disabled:opacity-40"
             >
               Next
             </button>
@@ -225,7 +225,7 @@ export function MyContactsView({
               </Link>
               <Link
                 href={`/sdr/focus?lead=${encodeURIComponent(peek.contactId)}`}
-                className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-text-3 transition-colors hover:bg-co-sunken"
+                className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-co-surface text-[12px] font-semibold text-co-text-3 transition-colors hover:bg-co-sunken"
               >
                 Open in Focus workspace
               </Link>

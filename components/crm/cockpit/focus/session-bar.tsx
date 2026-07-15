@@ -29,7 +29,7 @@ export function SessionBar({
   const pct = total > 0 ? Math.min(100, Math.round((session.completedCount / total) * 100)) : 0;
 
   return (
-    <div className="flex h-[38px] shrink-0 items-center gap-3 border-b border-co-border bg-white px-4 text-[12px]">
+    <div className="flex h-[38px] shrink-0 items-center gap-3 border-b border-co-border bg-co-surface px-4 text-[12px]">
       <span className="flex items-center gap-1.5">
         <span className="relative flex size-2" aria-hidden="true">
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-co-teal opacity-70" />
@@ -92,8 +92,8 @@ function BarButton({
       onClick={onClick}
       className={`flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] font-bold transition-colors ${
         danger
-          ? "border-co-control bg-white text-co-red-text hover:bg-co-red-bg-soft"
-          : "border-co-control bg-white text-co-text-3 hover:bg-co-sunken"
+          ? "border-co-control bg-co-surface text-co-red-text hover:bg-co-red-bg-soft"
+          : "border-co-control bg-co-surface text-co-text-3 hover:bg-co-sunken"
       }`}
     >
       {icon}
