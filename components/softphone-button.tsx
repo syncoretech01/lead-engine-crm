@@ -42,7 +42,12 @@ import { cn } from "@/lib/utils";
 import type WebPhoneClass from "ringcentral-web-phone";
 type CallSession = Awaited<ReturnType<WebPhoneClass["call"]>>;
 type TransferCapableSession = CallSession & {
-  transfer?: (targetNumber: string) => Promise<unknown>;
+  transfer?: (targetNumber: string, timeout?: number) => Promise<unknown>;
+  // Lower-level REFER with a full SIP URI. The public transfer() hardcodes the
+  // Refer-To domain to sip.ringcentral.com; _transfer lets us set the account's
+  // real SIP edge domain instead (see transferCall).
+  _transfer?: (uri: string, timeout?: number) => Promise<void>;
+  webPhone?: { sipInfo?: { domain?: string } };
 };
 
 type TransferTarget = {
@@ -84,6 +89,11 @@ const NO_ANSWER_CODES = new Set([408, 480, 486, 487, 600, 603]);
 // registration is reused across every call button on the page.
 let webPhonePromise: Promise<{ webPhone: WebPhoneClass; callerId: string | null }> | null = null;
 
+// The account's real SIP edge domain from provisioning. Outbound INVITEs use it
+// (and connect fine); the transfer Refer-To must use the same domain, or RC
+// accepts the REFER (dropping the SDR) but can't route the manager call.
+let sipProvisionDomain: string | null = null;
+
 async function ensureWebPhone(): Promise<{ webPhone: WebPhoneClass; callerId: string | null }> {
   if (webPhonePromise) return webPhonePromise;
   webPhonePromise = (async () => {
@@ -96,6 +106,7 @@ async function ensureWebPhone(): Promise<{ webPhone: WebPhoneClass; callerId: st
     if (!res.ok || !data.sipInfo) {
       throw new Error(data.error || `Could not set up the softphone (HTTP ${res.status}).`);
     }
+    sipProvisionDomain = (data.sipInfo as { domain?: string })?.domain ?? null;
     const mod = await import("ringcentral-web-phone");
     const WebPhone = mod.default;
     const webPhone = new WebPhone({
@@ -830,7 +841,9 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       setTransferError("Transfer is available after the call is connected.");
       return;
     }
-    if (typeof session.transfer !== "function") {
+    const domain = sipProvisionDomain ?? session.webPhone?.sipInfo?.domain ?? null;
+    const canDomainTransfer = typeof session._transfer === "function" && Boolean(domain);
+    if (!canDomainTransfer && typeof session.transfer !== "function") {
       setTransferError("This RingCentral softphone session does not support transfer.");
       return;
     }
@@ -839,7 +852,15 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     setTransferError(null);
     setTransferMessage(null);
     try {
-      await session.transfer(dial);
+      if (canDomainTransfer) {
+        // Mirror the working outbound INVITE: same E.164 number + the account's real
+        // SIP domain. The SDK's public transfer() hardcodes sip.ringcentral.com,
+        // which RC accepts (dropping the SDR's leg) but can't route on a different
+        // edge domain — so the manager never rings. _transfer sets the Refer-To.
+        await session._transfer!(`sip:${dial}@${domain}`);
+      } else {
+        await session.transfer!(dial);
+      }
       setTransferMessage("Transfer sent. The SDR call will end when RingCentral completes the handoff.");
     } catch (err) {
       setTransferError(err instanceof Error ? err.message : "Call transfer failed.");
