@@ -77,13 +77,10 @@ const NOTE_CHIPS = [
   "Next step"
 ];
 
-type FollowUpPreset = "later" | "tomorrow" | "nextbiz" | "3days" | "nextweek" | "custom" | "none";
+type FollowUpPreset = "later" | "tomorrow" | "custom" | "none";
 const FOLLOWUP_PRESETS: Array<{ id: FollowUpPreset; label: string }> = [
   { id: "later", label: "Later today" },
   { id: "tomorrow", label: "Tomorrow" },
-  { id: "nextbiz", label: "Next business day" },
-  { id: "3days", label: "In 3 days" },
-  { id: "nextweek", label: "Next week" },
   { id: "custom", label: "Custom" }
 ];
 
@@ -106,17 +103,6 @@ function presetToIso(preset: FollowUpPreset, customValue: string): string | unde
     d.setHours(d.getHours() + 3);
   } else if (preset === "tomorrow") {
     d.setDate(d.getDate() + 1);
-    d.setHours(9, 0, 0, 0);
-  } else if (preset === "nextbiz") {
-    do {
-      d.setDate(d.getDate() + 1);
-    } while (d.getDay() === 0 || d.getDay() === 6);
-    d.setHours(9, 0, 0, 0);
-  } else if (preset === "3days") {
-    d.setDate(d.getDate() + 3);
-    d.setHours(9, 0, 0, 0);
-  } else if (preset === "nextweek") {
-    d.setDate(d.getDate() + 7);
     d.setHours(9, 0, 0, 0);
   }
   return d.toISOString();
@@ -658,7 +644,7 @@ function Wrapup({
   const field = "h-8 w-full rounded-md border border-co-control bg-white px-2 text-[12px] text-co-ink";
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-4">
+    <div className="flex h-full flex-col overflow-y-auto p-4 [&>*]:shrink-0">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Call wrap-up</div>
@@ -693,13 +679,28 @@ function Wrapup({
       </div>
 
       {/* Notes */}
-      <div className="mt-3 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Notes</div>
+      <div className="mt-3 flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">
+        Notes
+        <span className="ml-auto font-normal normal-case text-co-muted-2">{notes.trim() ? "Draft" : "Empty"}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {NOTE_CHIPS.map((chipLabel) => (
+          <button
+            key={chipLabel}
+            type="button"
+            onClick={() => setNotes(`${notes}${notes && !notes.endsWith("\n") ? "\n" : ""}${chipLabel}: `)}
+            className="rounded-full border border-co-control bg-white px-2 py-0.5 text-[10.5px] font-semibold text-co-text-3 hover:bg-co-sunken"
+          >
+            {chipLabel}
+          </button>
+        ))}
+      </div>
       <textarea
         value={notes}
         onChange={(event) => setNotes(event.target.value)}
-        rows={3}
+        rows={4}
         placeholder="What happened on the call…"
-        className="mt-1.5 w-full resize-none rounded-[10px] border border-co-control bg-white p-2.5 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
+        className="mt-1.5 min-h-[104px] w-full resize-y rounded-[10px] border border-co-control bg-white p-2.5 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
       />
 
       {/* Lead status + suggested next action */}
