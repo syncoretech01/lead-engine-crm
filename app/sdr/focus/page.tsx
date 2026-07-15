@@ -1,5 +1,6 @@
 import { readAssignedContactsModel } from "@/lib/phase1/assigned-contacts-read-model";
 import { parseBrokerNotes } from "@/lib/phase1/broker-notes";
+import { isUtcToday } from "@/lib/phase1/date-utils";
 import { readFocusContext } from "@/lib/phase1/focus-context-read-model";
 import { readFocusTimelines } from "@/lib/phase1/focus-timeline-read-model";
 import { readKeyAccountFields } from "@/lib/phase1/key-account-fields-read-model";
@@ -62,6 +63,7 @@ export default async function FocusPage({
       dueLabel: row.dueLabel,
       dueAtMs: Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER,
       overdue: row.slaStatus === "Overdue",
+      dueToday: Boolean(dueIso && isUtcToday(dueIso)),
       grade: row.grade,
       fitReason: broker?.fitReason || (row.notes ?? ""),
       companyId: row.companyId,

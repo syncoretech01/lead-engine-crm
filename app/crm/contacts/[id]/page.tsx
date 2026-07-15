@@ -62,6 +62,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
     dueLabel: "",
     dueAtMs: Number.MAX_SAFE_INTEGER,
     overdue: false,
+    dueToday: false,
     grade,
     fitReason: contact.fitReason || broker?.fitReason || contact.notes || "",
     companyId: contact.companyId ?? "",
