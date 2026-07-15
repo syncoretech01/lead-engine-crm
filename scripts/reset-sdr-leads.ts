@@ -12,9 +12,11 @@ import { resetSdrAssignmentToFresh } from "@/lib/phase1/sdr";
  * DRY RUN by default (prints exact counts, writes nothing). Set RESET_APPLY=1 to
  * actually write. Requires SYNCORE_STORAGE_DRIVER=prisma and a DATABASE_URL.
  *
- *   RESET_WORKSPACE_ID   default workspace-acme-outbound (live team)
- *   RESET_SDR_PATTERN    case-insensitive name regex, default "zack|zainab"
- *   RESET_APPLY=1        apply (otherwise dry run)
+ *   RESET_WORKSPACE_ID    default workspace-acme-outbound (live team)
+ *   RESET_SDR_PATTERN     case-insensitive name regex, default "zack|zainab"
+ *   RESET_APPLY=1         apply (otherwise dry run)
+ *   RESET_RECORDS_ONLY=1  only delete leftover work records (incl. trackedCalls);
+ *                         leave the already-fresh assignments + reminders alone.
  */
 async function main() {
   if (resolveStorageDriver() !== "prisma") {
@@ -52,15 +54,23 @@ async function main() {
 
     const hit = (contactId?: string) => Boolean(contactId && contactIds.has(contactId));
     const count = (rows: Array<{ contactId?: string }>) => rows.filter((r) => hit(r.contactId)).length;
-    console.log("engagement records to DELETE (by contactId):");
-    console.log(`  activities:        ${count(state.activities)}`);
-    console.log(`  callLogs:          ${count(state.callLogs)}`);
-    console.log(`  notes:             ${count(state.notes)}`);
-    console.log(`  tasks:             ${count(state.tasks)}`);
-    console.log(`  followUpReminders: ${count(state.followUpReminders)}`);
-    console.log(`  opportunities:     ${count(state.opportunities)}`);
-    console.log(`  emailEvents:       ${count(state.emailEvents)}`);
-    console.log(`  smsEvents:         ${count(state.smsEvents)}`);
+    // Tracked calls (the softphone/RingOut call log) are keyed by BOTH the called
+    // contact and the SDR who placed them — clear either so the SDR's call log empties.
+    const hitCall = (c: { contactId?: string; sdrUserId?: string }) =>
+      hit(c.contactId) || Boolean(c.sdrUserId && sdrIds.has(c.sdrUserId));
+    console.log("engagement records to DELETE:");
+    console.log(`  activities:          ${count(state.activities)}`);
+    console.log(`  callLogs:            ${count(state.callLogs)}`);
+    console.log(`  trackedCalls:        ${state.trackedCalls.filter(hitCall).length}  (call log; by contact or SDR)`);
+    console.log(`  notes:               ${count(state.notes)}`);
+    console.log(`  tasks:               ${count(state.tasks)}`);
+    console.log(`  followUpReminders:   ${count(state.followUpReminders)}`);
+    console.log(`  opportunities:       ${count(state.opportunities)}`);
+    console.log(`  emailEvents:         ${count(state.emailEvents)}`);
+    console.log(`  smsEvents:           ${count(state.smsEvents)}`);
+    console.log(`  aiPersonalizations:  ${count(state.aiPersonalizations)}`);
+    console.log(`  aiReplyClassif.:     ${count(state.aiReplyClassifications)}`);
+    console.log(`  directSendClaims:    ${count(state.directSendClaims)}`);
 
     const statusCounts: Record<string, number> = {};
     for (const id of contactIds) {
@@ -75,21 +85,33 @@ async function main() {
     }
 
     const now = new Date().toISOString();
+    const recordsOnly = process.env.RESET_RECORDS_ONLY === "1";
     const keep = <T extends { contactId?: string }>(rows: T[]) => rows.filter((r) => !hit(r.contactId));
+    // Work records — never affect the fresh assignment/reminders, always cleared.
     state.activities = keep(state.activities);
     state.callLogs = keep(state.callLogs);
+    state.trackedCalls = state.trackedCalls.filter((c) => !hitCall(c));
     state.notes = keep(state.notes);
     state.tasks = keep(state.tasks);
-    state.followUpReminders = keep(state.followUpReminders);
     state.opportunities = keep(state.opportunities);
     state.emailEvents = keep(state.emailEvents);
     state.smsEvents = keep(state.smsEvents);
+    state.aiPersonalizations = keep(state.aiPersonalizations);
+    state.aiReplyClassifications = keep(state.aiReplyClassifications);
+    state.directSendClaims = keep(state.directSendClaims);
 
-    let reset = 0;
-    for (const id of contactIds) {
-      if (resetSdrAssignmentToFresh(state, workspaceId, id, now)) reset++;
+    if (recordsOnly) {
+      // Leave the already-fresh assignments + first-touch reminders untouched;
+      // just clear the leftover work records above.
+      console.log(`\nAPPLY (records only): cleared engagement records; assignments + reminders left as-is.`);
+    } else {
+      state.followUpReminders = keep(state.followUpReminders);
+      let reset = 0;
+      for (const id of contactIds) {
+        if (resetSdrAssignmentToFresh(state, workspaceId, id, now)) reset++;
+      }
+      console.log(`\nAPPLY: reset ${reset} assignments to fresh; deleted engagement records above.`);
     }
-    console.log(`\nAPPLY: reset ${reset} assignments to fresh; deleted engagement records above.`);
     await writeState(state);
     console.log("writeState complete.");
   } finally {
