@@ -18,6 +18,8 @@ export type FocusLead = {
   dueLabel: string;
   dueAtMs: number;
   overdue: boolean;
+  /** The current due date falls on today (UTC) — matches My Day's "Due today". */
+  dueToday: boolean;
   grade: string;
   fitReason: string;
   companyId: string;

@@ -47,7 +47,9 @@ function matchesView(lead: FocusLead, view: ViewId): boolean {
     case "p1":
       return lead.priority === "P1";
     case "due":
-      return lead.slaStatus === "Due soon" || lead.overdue;
+      // Match My Day's "Due today" (the current due date falls on today), not
+      // just "due within 2h / overdue" — so P2 leads due later today still show.
+      return lead.dueToday;
     case "overdue":
       return lead.overdue;
     case "replied":
