@@ -90,7 +90,7 @@ export function AccountDossier({ account }: { account: AccountDossierData }) {
   return (
     <div className="mx-auto max-w-[900px] px-6 py-5">
       <div className="flex items-start gap-3">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#eaf3ff] text-[15px] font-extrabold text-co-blue">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-co-accent-bg text-[15px] font-extrabold text-co-blue">
           {initials(account.name)}
         </div>
         <div>
@@ -113,7 +113,7 @@ export function AccountDossier({ account }: { account: AccountDossierData }) {
         className={`mt-4 flex items-start gap-2.5 rounded-[10px] border px-3.5 py-2.5 ${
           account.complianceClear
             ? "border-co-teal-border bg-co-teal-bg text-co-teal-text"
-            : "border-[#f3d998] bg-co-amber-bg-soft text-co-amber-text"
+            : "border-co-amber-border bg-co-amber-bg-soft text-co-amber-text"
         }`}
       >
         <span className="mt-1 size-2 shrink-0 rounded-full bg-current" aria-hidden="true" />
@@ -222,12 +222,12 @@ function OverviewTab({ account, onViewActivity }: { account: AccountDossierData;
 function ContactsTab({ account }: { account: AccountDossierData }) {
   if (!account.contacts.length) return <EmptyTab>No contacts linked to this account yet.</EmptyTab>;
   return (
-    <div className="overflow-hidden rounded-[10px] border border-co-border bg-white">
+    <div className="overflow-hidden rounded-[10px] border border-co-border bg-co-surface">
       {account.contacts.map((contact) => (
         <Link
           key={contact.id}
           href={`/crm/contacts/${contact.id}`}
-          className="grid grid-cols-[minmax(140px,1fr)_auto] items-center gap-3 border-b border-co-divider px-3.5 py-2.5 transition-colors last:border-0 hover:bg-[#f6faff]"
+          className="grid grid-cols-[minmax(140px,1fr)_auto] items-center gap-3 border-b border-co-divider px-3.5 py-2.5 transition-colors last:border-0 hover:bg-co-hover"
         >
           <span className="min-w-0">
             <span className="block truncate text-[13px] font-bold text-co-ink">{contact.name}</span>
@@ -251,7 +251,7 @@ function PipelineTab({ account }: { account: AccountDossierData }) {
   return (
     <div className="flex flex-col gap-2">
       {account.opportunities.map((opp, index) => (
-        <div key={`${opp.name}-${index}`} className="rounded-[10px] border border-co-border bg-white p-3">
+        <div key={`${opp.name}-${index}`} className="rounded-[10px] border border-co-border bg-co-surface p-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[13px] font-bold text-co-ink">{opp.name}</span>
             <span className="text-[12.5px] font-bold tabular-nums text-co-ink">{opp.amountLabel}</span>

@@ -97,6 +97,12 @@
   --color-co-red-text: var(--co-red-text);
   --color-co-p3-bg: var(--co-p3-bg);
   --color-co-p3-text: var(--co-p3-text);
+  --color-co-accent-bg: var(--co-accent-bg);
+  --color-co-accent-border: var(--co-accent-border);
+  --color-co-hover: var(--co-hover);
+  --color-co-disabled-bg: var(--co-disabled-bg);
+  --color-co-red-border: var(--co-red-border);
+  --color-co-amber-border: var(--co-amber-border);
 }
 
 /* Motion vocabulary — pair with `ease-out` / `transition-colors`. Durations
@@ -375,6 +381,15 @@
   --co-p3-bg: #e0f2fe;
   --co-p3-text: #0361a1;
 
+  /* Accent / interaction surfaces (tokenized from the prototype's inline hexes so
+     they can flip in dark mode). Light values preserve the original look 1:1. */
+  --co-accent-bg: #eaf3ff;
+  --co-accent-border: #bcd8ff;
+  --co-hover: #f6faff;
+  --co-disabled-bg: #dce5ee;
+  --co-red-border: #f5b5b5;
+  --co-amber-border: #f3d998;
+
   --co-focus: #8fc2ff;
 }
 
@@ -434,6 +449,70 @@
 .co-anim-up { animation: co-up 0.25s ease; }
 .co-anim-in { animation: co-in 0.18s ease; }
 .co-anim-bar { animation: co-bar 1.5s linear forwards; }
+
+/* Dark cockpit (navy-tinted). Flips the --co-* palette + the light --ui-* whites
+   the base .cockpit hardcodes; surfaces match the app-wide .dark ramp so the CRM
+   reads as one product. `.dark .cockpit` (0,2,0) outranks `.cockpit` (0,1,0), so
+   these win for the cockpit subtree. The navy sidebar/live-call surface
+   (--co-navy) stays constant in both themes. */
+.dark .cockpit {
+  color-scheme: dark;
+
+  --co-page: #05091f;
+  --co-surface: #0b102c;
+  --co-sunken: #090e26;
+  --co-sunken-2: #0c1230;
+
+  --co-border: rgba(255, 255, 255, 0.11);
+  --co-divider: rgba(255, 255, 255, 0.07);
+  --co-divider-2: rgba(255, 255, 255, 0.09);
+  --co-control: rgba(255, 255, 255, 0.2);
+
+  --co-ink: #eef3ff;
+  --co-text-2: #c3cce4;
+  --co-text-3: #9aa6cc;
+  --co-muted: #808db2;
+  --co-muted-2: #6f7c9e;
+  --co-disabled: #55607f;
+
+  --co-blue: #2789ff;
+  --co-blue-hover: #4098ff;
+  --co-blue-dark: #6aadff;
+
+  --co-teal: #4be6cf;
+  --co-teal-bg: rgba(5, 218, 195, 0.14);
+  --co-teal-bg-strong: rgba(5, 218, 195, 0.22);
+  --co-teal-border: rgba(5, 218, 195, 0.32);
+  --co-teal-text: #7cead9;
+
+  --co-amber-bg: rgba(255, 176, 32, 0.16);
+  --co-amber-bg-soft: rgba(255, 176, 32, 0.1);
+  --co-amber-text: #ffce6b;
+  --co-amber-dot: #ffb020;
+  --co-amber-border: rgba(255, 176, 32, 0.32);
+
+  --co-red: #ff6b7a;
+  --co-red-bg: rgba(255, 77, 94, 0.16);
+  --co-red-bg-soft: rgba(255, 77, 94, 0.1);
+  --co-red-text: #ff9aa5;
+  --co-red-border: rgba(255, 77, 94, 0.32);
+
+  --co-p3-bg: rgba(0, 118, 254, 0.18);
+  --co-p3-text: #8bb8ff;
+
+  --co-accent-bg: rgba(0, 118, 254, 0.16);
+  --co-accent-border: rgba(0, 118, 254, 0.32);
+
+  --co-hover: rgba(255, 255, 255, 0.04);
+  --co-disabled-bg: rgba(255, 255, 255, 0.08);
+
+  --co-focus: #5aa2ff;
+
+  /* Override the light whites the base .cockpit hardcodes (the rest reference --co-*). */
+  --ui-background: var(--co-surface);
+  --ui-card: var(--co-surface);
+  --ui-popover: #10173a;
+}
 
 .dark {
   color-scheme: dark;

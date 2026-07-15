@@ -108,7 +108,7 @@ export function MyDay({
         </div>
 
         {/* Counter strip */}
-        <div className="mt-4 grid grid-cols-2 divide-y divide-co-divider rounded-[10px] border border-co-border bg-white sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+        <div className="mt-4 grid grid-cols-2 divide-y divide-co-divider rounded-[10px] border border-co-border bg-co-surface sm:grid-cols-4 sm:divide-x sm:divide-y-0">
           <Counter tone="red" label="Overdue" value={metrics.overdue} />
           <Counter tone="blue" label="P1 leads" value={metrics.p1} />
           <Counter tone="amber" label="Due today" value={metrics.dueToday} />
@@ -121,7 +121,7 @@ export function MyDay({
               scrolls internally (the inner card is absolutely positioned, so its
               intrinsic height doesn't stretch the row past the right column). */}
           <div className="lg:relative">
-            <div className="flex flex-col overflow-hidden rounded-[10px] border border-co-border bg-white lg:absolute lg:inset-0">
+            <div className="flex flex-col overflow-hidden rounded-[10px] border border-co-border bg-co-surface lg:absolute lg:inset-0">
               <div className="flex shrink-0 items-center justify-between border-b border-co-border px-4 py-3">
                 <h2 className="text-[13px] font-extrabold text-co-ink">Work queue</h2>
                 <span className="text-[11px] font-bold text-co-muted-2">{queueCount} active</span>
@@ -140,7 +140,7 @@ export function MyDay({
                     <Link
                       key={`${group.id}-${lead.contactId}`}
                       href={`/sdr/focus?lead=${encodeURIComponent(lead.contactId)}&view=${lead.view}`}
-                      className="grid grid-cols-[64px_minmax(140px,1fr)_auto] items-center gap-3 border-b border-co-divider px-4 py-2.5 transition-colors last:border-0 hover:bg-[#f6faff]"
+                      className="grid grid-cols-[64px_minmax(140px,1fr)_auto] items-center gap-3 border-b border-co-divider px-4 py-2.5 transition-colors last:border-0 hover:bg-co-hover"
                     >
                       <span
                         className={`text-[11px] font-bold ${
@@ -192,7 +192,7 @@ export function MyDay({
                   <Link
                     key={item.id}
                     href={`/crm/contacts/${item.contactId}`}
-                    className="flex flex-col gap-0.5 border-b border-co-divider py-2 last:border-0 hover:bg-[#f6faff]"
+                    className="flex flex-col gap-0.5 border-b border-co-divider py-2 last:border-0 hover:bg-co-hover"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate text-[12.5px] font-bold text-co-ink">{item.title}</span>
@@ -222,7 +222,7 @@ export function MyDay({
                   <Link
                     key={reply.contactId}
                     href={`/sdr/focus?lead=${encodeURIComponent(reply.contactId)}&view=replied`}
-                    className="flex items-center justify-between gap-2 border-b border-co-divider py-2 last:border-0 hover:bg-[#f6faff]"
+                    className="flex items-center justify-between gap-2 border-b border-co-divider py-2 last:border-0 hover:bg-co-hover"
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-[12.5px] font-bold text-co-ink">{reply.name}</span>
@@ -260,7 +260,7 @@ function Counter({ tone, label, value }: { tone: MyDayGroup["tone"]; label: stri
 
 function SideCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-[10px] border border-co-border bg-white p-4">
+    <div className="rounded-[10px] border border-co-border bg-co-surface p-4">
       <h3 className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">{title}</h3>
       <div>{children}</div>
     </div>

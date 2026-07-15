@@ -30,12 +30,12 @@ export function AccountWorkbench({
 }) {
   return (
     <div className="cockpit flex min-h-[calc(100vh-3.5rem)] w-full bg-co-page">
-      <main className="min-w-0 flex-1 overflow-y-auto bg-white">
+      <main className="min-w-0 flex-1 overflow-y-auto bg-co-surface">
         <AccountDossier account={account} />
       </main>
 
       <aside className="hidden w-[360px] shrink-0 flex-col gap-4 border-l border-co-border bg-co-sunken p-4 xl:flex [@media(max-width:1200px)]:w-[320px]">
-        <div className="rounded-[10px] border border-[#bcd8ff] bg-[#eaf3ff] p-3.5">
+        <div className="rounded-[10px] border border-co-accent-border bg-co-accent-bg p-3.5">
           <div className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-blue-dark">Account health</div>
           <div className="mt-2 grid grid-cols-2 gap-3">
             <HealthStat label="Open pipeline" value={health.pipelineLabel} />

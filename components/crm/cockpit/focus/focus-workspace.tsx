@@ -214,13 +214,13 @@ export function FocusWorkspace({
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* ───────────── Queue rail ───────────── */}
-      <aside className="flex w-[300px] shrink-0 flex-col border-r border-co-border bg-white [@media(max-width:1380px)]:w-[264px]">
+      <aside className="flex w-[300px] shrink-0 flex-col border-r border-co-border bg-co-surface [@media(max-width:1380px)]:w-[264px]">
         <div className="flex flex-col gap-2 border-b border-co-border p-3">
           <div className="flex items-center gap-2">
             <select
               value={view}
               onChange={(event) => setView(event.target.value as ViewId)}
-              className="h-8 flex-1 rounded-md border border-co-control bg-white px-2 text-[12px] font-semibold text-co-ink"
+              className="h-8 flex-1 rounded-md border border-co-control bg-co-surface px-2 text-[12px] font-semibold text-co-ink"
             >
               {VIEWS.map((option) => (
                 <option key={option.id} value={option.id}>
@@ -237,7 +237,7 @@ export function FocusWorkspace({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search queue…  ( / )"
             aria-label="Search queue"
-            className="h-8 w-full rounded-md border border-co-control bg-white px-2.5 text-[12px] text-co-ink placeholder:text-co-muted-2"
+            className="h-8 w-full rounded-md border border-co-control bg-co-surface px-2.5 text-[12px] text-co-ink placeholder:text-co-muted-2"
           />
           <div className="flex items-center gap-1.5">
             {CHIPS.map((option) => (
@@ -249,7 +249,7 @@ export function FocusWorkspace({
                 className={`h-7 rounded-full px-2.5 text-[11px] font-bold transition-colors ${
                   chip === option.id
                     ? "bg-co-blue text-white"
-                    : "border border-co-control bg-white text-co-text-3 hover:bg-co-sunken"
+                    : "border border-co-control bg-co-surface text-co-text-3 hover:bg-co-sunken"
                 }`}
               >
                 {option.label}
@@ -268,7 +268,7 @@ export function FocusWorkspace({
                 type="button"
                 onClick={() => setSelectedId(lead.id)}
                 className={`flex w-full flex-col gap-1 border-b border-co-divider px-3 py-2.5 text-left transition-colors ${
-                  active ? "bg-[#eaf3ff]" : "hover:bg-co-sunken"
+                  active ? "bg-co-accent-bg" : "hover:bg-co-sunken"
                 } ${done ? "opacity-55" : ""}`}
                 style={active ? { boxShadow: "inset 3px 0 0 var(--co-blue)" } : undefined}
               >
@@ -302,14 +302,14 @@ export function FocusWorkspace({
               <button
                 type="button"
                 onClick={() => move(-1)}
-                className="h-7 rounded-md border border-co-control bg-white px-2 text-[11px] font-bold text-co-text-3 hover:bg-co-sunken"
+                className="h-7 rounded-md border border-co-control bg-co-surface px-2 text-[11px] font-bold text-co-text-3 hover:bg-co-sunken"
               >
                 Prev
               </button>
               <button
                 type="button"
                 onClick={() => move(1)}
-                className="h-7 rounded-md border border-co-control bg-white px-2 text-[11px] font-bold text-co-text-3 hover:bg-co-sunken"
+                className="h-7 rounded-md border border-co-control bg-co-surface px-2 text-[11px] font-bold text-co-text-3 hover:bg-co-sunken"
               >
                 Next
               </button>
@@ -320,7 +320,7 @@ export function FocusWorkspace({
       </aside>
 
       {/* ───────────── Dossier ───────────── */}
-      <main className="flex-1 overflow-y-auto bg-white">
+      <main className="flex-1 overflow-y-auto bg-co-surface">
         {selected ? (
           <ContactDossier lead={selected} onCall={callSelected} callBlocked={selectedBlock} />
         ) : (

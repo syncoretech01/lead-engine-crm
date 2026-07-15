@@ -12,7 +12,7 @@ const toneClass: Record<CoTone, string> = {
   teal: "bg-co-teal-bg text-co-teal-text",
   amber: "bg-co-amber-bg text-co-amber-text",
   red: "bg-co-red-bg text-co-red-text",
-  info: "bg-[#e8f2ff] text-co-blue-dark",
+  info: "bg-co-accent-bg text-co-blue-dark",
   sky: "bg-co-p3-bg text-co-p3-text",
   neutral: "bg-co-sunken text-co-text-3 ring-1 ring-inset ring-co-border"
 };
@@ -32,7 +32,7 @@ export const coBodyCell = "px-4 py-2.5 align-middle text-[12.5px] text-co-ink";
 
 export function CoTableShell({ minWidth = 860, children }: { minWidth?: number; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-[10px] border border-co-border bg-white">
+    <div className="overflow-x-auto rounded-[10px] border border-co-border bg-co-surface">
       <table className="w-full border-collapse" style={{ minWidth: `${minWidth}px` }}>
         {children}
       </table>
@@ -78,7 +78,7 @@ export function CoSearch({
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       aria-label={label ?? placeholder}
-      className="h-9 w-[220px] rounded-lg border border-co-control bg-white px-3 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
+      className="h-9 w-[220px] rounded-lg border border-co-control bg-co-surface px-3 text-[12.5px] text-co-ink placeholder:text-co-muted-2"
     />
   );
 }
@@ -103,7 +103,7 @@ export function CoChips<T extends string>({
             onClick={() => onChange(chip.id)}
             aria-pressed={active}
             className={`h-8 rounded-full px-3 text-[12px] font-bold transition-colors ${
-              active ? "bg-co-blue text-white" : "border border-co-control bg-white text-co-text-3 hover:bg-co-sunken"
+              active ? "bg-co-blue text-white" : "border border-co-control bg-co-surface text-co-text-3 hover:bg-co-sunken"
             }`}
           >
             {chip.label}

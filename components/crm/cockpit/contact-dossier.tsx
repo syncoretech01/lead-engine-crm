@@ -45,7 +45,7 @@ export function ContactDossier({
     <div className="mx-auto max-w-[900px] px-6 py-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#eaf3ff] text-[15px] font-extrabold text-co-blue">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-co-accent-bg text-[15px] font-extrabold text-co-blue">
             {initials(lead.name)}
           </div>
           <div>
@@ -78,7 +78,7 @@ export function ContactDossier({
           onClick={onCall}
           disabled={Boolean(callBlocked)}
           title={callBlocked || `Call ${lead.name}`}
-          className="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-co-blue px-4 text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-[#dce5ee] disabled:text-co-muted-2"
+          className="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-co-blue px-4 text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-co-disabled-bg disabled:text-co-muted-2"
         >
           <Phone className="size-4" aria-hidden="true" />
           Call
@@ -134,8 +134,8 @@ export function ContactDossier({
 
 const bandTone: Record<LeadCompliance["tone"], string> = {
   teal: "border-co-teal-border bg-co-teal-bg text-co-teal-text",
-  red: "border-[#f5b5b5] bg-co-red-bg-soft text-co-red-text",
-  amber: "border-[#f3d998] bg-co-amber-bg-soft text-co-amber-text",
+  red: "border-co-red-border bg-co-red-bg-soft text-co-red-text",
+  amber: "border-co-amber-border bg-co-amber-bg-soft text-co-amber-text",
   gray: "border-co-border bg-co-sunken-2 text-co-text-3"
 };
 
@@ -265,7 +265,7 @@ function ActivityTab({ lead }: { lead: FocusLead }) {
 function TasksTab({ lead }: { lead: FocusLead }) {
   if (!lead.tasks.length) return <EmptyTab>No open tasks for this lead.</EmptyTab>;
   return (
-    <div className="rounded-[10px] border border-co-border bg-white">
+    <div className="rounded-[10px] border border-co-border bg-co-surface">
       {lead.tasks.map((task, index) => (
         <div
           key={`${task.title}-${index}`}
@@ -291,7 +291,7 @@ function OpportunitiesTab({ lead }: { lead: FocusLead }) {
   return (
     <div className="flex flex-col gap-2">
       {lead.opportunities.map((opp, index) => (
-        <div key={`${opp.name}-${index}`} className="rounded-[10px] border border-co-border bg-white p-3">
+        <div key={`${opp.name}-${index}`} className="rounded-[10px] border border-co-border bg-co-surface p-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[13px] font-bold text-co-ink">{opp.name}</span>
             <span className="text-[12.5px] font-bold tabular-nums text-co-ink">{opp.amountLabel}</span>

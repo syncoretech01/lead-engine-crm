@@ -106,7 +106,7 @@ export default async function ContactsPage({
           <div className="flex shrink-0 items-center gap-2">
             <Link
               href="/crm/accounts"
-              className="flex h-[38px] items-center gap-2 rounded-[9px] border border-co-control bg-white px-4 text-[13px] font-bold text-co-text-3 transition-colors hover:bg-co-sunken"
+              className="flex h-[38px] items-center gap-2 rounded-[9px] border border-co-control bg-co-surface px-4 text-[13px] font-bold text-co-text-3 transition-colors hover:bg-co-sunken"
             >
               <Building2 className="size-4" aria-hidden="true" />
               Accounts
@@ -122,14 +122,14 @@ export default async function ContactsPage({
         </div>
 
         {/* Counter strip */}
-        <div className="mt-4 grid grid-cols-2 divide-y divide-co-divider rounded-[10px] border border-co-border bg-white sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+        <div className="mt-4 grid grid-cols-2 divide-y divide-co-divider rounded-[10px] border border-co-border bg-co-surface sm:grid-cols-4 sm:divide-x sm:divide-y-0">
           {counters.map((counter) => (
             <Counter key={counter.label} tone={counter.tone} label={counter.label} value={counter.value} />
           ))}
         </div>
 
         {/* Contact directory — the wide table scrolls horizontally inside this card. */}
-        <section className="mt-5 min-w-0 overflow-hidden rounded-[10px] border border-co-border bg-white">
+        <section className="mt-5 min-w-0 overflow-hidden rounded-[10px] border border-co-border bg-co-surface">
           <div className="flex items-start justify-between gap-3 border-b border-co-border px-4 py-3">
             <div className="min-w-0">
               <h2 className="text-[13px] font-extrabold text-co-ink">Contact directory</h2>

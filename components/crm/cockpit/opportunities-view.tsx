@@ -86,7 +86,7 @@ export function OpportunitiesView({
               onClick={() => setView(mode)}
               aria-pressed={view === mode}
               className={`h-8 px-3.5 text-[12px] font-bold capitalize transition-colors ${
-                view === mode ? "bg-co-blue text-white" : "bg-white text-co-text-3 hover:bg-co-sunken"
+                view === mode ? "bg-co-blue text-white" : "bg-co-surface text-co-text-3 hover:bg-co-sunken"
               }`}
             >
               {mode}
@@ -113,7 +113,7 @@ export function OpportunitiesView({
               <tr
                 key={row.id}
                 onClick={() => setPeek(row)}
-                className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
+                className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-co-hover"
               >
                 <td className={coBodyCell}>
                   <Link
@@ -156,7 +156,7 @@ export function OpportunitiesView({
                 </div>
                 <div className="flex flex-col gap-2.5">
                   {cards.map((row) => (
-                    <div key={row.id} className="rounded-[10px] border border-co-border bg-white p-3">
+                    <div key={row.id} className="rounded-[10px] border border-co-border bg-co-surface p-3">
                       <Link href={`/crm/accounts/${row.companyId}`} className="text-[12.5px] font-bold text-co-ink hover:text-co-blue">
                         {row.name}
                       </Link>
@@ -230,7 +230,7 @@ export function OpportunitiesView({
                 href={`/crm/accounts/${peek.companyId}`}
                 className={`flex items-center justify-center rounded-lg text-[12px] font-semibold transition-colors ${
                   peek.contactId
-                    ? "h-9 border border-co-control bg-white text-co-text-3 hover:bg-co-sunken"
+                    ? "h-9 border border-co-control bg-co-surface text-co-text-3 hover:bg-co-sunken"
                     : "h-10 bg-co-blue text-[12.5px] font-bold text-white hover:bg-co-blue-hover"
                 }`}
               >

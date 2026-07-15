@@ -94,7 +94,7 @@ export function AccountsView({
             <tr
               key={row.id}
               onClick={() => setPeek(row)}
-              className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-[#f6faff]"
+              className="cursor-pointer border-b border-co-divider transition-colors last:border-0 hover:bg-co-hover"
             >
               <td className={coBodyCell}>
                 <Link
@@ -150,7 +150,7 @@ export function AccountsView({
               {peek.primaryContactId ? (
                 <Link
                   href={`/sdr/focus?lead=${encodeURIComponent(peek.primaryContactId)}`}
-                  className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-text-3 transition-colors hover:bg-co-sunken"
+                  className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-co-surface text-[12px] font-semibold text-co-text-3 transition-colors hover:bg-co-sunken"
                 >
                   Open primary contact in Focus
                 </Link>
@@ -159,7 +159,7 @@ export function AccountsView({
                   type="button"
                   disabled
                   title="No primary contact on this account to work in Focus."
-                  className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-white text-[12px] font-semibold text-co-muted-2"
+                  className="flex h-9 items-center justify-center rounded-lg border border-co-control bg-co-surface text-[12px] font-semibold text-co-muted-2"
                 >
                   No contact to open in Focus
                 </button>
