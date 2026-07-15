@@ -85,5 +85,9 @@ export async function GET() {
 
   // sipInfo carries short-lived SIP credentials scoped to this SDR's own extension —
   // returned only to the authenticated SDR's browser for their softphone to register.
+  // Diagnostic — log ONLY the edge domain/proxy (never the credentials): the
+  // transfer Refer-To must use this same domain as the outbound INVITE.
+  const edge = json.sipInfo[0] as { domain?: string; outboundProxy?: string };
+  console.log(`[sip-provision] sip domain=${edge.domain ?? "?"} outboundProxy=${edge.outboundProxy ?? "?"}`);
   return Response.json({ sipInfo: json.sipInfo[0], callerId: callerId ?? null });
 }
