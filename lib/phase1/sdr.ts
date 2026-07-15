@@ -531,6 +531,61 @@ export function assignContactToSdr(
   return { created: true, reassigned: false };
 }
 
+/**
+ * Test-data cleanup: reset one contact's SDR engagement to a freshly-assigned
+ * state, KEEPING the assignment + owner. Zeroes the touch history, restarts the
+ * first-touch/SLA clock as of `now`, resets the contact + assignment status to
+ * "Assigned", and drops a fresh first-touch reminder — exactly what a brand-new
+ * assignment looks like. Callers delete the contact's activity/call/note/task/
+ * opportunity/event/reminder records BEFORE calling this. No-op if unassigned.
+ */
+export function resetSdrAssignmentToFresh(
+  state: AppState,
+  workspaceId: string,
+  contactId: string,
+  now: string
+): boolean {
+  const assignment = state.sdrAssignments.find(
+    (item) => item.workspaceId === workspaceId && item.contactId === contactId
+  );
+  if (!assignment) return false;
+  const contact = state.contacts.find((item) => item.id === contactId && item.workspaceId === workspaceId);
+  if (!contact) return false;
+
+  const status: SdrLeadStatus = "Assigned";
+  assignment.assignedAt = now;
+  assignment.status = status;
+  assignment.touchCount = 0;
+  assignment.firstTouchedAt = undefined;
+  assignment.lastTouchAt = undefined;
+  assignment.reassignmentReason = undefined;
+  assignment.previousOwnerId = undefined;
+  assignment.firstTouchDueAt = firstTouchDueAtForPriority(contact.priority, now);
+  assignment.followUpDueAt = followUpDueAtForStatus(status, now);
+  assignment.slaStatus = calculateSlaStatus(assignment, now);
+  assignment.updatedAt = now;
+
+  contact.status = leadStatusForAssignment(status);
+  contact.updatedAt = now;
+
+  if (assignment.firstTouchDueAt) {
+    state.followUpReminders.push({
+      id: `reminder-${randomUUID()}`,
+      workspaceId,
+      assignmentId: assignment.id,
+      companyId: assignment.companyId,
+      contactId: assignment.contactId,
+      ownerUserId: assignment.assignedSdrId,
+      title: `First touch ${contact.name}`,
+      channel: recommendedChannel(contact.grade, contact.phone),
+      dueAt: assignment.firstTouchDueAt,
+      status: reminderStatusForDueAt(assignment.firstTouchDueAt, now),
+      createdAt: now
+    });
+  }
+  return true;
+}
+
 export function reassignSdrAssignment(
   state: AppState,
   input: {
