@@ -16,6 +16,7 @@ import {
   slaTone,
   type FocusLead
 } from "@/components/crm/cockpit/focus/focus-types";
+import { allowsFocusKeyboardShortcut } from "@/lib/focus-keyboard-shortcuts";
 
 export type { FocusLead };
 
@@ -184,8 +185,14 @@ export function FocusWorkspace({
 
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const tag = (event.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // Never reinterpret browser/OS shortcuts such as Ctrl+C or Cmd+C as the
+      // bare `C` = Call shortcut. Active text selection also wins over every
+      // single-key Focus shortcut so users can copy record details safely.
+      if (!allowsFocusKeyboardShortcut(event)) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable) return;
+      if (window.getSelection()?.isCollapsed === false) return;
       const key = event.key.toLowerCase();
       if (key === "/") {
         event.preventDefault();

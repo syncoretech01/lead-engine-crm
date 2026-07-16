@@ -46,7 +46,7 @@ export function ContactWorkbench({
             className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-co-disabled-bg disabled:text-co-muted-2"
           >
             <Phone className="size-4" aria-hidden="true" />
-            {block ? "Call unavailable" : lead.hasPhone ? `Call ${lead.phone}` : "No phone"}
+            {block ? "Call unavailable" : lead.hasPhone ? "Call now" : "No phone"}
           </button>
         </div>
 

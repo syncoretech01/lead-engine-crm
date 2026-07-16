@@ -219,7 +219,7 @@ function PreCall({
           className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:cursor-not-allowed disabled:bg-co-disabled-bg disabled:text-co-muted-2"
         >
           <Phone className="size-4" aria-hidden="true" />
-          {block ? "Call unavailable" : `Call ${lead.phone}`}
+          {block ? "Call unavailable" : "Call now"}
         </button>
         <div className="mt-2.5 flex items-center justify-between gap-2">
           <label htmlFor="dock-consent" className="text-[11px] font-semibold text-co-text-3">
