@@ -30,10 +30,16 @@ export type CrmContactListRow = {
 export type CrmContactsReadModel = {
   contacts: CrmContactListRow[];
   openTaskCount: number;
-  /** Every contact in scope (assigned or unassigned), not capped by the 500-row
+  /** Every contact in scope (assigned or unassigned), not capped by the directory
    *  list limit — powers the "Total Contacts" tile. */
   totalContacts: number;
 };
+
+// The records directory currently paginates, sorts, and searches client-side.
+// Keep this aligned with the assigned-contacts read model so a normal SDR book
+// (including Sam's 791-contact import) is not silently truncated at 500 rows.
+// True server-side pagination should replace this bounded fetch as books grow.
+export const CRM_CONTACT_DIRECTORY_LIMIT = 2_000;
 
 export async function readFastCrmContactsModel(
   session: Session,
@@ -54,7 +60,7 @@ export async function readFastCrmContactsModel(
       where: contactWhere,
       include: { company: true },
       orderBy: [{ score: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
-      take: 500
+      take: CRM_CONTACT_DIRECTORY_LIMIT
     }),
     prisma.task.findMany({
       where: {
