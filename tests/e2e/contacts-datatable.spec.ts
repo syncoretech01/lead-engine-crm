@@ -41,4 +41,19 @@ test.describe("contacts data table", () => {
     await page.goto(shareable, { waitUntil: "networkidle" });
     await expect(page.getByPlaceholder(/Search contacts/i)).toBeVisible();
   });
+
+  test("finds a contact when the phone query uses different formatting", async ({ page }) => {
+    await loginAs(page, "nora@syncore.tech");
+    await page.goto("/crm/contacts", { waitUntil: "networkidle" });
+
+    const search = page.getByPlaceholder(/Search contacts/i);
+    const phoneCell = page.locator("tbody tr td").filter({ hasText: /\+?\d[\d\s()-]{8,}/ }).first();
+    const displayedPhone = (await phoneCell.innerText()).trim();
+    const localDigits = displayedPhone.replace(/\D/g, "").slice(-10);
+    const alternateFormat = `(${localDigits.slice(0, 3)}) ${localDigits.slice(3, 6)}-${localDigits.slice(6)}`;
+
+    await search.fill(alternateFormat);
+
+    await expect(page.getByText(displayedPhone, { exact: true }).first()).toBeVisible();
+  });
 });

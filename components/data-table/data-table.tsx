@@ -12,6 +12,7 @@ import {
   useReactTable,
   type ColumnDef,
   type ColumnFiltersState,
+  type FilterFn,
   type RowSelectionState,
   type SortingState,
   type Table as TanstackTable,
@@ -32,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { parseSortParam, useTableUrlSync } from "@/components/data-table/use-table-url-state";
+import { textOrPhoneMatchesSearch } from "@/lib/phone-search";
 
 const PAGE_SIZE = 50;
 
@@ -42,6 +44,8 @@ type DataTableProps<TData> = {
   /** Human labels for the column-visibility menu, keyed by column id. */
   columnLabels?: Record<string, string>;
   searchPlaceholder?: string;
+  /** Optional phone value included in global search with format-insensitive matching. */
+  phoneSearchAccessor?: (row: TData) => string | null | undefined;
   /** Initial values parsed server-side from searchParams. */
   initialQuery?: string;
   initialSort?: string;
@@ -64,6 +68,7 @@ export function DataTable<TData>({
   getRowId,
   columnLabels,
   searchPlaceholder,
+  phoneSearchAccessor,
   initialQuery = "",
   initialSort,
   initialPage = 0,
@@ -79,6 +84,17 @@ export function DataTable<TData>({
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [pagination, setPagination] = React.useState({ pageIndex: initialPage, pageSize: PAGE_SIZE });
+
+  const phoneAwareGlobalFilter = React.useCallback<FilterFn<TData>>(
+    (row, columnId, filterValue) => {
+      return textOrPhoneMatchesSearch(
+        row.getValue(columnId),
+        phoneSearchAccessor?.(row.original),
+        String(filterValue ?? "")
+      );
+    },
+    [phoneSearchAccessor]
+  );
 
   const allColumns = React.useMemo<ColumnDef<TData, unknown>[]>(() => {
     if (!enableSelection) return columns;
@@ -116,6 +132,7 @@ export function DataTable<TData>({
     enableRowSelection: enableSelection,
     state: { globalFilter, sorting, columnFilters, columnVisibility, rowSelection, pagination },
     onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: phoneSearchAccessor ? phoneAwareGlobalFilter : undefined,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,

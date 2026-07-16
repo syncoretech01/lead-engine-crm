@@ -205,7 +205,8 @@ export function MyContactsTable({
         columns={columns}
         data={rows}
         getRowId={(row) => row.contactId}
-        searchPlaceholder="Search assigned contacts…"
+        searchPlaceholder="Search assigned contacts or phones…"
+        phoneSearchAccessor={(row) => row.phone}
         initialQuery={initialQuery}
         initialSort={initialSort}
         initialPage={initialPage}

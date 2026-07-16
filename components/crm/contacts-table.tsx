@@ -197,7 +197,8 @@ export function ContactsTable({
       data={rows}
       getRowId={(row) => row.id}
       columnLabels={COLUMN_LABELS}
-      searchPlaceholder="Search contacts, accounts, emails…"
+      searchPlaceholder="Search contacts, accounts, emails, phones…"
+      phoneSearchAccessor={(row) => row.phone}
       initialQuery={initialQuery}
       initialSort={initialSort}
       initialPage={initialPage}

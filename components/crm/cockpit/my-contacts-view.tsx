@@ -15,6 +15,7 @@ import {
   type CoTone
 } from "@/components/crm/cockpit/co-table";
 import { CoPeek, CoPeekRow, CoPeekSection } from "@/components/crm/cockpit/co-peek";
+import { phoneMatchesSearch } from "@/lib/phone-search";
 
 export type CockpitMyContactRow = {
   contactId: string;
@@ -83,7 +84,10 @@ export function MyContactsView({
       if (filter === "blocked" && row.hasPhone) return false;
       if (filter === "replied" && !row.replied) return false;
       if (!q) return true;
-      return `${row.contactName} ${row.title} ${row.companyName} ${row.companyDomain}`.toLowerCase().includes(q);
+      return (
+        `${row.contactName} ${row.title} ${row.companyName} ${row.companyDomain}`.toLowerCase().includes(q) ||
+        phoneMatchesSearch(row.phone, q)
+      );
     });
   }, [rows, query, filter]);
 
@@ -101,7 +105,7 @@ export function MyContactsView({
             setQuery(value);
             setPage(0);
           }}
-          placeholder="Search contacts…"
+          placeholder="Search contacts or phones…"
         />
         <CoChips
           options={FILTERS}

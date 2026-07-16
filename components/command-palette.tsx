@@ -107,8 +107,10 @@ export function CommandPalette({ session, open, onOpenChange }: CommandPalettePr
                   >
                     <User aria-hidden="true" />
                     <span>{contact.name}</span>
-                    {contact.email ? (
-                      <span className="ml-auto text-xs text-muted-foreground">{contact.email}</span>
+                    {contact.email || contact.phone ? (
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {contact.email || contact.phone}
+                      </span>
                     ) : null}
                   </CommandItem>
                 ))}
