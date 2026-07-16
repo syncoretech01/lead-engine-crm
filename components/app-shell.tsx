@@ -129,7 +129,9 @@ export function AppShell({ children, session, defaultSidebarOpen = true, ringCen
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset className="bg-[var(--bg-subtle)]">
+      <SidebarInset
+        className={`bg-[var(--bg-subtle)] ${inFocus ? "h-dvh min-h-0 overflow-hidden" : ""}`}
+      >
         <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4">
           <SidebarTrigger className="-ml-1 text-muted-foreground" />
           <AppBreadcrumbs session={session} />
@@ -165,7 +167,10 @@ export function AppShell({ children, session, defaultSidebarOpen = true, ringCen
           </div>
         </header>
 
-        <div className="content" style={{ overflow: "visible" }}>
+        <div
+          className={inFocus ? "min-h-0 flex-1 overflow-hidden" : "content"}
+          style={inFocus ? undefined : { overflow: "visible" }}
+        >
           {children}
         </div>
       </SidebarInset>

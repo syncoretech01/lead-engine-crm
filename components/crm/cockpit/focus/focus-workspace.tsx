@@ -210,13 +210,13 @@ export function FocusWorkspace({
   const hasNext = list.some((lead) => lead.id !== call.contactId && !completedIds.has(lead.id));
 
   return (
-    <div className="cockpit flex h-[calc(100vh-3.5rem)] min-h-[560px] w-full flex-col overflow-hidden bg-co-page">
+    <div className="cockpit flex h-full min-h-0 w-full flex-col overflow-hidden bg-co-page">
       {session.active ? (
         <SessionBar session={session} position={indexInList < 0 ? 1 : indexInList + 1} total={list.length} />
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* ───────────── Queue rail ───────────── */}
-      <aside className="flex w-[300px] shrink-0 flex-col border-r border-co-border bg-co-surface [@media(max-width:1380px)]:w-[264px]">
+      <aside className="flex min-h-0 w-[300px] shrink-0 flex-col overflow-hidden border-r border-co-border bg-co-surface [@media(max-width:1380px)]:w-[264px]">
         <div className="flex flex-col gap-2 border-b border-co-border p-3">
           <div className="flex items-center gap-2">
             <select
@@ -322,7 +322,7 @@ export function FocusWorkspace({
       </aside>
 
       {/* ───────────── Dossier ───────────── */}
-      <main className="flex-1 overflow-y-auto bg-co-surface">
+      <main className="min-h-0 flex-1 overflow-y-auto bg-co-surface">
         {selected ? (
           <ContactDossier lead={selected} onCall={callSelected} callBlocked={selectedBlock} />
         ) : (
@@ -333,7 +333,7 @@ export function FocusWorkspace({
       </main>
 
       {/* ───────────── Execution dock ───────────── */}
-      <aside className="hidden w-[388px] shrink-0 flex-col border-l border-co-border bg-co-sunken xl:flex [@media(max-width:1380px)]:w-[360px] [@media(max-width:1200px)]:w-[332px]">
+      <aside className="hidden min-h-0 w-[388px] shrink-0 flex-col overflow-y-auto overscroll-contain border-l border-co-border bg-co-sunken xl:flex [@media(max-width:1380px)]:w-[360px] [@media(max-width:1200px)]:w-[332px]">
         <FocusDock
           selected={selected}
           leads={leads}
