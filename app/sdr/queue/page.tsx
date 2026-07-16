@@ -54,6 +54,7 @@ import { TileGrid, TileItem } from "@/components/tile-grid";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import { MyDay, type MyDayGroup, type MyDayLead } from "@/components/crm/cockpit/my-day";
 import { isSdrScheduledFollowUp } from "@/lib/phase1/sdr-calendar";
+import { myDayActivityPresentation, myDayActivityTimeLabel } from "@/lib/my-day-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +99,17 @@ export default async function SdrQueuePage() {
     .slice(0, 10);
   const callReady = activeAssignments.filter((assignment) => assignment.phone);
   const meetingFollowUps = activeAssignments.filter((assignment) => assignment.status === "Meeting Booked");
+  const recentActivityRows = snapshot.recentActivity ?? (
+    fallbackState
+      ? recentActivityRowsFromState(
+          fallbackState,
+          workspaceId,
+          isSdr ? session.user.id : undefined,
+          snapshot.assignments,
+          snapshot.reminders
+        )
+      : []
+  );
 
   // SDRs get the redesigned "My Day" landing (SDR Cockpit §1); managers/admins keep
   // the routing + bulk-email + assignment-directory tooling below.
@@ -108,6 +120,7 @@ export default async function SdrQueuePage() {
           assignments: activeAssignments,
           reminders: scheduledFollowUps,
           allAssignments: snapshot.assignments,
+          activities: recentActivityRows,
           metrics: snapshot.metrics,
           sdrName: session.user.name
         })}
@@ -132,9 +145,6 @@ export default async function SdrQueuePage() {
     ? `RingCentral: ${currentTelephonyIdentity.phoneNumber}`
     : "No RingCentral number configured";
   const canSubmitBulkEmail = Boolean(bulkEligibleAssignments.length) && (canSelectBulkOwner || Boolean(currentSenderIdentity));
-  const recentActivityRows = snapshot.recentActivity ?? (
-    fallbackState ? recentActivityRowsFromState(fallbackState, workspaceId, isSdr ? session.user.id : undefined, snapshot.assignments, snapshot.reminders) : []
-  );
   const recentActivityItems = recentActivityRows.flatMap((activity) => {
     const display = timelineActivityDisplayForViewer({
       activity,
@@ -764,12 +774,14 @@ function buildMyDayProps({
   assignments,
   reminders,
   allAssignments,
+  activities,
   metrics,
   sdrName
 }: {
   assignments: AssignmentView[];
   reminders: ReminderView[];
   allAssignments: AssignmentView[];
+  activities: SdrQueueActivityReadRow[];
   metrics: { assigned: number; p1: number; dueToday: number; overdue: number };
   sdrName: string;
 }) {
@@ -833,6 +845,22 @@ function buildMyDayProps({
     isMeeting: /meeting/i.test(reminder.title) || reminder.channel === "Meeting"
   }));
 
+  const recentActivity = activities.slice(0, 6).map((activity) => {
+    const contactName = meaningfulName(activity.contactName);
+    const companyName = meaningfulName(activity.companyName);
+    const presentation = myDayActivityPresentation(activity);
+
+    return {
+      id: activity.id,
+      kind: presentation.kind,
+      verb: presentation.verb,
+      contactName: contactName || companyName || "Contact",
+      companyName: contactName ? companyName || "Unknown account" : "Account activity",
+      timeLabel: myDayActivityTimeLabel(activity.occurredAt),
+      href: activityHref(activity)
+    };
+  });
+
   const replies = assignments
     .filter((a) => a.status === "Replied" || a.status === "Interested")
     .slice(0, 6)
@@ -848,6 +876,7 @@ function buildMyDayProps({
     sdrName,
     metrics: { overdue: metrics.overdue, p1: metrics.p1, dueToday: metrics.dueToday, completedToday },
     groups,
+    recentActivity,
     followUps,
     replies,
     startHref: "/sdr/focus?start=1",
@@ -902,6 +931,10 @@ function recentActivityRowsFromState(
     .filter((activity) => {
       if (!ownerUserId) {
         return true;
+      }
+
+      if (activity.actorUserId !== ownerUserId) {
+        return false;
       }
 
       return Boolean(

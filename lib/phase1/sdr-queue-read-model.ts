@@ -434,7 +434,7 @@ async function readRecentActivityRows({
   ];
   const where: Prisma.ActivityWhereInput = {
     workspaceId,
-    ...(ownerUserId ? { OR: scopedFilters } : {})
+    ...(ownerUserId ? { actorUserId: ownerUserId, OR: scopedFilters } : {})
   };
   const activityRows = await prisma.activity.findMany({
     where,

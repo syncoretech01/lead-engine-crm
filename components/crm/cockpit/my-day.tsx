@@ -1,9 +1,22 @@
 import Link from "next/link";
-import { CalendarClock, Phone, PlayCircle } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  CalendarClock,
+  CalendarPlus,
+  ListTodo,
+  Mail,
+  MessageSquareText,
+  NotebookPen,
+  Phone,
+  PlayCircle,
+  UserRoundCheck,
+  type LucideIcon
+} from "lucide-react";
 
 import { CoPill } from "@/components/crm/cockpit/co-table";
 import { priorityTone, slaTone, statusTone } from "@/components/crm/cockpit/focus/focus-types";
 import { MyDayProgress, MyDayResume } from "@/components/crm/cockpit/my-day-client";
+import type { MyDayActivityKind } from "@/lib/my-day-activity";
 
 // My Day — the SDR's landing (SDR Cockpit §1). A centered "start or resume work"
 // hub: counter strip + grouped work queue that deep-links into the Focus
@@ -48,6 +61,16 @@ export type MyDayReply = {
   status: string;
 };
 
+export type MyDayRecentActivity = {
+  id: string;
+  kind: MyDayActivityKind;
+  verb: string;
+  contactName: string;
+  companyName: string;
+  timeLabel: string;
+  href?: string;
+};
+
 const groupHeadTone: Record<MyDayGroup["tone"], string> = {
   red: "text-co-red-text",
   blue: "text-co-blue-dark",
@@ -62,12 +85,24 @@ const groupDotTone: Record<MyDayGroup["tone"], string> = {
   teal: "bg-co-teal",
   gray: "bg-co-muted"
 };
+const activityVisuals: Record<MyDayActivityKind, { icon: LucideIcon; tone: string }> = {
+  call: { icon: Phone, tone: "text-co-blue" },
+  email: { icon: Mail, tone: "text-co-teal" },
+  sms: { icon: MessageSquareText, tone: "text-co-blue-dark" },
+  followup: { icon: CalendarPlus, tone: "text-co-amber-text" },
+  opportunity: { icon: BriefcaseBusiness, tone: "text-co-teal-text" },
+  meeting: { icon: CalendarClock, tone: "text-co-teal-text" },
+  note: { icon: NotebookPen, tone: "text-co-text-3" },
+  task: { icon: ListTodo, tone: "text-co-text-3" },
+  other: { icon: UserRoundCheck, tone: "text-co-muted" }
+};
 
 export function MyDay({
   todayLabel,
   sdrName,
   metrics,
   groups,
+  recentActivity,
   followUps,
   replies,
   startHref,
@@ -77,6 +112,7 @@ export function MyDay({
   sdrName: string;
   metrics: { overdue: number; p1: number; dueToday: number; completedToday: number };
   groups: MyDayGroup[];
+  recentActivity: MyDayRecentActivity[];
   followUps: MyDayFollowUp[];
   replies: MyDayReply[];
   startHref: string;
@@ -186,6 +222,43 @@ export function MyDay({
 
           {/* Right column */}
           <div className="flex flex-col gap-5">
+            <SideCard title="Recent activity">
+              {recentActivity.length ? (
+                recentActivity.map((item) => {
+                  const visual = activityVisuals[item.kind];
+                  const Icon = visual.icon;
+                  const content = (
+                    <>
+                      <Icon className={`mt-0.5 size-3.5 shrink-0 ${visual.tone}`} aria-hidden="true" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12px] text-co-ink">
+                          {item.verb} <span className="font-bold">{item.contactName}</span>
+                        </span>
+                        <span className="block truncate text-[10.5px] text-co-muted-2">{item.companyName}</span>
+                      </span>
+                      <span className="shrink-0 text-[10.5px] text-co-muted-2">{item.timeLabel}</span>
+                    </>
+                  );
+
+                  return item.href ? (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      className="flex items-start gap-2 border-b border-co-divider py-2 last:border-0 hover:bg-co-hover"
+                    >
+                      {content}
+                    </Link>
+                  ) : (
+                    <div key={item.id} className="flex items-start gap-2 border-b border-co-divider py-2 last:border-0">
+                      {content}
+                    </div>
+                  );
+                })
+              ) : (
+                <Empty>No recent activity yet.</Empty>
+              )}
+            </SideCard>
+
             <SideCard title="Upcoming follow-ups">
               {followUps.length ? (
                 followUps.map((item) => (
