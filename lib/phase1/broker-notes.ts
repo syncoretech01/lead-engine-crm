@@ -32,12 +32,17 @@ export function parseBrokerNotes(notes: string): ParsedBroker | null {
   if (!notes || !/\bMC#|\bUSDOT\b/.test(notes)) return null;
 
   const line = (re: RegExp) => notes.match(re)?.[1]?.trim() ?? "";
-  const mc = line(/MC#\s*([^\s|]+)/);
-  const usdot = line(/USDOT\s*([^\s|]+)/);
+  // New imports keep MC and USDOT on separate lines so compound authority
+  // numbers such as "MC1821284 | FF71648" remain intact. Keep accepting the
+  // older one-line format as well.
+  const mc = line(/MC#\s*:?\s*(.+?)(?=\s*\|\s*USDOT\b|$)/m);
+  const usdot = line(/USDOT\s*:?\s*([^\s|]+)/);
+  const activeDate = line(/Active authority date:\s*(.+)/);
   const status = line(/Authority status:\s*(.+)/);
   const type = line(/Authority type:\s*(.+)/);
   const bond = line(/Bond filed:\s*(.+)/);
   const address = line(/Address:\s*(.+)/);
+  const additionalEmails = line(/Additional emails:\s*(.+)/);
 
   // Address parts: "street, city, ST, zip" → state = the 2-letter uppercase part.
   const parts = address
@@ -55,14 +60,17 @@ export function parseBrokerNotes(notes: string): ParsedBroker | null {
   if (mc) fields.push({ label: "MC number", value: mc });
   if (usdot) fields.push({ label: "USDOT", value: usdot });
   if (status || type) fields.push({ label: "Authority", value: [status, type].filter(Boolean).join(" · ") });
+  if (activeDate) fields.push({ label: "Authority active date", value: activeDate });
   if (bond) fields.push({ label: "Bond filed", value: bond });
   if (address) fields.push({ label: "Address", value: compactAddress });
+  if (additionalEmails) fields.push({ label: "Additional emails", value: additionalEmails });
 
   if (fields.length === 0) return null;
 
+  const meaningful = (value: string) => value && !/^not provided$/i.test(value);
   const fitParts = [
-    type ? titleCase(type) : "",
-    status ? `${status.toLowerCase()} authority` : "",
+    meaningful(type) ? titleCase(type) : "",
+    meaningful(status) ? `${status.toLowerCase()} authority` : "",
     /^yes/i.test(bond) ? "bond filed" : ""
   ].filter(Boolean);
   const fitReason = fitParts.length ? `${fitParts.join(", ")} — matches carrier-services ICP.` : "";

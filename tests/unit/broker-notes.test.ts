@@ -25,8 +25,28 @@ describe("parseBrokerNotes", () => {
     expect(byLabel["MC number"]).toBe("MC-260504");
     expect(byLabel["USDOT"]).toBe("4517595");
     expect(byLabel["Authority"]).toBe("Active · PROPERTY BROKER");
+    expect(byLabel["Authority active date"]).toBe("02/19/2026");
     expect(byLabel["Bond filed"]).toBe("Yes (required: Yes)");
     expect(byLabel["Address"]).toBe("Saint Cloud, MN 56301-5886");
+  });
+
+  it("preserves compound MC numbers and additional source emails", () => {
+    const parsed = parseBrokerNotes([
+      "MC#: MC1821284 | FF71648",
+      "USDOT: 4576798",
+      "Active authority date: Not provided",
+      "Authority status: AUTHORIZED",
+      "Authority type: Not provided",
+      "Address: 20158 W MONTEREY WAY, BUCKEYE, AZ, 85396",
+      "Additional emails: dispatch@example.com"
+    ].join("\n"));
+    const byLabel = Object.fromEntries((parsed?.fields ?? []).map((field) => [field.label, field.value]));
+
+    expect(byLabel["MC number"]).toBe("MC1821284 | FF71648");
+    expect(byLabel["USDOT"]).toBe("4576798");
+    expect(byLabel["Authority active date"]).toBe("Not provided");
+    expect(byLabel["Additional emails"]).toBe("dispatch@example.com");
+    expect(parsed?.fitReason).toBe("authorized authority — matches carrier-services ICP.");
   });
 
   it("derives the state (for local time) and a clean fit reason", () => {
