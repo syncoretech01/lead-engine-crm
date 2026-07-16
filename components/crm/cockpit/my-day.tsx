@@ -211,9 +211,12 @@ export function MyDay({
                 <Empty>No upcoming follow-ups.</Empty>
               )}
               <p className="mt-2 border-t border-co-divider pt-2 text-[10.5px] text-co-muted-2">
-                Booked meetings are tracked as follow-up reminders. Calendar invitations require future calendar
-                integration.
+                Only follow-ups you schedule appear here. Booked meetings are included in your calendar.
               </p>
+              <Link href="/sdr/calendar" className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-co-blue hover:underline">
+                <CalendarClock className="size-3.5" aria-hidden="true" />
+                Open my calendar
+              </Link>
             </SideCard>
 
             <SideCard title="Recent replies">

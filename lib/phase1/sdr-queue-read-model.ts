@@ -392,6 +392,7 @@ export async function readFastSdrQueueModel(
       id: user.id,
       email: user.email,
       name: user.name,
+      timezone: user.timezone ?? undefined,
       createdAt: user.createdAt.toISOString()
     }))
   };

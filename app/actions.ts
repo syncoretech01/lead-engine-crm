@@ -3149,6 +3149,7 @@ function revalidateCrmPages(paths: string[] = []) {
 
 function revalidateSdrPages(paths: string[] = []) {
   revalidatePath("/sdr/queue");
+  revalidatePath("/sdr/calendar");
   revalidatePath("/sdr/manager");
   revalidateCrmPages(paths);
 }

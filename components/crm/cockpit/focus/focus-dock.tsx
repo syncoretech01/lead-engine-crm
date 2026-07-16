@@ -761,7 +761,8 @@ function Wrapup({
             aria-label="Meeting time"
           />
           <p className="mt-2 text-[11px] text-co-amber-text">
-            Calendar event creation and attendee invitations require future calendar integration — not part of this release.
+            This meeting will appear in <Link href="/sdr/calendar" className="font-bold underline">your SDR calendar</Link>.
+            Attendee invitations still require an external calendar integration.
           </p>
         </div>
       ) : null}

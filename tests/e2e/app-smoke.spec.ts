@@ -12,6 +12,7 @@ const routes = [
   ["/crm/contacts", "Contacts"],
   ["/crm/opportunities", "Opportunities"],
   ["/sdr/queue", "SDR queue"],
+  ["/sdr/calendar", "Calendar"],
   ["/sdr/manager", "SDR manager dashboard"],
   ["/outreach/campaigns", "Outreach campaigns"],
   ["/outreach/events", "Outreach event tracking"],

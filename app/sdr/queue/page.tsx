@@ -53,6 +53,7 @@ import {
 import { TileGrid, TileItem } from "@/components/tile-grid";
 import { canCustomizeTiles, readUserTileLayout } from "@/lib/phase1/tile-layouts";
 import { MyDay, type MyDayGroup, type MyDayLead } from "@/components/crm/cockpit/my-day";
+import { isSdrScheduledFollowUp } from "@/lib/phase1/sdr-calendar";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +92,10 @@ export default async function SdrQueuePage() {
     .filter((reminder) => reminder.status !== "Completed")
     .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt))
     .slice(0, 10);
+  const scheduledFollowUps = snapshot.reminders
+    .filter((reminder) => reminder.status !== "Completed" && isSdrScheduledFollowUp(reminder))
+    .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt))
+    .slice(0, 10);
   const callReady = activeAssignments.filter((assignment) => assignment.phone);
   const meetingFollowUps = activeAssignments.filter((assignment) => assignment.status === "Meeting Booked");
 
@@ -101,7 +106,7 @@ export default async function SdrQueuePage() {
       <MyDay
         {...buildMyDayProps({
           assignments: activeAssignments,
-          reminders: openReminders,
+          reminders: scheduledFollowUps,
           allAssignments: snapshot.assignments,
           metrics: snapshot.metrics,
           sdrName: session.user.name
