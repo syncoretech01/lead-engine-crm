@@ -35,6 +35,7 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { fieldClass, fieldTextareaClass } from "@/components/ui/field";
+import { appendDtmfDigit, isDtmfKey, playDtmfTone } from "@/lib/dtmf-feedback";
 import { cn } from "@/lib/utils";
 
 // Type-only: the class is dynamically imported in the browser (it touches
@@ -216,6 +217,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
   const [error, setError] = React.useState<string | null>(null);
   const [muted, setMuted] = React.useState(false);
   const [seconds, setSeconds] = React.useState(0);
+  const [dtmfDigits, setDtmfDigits] = React.useState("");
   // On-demand recording actually running (mirrors recordingStartedRef as state so
   // the dock can show a live "Recording" indicator).
   const [recording, setRecording] = React.useState(false);
@@ -560,6 +562,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     setError(null);
     setMuted(false);
     setSeconds(0);
+    setDtmfDigits("");
     setRecording(false);
     setMinimized(false);
     setNotes("");
@@ -622,6 +625,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     setError(null);
     setMuted(false);
     setSeconds(0);
+    setDtmfDigits("");
     endedRef.current = false;
     blockCloseRef.current = true;
     setStatus("connecting");
@@ -754,11 +758,24 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     }
   }, [muted]);
 
+  const sendDtmf = React.useCallback((key: string) => {
+    if (status !== "in-call" || !sessionRef.current || !isDtmfKey(key)) return;
+    playDtmfTone(key);
+    setDtmfDigits((current) => appendDtmfDigit(current, key));
+    try {
+      sessionRef.current.sendDtmf(key);
+    } catch {
+      // Keep the pressed-key feedback visible; the call session owns delivery.
+    }
+  }, [status]);
+
   function onDialKey(key: string) {
     if (status === "in-call") {
-      sessionRef.current?.sendDtmf(key);
+      sendDtmf(key);
       return;
     }
+    if (!isDtmfKey(key)) return;
+    playDtmfTone(key);
     setNumber((prev) => prev + key);
   }
 
@@ -897,6 +914,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
           setNotes("");
           setNoteSaved(false);
           setSeconds(0);
+          setDtmfDigits("");
           setRecording(false);
           resetTransferState();
         }
@@ -916,6 +934,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
         setNotes("");
         setNoteSaved(false);
         setSeconds(0);
+        setDtmfDigits("");
         setRecording(false);
         resetTransferState();
         // Dial straight away with an explicit number: the setNumber above hasn't
@@ -924,7 +943,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       },
       hangup,
       toggleMute,
-      sendDtmf: (key: string) => sessionRef.current?.sendDtmf(key),
+      sendDtmf,
       setConsent: applyConsent,
       retry: () => {
         void startCall();
@@ -951,6 +970,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       ringMyPhoneInstead,
       startCall,
       toggleMute,
+      sendDtmf,
       loadTransferTargets,
       selectTransferTarget,
       applyTransferNumber,
@@ -973,6 +993,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
         callerLabel: callerLabel ?? null,
         seconds,
         muted,
+        dtmfDigits,
         recording,
         consent,
         error,
@@ -997,6 +1018,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     status,
     seconds,
     muted,
+    dtmfDigits,
     recording,
     consent,
     error,
@@ -1133,17 +1155,27 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
               </div>
 
               {status === "in-call" ? (
-                <div className="grid w-full grid-cols-3 gap-2">
-                  {DIAL_KEYS.map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => onDialKey(key)}
-                      className="bg-card hover:bg-[var(--bg-subtle)] h-9 rounded-md border text-sm font-medium text-foreground transition-colors"
-                    >
-                      {key}
-                    </button>
-                  ))}
+                <div className="w-full">
+                  <div
+                    className="mb-2 min-h-9 rounded-md border bg-muted/40 px-3 py-2 text-center font-mono text-sm tracking-[0.18em] text-foreground"
+                    aria-live="polite"
+                    aria-label="DTMF digits pressed"
+                  >
+                    {dtmfDigits || <span className="font-sans tracking-normal text-muted-foreground">Pressed digits appear here</span>}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {DIAL_KEYS.map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => onDialKey(key)}
+                        aria-label={`Send keypad ${key}`}
+                        className="bg-card hover:bg-[var(--bg-subtle)] h-9 rounded-md border text-sm font-medium text-foreground transition-all active:scale-95 active:bg-muted"
+                      >
+                        {key}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 

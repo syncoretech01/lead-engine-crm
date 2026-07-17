@@ -342,18 +342,28 @@ function LiveCall({
         </div>
 
         {keypadOpen ? (
-          <div className="mt-3 grid grid-cols-6 gap-1.5">
-            {DIAL_KEYS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => controls.sendDtmf(key)}
-                disabled={!connected}
-                className="h-8 rounded-md bg-white/10 text-[13px] font-bold text-white transition-colors hover:bg-white/20 disabled:opacity-40"
-              >
-                {key}
-              </button>
-            ))}
+          <div className="mt-3">
+            <div
+              className="mb-2 min-h-8 rounded-md bg-white/10 px-2.5 py-1.5 text-center font-mono text-[13px] tracking-[0.18em] text-white"
+              aria-live="polite"
+              aria-label="DTMF digits pressed"
+            >
+              {call.dtmfDigits || <span className="font-sans tracking-normal text-white/45">Pressed digits appear here</span>}
+            </div>
+            <div className="grid grid-cols-6 gap-1.5">
+              {DIAL_KEYS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => controls.sendDtmf(key)}
+                  disabled={!connected}
+                  aria-label={`Send keypad ${key}`}
+                  className="h-8 rounded-md bg-white/10 text-[13px] font-bold text-white transition-all hover:bg-white/20 active:scale-95 active:bg-white/30 disabled:opacity-40"
+                >
+                  {key}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
 

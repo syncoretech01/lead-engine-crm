@@ -52,6 +52,8 @@ export type CallSnapshot = {
   callerLabel: string | null;
   seconds: number;
   muted: boolean;
+  /** DTMF keys pressed during this call. UI-only; never persisted to CRM. */
+  dtmfDigits: string;
   recording: boolean;
   consent: CallConsent;
   error: string | null;
@@ -107,6 +109,7 @@ export const IDLE_CALL_SNAPSHOT: CallSnapshot = {
   callerLabel: null,
   seconds: 0,
   muted: false,
+  dtmfDigits: "",
   recording: false,
   consent: "Granted",
   error: null,
