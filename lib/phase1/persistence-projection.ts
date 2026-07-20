@@ -65,6 +65,7 @@ export type ProjectionTableName =
   | "smsEvents"
   | "webhookEvents"
   | "trackedCalls"
+  | "sdrCallingSessions"
   | "reportSnapshots"
   | "retentionPolicies"
   | "retentionRuns"
@@ -161,6 +162,7 @@ const projectionTables: ProjectionTableName[] = [
   "smsEvents",
   "webhookEvents",
   "trackedCalls",
+  "sdrCallingSessions",
   "reportSnapshots",
   "retentionPolicies",
   "retentionRuns",
@@ -232,6 +234,7 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "smsEvents", delegate: "smsEvent", workspaceScoped: true },
   { table: "webhookEvents", delegate: "webhookEvent", workspaceScoped: true },
   { table: "trackedCalls", delegate: "trackedCall", workspaceScoped: true },
+  { table: "sdrCallingSessions", delegate: "sdrCallingSession", workspaceScoped: true },
   { table: "reportSnapshots", delegate: "reportSnapshot", workspaceScoped: true },
   { table: "retentionPolicies", delegate: "retentionPolicy", workspaceScoped: true },
   { table: "retentionRuns", delegate: "retentionRun", workspaceScoped: true },
@@ -1245,6 +1248,25 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       telephonySessionId: call.telephonySessionId ?? null,
       liveState: call.liveState ?? null,
       createdAt: call.createdAt
+    }))),
+    sdrCallingSessions: sortRows(state.sdrCallingSessions.map((session) => ({
+      id: session.id,
+      workspaceId: session.workspaceId,
+      sdrUserId: session.sdrUserId,
+      status: session.status,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt ?? null,
+      activeDurationSeconds: session.activeDurationSeconds,
+      totalCalls: session.totalCalls,
+      connectedCalls: session.connectedCalls,
+      voicemailCalls: session.voicemailCalls,
+      unansweredCalls: session.unansweredCalls,
+      suppressedContacts: session.suppressedContacts,
+      followUpContacts: session.followUpContacts,
+      totalTalkTimeSeconds: session.totalTalkTimeSeconds,
+      completedContactIds: session.completedContactIds,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt
     }))),
     reportSnapshots: sortRows(state.reportSnapshots.map((snapshot) => ({
       id: snapshot.id,

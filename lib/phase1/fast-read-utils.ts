@@ -91,6 +91,7 @@ export function createFastState(session: Session, input: FastStateInput = {}): A
     smsEvents: input.smsEvents ?? [],
     webhookEvents: input.webhookEvents ?? [],
     trackedCalls: input.trackedCalls ?? [],
+    sdrCallingSessions: input.sdrCallingSessions ?? [],
     reportSnapshots: input.reportSnapshots ?? [],
     retentionPolicies: input.retentionPolicies ?? [],
     retentionRuns: input.retentionRuns ?? [],

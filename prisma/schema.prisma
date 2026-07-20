@@ -154,6 +154,7 @@ model Workspace {
   smsEvents                       SmsEvent[]
   webhookEvents                   WebhookEvent[]
   trackedCalls                    TrackedCall[]
+  sdrCallingSessions              SdrCallingSession[]
   reportSnapshots                 ReportSnapshot[]
   retentionPolicies               RetentionPolicy[]
   retentionRuns                   RetentionRun[]
@@ -201,6 +202,7 @@ model User {
   createdCampaignSequences     CampaignSequence[]    @relation("SequenceCreator")
   smsEvents                    SmsEvent[]
   trackedCalls                 TrackedCall[]
+  sdrCallingSessions           SdrCallingSession[]
   activities                   Activity[]
   generatedReportSnapshots     ReportSnapshot[]      @relation("ReportSnapshotGenerator")
   retentionRuns                RetentionRun[]        @relation("RetentionRunActor")
@@ -1593,6 +1595,31 @@ model TrackedCall {
   // Serves the manager/admin unfiltered calls list + outreach dashboard
   // (where workspaceId orderBy createdAt desc).
   @@index([workspaceId, createdAt])
+}
+
+model SdrCallingSession {
+  id                       String    @id
+  workspaceId              String
+  sdrUserId                String
+  status                   String    @default("Active")
+  startedAt                DateTime
+  endedAt                  DateTime?
+  activeDurationSeconds    Int       @default(0)
+  totalCalls               Int       @default(0)
+  connectedCalls           Int       @default(0)
+  voicemailCalls           Int       @default(0)
+  unansweredCalls          Int       @default(0)
+  suppressedContacts       Int       @default(0)
+  followUpContacts         Int       @default(0)
+  totalTalkTimeSeconds     Int       @default(0)
+  completedContactIds      Json
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sdr                      User      @relation(fields: [sdrUserId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, sdrUserId, startedAt])
+  @@index([workspaceId, status, startedAt])
 }
 
 model ReportSnapshot {

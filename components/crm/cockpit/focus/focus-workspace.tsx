@@ -1,8 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Check } from "lucide-react";
+import Link from "next/link";
+import { Check, X } from "lucide-react";
+import { toast } from "sonner";
 
+import { completeSdrCallingSessionAction, ensureSdrCallingSessionAction } from "@/app/actions";
 import { useCall } from "@/components/call/call-context";
 import { CoPill } from "@/components/crm/cockpit/co-table";
 import { ContactDossier } from "@/components/crm/cockpit/contact-dossier";
@@ -16,6 +19,7 @@ import {
   type FocusLead
 } from "@/components/crm/cockpit/focus/focus-types";
 import { allowsFocusKeyboardShortcut } from "@/lib/focus-keyboard-shortcuts";
+import type { SdrCallingSession } from "@/lib/phase1/types";
 
 export type { FocusLead };
 
@@ -106,6 +110,8 @@ export function FocusWorkspace({
   const [chip, setChip] = React.useState<ChipId>("all");
   const [query, setQuery] = React.useState("");
   const [completedIds, setCompletedIds] = React.useState<Set<string>>(() => new Set());
+  const [endingSession, setEndingSession] = React.useState(false);
+  const [endedReport, setEndedReport] = React.useState<SdrCallingSession | null>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
 
   const list = React.useMemo(() => {
@@ -186,6 +192,31 @@ export function FocusWorkspace({
     if (callActive && !sessionActive) startSession(queueTotal);
   }, [callActive, sessionActive, startSession, queueTotal]);
 
+  React.useEffect(() => {
+    if (!session.active || !session.id || !session.startedAt) return;
+    void ensureSdrCallingSessionAction({ sessionId: session.id, startedAt: session.startedAt }).then((result) => {
+      if (!result.ok) toast.error(result.error);
+    });
+  }, [session.active, session.id, session.startedAt]);
+
+  const endSession = React.useCallback(async () => {
+    if (endingSession || !session.id || !session.startedAt) return;
+    setEndingSession(true);
+    const result = await completeSdrCallingSessionAction({
+      sessionId: session.id,
+      startedAt: session.startedAt,
+      activeDurationSeconds: Math.floor(session.elapsedMs / 1000)
+    });
+    setEndingSession(false);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    session.end();
+    setEndedReport(result.report);
+    toast.success("Session report saved.");
+  }, [endingSession, session]);
+
   const callSelected = React.useCallback(() => {
     if (!selected) return;
     openCallInline(leadCallTarget(selected, callerLabel, lineBlockReason));
@@ -227,7 +258,13 @@ export function FocusWorkspace({
   return (
     <div className="cockpit flex h-full min-h-0 w-full flex-col overflow-hidden bg-co-page">
       {session.active ? (
-        <SessionBar session={session} position={indexInList < 0 ? 1 : indexInList + 1} total={list.length} />
+        <SessionBar
+          session={session}
+          position={indexInList < 0 ? 1 : indexInList + 1}
+          total={list.length}
+          onEnd={() => void endSession()}
+          ending={endingSession}
+        />
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* ───────────── Queue rail ───────────── */}
@@ -372,9 +409,72 @@ export function FocusWorkspace({
           hasNext={hasNext}
           onAdvance={advance}
           onComplete={onComplete}
+          callingSession={session.active ? { id: session.id, startedAt: session.startedAt } : undefined}
         />
       </aside>
       </div>
+      {endedReport ? <SessionReportDialog report={endedReport} onClose={() => setEndedReport(null)} /> : null}
     </div>
   );
+}
+
+function SessionReportDialog({ report, onClose }: { report: SdrCallingSession; onClose: () => void }) {
+  const metrics = [
+    ["Total calls", report.totalCalls],
+    ["Connected", report.connectedCalls],
+    ["Voicemail", report.voicemailCalls],
+    ["Unanswered", report.unansweredCalls],
+    ["Suppressed", report.suppressedContacts],
+    ["Follow-ups", report.followUpContacts]
+  ] as const;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-labelledby="session-report-title">
+      <div className="w-full max-w-xl rounded-2xl border border-co-border bg-co-surface p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[10.5px] font-extrabold uppercase tracking-[0.08em] text-co-teal-text">Session complete</div>
+            <h2 id="session-report-title" className="mt-1 text-xl font-extrabold text-co-ink">Calling session report</h2>
+            <p className="mt-1 text-[12px] text-co-muted">Saved permanently in Session History.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close report" className="rounded-md p-1 text-co-muted hover:bg-co-sunken hover:text-co-ink">
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {metrics.map(([label, value]) => (
+            <div key={label} className="rounded-xl border border-co-border bg-co-sunken-2 px-3 py-3">
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-co-muted">{label}</div>
+              <div className="mt-1 text-2xl font-extrabold tabular-nums text-co-ink">{value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-co-teal-border bg-co-teal-bg px-4 py-3">
+          <span className="text-[12px] font-bold text-co-teal-text">Total talk time</span>
+          <span className="font-mono text-lg font-extrabold tabular-nums text-co-teal-text">{formatReportDuration(report.totalTalkTimeSeconds)}</span>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="h-9 rounded-lg border border-co-control bg-co-surface px-4 text-[12px] font-bold text-co-text-3 hover:bg-co-sunken">
+            Close
+          </button>
+          <Link href="/sdr/sessions" className="flex h-9 items-center rounded-lg bg-co-blue px-4 text-[12px] font-bold text-white hover:bg-co-blue-hover">
+            View session history
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatReportDuration(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const rest = safe % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`
+    : `${minutes}:${String(rest).padStart(2, "0")}`;
 }

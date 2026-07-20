@@ -93,6 +93,7 @@ export const sdrWriteTables = [
   "sdrAssignments",
   "followUpReminders",
   "reassignmentRules",
+  "sdrCallingSessions",
   "auditLogs"
 ] satisfies ProjectionTableName[];
 

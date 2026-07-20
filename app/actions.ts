@@ -77,6 +77,11 @@ import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/phase1/no
 import { outreachBatchSize } from "@/lib/phase1/outreach-config";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
 import { resolveUserRingCentralCredential } from "@/lib/phase1/ringcentral-user-credential";
+import {
+  completeSdrCallingSession,
+  ensureSdrCallingSession,
+  recordSdrCallingSessionWrapup
+} from "@/lib/phase1/sdr-calling-session";
 import { ringCentralRingOut } from "@/lib/providers/adapters/ringcentral-ringout";
 import { ringCentralSmsLiveBlockReason } from "@/lib/providers/adapters/ringcentral-sms";
 import {
@@ -180,6 +185,7 @@ import type {
   SearchProfile,
   SegmentCondition,
   SdrLeadStatus,
+  SdrCallingSession,
   SmsEventStatus,
   SuppressionRecord,
   TileLayoutItem,
@@ -1248,6 +1254,11 @@ export async function saveCallWrapupAction(input: {
     expectedCloseDate?: string;
     nextStep?: string;
   } | null;
+  /** Browser calling-session context used to build the durable session report. */
+  callingSessionId?: string;
+  callingSessionStartedAt?: string;
+  connected?: boolean;
+  talkTimeSeconds?: number;
 }): Promise<CallWrapupResult> {
   const created: string[] = [];
   try {
@@ -1305,6 +1316,24 @@ export async function saveCallWrapupAction(input: {
         }
         if (callCycle.nextBatchAssigned) {
           created.push(`${callCycle.nextBatchAssigned} fresh leads assigned`);
+        }
+
+        if (input.callingSessionId && input.callingSessionStartedAt) {
+          recordSdrCallingSessionWrapup(state, {
+            id: callingSessionIdValue(input.callingSessionId),
+            workspaceId: session.workspace.id,
+            sdrUserId: session.user.id,
+            startedAt: input.callingSessionStartedAt,
+            now,
+            summary: {
+              contactId,
+              outcome: input.outcome,
+              connected: Boolean(input.connected),
+              followUp: Boolean(input.followUpDueAt),
+              suppressed: assignment.status === "Suppressed" || assignment.status === "Unsubscribed",
+              talkTimeSeconds: Math.max(0, Math.round(input.talkTimeSeconds ?? 0))
+            }
+          });
         }
 
         // 2. Call note on the timeline (distinct from the touch activity so it shows
@@ -1408,7 +1437,7 @@ export async function saveCallWrapupAction(input: {
           newValue: { outcome: input.outcome, leadStatus: assignment.status, created }
         });
       },
-      { normalizedTables: [...new Set([...sdrWriteTables, ...crmWriteTables])] }
+      { normalizedTables: [...new Set([...sdrWriteTables, ...crmWriteTables, ...outreachTrackedCallWriteTables])] }
     );
 
     revalidateSdrPages();
@@ -1419,6 +1448,80 @@ export async function saveCallWrapupAction(input: {
     return { ok: true, message: "Call wrap-up saved.", created };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Could not save the wrap-up." };
+  }
+}
+
+export type SdrCallingSessionActionResult =
+  | { ok: true; report: SdrCallingSession }
+  | { ok: false; error: string };
+
+export async function ensureSdrCallingSessionAction(input: {
+  sessionId: string;
+  startedAt: string;
+}): Promise<SdrCallingSessionActionResult> {
+  try {
+    const report = await updateState(
+      (state, session) => {
+        assertPermission(session, "manage_sdr");
+        return ensureSdrCallingSession(state, {
+          id: callingSessionIdValue(input.sessionId),
+          workspaceId: session.workspace.id,
+          sdrUserId: session.user.id,
+          startedAt: input.startedAt
+        });
+      },
+      { normalizedTables: sdrWriteTables }
+    );
+    return { ok: true, report };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Could not start the calling session." };
+  }
+}
+
+export async function completeSdrCallingSessionAction(input: {
+  sessionId: string;
+  startedAt: string;
+  activeDurationSeconds: number;
+}): Promise<SdrCallingSessionActionResult> {
+  try {
+    const report = await updateState(
+      (state, session) => {
+        assertPermission(session, "manage_sdr");
+        const sessionId = callingSessionIdValue(input.sessionId);
+        const alreadyCompleted = state.sdrCallingSessions.some(
+          (item) => item.id === sessionId && item.workspaceId === session.workspace.id && item.status === "Completed"
+        );
+        const completed = completeSdrCallingSession(state, {
+          id: sessionId,
+          workspaceId: session.workspace.id,
+          sdrUserId: session.user.id,
+          startedAt: input.startedAt,
+          activeDurationSeconds: input.activeDurationSeconds
+        });
+        if (!alreadyCompleted) {
+          appendAudit(state, session, {
+            objectType: "sdr_calling_session",
+            objectId: completed.id,
+            action: "completed",
+            newValue: {
+              totalCalls: completed.totalCalls,
+              connectedCalls: completed.connectedCalls,
+              voicemailCalls: completed.voicemailCalls,
+              unansweredCalls: completed.unansweredCalls,
+              suppressedContacts: completed.suppressedContacts,
+              followUpContacts: completed.followUpContacts,
+              totalTalkTimeSeconds: completed.totalTalkTimeSeconds
+            }
+          });
+        }
+        return completed;
+      },
+      { normalizedTables: sdrWriteTables }
+    );
+    revalidateSdrPages(["/sdr/sessions"]);
+    return { ok: true, report };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Could not save the session report." };
   }
 }
 
@@ -3179,6 +3282,8 @@ function revalidateCrmPages(paths: string[] = []) {
 function revalidateSdrPages(paths: string[] = []) {
   revalidatePath("/sdr/queue");
   revalidatePath("/sdr/calendar");
+  revalidatePath("/sdr/focus");
+  revalidatePath("/sdr/sessions");
   revalidatePath("/sdr/manager");
   revalidateCrmPages(paths);
 }
@@ -3233,6 +3338,14 @@ function taskPriorityValue(value: FormDataEntryValue | null): CrmTask["priority"
 function callOutcomeValue(value: FormDataEntryValue | null): CallLog["outcome"] {
   const outcome = stringValue(value, "Connected") as CallLog["outcome"];
   return callOutcomes.includes(outcome) ? outcome : "Connected";
+}
+
+function callingSessionIdValue(value: string): string {
+  const id = value.trim();
+  if (!/^[A-Za-z0-9_-]{8,100}$/.test(id)) {
+    throw new Error("Calling session ID is invalid.");
+  }
+  return id;
 }
 
 function customFieldObjectValue(value: FormDataEntryValue | null): CustomField["objectType"] {

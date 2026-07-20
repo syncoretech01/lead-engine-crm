@@ -1194,6 +1194,30 @@ export type TrackedCall = {
   createdAt: string;
 };
 
+export type SdrCallingSessionStatus = "Active" | "Completed";
+
+/** Durable calling-session report. Live counters are updated from saved wrap-ups;
+ * final call and talk-time totals are reconciled against TrackedCall rows. */
+export type SdrCallingSession = {
+  id: string;
+  workspaceId: string;
+  sdrUserId: string;
+  status: SdrCallingSessionStatus;
+  startedAt: string;
+  endedAt?: string;
+  activeDurationSeconds: number;
+  totalCalls: number;
+  connectedCalls: number;
+  voicemailCalls: number;
+  unansweredCalls: number;
+  suppressedContacts: number;
+  followUpContacts: number;
+  totalTalkTimeSeconds: number;
+  completedContactIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ReportCategory =
   | "Executive Overview"
   | "Lead Source Performance"
@@ -1655,6 +1679,7 @@ export type AppState = {
   directSendClaims: DirectSendClaim[];
   webhookEvents: WebhookEvent[];
   trackedCalls: TrackedCall[];
+  sdrCallingSessions: SdrCallingSession[];
   reportSnapshots: ReportSnapshot[];
   retentionPolicies: RetentionPolicy[];
   retentionRuns: RetentionRun[];

@@ -115,7 +115,8 @@ export function FocusDock({
   lineBlockReason,
   hasNext,
   onAdvance,
-  onComplete
+  onComplete,
+  callingSession
 }: {
   selected: FocusLead | null;
   leads: FocusLead[];
@@ -124,6 +125,7 @@ export function FocusDock({
   hasNext: boolean;
   onAdvance: () => void;
   onComplete: (leadId: string, summary: WrapupSummary) => void;
+  callingSession?: { id: string; startedAt: string };
 }) {
   const { openCallInline, call, controls } = useCall();
 
@@ -164,6 +166,7 @@ export function FocusDock({
         hasNext={hasNext}
         onAdvance={onAdvance}
         onComplete={onComplete}
+        callingSession={callingSession}
         onDismiss={() => {
           controls.reset();
           setNotes("");
@@ -540,6 +543,7 @@ function Wrapup({
   hasNext,
   onAdvance,
   onComplete,
+  callingSession,
   onDismiss
 }: {
   lead: FocusLead;
@@ -549,6 +553,7 @@ function Wrapup({
   hasNext: boolean;
   onAdvance: () => void;
   onComplete: (leadId: string, summary: WrapupSummary) => void;
+  callingSession?: { id: string; startedAt: string };
   onDismiss: () => void;
 }) {
   const connected = call.seconds > 0 && call.status !== "error";
@@ -588,6 +593,8 @@ function Wrapup({
       def.meeting && meetingAt
         ? new Date(meetingAt).toISOString()
         : presetToIso(followUp, customFollowUp);
+    const countsAsConnected = connected ||
+      ["Connected", "Not interested", "Follow-up required", "Qualified", "Meeting booked", "Do not contact"].includes(outcome);
     const result = await saveCallWrapupAction({
       assignmentId: lead.assignmentId,
       contactId: lead.id,
@@ -606,7 +613,11 @@ function Wrapup({
               expectedCloseDate: oppClose || undefined,
               nextStep: oppNextStep.trim() || undefined
             }
-          : null
+          : null,
+      callingSessionId: callingSession?.id,
+      callingSessionStartedAt: callingSession?.startedAt,
+      connected: countsAsConnected,
+      talkTimeSeconds: call.seconds
     });
     setPending(false);
     if (!result.ok) {
@@ -614,9 +625,12 @@ function Wrapup({
       return;
     }
     onComplete(lead.id, {
-      connected,
+      outcome,
+      connected: countsAsConnected,
       followUp: Boolean(followUpDueAt),
-      opp: Boolean(oppOpen && oppName.trim())
+      suppressed: status === "Suppressed" || outcome === "Do not contact",
+      opp: Boolean(oppOpen && oppName.trim()),
+      talkTimeSeconds: call.seconds
     });
     toast.success("Wrap-up saved.");
     if (advance) {

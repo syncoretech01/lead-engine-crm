@@ -180,6 +180,7 @@ export function createProvisionedState(input: CreateProvisionedStateInput): AppS
     smsEvents: [],
     webhookEvents: [],
     trackedCalls: [],
+    sdrCallingSessions: [],
     reportSnapshots: [],
     retentionPolicies: [],
     retentionRuns: [],

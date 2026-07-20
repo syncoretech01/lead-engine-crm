@@ -1,6 +1,6 @@
 "use client";
 
-import { Pause, Play, Square } from "lucide-react";
+import { Loader2, Pause, Play, Square } from "lucide-react";
 
 import type { FocusSession } from "@/components/crm/cockpit/focus/use-focus-session";
 
@@ -20,11 +20,15 @@ function formatElapsed(ms: number): string {
 export function SessionBar({
   session,
   position,
-  total
+  total,
+  onEnd,
+  ending = false
 }: {
   session: FocusSession;
   position: number;
   total: number;
+  onEnd: () => void;
+  ending?: boolean;
 }) {
   const pct = total > 0 ? Math.min(100, Math.round((session.completedCount / total) * 100)) : 0;
 
@@ -62,7 +66,13 @@ export function SessionBar({
       ) : (
         <BarButton onClick={session.resume} icon={<Play className="size-3.5" aria-hidden="true" />} label="Resume" />
       )}
-      <BarButton onClick={session.end} icon={<Square className="size-3.5" aria-hidden="true" />} label="End" danger />
+      <BarButton
+        onClick={onEnd}
+        icon={ending ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Square className="size-3.5" aria-hidden="true" />}
+        label={ending ? "Saving" : "End"}
+        danger
+        disabled={ending}
+      />
     </div>
   );
 }
@@ -79,22 +89,25 @@ function BarButton({
   onClick,
   icon,
   label,
-  danger
+  danger,
+  disabled = false
 }: {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={`flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] font-bold transition-colors ${
         danger
           ? "border-co-control bg-co-surface text-co-red-text hover:bg-co-red-bg-soft"
           : "border-co-control bg-co-surface text-co-text-3 hover:bg-co-sunken"
-      }`}
+      } disabled:cursor-not-allowed disabled:opacity-60`}
     >
       {icon}
       {label}

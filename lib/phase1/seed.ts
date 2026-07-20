@@ -378,6 +378,7 @@ export function createSeedState(): AppState {
     smsEvents: [],
     webhookEvents: [],
     trackedCalls: [],
+    sdrCallingSessions: [],
     reportSnapshots: [],
     retentionPolicies: [],
     retentionRuns: [],
