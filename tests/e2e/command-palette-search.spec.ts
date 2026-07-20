@@ -23,5 +23,9 @@ test.describe("command palette record search", () => {
 
     await result.click();
     await page.waitForURL(/\/crm\/contacts\/.+/);
+
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.getByText("Recent searches", { exact: true })).toBeVisible();
+    await expect(page.getByRole("option", { name: "maya", exact: true })).toBeVisible();
   });
 });

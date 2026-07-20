@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Building2, CircleDollarSign, User } from "lucide-react";
+import { Building2, CircleDollarSign, History, User } from "lucide-react";
 
 import {
   CommandDialog,
@@ -16,6 +16,7 @@ import {
 import { THEME_OPTIONS } from "@/components/theme-menu-items";
 import { useTheme } from "@/hooks/use-theme";
 import { accessibleNav, resolveNavLabel } from "@/lib/navigation";
+import { addRecentSearch, parseRecentSearches } from "@/lib/recent-searches";
 import { searchCrmRecordsAction, type CrmSearchResults } from "@/app/crm/search-actions";
 import type { Session } from "@/lib/phase1/types";
 
@@ -27,6 +28,15 @@ type CommandPaletteProps = {
 
 const EMPTY_RESULTS: CrmSearchResults = { contacts: [], companies: [], opportunities: [] };
 
+function readRecentSearches(key: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return parseRecentSearches(window.localStorage.getItem(key));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * ⌘K / Ctrl+K palette. Navigates permission-filtered pages, toggles theme, and
  * (for CRM users) searches contacts / accounts / opportunities by name via a
@@ -37,10 +47,29 @@ export function CommandPalette({ session, open, onOpenChange }: CommandPalettePr
   const { setTheme } = useTheme();
   const groups = React.useMemo(() => accessibleNav(session), [session]);
   const canSearchRecords = session.permissions.includes("manage_crm");
+  const recentSearchesKey = `syncore:recent-searches:${session.user.id}`;
 
   const [query, setQuery] = React.useState("");
   const [results, setResults] = React.useState<CrmSearchResults>(EMPTY_RESULTS);
+  const [recentSearches, setRecentSearches] = React.useState<string[]>(() =>
+    readRecentSearches(recentSearchesKey)
+  );
   const [, startTransition] = React.useTransition();
+
+  const rememberSearch = React.useCallback(
+    (search: string) => {
+      setRecentSearches((current) => {
+        const next = addRecentSearch(current, search);
+        try {
+          window.localStorage.setItem(recentSearchesKey, JSON.stringify(next));
+        } catch {
+          // Search still works when browser privacy settings disable storage.
+        }
+        return next;
+      });
+    },
+    [recentSearchesKey]
+  );
 
   const handleOpenChange = React.useCallback(
     (next: boolean) => {
@@ -62,17 +91,25 @@ export function CommandPalette({ session, open, onOpenChange }: CommandPalettePr
   const searchable = canSearchRecords && query.trim().length >= 2;
   React.useEffect(() => {
     if (!searchable) return;
+    let cancelled = false;
+    const search = query.trim();
     const handle = setTimeout(() => {
       startTransition(async () => {
         try {
-          setResults(await searchCrmRecordsAction(query));
+          const nextResults = await searchCrmRecordsAction(search);
+          if (cancelled) return;
+          setResults(nextResults);
+          rememberSearch(search);
         } catch {
-          setResults(EMPTY_RESULTS);
+          if (!cancelled) setResults(EMPTY_RESULTS);
         }
       });
     }, 200);
-    return () => clearTimeout(handle);
-  }, [query, searchable]);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [query, rememberSearch, searchable]);
 
   // Only show records while a query is active; stale results stay hidden.
   const hasRecords =
@@ -94,6 +131,24 @@ export function CommandPalette({ session, open, onOpenChange }: CommandPalettePr
       />
       <CommandList>
         <CommandEmpty>No matches.</CommandEmpty>
+
+        {canSearchRecords && query.trim() === "" && recentSearches.length > 0 ? (
+          <>
+            <CommandGroup heading="Recent searches">
+              {recentSearches.map((search) => (
+                <CommandItem
+                  key={search.toLocaleLowerCase()}
+                  value={`recent-search-${search}`}
+                  onSelect={() => setQuery(search)}
+                >
+                  <History aria-hidden="true" />
+                  <span>{search}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        ) : null}
 
         {hasRecords ? (
           <>
