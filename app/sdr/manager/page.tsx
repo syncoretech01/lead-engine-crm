@@ -225,7 +225,7 @@ export default async function SdrManagerPage() {
                 <TableHead>SDR</TableHead>
                 <TableHead>Calls</TableHead>
                 <TableHead>Talk time</TableHead>
-                <TableHead>Email / SMS</TableHead>
+                <TableHead>Email and SMS</TableHead>
                 <TableHead>Pipeline</TableHead>
                 <TableHead>Follow-ups</TableHead>
                 <TableHead>Other activity</TableHead>
@@ -251,7 +251,10 @@ export default async function SdrManagerPage() {
                         <ReportMetric value={formatDuration(report.metrics.totalTalkTimeSeconds)} note={`${report.metrics.callingSessions} sessions · ${formatDuration(report.metrics.activeCallingSeconds)} active`} />
                       </TableCell>
                       <TableCell>
-                        <ReportMetric value={`${report.metrics.emailsSent} / ${report.metrics.smsSent}`} note={`${report.metrics.emailReplies} email replies · ${report.metrics.smsReplies} SMS replies`} />
+                        <ReportMetric
+                          value={`${report.metrics.emailsSent} emails sent · ${report.metrics.smsSent} SMS sent`}
+                          note={`${report.metrics.emailReplies} email replies · ${report.metrics.smsReplies} SMS replies`}
+                        />
                       </TableCell>
                       <TableCell>
                         <ReportMetric value={`${report.metrics.opportunitiesCreated} opportunities`} note={`${report.metrics.meetingsBooked} meetings · ${formatCurrency(report.metrics.opportunityValue)}`} />
