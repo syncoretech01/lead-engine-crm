@@ -109,7 +109,13 @@ export function MyDay({
 }: {
   todayLabel: string;
   sdrName: string;
-  metrics: { overdue: number; p1: number; dueToday: number; completedToday: number };
+  metrics: {
+    callsToday: number;
+    callTarget: number;
+    remainingToday: number;
+    cyclePass: 1 | 2 | null;
+    batchRemaining: number;
+  };
   groups: MyDayGroup[];
   recentActivity: MyDayRecentActivity[];
   followUps: MyDayFollowUp[];
@@ -132,22 +138,28 @@ export function MyDay({
           </div>
           <div className="flex items-center gap-2">
             <MyDayResume />
-            <Link
-              href={startHref}
-              className="flex h-[38px] items-center gap-2 rounded-[9px] bg-co-blue px-4 text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover"
-            >
-              <PlayCircle className="size-4" aria-hidden="true" />
-              Start calling
-            </Link>
+            {queueCount > 0 ? (
+              <Link
+                href={startHref}
+                className="flex h-[38px] items-center gap-2 rounded-[9px] bg-co-blue px-4 text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover"
+              >
+                <PlayCircle className="size-4" aria-hidden="true" />
+                Start calling
+              </Link>
+            ) : (
+              <span className="flex h-[38px] items-center rounded-[9px] border border-co-border bg-co-sunken-2 px-4 text-[13px] font-bold text-co-text-3">
+                Daily plan complete
+              </span>
+            )}
           </div>
         </div>
 
         {/* Counter strip */}
         <div className="mt-4 grid grid-cols-2 divide-y divide-co-divider rounded-[10px] border border-co-border bg-co-surface sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-          <Counter tone="red" label="Overdue" value={metrics.overdue} />
-          <Counter tone="blue" label="P1 leads" value={metrics.p1} />
-          <Counter tone="amber" label="Due today" value={metrics.dueToday} />
-          <Counter tone="teal" label="Completed today" value={metrics.completedToday} />
+          <Counter tone="teal" label="Calls today" value={`${metrics.callsToday}/${metrics.callTarget}`} />
+          <Counter tone="blue" label="Remaining today" value={metrics.remainingToday} />
+          <Counter tone="amber" label="Current cycle" value={metrics.cyclePass ? `Pass ${metrics.cyclePass}` : "Complete"} />
+          <Counter tone="gray" label="Batch remaining" value={metrics.batchRemaining} />
         </div>
 
         {/* Main grid */}
@@ -159,7 +171,7 @@ export function MyDay({
             <div className="flex flex-col overflow-hidden rounded-[10px] border border-co-border bg-co-surface lg:absolute lg:inset-0">
               <div className="flex shrink-0 items-center justify-between border-b border-co-border px-4 py-3">
                 <h2 className="text-[13px] font-extrabold text-co-ink">Work queue</h2>
-                <span className="text-[11px] font-bold text-co-muted-2">{queueCount} active</span>
+                <span className="text-[11px] font-bold text-co-muted-2">{queueCount} calls planned</span>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
               {groups.map((group) => (
@@ -320,7 +332,7 @@ export function MyDay({
   );
 }
 
-function Counter({ tone, label, value }: { tone: MyDayGroup["tone"]; label: string; value: number }) {
+function Counter({ tone, label, value }: { tone: MyDayGroup["tone"]; label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 px-4 py-3">
       <div className="flex items-center gap-1.5">

@@ -3,6 +3,11 @@ import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { activityTypeValue } from "@/lib/phase1/fast-read-utils";
+import {
+  buildSdrDailyCallPlan,
+  SDR_DAILY_CALL_TARGET,
+  type SdrDailyCallPlan
+} from "@/lib/phase1/sdr-call-cycle";
 import type { ActivityType, Session, SdrLeadStatus, SlaStatus, User } from "@/lib/phase1/types";
 
 export type SdrQueueAssignmentReadRow = {
@@ -25,12 +30,17 @@ export type SdrQueueAssignmentReadRow = {
   firstTouchedAt?: string;
   lastTouchAt?: string;
   touchCount: number;
+  firstCallCompletedAt?: string;
+  secondCallCompletedAt?: string;
+  callCycleCompletedAt?: string;
   createdAt: string;
   updatedAt: string;
   contactName: string;
   title: string;
   email: string;
   phone: string;
+  doNotContact: boolean;
+  isSuppressed: boolean;
   grade: string;
   priority: string;
   segment: string;
@@ -94,6 +104,7 @@ export type SdrQueueReadModel = {
     assignments: SdrQueueAssignmentReadRow[];
     reminders: SdrQueueReminderReadRow[];
     recentActivity: SdrQueueActivityReadRow[];
+    dailyCallPlan: Omit<SdrDailyCallPlan<SdrQueueAssignmentReadRow>, "assignments">;
   };
   bulkOwnerUsers: User[];
 };
@@ -188,6 +199,9 @@ export function mapSdrAssignmentRow(assignment: SdrAssignmentRowPayload): SdrQue
     firstTouchedAt: assignment.firstTouchedAt?.toISOString(),
     lastTouchAt: assignment.lastTouchAt?.toISOString(),
     touchCount: assignment.touchCount,
+    firstCallCompletedAt: assignment.firstCallCompletedAt?.toISOString(),
+    secondCallCompletedAt: assignment.secondCallCompletedAt?.toISOString(),
+    callCycleCompletedAt: assignment.callCycleCompletedAt?.toISOString(),
     createdAt: assignment.createdAt.toISOString(),
     updatedAt: assignment.updatedAt.toISOString(),
     contactName: displayContactName({
@@ -197,6 +211,8 @@ export function mapSdrAssignmentRow(assignment: SdrAssignmentRowPayload): SdrQue
     title: leadContact?.title ?? crmContact?.title ?? "",
     email,
     phone,
+    doNotContact: leadContact?.doNotContact ?? false,
+    isSuppressed: leadContact?.isSuppressed ?? false,
     grade,
     priority,
     segment: leadContact?.segment ?? "General outbound",
@@ -260,6 +276,7 @@ export async function readFastSdrQueueModel(
   const ownerUserId = session.role === "SDR" ? session.user.id : undefined;
   const assignmentWhere = {
     workspaceId,
+    callCycleCompletedAt: null,
     ...(ownerUserId ? { assignedSdrId: ownerUserId } : {})
   };
   const reminderWhere = {
@@ -267,13 +284,14 @@ export async function readFastSdrQueueModel(
     status: { not: "Completed" },
     ...(ownerUserId ? { ownerUserId } : {})
   };
+  const today = utcDayBounds();
 
-  const [assignments, reminders, memberRows] = await Promise.all([
+  const [assignments, reminders, memberRows, completedCallsToday] = await Promise.all([
     prisma.sdrAssignment.findMany({
       where: assignmentWhere,
       include: sdrAssignmentRowInclude,
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      take: 500
+      take: 2000
     }),
     prisma.followUpReminder.findMany({
       where: reminderWhere,
@@ -296,10 +314,26 @@ export async function readFastSdrQueueModel(
       },
       include: { user: true },
       orderBy: [{ role: "asc" }, { id: "asc" }]
-    })
+    }),
+    ownerUserId
+      ? prisma.trackedCall.count({
+          where: {
+            workspaceId,
+            sdrUserId: ownerUserId,
+            direction: "Outbound",
+            createdAt: { gte: today.start, lt: today.end }
+          }
+        })
+      : Promise.resolve(0)
   ]);
 
-  const assignmentRows = assignments.map(mapSdrAssignmentRow);
+  const allAssignmentRows = assignments.map(mapSdrAssignmentRow);
+  const ownerPlan = ownerUserId
+    ? buildSdrDailyCallPlan(allAssignmentRows, ownerUserId, completedCallsToday)
+    : undefined;
+  const assignmentRows = ownerPlan?.assignments ?? allAssignmentRows.filter(
+    (assignment) => !assignment.callCycleCompletedAt && activeAssignmentStatuses.has(assignment.status)
+  );
   const activeAssignments = assignmentRows.filter((assignment) => activeAssignmentStatuses.has(assignment.status));
   const reminderRows = reminders.map((reminder) => ({
     id: reminder.id,
@@ -337,7 +371,7 @@ export async function readFastSdrQueueModel(
   return {
     snapshot: {
       metrics: {
-        assigned: activeAssignments.length,
+        assigned: ownerPlan?.activeBatchSize ?? activeAssignments.length,
         p1: activeAssignments.filter((assignment) => assignment.priority === "P1").length,
         dueToday,
         overdue
@@ -386,7 +420,24 @@ export async function readFastSdrQueueModel(
       ],
       assignments: assignmentRows,
       reminders: reminderRows,
-      recentActivity
+      recentActivity,
+      dailyCallPlan: ownerPlan
+        ? {
+            target: ownerPlan.target,
+            completedToday: ownerPlan.completedToday,
+            remainingToday: ownerPlan.remainingToday,
+            pass: ownerPlan.pass,
+            activeBatchSize: ownerPlan.activeBatchSize,
+            batchRemaining: ownerPlan.batchRemaining
+          }
+        : {
+            target: SDR_DAILY_CALL_TARGET,
+            completedToday: 0,
+            remainingToday: SDR_DAILY_CALL_TARGET,
+            pass: null,
+            activeBatchSize: activeAssignments.length,
+            batchRemaining: activeAssignments.length
+          }
     },
     bulkOwnerUsers: memberRows.map(({ user }) => ({
       id: user.id,
@@ -396,6 +447,13 @@ export async function readFastSdrQueueModel(
       createdAt: user.createdAt.toISOString()
     }))
   };
+}
+
+function utcDayBounds(now = new Date()) {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
 }
 
 async function readRecentActivityRows({

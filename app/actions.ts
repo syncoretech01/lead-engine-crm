@@ -143,6 +143,7 @@ import {
   outreachChannels,
   reassignmentTriggers,
   reassignSdrAssignment,
+  recordSdrCallCycleAttempt,
   recordFirstTouch,
   refreshSlaStatuses,
   sdrLeadStatuses
@@ -1277,6 +1278,34 @@ export async function saveCallWrapupAction(input: {
         const companyId = assignment.companyId || input.companyId;
         const contactId = assignment.contactId || input.contactId;
         const now = new Date().toISOString();
+
+        if (leadStatus === "Suppressed" || leadStatus === "Unsubscribed") {
+          const contact = state.contacts.find(
+            (item) => item.workspaceId === session.workspace.id && item.id === contactId
+          );
+          if (contact) {
+            suppressContact(contact, `Call wrap-up: ${input.outcome}.`, now);
+            assignment.status = "Suppressed";
+            assignment.slaStatus = "Paused";
+            created.push("Contact suppressed — future outreach blocked");
+          }
+        }
+
+        const callCycle = recordSdrCallCycleAttempt(state, {
+          workspaceId: session.workspace.id,
+          assignmentId: assignment.id,
+          actorUserId: session.user.id,
+          now
+        });
+        if (callCycle.recordedPass) {
+          created.push(`Call pass ${callCycle.recordedPass} complete`);
+        }
+        if (callCycle.batchCompleted) {
+          created.push("Two-pass batch complete");
+        }
+        if (callCycle.nextBatchAssigned) {
+          created.push(`${callCycle.nextBatchAssigned} fresh leads assigned`);
+        }
 
         // 2. Call note on the timeline (distinct from the touch activity so it shows
         //    in the contact's Notes).

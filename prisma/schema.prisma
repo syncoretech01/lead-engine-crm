@@ -1279,6 +1279,9 @@ model SdrAssignment {
   firstTouchedAt     DateTime?
   lastTouchAt        DateTime?
   touchCount         Int                @default(0)
+  firstCallCompletedAt DateTime?
+  secondCallCompletedAt DateTime?
+  callCycleCompletedAt DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1292,6 +1295,7 @@ model SdrAssignment {
   @@unique([workspaceId, contactId])
   @@index([workspaceId, assignedSdrId, status])
   @@index([workspaceId, assignedSdrId, assignedAt])
+  @@index([workspaceId, assignedSdrId, callCycleCompletedAt])
   @@index([workspaceId, slaStatus])
   @@index([workspaceId, firstTouchDueAt])
   @@index([workspaceId, followUpDueAt])

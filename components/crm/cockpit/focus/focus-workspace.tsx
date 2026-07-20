@@ -80,7 +80,8 @@ export function FocusWorkspace({
   initialView,
   callerLabel = null,
   lineBlockReason = null,
-  autoStart = false
+  autoStart = false,
+  dailyCallPlan
 }: {
   leads: FocusLead[];
   initialLeadId?: string;
@@ -88,6 +89,14 @@ export function FocusWorkspace({
   callerLabel?: string | null;
   lineBlockReason?: string | null;
   autoStart?: boolean;
+  dailyCallPlan?: {
+    target: number;
+    completedToday: number;
+    remainingToday: number;
+    pass: 1 | 2 | null;
+    activeBatchSize: number;
+    batchRemaining: number;
+  };
 }) {
   const { openCallInline, call } = useCall();
   const session = useFocusSession();
@@ -224,6 +233,16 @@ export function FocusWorkspace({
       {/* ───────────── Queue rail ───────────── */}
       <aside className="flex min-h-0 w-[300px] shrink-0 flex-col overflow-hidden border-r border-co-border bg-co-surface [@media(max-width:1380px)]:w-[264px]">
         <div className="flex flex-col gap-2 border-b border-co-border p-3">
+          {dailyCallPlan ? (
+            <div className="flex items-center justify-between rounded-md border border-co-border bg-co-sunken-2 px-2.5 py-2 text-[11px]">
+              <span className="font-extrabold text-co-ink">
+                Daily calls {dailyCallPlan.completedToday}/{dailyCallPlan.target}
+              </span>
+              <span className="font-bold text-co-text-3">
+                {dailyCallPlan.pass ? `Pass ${dailyCallPlan.pass}` : "Batch complete"}
+              </span>
+            </div>
+          ) : null}
           <div className="flex items-center gap-2">
             <select
               value={view}
@@ -296,7 +315,13 @@ export function FocusWorkspace({
             );
           })}
           {list.length === 0 ? (
-            <div className="px-3 py-10 text-center text-[12px] text-co-muted">No leads in this view.</div>
+            <div className="px-3 py-10 text-center text-[12px] text-co-muted">
+              {dailyCallPlan?.remainingToday === 0
+                ? `Daily target complete — ${dailyCallPlan.target} calls logged.`
+                : dailyCallPlan?.pass === null
+                  ? "This two-pass batch is complete. Fresh leads will appear when available."
+                  : "No leads in this view."}
+            </div>
           ) : null}
         </div>
 

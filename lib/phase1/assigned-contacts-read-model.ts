@@ -5,9 +5,15 @@ import {
   type SdrQueueAssignmentReadRow
 } from "@/lib/phase1/sdr-queue-read-model";
 import type { Session } from "@/lib/phase1/types";
+import {
+  buildSdrDailyCallPlan,
+  isCurrentCallCycleAssignment,
+  type SdrDailyCallPlan
+} from "@/lib/phase1/sdr-call-cycle";
 
 export type AssignedContactsReadModel = {
   rows: SdrQueueAssignmentReadRow[];
+  dailyCallPlan?: Omit<SdrDailyCallPlan<SdrQueueAssignmentReadRow>, "assignments">;
   /** SDR/Manager roster for the owner filter (empty for an SDR's own view). */
   roster: Array<{ id: string; name: string }>;
 };
@@ -19,7 +25,7 @@ export type AssignedContactsReadModel = {
 export async function readAssignedContactsModel(
   session: Session,
   workspaceId: string,
-  opts?: { sdrId?: string }
+  opts?: { sdrId?: string; callPlan?: boolean }
 ): Promise<AssignedContactsReadModel | undefined> {
   if (resolveStorageDriver() !== "prisma") {
     return undefined;
@@ -30,10 +36,12 @@ export async function readAssignedContactsModel(
   // SDRs are always locked to their own id; any ?sdr= param is ignored for them.
   const ownerId = isSdr ? session.user.id : opts?.sdrId;
 
-  const [assignments, members] = await Promise.all([
+  const today = utcDayBounds();
+  const [assignments, members, completedCallsToday] = await Promise.all([
     prisma.sdrAssignment.findMany({
       where: {
         workspaceId,
+        ...(opts?.callPlan ? { callCycleCompletedAt: null } : {}),
         ...(ownerId ? { assignedSdrId: ownerId } : {})
       },
       include: sdrAssignmentRowInclude,
@@ -51,11 +59,46 @@ export async function readAssignedContactsModel(
           where: { workspaceId, role: { in: ["SDR", "MANAGER"] } },
           include: { user: true },
           orderBy: [{ role: "asc" }, { id: "asc" }]
+        }),
+    opts?.callPlan && ownerId
+      ? prisma.trackedCall.count({
+          where: {
+            workspaceId,
+            sdrUserId: ownerId,
+            direction: "Outbound",
+            createdAt: { gte: today.start, lt: today.end }
+          }
         })
+      : Promise.resolve(0)
   ]);
 
+  const allRows = assignments.map(mapSdrAssignmentRow);
+  const callPlan = opts?.callPlan && ownerId
+    ? buildSdrDailyCallPlan(allRows, ownerId, completedCallsToday)
+    : undefined;
+  const rows = callPlan?.assignments ?? (
+    opts?.callPlan ? allRows.filter(isCurrentCallCycleAssignment) : allRows
+  );
+
   return {
-    rows: assignments.map(mapSdrAssignmentRow),
-    roster: members.map((member) => ({ id: member.user.id, name: member.user.name }))
+    rows,
+    roster: members.map((member) => ({ id: member.user.id, name: member.user.name })),
+    dailyCallPlan: callPlan
+      ? {
+          target: callPlan.target,
+          completedToday: callPlan.completedToday,
+          remainingToday: callPlan.remainingToday,
+          pass: callPlan.pass,
+          activeBatchSize: callPlan.activeBatchSize,
+          batchRemaining: callPlan.batchRemaining
+        }
+      : undefined
   };
+}
+
+function utcDayBounds(now = new Date()) {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
 }

@@ -939,6 +939,9 @@ export type SdrAssignment = {
   firstTouchedAt?: string;
   lastTouchAt?: string;
   touchCount: number;
+  firstCallCompletedAt?: string;
+  secondCallCompletedAt?: string;
+  callCycleCompletedAt?: string;
   createdAt: string;
   updatedAt: string;
 };

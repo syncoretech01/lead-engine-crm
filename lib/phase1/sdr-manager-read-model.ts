@@ -184,6 +184,9 @@ export async function readFastSdrManagerModel(
       firstTouchedAt: optionalIso(assignment.firstTouchedAt),
       lastTouchAt: optionalIso(assignment.lastTouchAt),
       touchCount: assignment.touchCount,
+      firstCallCompletedAt: optionalIso(assignment.firstCallCompletedAt),
+      secondCallCompletedAt: optionalIso(assignment.secondCallCompletedAt),
+      callCycleCompletedAt: optionalIso(assignment.callCycleCompletedAt),
       createdAt: assignment.createdAt.toISOString(),
       updatedAt: assignment.updatedAt.toISOString(),
       contactName: displayContactName({
@@ -221,7 +224,9 @@ export async function readFastSdrManagerModel(
     createdAt: team.createdAt.toISOString(),
     updatedAt: team.updatedAt.toISOString()
   } satisfies SdrTeam));
-  const activeAssignments = managerAssignments.filter((assignment) => activeAssignmentStatuses.has(assignment.status));
+  const activeAssignments = managerAssignments.filter(
+    (assignment) => activeAssignmentStatuses.has(assignment.status) && !assignment.callCycleCompletedAt
+  );
   const workloads = sdrWorkloads(users, managerAssignments);
   const recommendations = reassignmentRecommendations(managerAssignments, workloads);
   const touched = activeAssignments.filter((assignment) => assignment.touchCount > 0).length;
@@ -282,7 +287,7 @@ export async function readFastSdrManagerModel(
       },
       workloads,
       recommendations,
-      assignments: managerAssignments,
+      assignments: activeAssignments,
       reminders: [],
       rules: mappedRules
     },
@@ -294,14 +299,15 @@ export async function readFastSdrManagerModel(
 function sdrWorkloads(users: User[], assignments: FastManagerAssignmentView[]): FastSdrWorkload[] {
   return users.map((user) => {
     const owned = assignments.filter((assignment) => assignment.assignedSdrId === user.id);
-    const active = owned.filter((assignment) => activeAssignmentStatuses.has(assignment.status));
+    const current = owned.filter((assignment) => !assignment.callCycleCompletedAt);
+    const active = current.filter((assignment) => activeAssignmentStatuses.has(assignment.status));
     const overdue = active.filter((assignment) => assignment.slaStatus === "Overdue");
     const touched = active.filter((assignment) => assignment.touchCount > 0);
 
     return {
       userId: user.id,
       name: user.name,
-      assigned: owned.length,
+      assigned: current.length,
       active: active.length,
       p1: active.filter((assignment) => assignment.priority === "P1").length,
       overdue: overdue.length,
@@ -319,6 +325,9 @@ function reassignmentRecommendations(
   const recommendations: FastReassignmentRecommendation[] = [];
 
   for (const assignment of assignments) {
+    if (assignment.callCycleCompletedAt) {
+      continue;
+    }
     if (assignment.slaStatus !== "Overdue" && assignment.priority !== "P1") {
       continue;
     }

@@ -57,6 +57,7 @@ import type {
 } from "@/lib/phase1/types";
 
 const DASHBOARD_RECORD_LIMIT = 2_000;
+const SDR_ASSIGNMENT_RECORD_LIMIT = 20_000;
 const DASHBOARD_JOB_LIMIT = 100;
 const DASHBOARD_EXPORT_LIMIT = 100;
 const STATE_SNAPSHOT_ID = "syncore-primary-state";
@@ -417,7 +418,7 @@ async function readFastLeadDashboardStateUncached(
     prisma.sdrAssignment.findMany({
       where: { workspaceId },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      take: DASHBOARD_RECORD_LIMIT,
+      take: SDR_ASSIGNMENT_RECORD_LIMIT,
       select: {
         id: true,
         workspaceId: true,
@@ -438,6 +439,9 @@ async function readFastLeadDashboardStateUncached(
         firstTouchedAt: true,
         lastTouchAt: true,
         touchCount: true,
+        firstCallCompletedAt: true,
+        secondCallCompletedAt: true,
+        callCycleCompletedAt: true,
         createdAt: true,
         updatedAt: true
       }
@@ -1121,6 +1125,9 @@ function sdrAssignmentFromPrisma(row: {
   firstTouchedAt: Date | null;
   lastTouchAt: Date | null;
   touchCount: number;
+  firstCallCompletedAt: Date | null;
+  secondCallCompletedAt: Date | null;
+  callCycleCompletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): SdrAssignment {
@@ -1144,6 +1151,9 @@ function sdrAssignmentFromPrisma(row: {
     firstTouchedAt: optionalIso(row.firstTouchedAt),
     lastTouchAt: optionalIso(row.lastTouchAt),
     touchCount: row.touchCount,
+    firstCallCompletedAt: optionalIso(row.firstCallCompletedAt),
+    secondCallCompletedAt: optionalIso(row.secondCallCompletedAt),
+    callCycleCompletedAt: optionalIso(row.callCycleCompletedAt),
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt)
   };

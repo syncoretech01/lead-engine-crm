@@ -119,9 +119,8 @@ export default async function SdrQueuePage() {
         {...buildMyDayProps({
           assignments: activeAssignments,
           reminders: scheduledFollowUps,
-          allAssignments: snapshot.assignments,
           activities: recentActivityRows,
-          metrics: snapshot.metrics,
+          dailyCallPlan: snapshot.dailyCallPlan,
           sdrName: session.user.name
         })}
       />
@@ -758,16 +757,14 @@ function queueWeight(assignment: AssignmentView) {
 function buildMyDayProps({
   assignments,
   reminders,
-  allAssignments,
   activities,
-  metrics,
+  dailyCallPlan,
   sdrName
 }: {
   assignments: AssignmentView[];
   reminders: ReminderView[];
-  allAssignments: AssignmentView[];
   activities: SdrQueueActivityReadRow[];
-  metrics: { assigned: number; p1: number; dueToday: number; overdue: number };
+  dailyCallPlan: QueueSnapshot["dailyCallPlan"];
   sdrName: string;
 }) {
   const groupDefs: Array<{
@@ -816,10 +813,6 @@ function buildMyDayProps({
     .map((def) => ({ id: def.id, label: def.label, tone: def.tone, leads: buckets.get(def.id)! }))
     .filter((group) => group.leads.length > 0);
 
-  const completedToday = allAssignments.filter(
-    (a) => "lastTouchAt" in a && a.lastTouchAt && isToday(a.lastTouchAt)
-  ).length;
-
   const followUps = reminders.slice(0, 6).map((reminder) => ({
     id: reminder.id,
     title: reminder.title,
@@ -858,7 +851,13 @@ function buildMyDayProps({
       year: "numeric"
     }),
     sdrName,
-    metrics: { overdue: metrics.overdue, p1: metrics.p1, dueToday: metrics.dueToday, completedToday },
+    metrics: {
+      callsToday: dailyCallPlan.completedToday,
+      callTarget: dailyCallPlan.target,
+      remainingToday: dailyCallPlan.remainingToday,
+      cyclePass: dailyCallPlan.pass,
+      batchRemaining: dailyCallPlan.batchRemaining
+    },
     groups,
     recentActivity,
     followUps,
@@ -866,16 +865,6 @@ function buildMyDayProps({
     startHref: "/sdr/focus?start=1",
     queueCount: assignments.length
   };
-}
-
-function isToday(iso: string) {
-  const date = new Date(iso);
-  const now = new Date();
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
 }
 
 function activityHref(activity: SdrQueueActivityReadRow) {

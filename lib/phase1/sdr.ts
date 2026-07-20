@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { addActivity, ownerUserIdForName, userNameForId } from "@/lib/phase1/crm";
 import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
+import {
+  buildSdrDailyCallPlan,
+  SDR_DAILY_CALL_TARGET
+} from "@/lib/phase1/sdr-call-cycle";
 import { assertWorkspaceMember, requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import type {
   AppState,
@@ -90,9 +94,25 @@ export function assignWorkspaceLeads(
   workspaceId: string,
   assignedById: string,
   assignedAt = new Date().toISOString(),
-  options?: { eligibleContactIds?: Set<string>; orderedContactIds?: string[] }
+  options?: {
+    eligibleContactIds?: Set<string>;
+    orderedContactIds?: string[];
+    perSdrLimit?: number;
+    callOnly?: boolean;
+  }
 ) {
   let created = 0;
+  const perSdrLimit = options?.perSdrLimit ?? SDR_DAILY_CALL_TARGET;
+  const callOnly = options?.callOnly ?? true;
+  const activeBySdr = new Map<string, number>();
+  for (const assignment of state.sdrAssignments.filter((item) => item.workspaceId === workspaceId)) {
+    if (!isCallableCycleAssignment(state, assignment)) continue;
+    activeBySdr.set(assignment.assignedSdrId, (activeBySdr.get(assignment.assignedSdrId) ?? 0) + 1);
+  }
+  const ownersWithOpenBatch = new Set(
+    Array.from(activeBySdr.entries()).filter(([, count]) => count > 0).map(([ownerId]) => ownerId)
+  );
+  const ownersFillingNewBatch = new Set<string>();
   const existingContactIds = new Set(
     state.sdrAssignments
       .filter((assignment) => assignment.workspaceId === workspaceId)
@@ -114,12 +134,22 @@ export function assignWorkspaceLeads(
       continue;
     }
 
+    if (callOnly && !contact.phone.trim()) {
+      continue;
+    }
+
     if (options?.eligibleContactIds && !options.eligibleContactIds.has(contact.id)) {
       continue;
     }
 
     const company = state.companies.find((item) => item.id === contact.companyId && item.workspaceId === workspaceId);
     const routing = routeContact(state, workspaceId, contact.id);
+    if (ownersWithOpenBatch.has(routing.sdrId) && !ownersFillingNewBatch.has(routing.sdrId)) {
+      continue;
+    }
+    if ((activeBySdr.get(routing.sdrId) ?? 0) >= perSdrLimit) {
+      continue;
+    }
     const firstTouchDueAt = firstTouchDueAtForPriority(contact.priority, assignedAt);
     const followUpDueAt = followUpDueAtForStatus(statusForContact(contact.status), assignedAt);
     const assignment: SdrAssignment = {
@@ -146,6 +176,8 @@ export function assignWorkspaceLeads(
 
     assignment.slaStatus = calculateSlaStatus(assignment, assignedAt);
     state.sdrAssignments.push(assignment);
+    ownersFillingNewBatch.add(routing.sdrId);
+    activeBySdr.set(routing.sdrId, (activeBySdr.get(routing.sdrId) ?? 0) + 1);
     contact.owner = userNameForId(state, routing.sdrId);
     contact.status = leadStatusForAssignment(assignment.status);
     contact.updatedAt = assignedAt;
@@ -214,8 +246,23 @@ export function refreshSlaStatuses(state: AppState, workspaceId: string, now = n
 
 export function sdrQueueSnapshot(state: AppState, workspaceId: string, ownerUserId?: string) {
   refreshSlaStatuses(state, workspaceId);
-  const assignments = assignmentViews(state, workspaceId).filter(
+  const allAssignments = assignmentViews(state, workspaceId).filter(
     (assignment) => !ownerUserId || assignment.assignedSdrId === ownerUserId
+  );
+  const completedCallsToday = ownerUserId
+    ? state.trackedCalls.filter(
+        (call) =>
+          call.workspaceId === workspaceId &&
+          call.sdrUserId === ownerUserId &&
+          call.direction === "Outbound" &&
+          isUtcToday(call.createdAt)
+      ).length
+    : 0;
+  const ownerPlan = ownerUserId
+    ? buildSdrDailyCallPlan(allAssignments, ownerUserId, completedCallsToday)
+    : undefined;
+  const assignments = ownerPlan?.assignments ?? allAssignments.filter(
+    (assignment) => !assignment.callCycleCompletedAt && activeAssignmentStatuses.has(assignment.status)
   );
   const reminders = reminderViews(state, workspaceId).filter(
     (reminder) => !ownerUserId || reminder.ownerUserId === ownerUserId
@@ -224,7 +271,7 @@ export function sdrQueueSnapshot(state: AppState, workspaceId: string, ownerUser
 
   return {
     metrics: {
-      assigned: activeAssignments.length,
+      assigned: ownerPlan?.activeBatchSize ?? activeAssignments.length,
       p1: activeAssignments.filter((assignment) => assignment.priority === "P1").length,
       dueToday: reminders.filter((reminder) => isUtcToday(reminder.dueAt)).length,
       overdue: assignments.filter((assignment) => assignment.slaStatus === "Overdue").length + reminders.filter((reminder) => reminder.status === "Overdue").length
@@ -272,7 +319,24 @@ export function sdrQueueSnapshot(state: AppState, workspaceId: string, ownerUser
       }
     ],
     assignments,
-    reminders
+    reminders,
+    dailyCallPlan: ownerPlan
+      ? {
+          target: ownerPlan.target,
+          completedToday: ownerPlan.completedToday,
+          remainingToday: ownerPlan.remainingToday,
+          pass: ownerPlan.pass,
+          activeBatchSize: ownerPlan.activeBatchSize,
+          batchRemaining: ownerPlan.batchRemaining
+        }
+      : {
+          target: SDR_DAILY_CALL_TARGET,
+          completedToday: 0,
+          remainingToday: SDR_DAILY_CALL_TARGET,
+          pass: null,
+          activeBatchSize: activeAssignments.length,
+          batchRemaining: activeAssignments.length
+        }
   };
 }
 
@@ -375,6 +439,121 @@ export function recordFirstTouch(
   });
 
   return assignment;
+}
+
+export type SdrCallCycleResult = {
+  recordedPass: 1 | 2 | null;
+  batchCompleted: boolean;
+  nextBatchAssigned: number;
+};
+
+/** Records one completed call wrap-up against the two-pass SDR lifecycle. */
+export function recordSdrCallCycleAttempt(
+  state: AppState,
+  input: {
+    workspaceId: string;
+    assignmentId: string;
+    actorUserId: string;
+    now?: string;
+  }
+): SdrCallCycleResult {
+  const now = input.now ?? new Date().toISOString();
+  const assignment = requireWorkspaceScopedRecord(
+    state.sdrAssignments.find((item) => item.id === input.assignmentId),
+    input.workspaceId,
+    "SDR assignment"
+  );
+  assertWorkspaceMember(state, input.workspaceId, input.actorUserId);
+
+  if (assignment.callCycleCompletedAt) {
+    return { recordedPass: null, batchCompleted: false, nextBatchAssigned: 0 };
+  }
+
+  const wasCompleted = Boolean(assignment.callCycleCompletedAt);
+  let recordedPass: 1 | 2 | null = null;
+  if (!assignment.firstCallCompletedAt) {
+    assignment.firstCallCompletedAt = now;
+    recordedPass = 1;
+  } else {
+    const ownerStillHasFirstPassCalls = state.sdrAssignments.some(
+      (candidate) =>
+        candidate.workspaceId === assignment.workspaceId &&
+        candidate.assignedSdrId === assignment.assignedSdrId &&
+        candidate.id !== assignment.id &&
+        isCallableCycleAssignment(state, candidate) &&
+        !candidate.firstCallCompletedAt
+    );
+    if (!ownerStillHasFirstPassCalls && !assignment.secondCallCompletedAt) {
+      assignment.secondCallCompletedAt = now;
+      assignment.callCycleCompletedAt = now;
+      recordedPass = 2;
+    }
+  }
+
+  if (!isCallableCycleAssignment(state, assignment)) {
+    assignment.callCycleCompletedAt = assignment.callCycleCompletedAt ?? now;
+  }
+  if (assignment.callCycleCompletedAt) {
+    completeAssignmentReminders(state, assignment, now);
+    if (!wasCompleted) {
+      addActivity(state, {
+        workspaceId: assignment.workspaceId,
+        companyId: assignment.companyId,
+        contactId: assignment.contactId,
+        type: "Status change",
+        title: recordedPass === 2 ? "Two-pass calling cycle completed" : "Removed from active calling",
+        body: recordedPass === 2
+          ? "Both required call passes were completed. The contact remains in CRM history."
+          : "The contact is no longer eligible for the active calling cycle.",
+        actorUserId: input.actorUserId,
+        metadata: { assignmentId: assignment.id, recordedPass: recordedPass ?? undefined }
+      });
+    }
+  }
+  assignment.updatedAt = now;
+
+  const ownerHasRemainingCalls = state.sdrAssignments.some(
+    (candidate) =>
+      candidate.workspaceId === assignment.workspaceId &&
+      candidate.assignedSdrId === assignment.assignedSdrId &&
+      isCallableCycleAssignment(state, candidate)
+  );
+  if (ownerHasRemainingCalls) {
+    return { recordedPass, batchCompleted: false, nextBatchAssigned: 0 };
+  }
+
+  // Close non-callable rows in the same batch (no phone, invalid, suppressed,
+  // or otherwise terminal) so they remain history without looking actively assigned.
+  for (const candidate of state.sdrAssignments.filter(
+    (item) =>
+      item.workspaceId === assignment.workspaceId &&
+      item.assignedSdrId === assignment.assignedSdrId &&
+      !item.callCycleCompletedAt
+  )) {
+    candidate.callCycleCompletedAt = now;
+    candidate.updatedAt = now;
+    completeAssignmentReminders(state, candidate, now);
+  }
+
+  assignWorkspaceLeads(
+    state,
+    assignment.workspaceId,
+    input.actorUserId,
+    now,
+    { perSdrLimit: SDR_DAILY_CALL_TARGET, callOnly: true }
+  );
+  const nextBatchAssigned = state.sdrAssignments.filter(
+    (candidate) =>
+      candidate.workspaceId === assignment.workspaceId &&
+      candidate.assignedSdrId === assignment.assignedSdrId &&
+      candidate.createdAt === now
+  ).length;
+
+  return {
+    recordedPass,
+    batchCompleted: true,
+    nextBatchAssigned
+  };
 }
 
 export function completeReminder(state: AppState, reminderId: string, actorUserId: string, workspaceId?: string) {
@@ -556,6 +735,9 @@ export function resetSdrAssignmentToFresh(
   assignment.assignedAt = now;
   assignment.status = status;
   assignment.touchCount = 0;
+  assignment.firstCallCompletedAt = undefined;
+  assignment.secondCallCompletedAt = undefined;
+  assignment.callCycleCompletedAt = undefined;
   assignment.firstTouchedAt = undefined;
   assignment.lastTouchAt = undefined;
   assignment.reassignmentReason = undefined;
@@ -725,6 +907,8 @@ export function assignmentViews(state: AppState, workspaceId: string) {
         title: contact?.title ?? "",
         email: contact?.email ?? "",
         phone: contact?.phone ?? "",
+        doNotContact: contact?.doNotContact ?? false,
+        isSuppressed: contact?.isSuppressed ?? false,
         grade: contact?.grade ?? "D",
         priority: contact?.priority ?? "P4",
         segment: contact?.segment ?? "General outbound",
@@ -782,14 +966,15 @@ export function sdrWorkloads(state: AppState, workspaceId: string) {
 
   return users.map((user) => {
     const owned = assignments.filter((assignment) => assignment.assignedSdrId === user.id);
-    const active = owned.filter((assignment) => activeAssignmentStatuses.has(assignment.status));
+    const current = owned.filter((assignment) => !assignment.callCycleCompletedAt);
+    const active = current.filter((assignment) => activeAssignmentStatuses.has(assignment.status));
     const overdue = active.filter((assignment) => assignment.slaStatus === "Overdue");
     const touched = active.filter((assignment) => assignment.touchCount > 0);
 
     return {
       userId: user.id,
       name: user.name,
-      assigned: owned.length,
+      assigned: current.length,
       active: active.length,
       p1: active.filter((assignment) => {
         const contact = state.contacts.find(
@@ -821,6 +1006,9 @@ export function reassignmentRecommendations(state: AppState, workspaceId: string
   }> = [];
 
   for (const assignment of assignments) {
+    if (assignment.callCycleCompletedAt) {
+      continue;
+    }
     if (assignment.slaStatus !== "Overdue" && assignment.priority !== "P1") {
       continue;
     }
@@ -1076,6 +1264,7 @@ function defaultFollowUpDueAt(now: string, outcome: SdrLeadStatus) {
 }
 
 function calculateSlaStatus(assignment: SdrAssignment, now: string): SlaStatus {
+  if (assignment.callCycleCompletedAt) return "No SLA";
   if (assignment.status === "Suppressed" || assignment.status === "Unsubscribed") return "Paused";
   if (!activeAssignmentStatuses.has(assignment.status)) return "No SLA";
   const dueAt = assignment.firstTouchedAt ? assignment.followUpDueAt : assignment.firstTouchDueAt;
@@ -1099,6 +1288,28 @@ const activeAssignmentStatuses = new Set<SdrLeadStatus>([
   "Proposal Sent",
   "Nurture"
 ]);
+
+function isCallableCycleAssignment(state: AppState, assignment: SdrAssignment) {
+  if (assignment.callCycleCompletedAt || !activeAssignmentStatuses.has(assignment.status)) return false;
+  const contact = state.contacts.find(
+    (item) => item.workspaceId === assignment.workspaceId && item.id === assignment.contactId
+  );
+  return Boolean(
+    contact?.phone.trim() &&
+      !contact.isSuppressed &&
+      !contact.doNotContact &&
+      contact.priority !== "S"
+  );
+}
+
+function completeAssignmentReminders(state: AppState, assignment: SdrAssignment, now: string) {
+  for (const reminder of state.followUpReminders.filter(
+    (item) => item.assignmentId === assignment.id && item.workspaceId === assignment.workspaceId && item.status !== "Completed"
+  )) {
+    reminder.status = "Completed";
+    reminder.completedAt = now;
+  }
+}
 
 function reminderStatusForDueAt(dueAt: string, now: string): ReminderStatus {
   return Date.parse(dueAt) < Date.parse(now) ? "Overdue" : "Open";

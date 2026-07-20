@@ -21,7 +21,7 @@ export default async function FocusPage({
 
   // SDRs get their own queue; managers/admins get the whole assigned book (the read
   // model scopes by role). Ordering into the queue-weight is done in the client.
-  const model = await readAssignedContactsModel(session, workspaceId);
+  const model = await readAssignedContactsModel(session, workspaceId, { callPlan: true });
   const rows = model?.rows ?? [];
 
   // Recent activity + open opportunity/work per contact for the dossier.
@@ -95,6 +95,7 @@ export default async function FocusPage({
       callerLabel={callerLabel}
       lineBlockReason={lineBlockReason}
       autoStart={sp.start === "1"}
+      dailyCallPlan={model?.dailyCallPlan}
     />
   );
 }

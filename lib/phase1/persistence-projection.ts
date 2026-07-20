@@ -979,6 +979,9 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
         firstTouchedAt: assignment.firstTouchedAt,
         lastTouchAt: assignment.lastTouchAt,
         touchCount: assignment.touchCount,
+        firstCallCompletedAt: assignment.firstCallCompletedAt,
+        secondCallCompletedAt: assignment.secondCallCompletedAt,
+        callCycleCompletedAt: assignment.callCycleCompletedAt,
         createdAt: assignment.createdAt,
         updatedAt: assignment.updatedAt
       }))),

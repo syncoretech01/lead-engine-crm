@@ -322,6 +322,7 @@ export function assignedBulkEmailContactIds(
     .filter((assignment) => assignment.workspaceId === input.workspaceId)
     .filter((assignment) => !input.ownerUserId || assignment.assignedSdrId === input.ownerUserId)
     .filter((assignment) => activeAssignmentStatuses.has(assignment.status))
+    .filter((assignment) => !assignment.callCycleCompletedAt)
     .filter((assignment) => {
       const contact = state.contacts.find(
         (item) => item.id === assignment.contactId && item.workspaceId === input.workspaceId
