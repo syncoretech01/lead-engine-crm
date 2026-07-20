@@ -27,17 +27,8 @@ export function priorityTone(priority: string): BadgeTone {
   return "info";
 }
 
-export function slaTone(sla: string): BadgeTone {
-  if (sla === "Overdue") return "danger";
-  if (sla === "Due soon") return "warning";
-  if (sla === "On track") return "success";
-  return "default";
-}
-
 /** SDR-assignment fields shared by the contact peek across both tables. */
 export type PeekAssignment = {
-  slaStatus: string;
-  slaTone: BadgeTone;
   assignedRelative: string;
   lastTouchLabel: string;
 };
@@ -60,14 +51,11 @@ function relativeSince(iso?: string): string {
 
 /** Format raw assignment fields into the peek's display strings (server-side). */
 export function buildPeekAssignment(input: {
-  slaStatus: string;
   assignedAt?: string;
   lastTouchAt?: string;
   touchCount: number;
 }): PeekAssignment {
   return {
-    slaStatus: input.slaStatus,
-    slaTone: slaTone(input.slaStatus),
     assignedRelative: relativeSince(input.assignedAt),
     lastTouchLabel: `${input.lastTouchAt ? relativeSince(input.lastTouchAt) : "No touches"}${
       input.touchCount > 0 ? ` · ${input.touchCount}` : ""

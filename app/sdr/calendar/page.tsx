@@ -215,7 +215,7 @@ export default async function SdrCalendarPage({
 
           {monthEvents.length === 0 ? (
             <div className="border-t border-co-border px-4 py-5 text-center text-[12px] text-co-muted-2">
-              No SDR-scheduled follow-ups in {month.label}. First-touch SLA reminders are intentionally excluded.
+              No SDR-scheduled follow-ups in {month.label}. Automatic first-touch reminders are intentionally excluded.
             </div>
           ) : null}
         </section>

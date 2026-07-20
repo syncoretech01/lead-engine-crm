@@ -185,7 +185,7 @@ export default async function SdrQueuePage() {
     {
       label: "Overdue",
       value: formatNumber(snapshot.metrics.overdue),
-      note: "SLA or reminder misses",
+      note: "Follow-up or reminder misses",
       icon: Clock,
       tone: snapshot.metrics.overdue ? "danger" as const : "success" as const
     },
@@ -303,7 +303,6 @@ export default async function SdrQueuePage() {
                 <TableHead>Lead</TableHead>
                 {!isSdr ? <TableHead>Owner</TableHead> : null}
                 <TableHead>Status</TableHead>
-                <TableHead>SLA</TableHead>
                 <TableHead>Next due</TableHead>
                 <TableHead>Channel</TableHead>
                 <TableHead>Next action</TableHead>
@@ -341,12 +340,9 @@ export default async function SdrQueuePage() {
                       <StatusBadge label={assignment.status} tone={statusTone(assignment.status)} />
                     </TableCell>
                     <TableCell>
-                      <StatusBadge label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
-                    </TableCell>
-                    <TableCell>
                       <div className="flex flex-col">
                         <span className="font-medium text-foreground">
-                          {assignment.dueAt ? formatDate(assignment.dueAt) : "No active SLA"}
+                          {assignment.dueAt ? formatDate(assignment.dueAt) : "No due date"}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {assignment.reminderTitle ?? assignment.dueLabel}
@@ -646,7 +642,6 @@ export default async function SdrQueuePage() {
                   <TableHead>Lead</TableHead>
                   <TableHead>Owner</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>SLA</TableHead>
                   <TableHead>Method</TableHead>
                   <TableHead>Touches</TableHead>
                 </TableRow>
@@ -666,9 +661,6 @@ export default async function SdrQueuePage() {
                     <TableCell className="text-muted-foreground">{assignment.ownerName}</TableCell>
                     <TableCell>
                       <StatusBadge label={assignment.status} tone={statusTone(assignment.status)} />
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge label={assignment.slaStatus} tone={slaTone(assignment.slaStatus)} />
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
@@ -759,13 +751,6 @@ function queueWeight(assignment: AssignmentView) {
   return overdueWeight * 10 + priority + due;
 }
 
-function slaTone(status: string): "default" | "info" | "success" | "warning" | "danger" {
-  if (status === "Overdue") return "danger";
-  if (status === "Due soon") return "warning";
-  if (status === "On track") return "success";
-  return "default";
-}
-
 // Shapes the SDR "My Day" landing from the same queue snapshot the manager view
 // uses: each active lead lands in its first-matching work group (deep-linking to
 // the Focus workspace with the matching queue view), plus follow-ups, replies,
@@ -820,7 +805,6 @@ function buildMyDayProps({
       dueLabel: a.dueLabel,
       dueTone,
       priority: a.priority,
-      sla: a.slaStatus,
       status: a.status,
       hasPhone: Boolean(a.phone),
       blocked: a.status === "Suppressed" ? "Suppressed" : a.status === "Unsubscribed" ? "DNC" : undefined,

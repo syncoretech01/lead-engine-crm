@@ -25,8 +25,6 @@ export type MyContactRow = {
   priority: string;
   priorityTone: BadgeTone;
   status: string;
-  slaStatus: string;
-  slaTone: BadgeTone;
   companyId: string;
   companyName: string;
   companyDomain: string;
@@ -140,12 +138,6 @@ export function MyContactsTable({
         cell: ({ row }) => <StatusBadge label={row.original.status} />
       },
       {
-        id: "sla",
-        accessorFn: (row) => row.slaStatus,
-        header: "SLA",
-        cell: ({ row }) => <StatusBadge label={row.original.slaStatus} tone={row.original.slaTone} />
-      },
-      {
         id: "assigned",
         accessorFn: (row) => row.assignedAt,
         header: "Assigned",
@@ -252,8 +244,6 @@ export function MyContactsTable({
               owner: peekContact.ownerName,
               notes: peekContact.notes,
               assignment: {
-                slaStatus: peekContact.slaStatus,
-                slaTone: peekContact.slaTone,
                 assignedRelative: peekContact.assignedRelative,
                 lastTouchLabel: peekContact.lastTouchLabel
               }

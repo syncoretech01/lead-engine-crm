@@ -17,7 +17,6 @@ import {
   contactNextAction,
   gradeTone,
   priorityTone,
-  slaTone,
   type PeekAssignment
 } from "@/lib/crm-contact-presentation";
 
@@ -28,7 +27,7 @@ type ContactsTableProps = {
   roster: SdrRosterEntry[];
   callerLabel?: string;
   callBlockReason?: string;
-  /** SDR-assignment fields per contact id (SLA, last touch), where assigned. */
+  /** SDR-assignment fields per contact id (assigned time and last touch), where assigned. */
   assignments?: Record<string, PeekAssignment>;
   initialQuery?: string;
   initialSort?: string;
@@ -46,7 +45,6 @@ const COLUMN_LABELS: Record<string, string> = {
   channel: "Channel",
   phone: "Phone",
   status: "Status",
-  sla: "SLA",
   owner: "Owner",
   score: "Score",
   lastTouch: "Last touch",
@@ -146,19 +144,6 @@ export function ContactsTable({
             return <StatusBadge label={action.label} tone={action.tone} />;
           }
           return <StatusBadge label={contact.status} />;
-        }
-      },
-      {
-        id: "sla",
-        accessorFn: (row) => assignments?.[row.id]?.slaStatus ?? "",
-        header: "SLA",
-        cell: ({ row }) => {
-          const sla = assignments?.[row.id]?.slaStatus;
-          return sla ? (
-            <StatusBadge label={sla} tone={slaTone(sla)} />
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          );
         }
       },
       {

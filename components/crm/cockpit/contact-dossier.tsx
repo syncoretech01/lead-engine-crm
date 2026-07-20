@@ -11,7 +11,6 @@ import {
   leadCompliance,
   priorityTone,
   recommendedAction,
-  slaTone,
   statusTone,
   type FocusLead,
   type FocusTimelineItem,
@@ -54,7 +53,6 @@ export function ContactDossier({
               <CoPill tone={statusTone(lead.status)}>{lead.status}</CoPill>
               <CoPill tone={priorityTone(lead.priority)}>{lead.priority}</CoPill>
               {lead.grade ? <CoPill tone="neutral">Grade {lead.grade}</CoPill> : null}
-              <CoPill tone={slaTone(lead.slaStatus)}>SLA {lead.slaStatus}</CoPill>
             </div>
             <p className="mt-1 text-[12.5px] text-co-text-3">
               {[lead.title, lead.companyName, lead.companyDomain].filter(Boolean).join(" · ")}

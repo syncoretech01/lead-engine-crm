@@ -61,13 +61,6 @@ export function priorityTone(priority: string): CoTone {
   return "neutral";
 }
 
-export function slaTone(sla: string): CoTone {
-  if (sla === "Overdue") return "red";
-  if (sla === "Due soon") return "amber";
-  if (sla === "On track") return "teal";
-  return "neutral";
-}
-
 export function statusTone(status: string): CoTone {
   if (status === "Replied" || status === "Meeting Booked" || status === "Interested" || status === "Qualified")
     return "teal";
@@ -122,7 +115,7 @@ export type LeadCompliance = {
 // §38) — derived from the lead's state, never invented.
 export function recommendedAction(lead: FocusLead, blocked: boolean): string {
   if (blocked) return "Blocked — review the guardrail";
-  if (lead.overdue) return "Call now — SLA overdue";
+  if (lead.overdue) return "Call now — follow-up overdue";
   if (lead.status === "Replied" || lead.status === "Interested") return "Reply, then call";
   if (lead.status === "Meeting Booked") return "Prep the meeting";
   if (!lead.hasPhone) return "Send a 1:1 email";

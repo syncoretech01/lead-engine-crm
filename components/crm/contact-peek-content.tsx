@@ -154,9 +154,6 @@ export function ContactPeekContent({
         </Field>
         {contact.assignment ? (
           <>
-            <Field label="SLA">
-              <StatusBadge label={contact.assignment.slaStatus} tone={contact.assignment.slaTone} />
-            </Field>
             <Field label="Assigned">{contact.assignment.assignedRelative}</Field>
             <Field label="Last touch">{contact.assignment.lastTouchLabel}</Field>
           </>

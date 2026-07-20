@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { CoPill } from "@/components/crm/cockpit/co-table";
-import { priorityTone, slaTone, statusTone } from "@/components/crm/cockpit/focus/focus-types";
+import { priorityTone, statusTone } from "@/components/crm/cockpit/focus/focus-types";
 import { MyDayProgress, MyDayResume } from "@/components/crm/cockpit/my-day-client";
 import type { MyDayActivityKind } from "@/lib/my-day-activity";
 
@@ -31,7 +31,6 @@ export type MyDayLead = {
   dueLabel: string;
   dueTone: "red" | "amber" | "muted";
   priority: string;
-  sla: string;
   status: string;
   hasPhone: boolean;
   blocked?: string;
@@ -197,7 +196,6 @@ export function MyDay({
                       </span>
                       <span className="flex flex-wrap items-center justify-end gap-1.5">
                         <CoPill tone={priorityTone(lead.priority)}>{lead.priority}</CoPill>
-                        <CoPill tone={slaTone(lead.sla)}>{lead.sla}</CoPill>
                         <CoPill tone={statusTone(lead.status)}>{lead.status}</CoPill>
                         {lead.blocked ? (
                           <span className="text-[10.5px] font-bold text-co-red-text">{lead.blocked}</span>

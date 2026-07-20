@@ -13,7 +13,6 @@ import {
   leadBlockReason,
   leadCallTarget,
   priorityTone,
-  slaTone,
   type FocusLead
 } from "@/components/crm/cockpit/focus/focus-types";
 import { allowsFocusKeyboardShortcut } from "@/lib/focus-keyboard-shortcuts";
@@ -290,7 +289,6 @@ export function FocusWorkspace({
                 </div>
                 <span className="truncate text-[11px] text-co-muted-2">{lead.companyName}</span>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <CoPill tone={slaTone(lead.slaStatus)}>{lead.slaStatus}</CoPill>
                   <span className="text-[10.5px] text-co-text-3">{lead.dueLabel}</span>
                   {!lead.hasPhone ? <span className="text-[10.5px] font-bold text-co-red-text">No phone</span> : null}
                 </div>

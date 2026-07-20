@@ -210,7 +210,7 @@ function PreCall({
       <div className="rounded-[10px] border border-co-accent-border bg-co-accent-bg p-3.5">
         <div className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-blue-dark">Next best action</div>
         <div className="mt-1 text-[13px] font-bold text-co-ink">
-          {block ? block : lead.overdue ? "Call now — SLA overdue" : "Call now"}
+          {block ? block : lead.overdue ? "Call now — follow-up overdue" : "Call now"}
         </div>
         <button
           type="button"

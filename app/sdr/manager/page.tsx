@@ -329,7 +329,7 @@ export default async function SdrManagerPage() {
                     <div className="flex flex-col">
                       <span className="font-medium text-foreground">{recommendation.reason}</span>
                       <span className="text-xs text-muted-foreground">
-                        {recommendation.method} - {recommendation.slaStatus}
+                        {recommendation.method}
                       </span>
                     </div>
                   </TableCell>

@@ -38,7 +38,7 @@ export default async function ContactsPage({
   let openTasks = 0;
   let totalContacts = 0;
   let roster: SdrRosterEntry[] = [];
-  // SDR-assignment fields (SLA / assigned-ago / last touch) keyed by contact id,
+  // SDR-assignment fields (assigned-ago / last touch) keyed by contact id,
   // so the peek matches the My Contacts peek for contacts that are assigned.
   const assignments: Record<string, PeekAssignment> = {};
   const fastModel = await readFastCrmContactsModel(session, workspaceId);

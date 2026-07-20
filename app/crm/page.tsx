@@ -187,7 +187,7 @@ export default async function CrmDashboardPage() {
   const workspaceCards = [
     {
       title: "Work my queue",
-      copy: "First touches, follow-ups, SLA risk, and next actions for active SDR assignments.",
+      copy: "First touches, follow-ups, overdue work, and next actions for active SDR assignments.",
       href: "/sdr/queue",
       count: activeAssignments,
       label: "active",
@@ -342,7 +342,7 @@ export default async function CrmDashboardPage() {
         <TileItem id="priority-work" x={0} y={10} w={6} h={9} minW={4} minH={5}>
         <Panel
           title={session.role === "SDR" ? "My priority work" : "Priority SDR work"}
-          subtitle="Highest-priority assigned leads, SLA status, recommended channel, and next due date."
+          subtitle="Highest-priority assigned leads, recommended channel, and next due date."
           action={
             <Button asChild variant="ghost" size="icon" aria-label="Open SDR queue">
               <Link href="/sdr/queue">
@@ -359,7 +359,6 @@ export default async function CrmDashboardPage() {
                 <TableHead>Lead</TableHead>
                 <TableHead>Owner</TableHead>
                 <TableHead>Priority</TableHead>
-                <TableHead>SLA</TableHead>
                 <TableHead>Next action</TableHead>
               </TableRow>
             </TableHeader>
@@ -376,9 +375,6 @@ export default async function CrmDashboardPage() {
                   <TableCell className="text-muted-foreground">{assignment.ownerName}</TableCell>
                   <TableCell>
                     <StatusBadge label={assignment.priority} tone={assignment.priority === "P1" ? "success" : "info"} />
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge label={assignment.slaStatus} />
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">

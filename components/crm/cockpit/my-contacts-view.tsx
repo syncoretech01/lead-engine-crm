@@ -25,7 +25,6 @@ export type CockpitMyContactRow = {
   companyDomain: string;
   priority: string;
   status: string;
-  slaStatus: string;
   lastTouchLabel: string;
   phone: string;
   hasPhone: boolean;
@@ -46,13 +45,6 @@ function priorityTone(priority: string): CoTone {
   if (priority === "P1") return "red";
   if (priority === "P2") return "amber";
   if (priority === "P3") return "sky";
-  return "neutral";
-}
-
-function slaTone(sla: string): CoTone {
-  if (sla === "Overdue") return "red";
-  if (sla === "Due soon") return "amber";
-  if (sla === "On track") return "teal";
   return "neutral";
 }
 
@@ -124,7 +116,6 @@ export function MyContactsView({
             <th className={coHeadCell}>Account</th>
             <th className={coHeadCell}>Priority</th>
             <th className={coHeadCell}>Status</th>
-            <th className={coHeadCell}>SLA</th>
             <th className={coHeadCell}>Last touch</th>
             <th className={coHeadCell}>Phone</th>
           </tr>
@@ -155,9 +146,6 @@ export function MyContactsView({
               </td>
               <td className={coBodyCell}>
                 <CoPill tone={statusTone(row.status)}>{row.status}</CoPill>
-              </td>
-              <td className={coBodyCell}>
-                <CoPill tone={slaTone(row.slaStatus)}>{row.slaStatus}</CoPill>
               </td>
               <td className={`${coBodyCell} text-co-text-3`}>{row.lastTouchLabel}</td>
               <td className={`${coBodyCell} whitespace-nowrap`}>
@@ -214,7 +202,6 @@ export function MyContactsView({
             <>
               <CoPill tone={priorityTone(peek.priority)}>{peek.priority}</CoPill>
               <CoPill tone={statusTone(peek.status)}>{peek.status}</CoPill>
-              <CoPill tone={slaTone(peek.slaStatus)}>{peek.slaStatus}</CoPill>
             </>
           ) : null
         }
@@ -249,7 +236,6 @@ export function MyContactsView({
             </CoPeekSection>
             <CoPeekSection label="Engagement">
               <CoPeekRow label="Status" value={peek.status} />
-              <CoPeekRow label="SLA" value={peek.slaStatus} />
               <CoPeekRow label="Last touch" value={peek.lastTouchLabel} />
             </CoPeekSection>
           </>
