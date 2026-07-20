@@ -30,11 +30,15 @@ echo "HEAD=$(sudo -u syncore git -C "$APP_DIR" log --oneline -1 2>&1 | tr -cd '[
 
 if [ "$MIGRATE" = "1" ]; then
   echo "=== MIGRATE (expand-then-migrate; additive — old live bundle tolerates it) ==="
+  # Keep the database URL out of SSM command output while tracing remains enabled
+  # for the rest of the deployment.
+  set +x
   DBURL=$(grep -E '^DATABASE_URL=' /etc/syncore/web.env | head -1 | sed -E 's/^DATABASE_URL=//; s/^"//; s/"$//')
   if [ -z "$DBURL" ]; then echo "ABORT: no DATABASE_URL in /etc/syncore/web.env"; exit 1; fi
   cd "$APP_DIR"
   sudo -u syncore env HOME=/tmp DATABASE_URL="$DBURL" npx prisma migrate deploy > /tmp/migrate.log 2>&1
   MIG_RC=$?
+  set -x
   tail -14 /tmp/migrate.log | tr -cd '[:print:]\n'; echo
   if [ "$MIG_RC" -ne 0 ]; then echo "ABORT: migrate failed; web still live on old bundle."; exit 1; fi
 fi
