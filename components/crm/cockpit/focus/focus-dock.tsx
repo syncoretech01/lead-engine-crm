@@ -115,7 +115,6 @@ export function FocusDock({
   lineBlockReason,
   hasNext,
   onStartCall,
-  onReleaseCall,
   onAdvance,
   onComplete,
   callingSession
@@ -126,7 +125,6 @@ export function FocusDock({
   lineBlockReason: string | null;
   hasNext: boolean;
   onStartCall: (lead: FocusLead) => void;
-  onReleaseCall: () => void;
   onAdvance: () => void;
   onComplete: (leadId: string, summary: WrapupSummary) => void;
   callingSession?: { id: string; startedAt: string };
@@ -174,7 +172,6 @@ export function FocusDock({
         onDismiss={() => {
           controls.reset();
           setNotes("");
-          onReleaseCall();
         }}
       />
     );

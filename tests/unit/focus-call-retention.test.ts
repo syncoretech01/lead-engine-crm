@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { retainFocusCallLead } from "@/components/crm/cockpit/focus/focus-types";
+import {
+  resolveFocusSelectedLead,
+  retainFocusCallLead
+} from "@/components/crm/cockpit/focus/focus-types";
 
 describe("Focus call lead retention", () => {
   const calledLead = { id: "contact-called", name: "Called contact" };
@@ -21,5 +24,13 @@ describe("Focus call lead retention", () => {
 
   it("never reuses a retained lead for a different call", () => {
     expect(retainFocusCallLead(calledLead, [nextLead], nextLead.id, true)).toBe(nextLead);
+  });
+
+  it("keeps the completed contact selected after Save & stay removes it from the queue", () => {
+    expect(resolveFocusSelectedLead(null, calledLead, [nextLead], calledLead.id, [nextLead])).toBe(calledLead);
+  });
+
+  it("shows the next contact after an explicit advance", () => {
+    expect(resolveFocusSelectedLead(null, calledLead, [nextLead], nextLead.id, [nextLead])).toBe(nextLead);
   });
 });

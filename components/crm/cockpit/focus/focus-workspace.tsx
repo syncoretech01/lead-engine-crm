@@ -16,6 +16,7 @@ import {
   leadBlockReason,
   leadCallTarget,
   priorityTone,
+  resolveFocusSelectedLead,
   retainFocusCallLead,
   type FocusLead
 } from "@/components/crm/cockpit/focus/focus-types";
@@ -143,8 +144,8 @@ export function FocusWorkspace({
   const callLead = retainFocusCallLead(retainedCallLead, leads, call.contactId, callOwnsFocus);
 
   // A queue refresh can move a just-called contact out of the active batch. Keep
-  // its dossier and wrap-up selected until the SDR explicitly finishes it.
-  const selected = callLead ?? leads.find((l) => l.id === selectedId) ?? list[0] ?? null;
+  // its dossier selected until the SDR explicitly advances or selects another.
+  const selected = resolveFocusSelectedLead(callLead, retainedCallLead, leads, selectedId, list);
   const indexInList = list.findIndex((l) => l.id === selectedId);
 
   const move = React.useCallback(
@@ -163,12 +164,14 @@ export function FocusWorkspace({
     const start = indexInList < 0 ? -1 : indexInList;
     for (let i = start + 1; i < list.length; i += 1) {
       if (!completedIds.has(list[i].id)) {
+        setRetainedCallLead(null);
         setSelectedId(list[i].id);
         return;
       }
     }
     for (let i = 0; i <= start; i += 1) {
       if (!completedIds.has(list[i].id)) {
+        setRetainedCallLead(null);
         setSelectedId(list[i].id);
         return;
       }
@@ -423,7 +426,6 @@ export function FocusWorkspace({
           lineBlockReason={lineBlockReason}
           hasNext={hasNext}
           onStartCall={startCall}
-          onReleaseCall={() => setRetainedCallLead(null)}
           onAdvance={advance}
           onComplete={onComplete}
           callingSession={session.active ? { id: session.id, startedAt: session.startedAt } : undefined}

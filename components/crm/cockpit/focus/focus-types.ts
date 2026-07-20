@@ -69,6 +69,27 @@ export function retainFocusCallLead<T extends { id: string }>(
   return leads.find((lead) => lead.id === contactId) ?? (retained?.id === contactId ? retained : null);
 }
 
+/**
+ * Resolve the dossier selection without dropping a just-completed contact that
+ * moved out of the active queue. An explicit selection/advance still wins by
+ * changing selectedId, so retained data cannot pin the SDR to an old contact.
+ */
+export function resolveFocusSelectedLead<T extends { id: string }>(
+  callLead: T | null,
+  retained: T | null,
+  leads: readonly T[],
+  selectedId: string,
+  visibleLeads: readonly T[]
+): T | null {
+  return (
+    callLead ??
+    leads.find((lead) => lead.id === selectedId) ??
+    (retained?.id === selectedId ? retained : null) ??
+    visibleLeads[0] ??
+    null
+  );
+}
+
 export function priorityTone(priority: string): CoTone {
   if (priority === "P1") return "red";
   if (priority === "P2") return "amber";
