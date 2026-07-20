@@ -97,6 +97,10 @@ export const sdrWriteTables = [
   "auditLogs"
 ] satisfies ProjectionTableName[];
 
+export const sdrDailyReportWriteTables = [
+  "sdrDailyReports"
+] satisfies ProjectionTableName[];
+
 export const reportingWriteTables = [
   "reportSnapshots",
   "retentionPolicies",

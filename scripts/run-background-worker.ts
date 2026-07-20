@@ -1,6 +1,7 @@
 import { runLeadJobWorkerTick } from "@/lib/phase1/lead-job-worker-runner";
 import { runProviderWorkerTick } from "@/lib/phase1/provider-worker-runner";
 import { runRecordingWorkerTick } from "@/lib/phase1/recording-worker-runner";
+import { runSdrDailyReportWorkerTick } from "@/lib/phase1/sdr-daily-report-worker";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import { pingWorkerHeartbeat } from "@/lib/phase1/worker-heartbeat";
 
@@ -43,9 +44,10 @@ async function runTick(args: BackgroundWorkerArgs) {
     workerId: args.workerId
   });
   const recording = await runRecordingWorkerTick({ workspaceId: args.workspaceId });
+  const dailyReports = await runSdrDailyReportWorkerTick({ workspaceId: args.workspaceId });
 
   console.log(
-    `[${new Date().toISOString()}] provider-mock=${provider.mock.completed}/${provider.mock.claimed} provider-live=${provider.live.executed} lead-jobs=${lead.completed}/${lead.claimed} failed=${lead.failed} recordings=${recording.updated}/${recording.scanned}`
+    `[${new Date().toISOString()}] provider-mock=${provider.mock.completed}/${provider.mock.claimed} provider-live=${provider.live.executed} lead-jobs=${lead.completed}/${lead.claimed} failed=${lead.failed} recordings=${recording.updated}/${recording.scanned} daily-reports=${dailyReports.created}`
   );
 }
 

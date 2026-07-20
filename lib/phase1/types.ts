@@ -1218,6 +1218,49 @@ export type SdrCallingSession = {
   updatedAt: string;
 };
 
+export type SdrDailyReportMetrics = {
+  dailyCallTarget: number;
+  callsTotal: number;
+  callsConnected: number;
+  callsVoicemail: number;
+  callsUnanswered: number;
+  callsFailed: number;
+  uniqueContactsCalled: number;
+  totalTalkTimeSeconds: number;
+  emailsSent: number;
+  emailReplies: number;
+  smsSent: number;
+  smsReplies: number;
+  opportunitiesCreated: number;
+  opportunityValue: number;
+  followUpsCreated: number;
+  followUpsCompleted: number;
+  meetingsBooked: number;
+  contactsSuppressed: number;
+  tasksCreated: number;
+  tasksCompleted: number;
+  notesAdded: number;
+  leadsTouched: number;
+  assignmentsReceived: number;
+  firstPassCompleted: number;
+  secondPassCompleted: number;
+  callingSessions: number;
+  activeCallingSeconds: number;
+};
+
+export type SdrDailyReport = {
+  id: string;
+  workspaceId: string;
+  sdrUserId: string;
+  reportDate: string;
+  periodStart: string;
+  periodEnd: string;
+  timezone: "Asia/Karachi";
+  cutoffHour: 4;
+  metrics: SdrDailyReportMetrics;
+  generatedAt: string;
+};
+
 export type ReportCategory =
   | "Executive Overview"
   | "Lead Source Performance"
@@ -1680,6 +1723,7 @@ export type AppState = {
   webhookEvents: WebhookEvent[];
   trackedCalls: TrackedCall[];
   sdrCallingSessions: SdrCallingSession[];
+  sdrDailyReports: SdrDailyReport[];
   reportSnapshots: ReportSnapshot[];
   retentionPolicies: RetentionPolicy[];
   retentionRuns: RetentionRun[];

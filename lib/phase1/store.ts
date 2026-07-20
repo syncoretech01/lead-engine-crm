@@ -1075,6 +1075,11 @@ export function migrateState(input: AppState): { state: AppState; changed: boole
     changed = true;
   }
 
+  if (!Array.isArray(state.sdrDailyReports)) {
+    state.sdrDailyReports = [];
+    changed = true;
+  }
+
   if (!Array.isArray(state.reportSnapshots)) {
     state.reportSnapshots = [];
     changed = true;

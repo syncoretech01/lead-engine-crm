@@ -155,6 +155,7 @@ model Workspace {
   webhookEvents                   WebhookEvent[]
   trackedCalls                    TrackedCall[]
   sdrCallingSessions              SdrCallingSession[]
+  sdrDailyReports                 SdrDailyReport[]
   reportSnapshots                 ReportSnapshot[]
   retentionPolicies               RetentionPolicy[]
   retentionRuns                   RetentionRun[]
@@ -203,6 +204,7 @@ model User {
   smsEvents                    SmsEvent[]
   trackedCalls                 TrackedCall[]
   sdrCallingSessions           SdrCallingSession[]
+  sdrDailyReports              SdrDailyReport[]
   activities                   Activity[]
   generatedReportSnapshots     ReportSnapshot[]      @relation("ReportSnapshotGenerator")
   retentionRuns                RetentionRun[]        @relation("RetentionRunActor")
@@ -1620,6 +1622,25 @@ model SdrCallingSession {
 
   @@index([workspaceId, sdrUserId, startedAt])
   @@index([workspaceId, status, startedAt])
+}
+
+model SdrDailyReport {
+  id          String    @id
+  workspaceId String
+  sdrUserId   String
+  reportDate  String
+  periodStart DateTime
+  periodEnd   DateTime
+  timezone    String    @default("Asia/Karachi")
+  cutoffHour  Int       @default(4)
+  metrics     Json
+  generatedAt DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sdr         User      @relation(fields: [sdrUserId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, sdrUserId, reportDate])
+  @@index([workspaceId, reportDate])
+  @@index([workspaceId, sdrUserId, periodEnd])
 }
 
 model ReportSnapshot {

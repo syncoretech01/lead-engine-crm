@@ -66,6 +66,7 @@ export type ProjectionTableName =
   | "webhookEvents"
   | "trackedCalls"
   | "sdrCallingSessions"
+  | "sdrDailyReports"
   | "reportSnapshots"
   | "retentionPolicies"
   | "retentionRuns"
@@ -163,6 +164,7 @@ const projectionTables: ProjectionTableName[] = [
   "webhookEvents",
   "trackedCalls",
   "sdrCallingSessions",
+  "sdrDailyReports",
   "reportSnapshots",
   "retentionPolicies",
   "retentionRuns",
@@ -235,6 +237,7 @@ const upsertOrder: Array<{ table: ProjectionTableName; delegate: string; workspa
   { table: "webhookEvents", delegate: "webhookEvent", workspaceScoped: true },
   { table: "trackedCalls", delegate: "trackedCall", workspaceScoped: true },
   { table: "sdrCallingSessions", delegate: "sdrCallingSession", workspaceScoped: true },
+  { table: "sdrDailyReports", delegate: "sdrDailyReport", workspaceScoped: true },
   { table: "reportSnapshots", delegate: "reportSnapshot", workspaceScoped: true },
   { table: "retentionPolicies", delegate: "retentionPolicy", workspaceScoped: true },
   { table: "retentionRuns", delegate: "retentionRun", workspaceScoped: true },
@@ -1267,6 +1270,18 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       completedContactIds: session.completedContactIds,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt
+    }))),
+    sdrDailyReports: sortRows(state.sdrDailyReports.map((report) => ({
+      id: report.id,
+      workspaceId: report.workspaceId,
+      sdrUserId: report.sdrUserId,
+      reportDate: report.reportDate,
+      periodStart: report.periodStart,
+      periodEnd: report.periodEnd,
+      timezone: report.timezone,
+      cutoffHour: report.cutoffHour,
+      metrics: report.metrics,
+      generatedAt: report.generatedAt
     }))),
     reportSnapshots: sortRows(state.reportSnapshots.map((snapshot) => ({
       id: snapshot.id,

@@ -38,6 +38,11 @@ import {
   sdrUsers
 } from "@/lib/phase1/sdr";
 import { readFastSdrManagerModel } from "@/lib/phase1/sdr-manager-read-model";
+import {
+  latestSdrDailyReports,
+  readFastSdrDailyReports,
+  sdrDailyReportsFromState
+} from "@/lib/phase1/sdr-daily-report-read-model";
 import { getWorkspaceContext, getWorkspaceSessionContext } from "@/lib/phase1/store";
 import type { AppState } from "@/lib/phase1/types";
 import { formatNumber, formatPercent } from "@/lib/utils";
@@ -48,12 +53,16 @@ export const dynamic = "force-dynamic";
 
 export default async function SdrManagerPage() {
   const sessionContext = await getWorkspaceSessionContext("manage_sdr_team");
-  const fastModel = await readFastSdrManagerModel(sessionContext.session, sessionContext.workspaceId);
+  const [fastModel, fastDailyReports] = await Promise.all([
+    readFastSdrManagerModel(sessionContext.session, sessionContext.workspaceId),
+    readFastSdrDailyReports(sessionContext.session, sessionContext.workspaceId)
+  ]);
   let state = fastModel?.state;
   let workspaceId = sessionContext.workspaceId;
   let snapshot = fastModel?.snapshot;
   let users = fastModel?.users;
   let teams = fastModel?.teams;
+  let dailyReports = fastDailyReports;
 
   if (!fastModel) {
     const context = await getWorkspaceContext("manage_sdr_team");
@@ -62,9 +71,10 @@ export default async function SdrManagerPage() {
     snapshot = managerDashboardSnapshot(state, workspaceId);
     users = sdrUsers(state, workspaceId);
     teams = state.sdrTeams.filter((team) => team.workspaceId === workspaceId);
+    dailyReports = sdrDailyReportsFromState(state, workspaceId);
   }
 
-  if (!state || !snapshot || !users || !teams) {
+  if (!state || !snapshot || !users || !teams || !dailyReports) {
     throw new Error("Unable to load SDR manager dashboard.");
   }
 
@@ -74,6 +84,16 @@ export default async function SdrManagerPage() {
   const maxActiveLoad = Math.max(...snapshot.workloads.map((workload) => workload.active), 1);
   const riskCount = snapshot.workloads.filter((workload) => workload.overdue > 0 || workload.p1 > 2).length;
   const rulePreview = snapshot.rules.slice(0, 4);
+  const sdrMembers = state.workspaceMembers.filter((member) => member.workspaceId === workspaceId && member.role === "SDR");
+  const latestReports = new Map(
+    latestSdrDailyReports(dailyReports, sdrMembers.map((member) => member.userId)).map((report) => [report.sdrUserId, report])
+  );
+  const endOfDayRows = sdrMembers.map((member) => ({
+    userId: member.userId,
+    name: state.users.find((user) => user.id === member.userId)?.name ?? "Unknown SDR",
+    report: latestReports.get(member.userId)
+  }));
+  const latestReportDate = dailyReports[0]?.reportDate;
 
   const metrics = [
     {
@@ -191,7 +211,75 @@ export default async function SdrManagerPage() {
           </TileItem>
         ))}
 
-        <TileItem id="team-workload" x={0} y={4} w={7} h={8} minW={4} minH={4}>
+        <TileItem id="end-of-day-reports" x={0} y={4} w={12} h={9} minW={7} minH={5}>
+        <Panel
+          title="End-of-day SDR reports"
+          subtitle="Saved automatically after the daily window closes at 4:00 AM Pakistan Standard Time (Asia/Karachi)."
+          action={<StatusBadge label={latestReportDate ? `Through ${formatReportDate(latestReportDate)}` : "Awaiting first cutoff"} tone={latestReportDate ? "success" : "warning"} />}
+          flush
+          fill
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>SDR</TableHead>
+                <TableHead>Calls</TableHead>
+                <TableHead>Talk time</TableHead>
+                <TableHead>Email / SMS</TableHead>
+                <TableHead>Pipeline</TableHead>
+                <TableHead>Follow-ups</TableHead>
+                <TableHead>Other activity</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {endOfDayRows.map(({ userId, name, report }) => (
+                <TableRow key={userId}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {report ? formatReportDate(report.reportDate) : "No completed report yet"}
+                      </span>
+                    </div>
+                  </TableCell>
+                  {report ? (
+                    <>
+                      <TableCell>
+                        <ReportMetric value={`${report.metrics.callsTotal}/${report.metrics.dailyCallTarget}`} note={`${report.metrics.callsConnected} connected · ${report.metrics.callsVoicemail} VM · ${report.metrics.callsUnanswered} unanswered · ${report.metrics.callsFailed} failed`} />
+                      </TableCell>
+                      <TableCell>
+                        <ReportMetric value={formatDuration(report.metrics.totalTalkTimeSeconds)} note={`${report.metrics.callingSessions} sessions · ${formatDuration(report.metrics.activeCallingSeconds)} active`} />
+                      </TableCell>
+                      <TableCell>
+                        <ReportMetric value={`${report.metrics.emailsSent} / ${report.metrics.smsSent}`} note={`${report.metrics.emailReplies} email replies · ${report.metrics.smsReplies} SMS replies`} />
+                      </TableCell>
+                      <TableCell>
+                        <ReportMetric value={`${report.metrics.opportunitiesCreated} opportunities`} note={`${report.metrics.meetingsBooked} meetings · ${formatCurrency(report.metrics.opportunityValue)}`} />
+                      </TableCell>
+                      <TableCell>
+                        <ReportMetric value={`${report.metrics.followUpsCreated} created`} note={`${report.metrics.followUpsCompleted} completed`} />
+                      </TableCell>
+                      <TableCell>
+                        <ReportMetric
+                          value={`${report.metrics.leadsTouched} touched · ${report.metrics.contactsSuppressed} suppressed`}
+                          note={`${report.metrics.assignmentsReceived} assigned · P1 ${report.metrics.firstPassCompleted} / P2 ${report.metrics.secondPassCompleted} · ${report.metrics.tasksCompleted} tasks · ${report.metrics.notesAdded} notes`}
+                        />
+                      </TableCell>
+                    </>
+                  ) : (
+                    <TableCell colSpan={6} className="text-muted-foreground">The worker will save this SDR&apos;s first report at the next 4:00 AM PKT cutoff.</TableCell>
+                  )}
+                </TableRow>
+              ))}
+              {endOfDayRows.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-muted-foreground">No SDR members are available for daily reporting.</TableCell></TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </Panel>
+        </TileItem>
+
+        <TileItem id="team-workload" x={0} y={13} w={7} h={8} minW={4} minH={4}>
         <Panel
           title="Team workload"
           subtitle="Active load, P1 pressure, meetings, and SLA adherence by rep."
@@ -255,7 +343,7 @@ export default async function SdrManagerPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="routing-coverage" x={7} y={4} w={5} h={8} minW={3} minH={4}>
+        <TileItem id="routing-coverage" x={7} y={13} w={5} h={8} minW={3} minH={4}>
         <Panel
           title="Routing coverage"
           subtitle="Territory and industry pods used by the assignment engine."
@@ -291,7 +379,7 @@ export default async function SdrManagerPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="reassignment-recommendations" x={0} y={12} w={12} h={7} minW={6} minH={3}>
+        <TileItem id="reassignment-recommendations" x={0} y={21} w={12} h={7} minW={6} minH={3}>
         <Panel
           title="Reassignment recommendations"
           subtitle="Overdue SLA and P1 load-balance recommendations generated from current assignments."
@@ -358,7 +446,7 @@ export default async function SdrManagerPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="manual-reassignment" x={0} y={19} w={7} h={9} minW={4} minH={4}>
+        <TileItem id="manual-reassignment" x={0} y={28} w={7} h={9} minW={4} minH={4}>
         <Panel
           title="Manual reassignment"
           subtitle="Move any active assignment to another SDR with a manager reason."
@@ -454,7 +542,7 @@ export default async function SdrManagerPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="reassignment-rules" x={7} y={19} w={5} h={9} minW={3} minH={4}>
+        <TileItem id="reassignment-rules" x={7} y={28} w={5} h={9} minW={3} minH={4}>
         <Panel
           title="Reassignment rules"
           subtitle="Rules define when manager recommendations should move work."
@@ -578,4 +666,25 @@ export default async function SdrManagerPage() {
 
 function teamForUser(teams: AppState["sdrTeams"], userId: string) {
   return teams.find((team) => team.memberUserIds.includes(userId));
+}
+
+function ReportMetric({ value, note }: { value: string; note: string }) {
+  return <div className="flex min-w-[132px] flex-col"><span className="font-medium text-foreground">{value}</span><span className="text-xs text-muted-foreground">{note}</span></div>;
+}
+
+function formatDuration(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const rest = safe % 60;
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}` : `${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+}
+
+function formatReportDate(value: string): string {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
 }
