@@ -16,6 +16,7 @@ import {
   leadBlockReason,
   leadCallTarget,
   priorityTone,
+  retainFocusCallLead,
   type FocusLead
 } from "@/components/crm/cockpit/focus/focus-types";
 import { allowsFocusKeyboardShortcut } from "@/lib/focus-keyboard-shortcuts";
@@ -112,6 +113,7 @@ export function FocusWorkspace({
   const [completedIds, setCompletedIds] = React.useState<Set<string>>(() => new Set());
   const [endingSession, setEndingSession] = React.useState(false);
   const [endedReport, setEndedReport] = React.useState<SdrCallingSession | null>(null);
+  const [retainedCallLead, setRetainedCallLead] = React.useState<FocusLead | null>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
 
   const list = React.useMemo(() => {
@@ -137,7 +139,12 @@ export function FocusWorkspace({
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [selectedId, view, leads]);
 
-  const selected = leads.find((l) => l.id === selectedId) ?? list[0] ?? null;
+  const callOwnsFocus = call.surface === "dock" && call.status !== "idle";
+  const callLead = retainFocusCallLead(retainedCallLead, leads, call.contactId, callOwnsFocus);
+
+  // A queue refresh can move a just-called contact out of the active batch. Keep
+  // its dossier and wrap-up selected until the SDR explicitly finishes it.
+  const selected = callLead ?? leads.find((l) => l.id === selectedId) ?? list[0] ?? null;
   const indexInList = list.findIndex((l) => l.id === selectedId);
 
   const move = React.useCallback(
@@ -217,10 +224,18 @@ export function FocusWorkspace({
     toast.success("Session report saved.");
   }, [endingSession, session]);
 
+  const startCall = React.useCallback(
+    (lead: FocusLead) => {
+      if (leadBlockReason(lead, lineBlockReason)) return;
+      setRetainedCallLead(lead);
+      openCallInline(leadCallTarget(lead, callerLabel, lineBlockReason));
+    },
+    [callerLabel, lineBlockReason, openCallInline]
+  );
+
   const callSelected = React.useCallback(() => {
-    if (!selected) return;
-    openCallInline(leadCallTarget(selected, callerLabel, lineBlockReason));
-  }, [selected, callerLabel, lineBlockReason, openCallInline]);
+    if (selected) startCall(selected);
+  }, [selected, startCall]);
 
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -403,10 +418,12 @@ export function FocusWorkspace({
       <aside className="hidden min-h-0 w-[388px] shrink-0 flex-col overflow-y-auto overscroll-contain border-l border-co-border bg-co-sunken xl:flex [@media(max-width:1380px)]:w-[360px] [@media(max-width:1200px)]:w-[332px]">
         <FocusDock
           selected={selected}
-          leads={leads}
+          callLead={callLead}
           callerLabel={callerLabel}
           lineBlockReason={lineBlockReason}
           hasNext={hasNext}
+          onStartCall={startCall}
+          onReleaseCall={() => setRetainedCallLead(null)}
           onAdvance={advance}
           onComplete={onComplete}
           callingSession={session.active ? { id: session.id, startedAt: session.startedAt } : undefined}

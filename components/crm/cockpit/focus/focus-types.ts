@@ -54,6 +54,21 @@ export type FocusTimelineItem = {
   meta: string;
 };
 
+/**
+ * Keep the record that owns an in-progress call or pending wrap-up even if a
+ * queue refresh removes it from the latest active batch. The call lifecycle is
+ * the authority until the engine is explicitly reset after wrap-up.
+ */
+export function retainFocusCallLead<T extends { id: string }>(
+  retained: T | null,
+  leads: readonly T[],
+  contactId: string | null,
+  callOwnsFocus: boolean
+): T | null {
+  if (!callOwnsFocus || !contactId) return null;
+  return leads.find((lead) => lead.id === contactId) ?? (retained?.id === contactId ? retained : null);
+}
+
 export function priorityTone(priority: string): CoTone {
   if (priority === "P1") return "red";
   if (priority === "P2") return "amber";

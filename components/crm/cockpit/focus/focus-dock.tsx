@@ -22,7 +22,7 @@ import { saveCallWrapupAction } from "@/app/actions";
 import { useCall } from "@/components/call/call-context";
 import { CoPill } from "@/components/crm/cockpit/co-table";
 import { QuickActions } from "@/components/crm/cockpit/quick-actions";
-import { leadBlockReason, leadCallTarget, type FocusLead } from "@/components/crm/cockpit/focus/focus-types";
+import { leadBlockReason, type FocusLead } from "@/components/crm/cockpit/focus/focus-types";
 import type { WrapupSummary } from "@/components/crm/cockpit/focus/use-focus-session";
 
 const DIAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
@@ -110,34 +110,38 @@ function presetToIso(preset: FollowUpPreset, customValue: string): string | unde
 
 export function FocusDock({
   selected,
-  leads,
+  callLead,
   callerLabel,
   lineBlockReason,
   hasNext,
+  onStartCall,
+  onReleaseCall,
   onAdvance,
   onComplete,
   callingSession
 }: {
   selected: FocusLead | null;
-  leads: FocusLead[];
+  callLead: FocusLead | null;
   callerLabel: string | null;
   lineBlockReason: string | null;
   hasNext: boolean;
+  onStartCall: (lead: FocusLead) => void;
+  onReleaseCall: () => void;
   onAdvance: () => void;
   onComplete: (leadId: string, summary: WrapupSummary) => void;
   callingSession?: { id: string; startedAt: string };
 }) {
-  const { openCallInline, call, controls } = useCall();
+  const { call, controls } = useCall();
 
-  // The lead the live/ended call belongs to (derived from the snapshot, so the
-  // dock stays locked to the call even if the SDR browses other leads).
-  const callLead = call.contactId ? leads.find((lead) => lead.id === call.contactId) ?? null : null;
+  // FocusWorkspace retains this lead across queue refreshes, so the live call and
+  // pending wrap-up cannot be replaced by the next active-batch contact.
+  const resolvedCallLead = call.contactId === callLead?.id ? callLead : null;
   const onCall =
-    Boolean(callLead) &&
+    Boolean(resolvedCallLead) &&
     call.surface === "dock" &&
     (call.status === "connecting" || call.status === "ringing" || call.status === "in-call");
   const wrapping =
-    Boolean(callLead) &&
+    Boolean(resolvedCallLead) &&
     call.surface === "dock" &&
     (call.status === "ended" || call.status === "error" || call.status === "ringout-done");
 
@@ -148,18 +152,18 @@ export function FocusDock({
     (lead: FocusLead) => {
       if (leadBlockReason(lead, lineBlockReason)) return;
       setNotes("");
-      openCallInline(leadCallTarget(lead, callerLabel, lineBlockReason));
+      onStartCall(lead);
     },
-    [callerLabel, lineBlockReason, openCallInline]
+    [lineBlockReason, onStartCall]
   );
 
-  if (onCall && callLead) {
-    return <LiveCall lead={callLead} call={call} controls={controls} notes={notes} setNotes={setNotes} />;
+  if (onCall && resolvedCallLead) {
+    return <LiveCall lead={resolvedCallLead} call={call} controls={controls} notes={notes} setNotes={setNotes} />;
   }
-  if (wrapping && callLead) {
+  if (wrapping && resolvedCallLead) {
     return (
       <Wrapup
-        lead={callLead}
+        lead={resolvedCallLead}
         call={call}
         notes={notes}
         setNotes={setNotes}
@@ -170,6 +174,7 @@ export function FocusDock({
         onDismiss={() => {
           controls.reset();
           setNotes("");
+          onReleaseCall();
         }}
       />
     );
@@ -658,7 +663,18 @@ function Wrapup({
   }, []);
 
   if (saved) {
-    return <Success created={saved} name={lead.name} hasNext={hasNext} onAdvance={onAdvance} onStay={onDismiss} />;
+    return (
+      <Success
+        created={saved}
+        name={lead.name}
+        hasNext={hasNext}
+        onAdvance={() => {
+          onDismiss();
+          onAdvance();
+        }}
+        onStay={onDismiss}
+      />
+    );
   }
 
   const chip = (active: boolean) =>
