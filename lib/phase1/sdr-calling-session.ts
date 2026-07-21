@@ -175,6 +175,9 @@ function applyWrapupOutcomeToTrackedCall(call: TrackedCall, summary: SdrSessionW
   } else if (summary.outcome === "Wrong number") {
     call.callStatus = "Failed";
     call.disposition = "Bad number";
+  } else if (summary.outcome === "Hang Up") {
+    call.callStatus = summary.connected ? "Connected" : "No answer";
+    call.disposition = "Hung up";
   } else if (summary.connected) {
     call.callStatus = "Connected";
     if (summary.outcome === "Meeting booked") call.disposition = "Meeting booked";

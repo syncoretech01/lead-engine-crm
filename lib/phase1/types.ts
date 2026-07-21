@@ -1002,6 +1002,7 @@ export type CallDisposition =
   | "Not interested"
   | "Left voicemail"
   | "No answer"
+  | "Hung up"
   | "Bad number"
   | "Meeting booked";
 

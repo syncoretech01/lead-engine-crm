@@ -42,6 +42,7 @@ const OUTCOMES: OutcomeDef[] = [
   { id: "No answer", status: "Working", nextAction: "Try again later or send a 1:1 email" },
   { id: "Voicemail", status: "Contacted", nextAction: "Follow up after the voicemail" },
   { id: "Busy", status: "Working", nextAction: "Retry shortly" },
+  { id: "Hang Up", status: "Contacted", nextAction: "Review the call and set the next follow-up" },
   { id: "Wrong number", status: "Invalid", nextAction: "Verify the number on the record" },
   { id: "Not interested", status: "Disqualified", nextAction: "Nurture or disqualify" },
   { id: "Follow-up required", status: "Working", followUp: "tomorrow", nextAction: "Complete the follow-up you set" },
@@ -596,7 +597,7 @@ function Wrapup({
         ? new Date(meetingAt).toISOString()
         : presetToIso(followUp, customFollowUp);
     const countsAsConnected = connected ||
-      ["Connected", "Not interested", "Follow-up required", "Qualified", "Meeting booked", "Do not contact"].includes(outcome);
+      ["Connected", "Hang Up", "Not interested", "Follow-up required", "Qualified", "Meeting booked", "Do not contact"].includes(outcome);
     const result = await saveCallWrapupAction({
       assignmentId: lead.assignmentId,
       contactId: lead.id,

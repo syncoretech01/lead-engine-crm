@@ -393,6 +393,7 @@ export function callDispositionValue(value: string | null | undefined): CallDisp
     "Not interested",
     "Left voicemail",
     "No answer",
+    "Hung up",
     "Bad number",
     "Meeting booked"
   ];

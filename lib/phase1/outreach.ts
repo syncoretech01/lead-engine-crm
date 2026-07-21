@@ -53,6 +53,7 @@ export const callDispositions: CallDisposition[] = [
   "Not interested",
   "Left voicemail",
   "No answer",
+  "Hung up",
   "Bad number",
   "Meeting booked"
 ];

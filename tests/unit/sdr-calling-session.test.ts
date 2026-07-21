@@ -97,6 +97,45 @@ describe("SDR calling session reports", () => {
     expect(retry.endedAt).toBe("2026-07-20T14:15:00.000Z");
     expect(state.sdrCallingSessions).toHaveLength(1);
   });
+
+  it("records the Hang Up wrap-up as a connected call without marking it Interested", () => {
+    const state = createSeedState();
+    const workspaceId = state.workspaces[0].id;
+    const sdrUserId = state.workspaceMembers.find((member) => member.role === "SDR")!.userId;
+    const contact = state.contacts.find((item) => item.workspaceId === workspaceId)!;
+    const startedAt = "2026-07-20T16:00:00.000Z";
+    const call = trackedCall({
+      id: "call-hang-up",
+      workspaceId,
+      sdrUserId,
+      contactId: contact.id,
+      companyId: contact.companyId,
+      createdAt: "2026-07-20T16:01:00.000Z",
+      callStatus: "Connected",
+      durationSeconds: 18
+    });
+    state.trackedCalls.unshift(call);
+
+    const report = recordSdrCallingSessionWrapup(state, {
+      id: "session-hang-up",
+      workspaceId,
+      sdrUserId,
+      startedAt,
+      now: "2026-07-20T16:02:00.000Z",
+      summary: {
+        contactId: contact.id,
+        outcome: "Hang Up",
+        connected: true,
+        followUp: false,
+        suppressed: false,
+        talkTimeSeconds: 18
+      }
+    });
+
+    expect(report.connectedCalls).toBe(1);
+    expect(call.callStatus).toBe("Connected");
+    expect(call.disposition).toBe("Hung up");
+  });
 });
 
 function trackedCall(input: {
