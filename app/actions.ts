@@ -40,6 +40,14 @@ import {
   taskPriorities
 } from "@/lib/phase1/crm";
 import { updateContactDetailsForWorkspace } from "@/lib/phase1/contact-details";
+import {
+  assertCanManageCrmConfiguration,
+  assertCanMutateAssignment,
+  assertCanMutateCrmTarget,
+  assertCanMutateReminder,
+  assertCanMutateTask,
+  resolveCrmMutationUserId
+} from "@/lib/phase1/crm-mutation-authorization";
 import { splitList } from "@/lib/phase1/csv";
 import {
   detectWorkspaceDuplicates,
@@ -77,6 +85,7 @@ import { normalizeDomain, normalizeEmail, normalizePhone } from "@/lib/phase1/no
 import { outreachBatchSize } from "@/lib/phase1/outreach-config";
 import { resolveUserTelephonyIdentity, telephonyIdentityBlockReason } from "@/lib/phase1/telephony-identities";
 import { resolveUserRingCentralCredential } from "@/lib/phase1/ringcentral-user-credential";
+import { userDateTimeToIso } from "@/lib/phase1/user-date-time";
 import {
   completeSdrCallingSession,
   ensureSdrCallingSession,
@@ -785,6 +794,7 @@ export async function createOpportunityAction(formData: FormData) {
         )
       : undefined;
     const contactId = contact?.id;
+    assertCanMutateCrmTarget(state, session, { companyId, contactId }, "opportunities");
     const stage = opportunityStageValue(formData.get("stage"));
     const now = new Date().toISOString();
     const opportunity: Opportunity = {
@@ -797,7 +807,11 @@ export async function createOpportunityAction(formData: FormData) {
       amount: numberValue(formData.get("amount")),
       probability: stageProbability(stage),
       expectedCloseDate: dateValue(formData.get("expectedCloseDate")),
-      ownerUserId: stringValue(formData.get("ownerUserId"), session.user.id),
+      ownerUserId: resolveCrmMutationUserId(
+        state,
+        session,
+        stringValue(formData.get("ownerUserId")) || undefined
+      ),
       source: stringValue(formData.get("source"), company.sourceLineage[0] ?? "Manual CRM"),
       createdAt: now,
       updatedAt: now
@@ -892,6 +906,7 @@ export async function updateOpportunityStageAction(formData: FormData) {
     if (!opportunity) {
       throw new Error("Opportunity not found.");
     }
+    assertCanMutateCrmTarget(state, session, { opportunityId: opportunity.id }, "opportunities");
 
     const oldStage = opportunity.stage;
     const nextStage = opportunityStageValue(formData.get("stage"));
@@ -931,6 +946,7 @@ export async function createTaskAction(formData: FormData) {
       companyId: stringValue(formData.get("companyId")) || undefined
     });
     const contactId = contact?.id;
+    assertCanMutateCrmTarget(state, session, { contactId, companyId }, "tasks");
     const now = new Date().toISOString();
     const task: CrmTask = {
       id: `task-${randomUUID()}`,
@@ -940,8 +956,12 @@ export async function createTaskAction(formData: FormData) {
       title: stringValue(formData.get("title"), "Follow up"),
       status: "Open",
       priority: taskPriorityValue(formData.get("priority")),
-      dueAt: dateValue(formData.get("dueAt")),
-      ownerUserId: stringValue(formData.get("ownerUserId"), session.user.id),
+      dueAt: dateTimeValue(formData.get("dueAt"), session.user.timezone),
+      ownerUserId: resolveCrmMutationUserId(
+        state,
+        session,
+        stringValue(formData.get("ownerUserId")) || undefined
+      ),
       createdById: session.user.id,
       createdAt: now,
       updatedAt: now
@@ -979,6 +999,7 @@ export async function completeTaskAction(formData: FormData) {
     if (!task) {
       throw new Error("Task not found.");
     }
+    assertCanMutateTask(state, session, task);
 
     const oldStatus = task.status;
     const now = new Date().toISOString();
@@ -1016,6 +1037,7 @@ export async function createNoteAction(formData: FormData) {
       companyId: stringValue(formData.get("companyId")) || undefined
     });
     const contactId = contact?.id;
+    assertCanMutateCrmTarget(state, session, { contactId, companyId }, "notes");
     const now = new Date().toISOString();
     const note = {
       id: `note-${randomUUID()}`,
@@ -1058,6 +1080,7 @@ export async function createCallLogAction(formData: FormData) {
       companyId: stringValue(formData.get("companyId")) || undefined
     });
     const contactId = contact?.id;
+    assertCanMutateCrmTarget(state, session, { contactId, companyId }, "call logs");
     const durationMinutes = Math.max(0, numberValue(formData.get("durationMinutes")));
     const call: CallLog = {
       id: `call-${randomUUID()}`,
@@ -1098,6 +1121,7 @@ export async function createCallLogAction(formData: FormData) {
 export async function createCustomFieldAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_crm");
+    assertCanManageCrmConfiguration(session);
     const now = new Date().toISOString();
     const field: CustomField = {
       id: `field-${randomUUID()}`,
@@ -1139,6 +1163,9 @@ export async function setCustomFieldValueAction(formData: FormData) {
       throw new Error("Custom field not found.");
     }
 
+    const activityTarget = activityTargetForCustomField(state, field.objectType, objectId, session.workspace.id);
+    assertCanMutateCrmTarget(state, session, activityTarget, "custom-field values");
+
     const now = new Date().toISOString();
     const existing = state.customFieldValues.find(
       (item) => item.workspaceId === session.workspace.id && item.customFieldId === customFieldId && item.objectId === objectId
@@ -1158,7 +1185,6 @@ export async function setCustomFieldValueAction(formData: FormData) {
       });
     }
 
-    const activityTarget = activityTargetForCustomField(state, field.objectType, objectId, session.workspace.id);
     addActivity(state, {
       workspaceId: session.workspace.id,
       companyId: activityTarget.companyId,
@@ -1202,14 +1228,21 @@ export async function runSdrAssignmentAction() {
 export async function logFirstTouchAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_sdr");
+    const assignmentId = stringValue(formData.get("assignmentId"));
+    const targetAssignment = requireWorkspaceScopedRecord(
+      state.sdrAssignments.find((item) => item.id === assignmentId),
+      session.workspace.id,
+      "SDR assignment"
+    );
+    assertCanMutateAssignment(session, targetAssignment);
     const assignment = recordFirstTouch(state, {
       workspaceId: session.workspace.id,
-      assignmentId: stringValue(formData.get("assignmentId")),
+      assignmentId,
       actorUserId: session.user.id,
       channel: outreachChannelValue(formData.get("channel")),
       outcome: sdrLeadStatusValue(formData.get("outcome")),
       notes: stringValue(formData.get("notes"), "First touch logged."),
-      followUpDueAt: dateTimeValue(formData.get("followUpDueAt"))
+      followUpDueAt: dateTimeValue(formData.get("followUpDueAt"), session.user.timezone)
     });
 
     appendAudit(state, session, {
@@ -1267,6 +1300,20 @@ export async function saveCallWrapupAction(input: {
         assertPermission(session, "manage_sdr");
         assertPermission(session, "manage_crm");
 
+        const targetAssignment = requireWorkspaceScopedRecord(
+          state.sdrAssignments.find((item) => item.id === input.assignmentId),
+          session.workspace.id,
+          "SDR assignment"
+        );
+        assertCanMutateAssignment(session, targetAssignment);
+        if (input.contactId && input.contactId !== targetAssignment.contactId) {
+          throw new Error("Call wrap-up contact does not match the assignment.");
+        }
+        if (input.companyId && input.companyId !== targetAssignment.companyId) {
+          throw new Error("Call wrap-up account does not match the assignment.");
+        }
+        const followUpDueAt = dateTimeValue(input.followUpDueAt ?? null, session.user.timezone);
+
         // 1. First touch: status, SLA reset, completes old reminders, creates the
         //    follow-up reminder + task (when the status stays active), touch activity.
         const leadStatus = sdrLeadStatuses.includes(input.leadStatus as SdrLeadStatus)
@@ -1279,10 +1326,10 @@ export async function saveCallWrapupAction(input: {
           channel: "Call",
           outcome: leadStatus,
           notes: input.notes.trim() || `Call wrap-up: ${input.outcome}.`,
-          followUpDueAt: input.followUpDueAt
+          followUpDueAt
         });
         created.push(`Lead status → ${assignment.status}`);
-        if (input.followUpDueAt) {
+        if (followUpDueAt) {
           created.push("Follow-up reminder + task");
         }
 
@@ -1329,7 +1376,7 @@ export async function saveCallWrapupAction(input: {
               contactId,
               outcome: input.outcome,
               connected: Boolean(input.connected),
-              followUp: Boolean(input.followUpDueAt),
+              followUp: Boolean(followUpDueAt),
               suppressed: assignment.status === "Suppressed" || assignment.status === "Unsubscribed",
               talkTimeSeconds: Math.max(0, Math.round(input.talkTimeSeconds ?? 0))
             }
@@ -1371,7 +1418,7 @@ export async function saveCallWrapupAction(input: {
             title: input.task.title.trim(),
             status: "Open",
             priority: taskPriorityValue(null),
-            dueAt: dateTimeValue(input.task.dueAt ?? null),
+            dueAt: dateTimeValue(input.task.dueAt ?? null, session.user.timezone),
             ownerUserId: session.user.id,
             createdById: session.user.id,
             createdAt: now,
@@ -1528,7 +1575,14 @@ export async function completeSdrCallingSessionAction(input: {
 export async function completeFollowUpReminderAction(formData: FormData) {
   await updateState((state, session) => {
     assertPermission(session, "manage_sdr");
-    const reminder = completeReminder(state, stringValue(formData.get("id")), session.user.id, session.workspace.id);
+    const reminderId = stringValue(formData.get("id"));
+    const targetReminder = requireWorkspaceScopedRecord(
+      state.followUpReminders.find((item) => item.id === reminderId),
+      session.workspace.id,
+      "Follow-up reminder"
+    );
+    assertCanMutateReminder(state, session, targetReminder);
+    const reminder = completeReminder(state, reminderId, session.user.id, session.workspace.id);
 
     appendAudit(state, session, {
       objectType: "follow_up_reminder",
@@ -1640,7 +1694,8 @@ export async function bulkUpdateContactStatusAction(input: {
 }): Promise<ActionResult> {
   return asActionResult(async () => {
     const contactIds = [...new Set(input.contactIds)].filter(Boolean);
-    if (contactIds.length === 0 || !input.status) {
+    const nextStatus = crmLeadStatusValue(input.status);
+    if (contactIds.length === 0) {
       throw new Error("Select at least one contact and a status.");
     }
     await updateState((state, session) => {
@@ -1652,18 +1707,24 @@ export async function bulkUpdateContactStatusAction(input: {
       if (contacts.length === 0) {
         throw new Error("No matching contacts to update.");
       }
+      if (contacts.length !== contactIds.length) {
+        throw new Error("One or more contacts were not found in this workspace.");
+      }
+      for (const contact of contacts) {
+        assertCanMutateCrmTarget(state, session, { contactId: contact.id }, "contacts");
+      }
       const now = new Date().toISOString();
       for (const contact of contacts) {
         const previous = contact.status;
-        if (previous === input.status) continue;
-        contact.status = input.status;
+        if (previous === nextStatus) continue;
+        contact.status = nextStatus;
         contact.updatedAt = now;
         addActivity(state, {
           workspaceId: session.workspace.id,
           companyId: contact.companyId,
           contactId: contact.id,
           type: "Status change",
-          title: `Status set to ${input.status}`,
+          title: `Status set to ${nextStatus}`,
           body: `Bulk update from ${previous}.`,
           actorUserId: session.user.id
         });
@@ -1672,7 +1733,7 @@ export async function bulkUpdateContactStatusAction(input: {
         objectType: "contact",
         objectId: session.workspace.id,
         action: "bulk_status_updated",
-        newValue: { contactIds, status: input.status, count: contacts.length }
+        newValue: { contactIds, status: nextStatus, count: contacts.length }
       });
     }, { normalizedTables: crmWriteTables });
 
@@ -1954,7 +2015,7 @@ function assertAssignedContactForOutreach(state: AppState, session: Session, con
 
 export async function recordEmailEventAction(formData: FormData) {
   await updateState((state, session) => {
-    assertPermission(session, "send_direct_outreach");
+    assertPermission(session, "manage_outreach");
     const contactId = stringValue(formData.get("contactId"));
     assertAssignedContactForOutreach(state, session, contactId);
     const event = createEmailEvent(state, {
@@ -2219,11 +2280,15 @@ export async function sendDirectSmsAction(formData: FormData) {
 
 export async function recordSmsEventAction(formData: FormData) {
   await updateState((state, session) => {
-    assertPermission(session, "send_direct_outreach");
+    assertPermission(session, "manage_outreach");
     const contactId = stringValue(formData.get("contactId"));
     assertAssignedContactForOutreach(state, session, contactId);
-    const sdrUserId = stringValue(formData.get("sdrUserId"), session.user.id);
-    const sdrUser = state.users.find((user) => user.id === sdrUserId) ?? session.user;
+    const sdrUserId = resolveCrmMutationUserId(
+      state,
+      session,
+      stringValue(formData.get("sdrUserId")) || undefined
+    );
+    const sdrUser = state.users.find((user) => user.id === sdrUserId)!;
     const telephonyIdentity = resolveUserTelephonyIdentity(sdrUser);
     const event = createSmsEvent(state, {
       workspaceId: session.workspace.id,
@@ -2251,13 +2316,18 @@ export async function recordSmsEventAction(formData: FormData) {
 
 export async function recordTrackedCallAction(formData: FormData) {
   await updateState((state, session) => {
-    assertPermission(session, "send_direct_outreach");
+    assertPermission(session, "manage_outreach");
     const contactId = stringValue(formData.get("contactId"));
     assertAssignedContactForOutreach(state, session, contactId);
+    const sdrUserId = resolveCrmMutationUserId(
+      state,
+      session,
+      stringValue(formData.get("sdrUserId")) || undefined
+    );
     const call = createTrackedCall(state, {
       workspaceId: session.workspace.id,
       contactId,
-      sdrUserId: stringValue(formData.get("sdrUserId"), session.user.id),
+      sdrUserId,
       direction: stringValue(formData.get("direction"), "Outbound") === "Inbound" ? "Inbound" : "Outbound",
       callStatus: trackedCallStatusValue(formData.get("callStatus")),
       disposition: callDispositionValue(formData.get("disposition")),
@@ -3410,6 +3480,37 @@ function sdrLeadStatusValue(value: FormDataEntryValue | null): SdrLeadStatus {
   return sdrLeadStatuses.includes(status) ? status : "Contacted";
 }
 
+const crmLeadStatuses: LeadStatus[] = [
+  "New",
+  "Assigned",
+  "Working",
+  "Contacted",
+  "Opened",
+  "Replied",
+  "Interested",
+  "Meeting Booked",
+  "Qualified",
+  "Proposal Sent",
+  "Won",
+  "Lost",
+  "Nurture",
+  "Disqualified",
+  "Invalid",
+  "Unsubscribed",
+  "Ready for SDR",
+  "Needs enrichment",
+  "Suppressed",
+  "In review",
+  "Exported"
+];
+
+function crmLeadStatusValue(value: unknown): LeadStatus {
+  if (typeof value !== "string" || !crmLeadStatuses.includes(value as LeadStatus)) {
+    throw new Error("Select a valid contact status.");
+  }
+  return value as LeadStatus;
+}
+
 function outreachChannelValue(value: FormDataEntryValue | null): OutreachChannel {
   const channel = stringValue(value, "Email") as OutreachChannel;
   return outreachChannels.includes(channel) ? channel : "Email";
@@ -3425,14 +3526,8 @@ function reassignmentTriggerValue(value: FormDataEntryValue | null): Reassignmen
   return reassignmentTriggers.includes(trigger) ? trigger : "SLA overdue";
 }
 
-function dateTimeValue(value: FormDataEntryValue | null) {
-  if (typeof value !== "string" || !value.trim()) {
-    return undefined;
-  }
-
-  const normalized = value.includes("T") ? value : `${value}T09:00`;
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+function dateTimeValue(value: FormDataEntryValue | null, userTimeZone?: string) {
+  return userDateTimeToIso(value, userTimeZone);
 }
 
 function campaignTypeValue(value: FormDataEntryValue | null): CampaignType {
