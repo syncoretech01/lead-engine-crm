@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isPhoneSearchQuery,
   phoneMatchesSearch,
+  phoneNumbersEquivalent,
   phoneSearchDigits,
   textOrPhoneMatchesSearch
 } from "@/lib/phone-search";
@@ -22,6 +23,12 @@ describe("phone search", () => {
 
   it("accepts an optional leading US country code on either side", () => {
     expect(phoneMatchesSearch("301-201-0899", "+1 301 201 0899")).toBe(true);
+    expect(phoneNumbersEquivalent("301-201-0899", "+1 301 201 0899")).toBe(true);
+  });
+
+  it("does not identify a partial or different caller as the same contact", () => {
+    expect(phoneNumbersEquivalent(stored, "201-0899")).toBe(false);
+    expect(phoneNumbersEquivalent(stored, "+1 301 201 9999")).toBe(false);
   });
 
   it("does not turn text containing digits into a phone query", () => {

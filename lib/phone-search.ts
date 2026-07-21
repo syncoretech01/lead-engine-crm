@@ -31,6 +31,17 @@ export function phoneMatchesSearch(phone: string | null | undefined, query: stri
   );
 }
 
+/** Exact phone identity comparison for provider callbacks. Presentation and an
+ * optional leading North-American country code do not change the identity. */
+export function phoneNumbersEquivalent(
+  first: string | null | undefined,
+  second: string | null | undefined
+) {
+  const firstDigits = withoutUsCountryCode(phoneSearchDigits(first));
+  const secondDigits = withoutUsCountryCode(phoneSearchDigits(second));
+  return firstDigits.length >= 7 && firstDigits === secondDigits;
+}
+
 export function textOrPhoneMatchesSearch(
   value: unknown,
   phone: string | null | undefined,

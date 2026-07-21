@@ -20,7 +20,14 @@ import { SoftphoneEngine, type SoftphoneEngineHandle } from "@/components/softph
  * engine's published snapshot) + drives it through `controls`. The engine owns
  * the WebRTC session either way.
  */
-export function CallProvider({ children }: { children: React.ReactNode }) {
+export function CallProvider({
+  children,
+  registerInbound = false
+}: {
+  children: React.ReactNode;
+  /** Start and maintain this signed-in user's RingCentral SIP registration. */
+  registerInbound?: boolean;
+}) {
   const engineRef = React.useRef<SoftphoneEngineHandle>(null);
   const [busy, setBusy] = React.useState(false);
   const [activeContactId, setActiveContactId] = React.useState<string | null>(null);
@@ -68,7 +75,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   return (
     <CallContext.Provider value={value}>
       {children}
-      <SoftphoneEngine ref={engineRef} onStateChange={onStateChange} />
+      <SoftphoneEngine
+        ref={engineRef}
+        onStateChange={onStateChange}
+        registerInbound={registerInbound}
+      />
     </CallContext.Provider>
   );
 }

@@ -65,7 +65,12 @@ export default async function RootLayout({
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <ThemeProvider initialPref={themePref}>
-          <CallProvider>
+          <CallProvider
+            registerInbound={
+              Boolean(session.user.ringCentralJwt) &&
+              session.permissions.includes("send_direct_outreach")
+            }
+          >
             <AppShell
               session={session}
               defaultSidebarOpen={defaultSidebarOpen}

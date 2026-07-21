@@ -10,7 +10,13 @@ import { ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { isPhoneSearchQuery, phoneMatchesSearch } from "@/lib/phone-search";
 
 export type CrmSearchResults = {
-  contacts: { id: string; name: string; email: string | null; phone: string | null }[];
+  contacts: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    accountName: string | null;
+  }[];
   companies: { id: string; name: string; domain: string | null }[];
   opportunities: { id: string; name: string; stage: string; companyId: string }[];
 };
@@ -44,7 +50,13 @@ async function searchViaPrisma(trimmed: string): Promise<CrmSearchResults> {
   const [textContacts, phoneContacts, companies, opportunities] = await Promise.all([
     prisma.contact.findMany({
       where: { workspaceId, ...contactScope, OR: [{ fullName: contains }, { email: contains }] },
-      select: { id: true, fullName: true, email: true, phone: true },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        company: { select: { name: true } }
+      },
       take: 8
     }),
     isPhoneSearchQuery(trimmed)
@@ -69,7 +81,13 @@ async function searchViaPrisma(trimmed: string): Promise<CrmSearchResults> {
   ).slice(0, 8);
 
   return {
-    contacts: contacts.map((c) => ({ id: c.id, name: c.fullName, email: c.email, phone: c.phone })),
+    contacts: contacts.map((c) => ({
+      id: c.id,
+      name: c.fullName,
+      email: c.email,
+      phone: c.phone,
+      accountName: c.company?.name ?? null
+    })),
     companies: companies.map((c) => ({ id: c.id, name: c.name, domain: c.rootDomain })),
     opportunities: opportunities.map((o) => ({
       id: o.id,
@@ -100,7 +118,11 @@ async function searchViaState(trimmed: string): Promise<CrmSearchResults> {
       id: contact.id,
       name: contact.name,
       email: contact.email || null,
-      phone: contact.phone || null
+      phone: contact.phone || null,
+      accountName:
+        state.companies.find(
+          (company) => company.id === contact.companyId && company.workspaceId === workspaceId
+        )?.name ?? null
     }));
 
   const companies = scope
@@ -135,6 +157,7 @@ type PhoneSearchContact = {
   fullName: string;
   email: string | null;
   phone: string | null;
+  company: { name: string } | null;
 };
 
 /**
@@ -159,7 +182,13 @@ async function searchPrismaContactsByPhone(
         ...(scopedContactIds ? { id: { in: scopedContactIds } } : {}),
         phone: { not: null }
       },
-      select: { id: true, fullName: true, email: true, phone: true },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        company: { select: { name: true } }
+      },
       orderBy: { id: "asc" },
       take: pageSize,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})

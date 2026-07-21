@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Check,
   Delete,
+  ExternalLink,
   Loader2,
   Maximize2,
   Mic,
@@ -13,12 +14,15 @@ import {
   Phone,
   PhoneCall,
   PhoneForwarded,
+  PhoneIncoming,
   PhoneOff,
   RefreshCw,
-  StickyNote
+  StickyNote,
+  Voicemail
 } from "lucide-react";
 
 import { createNoteAction, logSoftphoneCallAction, placeCallAction } from "@/app/actions";
+import { searchCrmRecordsAction } from "@/app/crm/search-actions";
 import {
   useCall,
   type CallConsent,
@@ -36,12 +40,19 @@ import {
 } from "@/components/ui/dialog";
 import { fieldClass, fieldTextareaClass } from "@/components/ui/field";
 import { appendDtmfDigit, isDtmfKey, playDtmfTone } from "@/lib/dtmf-feedback";
+import {
+  playIncomingCallRingPulse,
+  primeIncomingCallAudio
+} from "@/lib/incoming-call-ringtone";
+import { phoneNumbersEquivalent } from "@/lib/phone-search";
 import { cn } from "@/lib/utils";
 
 // Type-only: the class is dynamically imported in the browser (it touches
 // `document`/`navigator`/WebRTC, so it must never load on the server).
 import type WebPhoneClass from "ringcentral-web-phone";
-type CallSession = Awaited<ReturnType<WebPhoneClass["call"]>>;
+import type InboundCallSession from "ringcentral-web-phone/call-session/inbound";
+type OutboundCallSession = Awaited<ReturnType<WebPhoneClass["call"]>>;
+type CallSession = OutboundCallSession | InboundCallSession;
 type TransferCapableSession = CallSession & {
   transfer?: (targetNumber: string, timeout?: number) => Promise<unknown>;
   // Lower-level REFER with a full SIP URI. The public transfer() hardcodes the
@@ -77,6 +88,23 @@ type SoftphoneButtonProps = {
 
 type Status = "idle" | "connecting" | "ringing" | "in-call" | "ended" | "error" | "ringout-done";
 type Outcome = "completed" | "no-answer" | "failed";
+type CallDirection = "Inbound" | "Outbound";
+
+type IncomingCallView = {
+  session: InboundCallSession;
+  phone: string;
+  displayName: string;
+  accountName: string | null;
+  contactId: string | null;
+  lookingUp: boolean;
+  actionPending: "answer" | "voicemail" | null;
+  error: string | null;
+};
+
+type InboundRegistrationView = {
+  status: "idle" | "connecting" | "ready" | "reconnecting";
+  error: string | null;
+};
 
 const CONSENTS = ["Granted", "Denied", "Unknown"] as const;
 const DIAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
@@ -89,6 +117,32 @@ const NO_ANSWER_CODES = new Set([408, 480, 486, 487, 600, 603]);
 // One shared WebPhone per browser tab: registering SIP is expensive and the
 // registration is reused across every call button on the page.
 let webPhonePromise: Promise<{ webPhone: WebPhoneClass; callerId: string | null }> | null = null;
+let sharedWebPhone: WebPhoneClass | null = null;
+type InboundCallHandler = (session: InboundCallSession) => void;
+const inboundCallHandlers = new Set<InboundCallHandler>();
+
+function subscribeToInboundCalls(handler: InboundCallHandler) {
+  inboundCallHandlers.add(handler);
+  sharedWebPhone?.on("inboundCall", handler as (...args: unknown[]) => void);
+  return () => {
+    inboundCallHandlers.delete(handler);
+    try {
+      sharedWebPhone?.off("inboundCall", handler as (...args: unknown[]) => void);
+    } catch {
+      // best effort
+    }
+  };
+}
+
+function disposeSharedWebPhoneWhenUnused() {
+  window.setTimeout(() => {
+    if (inboundCallHandlers.size > 0 || !sharedWebPhone) return;
+    const webPhone = sharedWebPhone;
+    sharedWebPhone = null;
+    webPhonePromise = null;
+    void webPhone.dispose().catch(() => {});
+  }, 0);
+}
 
 // The account's real SIP edge domain from provisioning. Outbound INVITEs use it
 // (and connect fine); the transfer Refer-To must use the same domain, or RC
@@ -114,12 +168,19 @@ async function ensureWebPhone(): Promise<{ webPhone: WebPhoneClass; callerId: st
       sipInfo: data.sipInfo as ConstructorParameters<typeof WebPhone>[0]["sipInfo"],
       instanceId: softphoneInstanceId()
     });
+    sharedWebPhone = webPhone;
+    for (const handler of inboundCallHandlers) {
+      webPhone.on("inboundCall", handler as (...args: unknown[]) => void);
+    }
     await webPhone.start();
     return { webPhone, callerId: data.callerId ?? null };
   })();
   // A failed provision must not be cached — allow the next attempt to retry.
   webPhonePromise.catch(() => {
+    const failedWebPhone = sharedWebPhone;
     webPhonePromise = null;
+    sharedWebPhone = null;
+    if (failedWebPhone) void failedWebPhone.dispose().catch(() => {});
   });
   return webPhonePromise;
 }
@@ -160,6 +221,10 @@ function isMicError(error: unknown): boolean {
   );
 }
 
+function isInboundSession(session: CallSession): session is InboundCallSession {
+  return session.direction === "inbound";
+}
+
 function formatClock(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
@@ -185,6 +250,7 @@ export type SoftphoneEngineHandle = {
 };
 
 type SoftphoneEngineProps = {
+  registerInbound?: boolean;
   onStateChange?: (state: {
     busy: boolean;
     activeContactId: string | null;
@@ -197,7 +263,7 @@ type SoftphoneEngineProps = {
 // below just triggers `openCall`. Its call target comes from state (set via the
 // imperative `openCall`) rather than props; everything else is unchanged.
 export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, SoftphoneEngineProps>(
-  function SoftphoneEngine({ onStateChange }, ref) {
+  function SoftphoneEngine({ onStateChange, registerInbound = false }, ref) {
   const [target, setTarget] = React.useState<CallTarget | null>(null);
   const contactId = target?.contactId ?? "";
   const contactName = target?.contactName ?? "contact";
@@ -232,8 +298,15 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
   const [transferPending, setTransferPending] = React.useState(false);
   const [transferError, setTransferError] = React.useState<string | null>(null);
   const [transferMessage, setTransferMessage] = React.useState<string | null>(null);
+  const [direction, setDirection] = React.useState<CallDirection>("Outbound");
+  const [incomingCall, setIncomingCall] = React.useState<IncomingCallView | null>(null);
+  const [inboundRegistration, setInboundRegistration] = React.useState<InboundRegistrationView>({
+    status: registerInbound ? "connecting" : "idle",
+    error: null
+  });
 
   const sessionRef = React.useRef<CallSession | null>(null);
+  const statusRef = React.useRef<Status>("idle");
   const handlersRef = React.useRef<Array<[string, (...args: unknown[]) => void]>>([]);
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const connectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -244,6 +317,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
   const providerCallIdRef = React.useRef<string | undefined>(undefined);
   const telephonySessionIdRef = React.useRef<string | undefined>(undefined);
   const consentRef = React.useRef<(typeof CONSENTS)[number]>("Granted");
+  const directionRef = React.useRef<CallDirection>("Outbound");
   // The contact being called, held in a ref so the call-log closures use the
   // CURRENT target even when the inline/dock path starts a call in the same tick
   // as setTarget (the render's `contactId` closure would still be the old one).
@@ -257,11 +331,59 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
   // + INVITE), where there's no dialog to CANCEL yet. The RingOut fallback and the
   // idle dialpad stay freely dismissable.
   const blockCloseRef = React.useRef(false);
+  const ringtoneTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const incomingNotificationRef = React.useRef<Notification | null>(null);
+  const previousDocumentTitleRef = React.useRef<string | null>(null);
 
   const resetTransferState = React.useCallback(() => {
     setTransferPending(false);
     setTransferError(null);
     setTransferMessage(null);
+  }, []);
+
+  const stopIncomingAlerts = React.useCallback(() => {
+    if (ringtoneTimerRef.current) {
+      clearInterval(ringtoneTimerRef.current);
+      ringtoneTimerRef.current = null;
+    }
+    incomingNotificationRef.current?.close();
+    incomingNotificationRef.current = null;
+    if (previousDocumentTitleRef.current !== null) {
+      document.title = previousDocumentTitleRef.current;
+      previousDocumentTitleRef.current = null;
+    }
+  }, []);
+
+  const startIncomingAlerts = React.useCallback((caller: string) => {
+    if (previousDocumentTitleRef.current === null) {
+      previousDocumentTitleRef.current = document.title;
+    }
+    document.title = `Incoming call — ${caller}`;
+
+    void playIncomingCallRingPulse();
+    if (ringtoneTimerRef.current) clearInterval(ringtoneTimerRef.current);
+    ringtoneTimerRef.current = setInterval(() => {
+      void playIncomingCallRingPulse();
+    }, 2_200);
+
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try {
+        incomingNotificationRef.current?.close();
+        const notification = new Notification("Incoming CRM call", {
+          body: caller,
+          icon: "/icon.png",
+          tag: "syncore-incoming-call",
+          requireInteraction: true
+        });
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+        incomingNotificationRef.current = notification;
+      } catch {
+        // The in-app card and ringtone remain available when OS notifications fail.
+      }
+    }
   }, []);
 
   const loadTransferTargets = React.useCallback(async () => {
@@ -384,7 +506,8 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
           });
           session.once("ringing", () => {
             try {
-              void session.cancel();
+              if (isInboundSession(session)) void session.toVoicemail();
+              else void session.cancel();
             } catch {
               // best effort
             }
@@ -408,11 +531,16 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
 
   const logCall = React.useCallback(
     async (durationSeconds: number, outcome: Outcome) => {
+      const activeContactId = contactIdRef.current || contactId;
+      // The existing TrackedCall model is contact-backed. Unknown callers still
+      // appear and can be answered, but are not attached to an unrelated record.
+      if (!activeContactId) return;
       try {
         const form = new FormData();
-        form.set("contactId", contactIdRef.current || contactId);
+        form.set("contactId", activeContactId);
         form.set("durationSeconds", String(durationSeconds));
         form.set("outcome", outcome);
+        form.set("direction", directionRef.current);
         form.set("recordingConsent", consentRef.current);
         if (providerCallIdRef.current) form.set("providerCallId", providerCallIdRef.current);
         if (telephonySessionIdRef.current) form.set("telephonySessionId", telephonySessionIdRef.current);
@@ -446,17 +574,19 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
           ? Math.round((Date.now() - connectedAtRef.current) / 1000)
           : 0;
       detachAudio();
+      stopIncomingAlerts();
       cleanupSession();
       const outcome: Outcome = wasConnectedRef.current ? "completed" : final === "error" ? "failed" : "no-answer";
       void logCall(duration, outcome);
       return outcome;
     },
-    [cleanupSession, clearConnectTimeout, detachAudio, logCall, stopTimer]
+    [cleanupSession, clearConnectTimeout, detachAudio, logCall, stopIncomingAlerts, stopTimer]
   );
 
   const endCall = React.useCallback(
     (final: "ended" | "error") => {
       if (finalize(final)) {
+        setIncomingCall(null);
         setStatus(final);
         setRecording(false);
         setMinimized(false); // call is over — drop the background bar
@@ -464,6 +594,24 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     },
     [finalize]
   );
+
+  const startSessionRecording = React.useCallback((session: CallSession) => {
+    if (recordingStartedRef.current) return;
+    recordingStartedRef.current = false;
+    recordingStartErrorRef.current = undefined;
+    void session
+      .startRecording()
+      .then(() => {
+        recordingStartedRef.current = true;
+        setRecording(true);
+      })
+      .catch((recordingError: unknown) => {
+        const message =
+          recordingError instanceof Error ? recordingError.message : String(recordingError);
+        recordingStartErrorRef.current = message;
+        console.error("[softphone] startRecording() failed:", message);
+      });
+  }, []);
 
   const attachSession = React.useCallback(
     (session: CallSession) => {
@@ -491,24 +639,19 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
         startTimer();
         attachAudio(session);
         setStatus("in-call");
+        stopIncomingAlerts();
+        setIncomingCall(null);
+        if (isInboundSession(session)) {
+          setSurface("dialog");
+          setMinimized(false);
+          setOpen(true);
+        }
         void loadTransferTargets();
         // Record on-demand when consented — account auto-recording doesn't capture
         // these VoIP calls. Best-effort: a recording failure must never break the
         // call, but capture the reason so it's diagnosable instead of silent.
         if (consentRef.current === "Granted") {
-          recordingStartedRef.current = false;
-          recordingStartErrorRef.current = undefined;
-          void session
-            .startRecording()
-            .then(() => {
-              recordingStartedRef.current = true;
-              setRecording(true);
-            })
-            .catch((error: unknown) => {
-              const message = error instanceof Error ? error.message : String(error);
-              recordingStartErrorRef.current = message;
-              console.error("[softphone] startRecording() failed:", message);
-            });
+          startSessionRecording(session);
         }
       };
       const onDisposed = () => endCall("ended");
@@ -527,8 +670,313 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       for (const [event, handler] of handlers) session.on(event, handler);
       handlersRef.current = handlers;
     },
-    [attachAudio, clearConnectTimeout, endCall, loadTransferTargets, startTimer]
+    [
+      attachAudio,
+      clearConnectTimeout,
+      endCall,
+      loadTransferTargets,
+      startSessionRecording,
+      startTimer,
+      stopIncomingAlerts
+    ]
   );
+
+  const handleInboundCall = React.useCallback(
+    (session: InboundCallSession) => {
+      const activeSession = sessionRef.current;
+      const anotherCallIsStarting =
+        blockCloseRef.current ||
+        statusRef.current === "connecting" ||
+        statusRef.current === "ringing" ||
+        statusRef.current === "in-call";
+      if (
+        (activeSession && activeSession !== session && !endedRef.current) ||
+        (!activeSession && anotherCallIsStarting)
+      ) {
+        // The CRM currently supports one media session at a time. Preserve the
+        // active conversation and let the second caller leave a voicemail.
+        void session.toVoicemail().catch(() => {});
+        return;
+      }
+
+      const remoteNumber = session.remoteNumber?.trim() || "Unknown number";
+      const providerName = session.rcApiCallInfo?.callerIdName?.trim();
+      const initialName = providerName || remoteNumber;
+
+      directionRef.current = "Inbound";
+      consentRef.current = "Unknown";
+      contactIdRef.current = "";
+      recordingStartedRef.current = false;
+      recordingStartErrorRef.current = undefined;
+      setDirection("Inbound");
+      setConsent("Unknown");
+      setTarget({
+        contactId: "",
+        contactName: initialName,
+        phone: remoteNumber,
+        callerLabel: "Incoming RingCentral call"
+      });
+      setNumber(remoteNumber);
+      setSurface("dialog");
+      setOpen(false);
+      setMinimized(false);
+      setError(null);
+      setMuted(false);
+      setSeconds(0);
+      setDtmfDigits("");
+      setRecording(false);
+      setNotes("");
+      setNoteSaved(false);
+      resetTransferState();
+      setIncomingCall({
+        session,
+        phone: remoteNumber,
+        displayName: initialName,
+        accountName: null,
+        contactId: null,
+        lookingUp: remoteNumber !== "Unknown number",
+        actionPending: null,
+        error: null
+      });
+      attachSession(session);
+      setStatus("ringing");
+      startIncomingAlerts(initialName);
+
+      if (remoteNumber === "Unknown number") return;
+      void searchCrmRecordsAction(remoteNumber)
+        .then((results) => {
+          if (sessionRef.current !== session || endedRef.current) return;
+          const contact = results.contacts.find((candidate) =>
+            phoneNumbersEquivalent(candidate.phone, remoteNumber)
+          );
+          if (!contact) {
+            setIncomingCall((current) =>
+              current?.session === session ? { ...current, lookingUp: false } : current
+            );
+            return;
+          }
+
+          contactIdRef.current = contact.id;
+          setTarget({
+            contactId: contact.id,
+            contactName: contact.name,
+            phone: contact.phone ?? remoteNumber,
+            callerLabel: "Incoming RingCentral call"
+          });
+          setIncomingCall((current) =>
+            current?.session === session
+              ? {
+                  ...current,
+                  displayName: contact.name,
+                  accountName: contact.accountName,
+                  contactId: contact.id,
+                  lookingUp: false
+                }
+              : current
+          );
+        })
+        .catch(() => {
+          setIncomingCall((current) =>
+            current?.session === session ? { ...current, lookingUp: false } : current
+          );
+        });
+    },
+    [attachSession, resetTransferState, startIncomingAlerts]
+  );
+
+  // Subscribe before provisioning so there is no registration-to-listener race.
+  // Keep the WebSocket registered while the signed-in SDR uses the CRM and
+  // recover it with capped exponential backoff after network changes.
+  React.useEffect(() => {
+    if (!registerInbound) {
+      setInboundRegistration({ status: "idle", error: null });
+      return;
+    }
+
+    setInboundRegistration({ status: "connecting", error: null });
+
+    let cancelled = false;
+    let webPhone: WebPhoneClass | null = null;
+    let closeSocket: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelay = 2_000;
+    let reconnecting: Promise<void> | null = null;
+
+    const removeCloseListener = () => {
+      closeSocket?.removeEventListener("close", onUnexpectedClose);
+      closeSocket = null;
+    };
+
+    const attachCloseListener = () => {
+      removeCloseListener();
+      const socket = (webPhone?.sipClient as { wsc?: WebSocket } | undefined)?.wsc;
+      if (!socket) return;
+      closeSocket = socket;
+      socket.addEventListener("close", onUnexpectedClose);
+    };
+
+    const recover = async () => {
+      if (cancelled) {
+        disposeSharedWebPhoneWhenUnused();
+        return;
+      }
+      if (!webPhone) {
+        webPhone = (await ensureWebPhone()).webPhone;
+      } else {
+        await webPhone.start();
+      }
+      if (cancelled) {
+        disposeSharedWebPhoneWhenUnused();
+        return;
+      }
+      retryDelay = 2_000;
+      setInboundRegistration({ status: "ready", error: null });
+      attachCloseListener();
+      for (const callSession of webPhone.callSessions) {
+        if (callSession.state === "answered") void callSession.reInvite().catch(() => {});
+      }
+    };
+
+    const scheduleReconnect = () => {
+      if (cancelled || retryTimer) return;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        if (reconnecting) return;
+        reconnecting = recover()
+          .catch((recoveryError) => {
+            retryDelay = Math.min(retryDelay * 2, 60_000);
+            onRecoveryFailed(recoveryError);
+          })
+          .finally(() => {
+            reconnecting = null;
+          });
+      }, retryDelay);
+    };
+
+    function onUnexpectedClose() {
+      removeCloseListener();
+      if (!cancelled && !webPhone?.disposed) {
+        setInboundRegistration({
+          status: "reconnecting",
+          error: "The call connection was interrupted. Retrying automatically."
+        });
+        scheduleReconnect();
+      }
+    }
+
+    const onRecoveryFailed = (recoveryError: unknown) => {
+      if (cancelled) return;
+      setInboundRegistration({
+        status: "reconnecting",
+        error:
+          recoveryError instanceof Error
+            ? recoveryError.message
+            : "Inbound calling is temporarily unavailable."
+      });
+      scheduleReconnect();
+    };
+
+    const onOnline = () => {
+      if (cancelled || reconnecting) return;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      reconnecting = recover()
+        .catch((recoveryError) => {
+          retryDelay = Math.min(retryDelay * 2, 60_000);
+          onRecoveryFailed(recoveryError);
+        })
+        .finally(() => {
+          reconnecting = null;
+        });
+    };
+
+    const unsubscribeInbound = subscribeToInboundCalls(handleInboundCall);
+    window.addEventListener("online", onOnline);
+    void recover().catch(onRecoveryFailed);
+
+    return () => {
+      cancelled = true;
+      unsubscribeInbound();
+      disposeSharedWebPhoneWhenUnused();
+      window.removeEventListener("online", onOnline);
+      removeCloseListener();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [handleInboundCall, registerInbound]);
+
+  React.useEffect(() => {
+    if (!registerInbound) return;
+    const primeAudio = () => {
+      void primeIncomingCallAudio();
+    };
+    window.addEventListener("pointerdown", primeAudio, { once: true });
+    window.addEventListener("keydown", primeAudio, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", primeAudio);
+      window.removeEventListener("keydown", primeAudio);
+    };
+  }, [registerInbound]);
+
+  React.useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const answerIncomingCall = React.useCallback(async () => {
+    const incoming = incomingCall;
+    if (!incoming || sessionRef.current !== incoming.session) return;
+    setIncomingCall((current) =>
+      current?.session === incoming.session
+        ? { ...current, actionPending: "answer", error: null }
+        : current
+    );
+    try {
+      await ensureMicPermission();
+      await incoming.session.answer();
+    } catch (answerError) {
+      setIncomingCall((current) =>
+        current?.session === incoming.session
+          ? {
+              ...current,
+              actionPending: null,
+              error: isMicError(answerError)
+                ? "Microphone access is required to answer in the CRM."
+                : answerError instanceof Error
+                  ? answerError.message
+                  : "The call could not be answered."
+            }
+          : current
+      );
+    }
+  }, [incomingCall]);
+
+  const sendIncomingCallToVoicemail = React.useCallback(async () => {
+    const incoming = incomingCall;
+    if (!incoming || sessionRef.current !== incoming.session) return;
+    setIncomingCall((current) =>
+      current?.session === incoming.session
+        ? { ...current, actionPending: "voicemail", error: null }
+        : current
+    );
+    try {
+      await incoming.session.toVoicemail();
+      endCall("ended");
+    } catch (voicemailError) {
+      setIncomingCall((current) =>
+        current?.session === incoming.session
+          ? {
+              ...current,
+              actionPending: null,
+              error:
+                voicemailError instanceof Error
+                  ? voicemailError.message
+                  : "The call could not be sent to voicemail."
+            }
+          : current
+      );
+    }
+  }, [endCall, incomingCall]);
 
   // Signal SIP teardown with the right verb: BYE after answer, CANCEL while ringing.
   // At "init" there is no dialog yet to CANCEL — cleanupSession's dispose() stops the
@@ -538,7 +986,10 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     if (!session) return;
     try {
       if (session.state === "answered") void session.hangup();
-      else if (session.state === "ringing") void session.cancel();
+      else if (session.state === "ringing") {
+        if (isInboundSession(session)) void session.toVoicemail();
+        else void session.cancel();
+      }
     } catch {
       // the disposed/failed event (or dispose) still drives cleanup
     }
@@ -564,12 +1015,24 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     setSeconds(0);
     setDtmfDigits("");
     setRecording(false);
+    setIncomingCall(null);
+    stopIncomingAlerts();
     setMinimized(false);
     setNotes("");
     setNoteSaved(false);
     setNumber(phone ?? "");
     resetTransferState();
-  }, [cleanupSession, clearConnectTimeout, detachAudio, finalize, phone, resetTransferState, stopTimer, terminateSession]);
+  }, [
+    cleanupSession,
+    clearConnectTimeout,
+    detachAudio,
+    finalize,
+    phone,
+    resetTransferState,
+    stopIncomingAlerts,
+    stopTimer,
+    terminateSession
+  ]);
 
   // Dedicated mount flag (empty deps) so it only flips on real unmount.
   React.useEffect(() => {
@@ -621,6 +1084,10 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       setStatus("error");
       return;
     }
+    directionRef.current = "Outbound";
+    setDirection("Outbound");
+    recordingStartedRef.current = false;
+    recordingStartErrorRef.current = undefined;
     consentRef.current = consent;
     setError(null);
     setMuted(false);
@@ -737,6 +1204,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
     if (!session) return;
     try {
       if (session.state === "answered") void session.hangup();
+      else if (isInboundSession(session)) void session.toVoicemail();
       else void session.cancel();
     } catch {
       // finalize below still tears everything down
@@ -888,10 +1356,22 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
 
   const inLiveCall = status === "connecting" || status === "ringing" || status === "in-call";
 
-  const applyConsent = React.useCallback((next: CallConsent) => {
-    setConsent(next);
-    consentRef.current = next;
-  }, []);
+  const applyConsent = React.useCallback(
+    (next: CallConsent) => {
+      setConsent(next);
+      consentRef.current = next;
+      const session = sessionRef.current;
+      if (!session || session.state !== "answered") return;
+
+      if (next === "Granted") {
+        startSessionRecording(session);
+      } else if (recording) {
+        void session.stopRecording().catch(() => {});
+        setRecording(false);
+      }
+    },
+    [recording, startSessionRecording]
+  );
 
   // Imperative entry points used by SoftphoneButton (dialog) and the Focus dock
   // (inline) via CallProvider. A live call is never dropped: opening the same
@@ -903,6 +1383,8 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       openCall(next: CallTarget) {
         const busy = status === "connecting" || status === "ringing" || status === "in-call";
         contactIdRef.current = next.contactId;
+        directionRef.current = "Outbound";
+        setDirection("Outbound");
         setSurface("dialog");
         setTarget(next);
         setMinimized(false);
@@ -925,6 +1407,8 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
         // current call is never dropped.
         if (busy) return;
         contactIdRef.current = next.contactId;
+        directionRef.current = "Outbound";
+        setDirection("Outbound");
         setSurface("dock");
         setTarget(next);
         setOpen(false);
@@ -1061,13 +1545,116 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
 
   return (
     <>
+      {registerInbound && inboundRegistration.status === "reconnecting" && !incomingCall ? (
+        <div
+          role="status"
+          className="fixed bottom-4 right-4 z-[70] flex max-w-sm items-start gap-2 rounded-lg border border-amber-300 bg-popover px-3 py-2.5 shadow-lg"
+        >
+          <RefreshCw className="mt-0.5 size-4 shrink-0 animate-spin text-amber-600" aria-hidden="true" />
+          <div>
+            <p className="text-xs font-semibold text-foreground">Inbound calls reconnecting</p>
+            <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+              {inboundRegistration.error ?? "Retrying automatically. Keep the CRM open."}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {incomingCall && direction === "Inbound" && status === "ringing" ? (
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="incoming-call-title"
+          aria-describedby="incoming-call-number"
+          className="fixed right-4 top-20 z-[80] w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-[var(--teal-200)] bg-popover shadow-2xl"
+        >
+          <div className="h-1 bg-[var(--teal-600)]" aria-hidden="true" />
+          <div className="p-5">
+            <div className="flex items-start gap-3">
+              <span className="relative flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--teal-50)] text-[var(--teal-700)]">
+                <span className="absolute inset-0 animate-ping rounded-full bg-[var(--teal-200)] opacity-40" />
+                <PhoneIncoming className="relative size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--teal-700)]">
+                  Incoming call
+                </p>
+                <h2 id="incoming-call-title" className="mt-1 truncate text-lg font-semibold text-foreground">
+                  {incomingCall.displayName}
+                </h2>
+                {incomingCall.accountName ? (
+                  <p className="truncate text-sm text-muted-foreground">{incomingCall.accountName}</p>
+                ) : null}
+                <p id="incoming-call-number" className="mt-1 text-sm tabular-nums text-muted-foreground">
+                  {incomingCall.phone}
+                </p>
+                {incomingCall.lookingUp ? (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                    Matching CRM contact…
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {incomingCall.error ? (
+              <p className="mt-3 rounded-md bg-[var(--ui-destructive)]/10 px-3 py-2 text-xs text-[var(--ui-destructive)]">
+                {incomingCall.error}
+              </p>
+            ) : null}
+
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                onClick={() => void answerIncomingCall()}
+                disabled={incomingCall.actionPending !== null}
+                className="bg-[var(--teal-700)] text-white hover:bg-[var(--teal-800)]"
+              >
+                {incomingCall.actionPending === "answer" ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <PhoneCall aria-hidden="true" />
+                )}
+                {incomingCall.actionPending === "answer" ? "Answering…" : "Answer"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void sendIncomingCallToVoicemail()}
+                disabled={incomingCall.actionPending !== null}
+              >
+                {incomingCall.actionPending === "voicemail" ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <Voicemail aria-hidden="true" />
+                )}
+                Voicemail
+              </Button>
+            </div>
+
+            {incomingCall.contactId ? (
+              <Link
+                href={`/crm/contacts/${incomingCall.contactId}`}
+                className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-[var(--teal-700)] hover:underline"
+              >
+                Open contact record
+                <ExternalLink className="size-3" aria-hidden="true" />
+              </Link>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       <Dialog open={open && surface === "dialog"} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Call {contactName}</DialogTitle>
+            <DialogTitle>
+              {direction === "Inbound" ? `Incoming call · ${contactName}` : `Call ${contactName}`}
+            </DialogTitle>
             <DialogDescription>
-              {callerLabel ? `Calling from ${callerLabel}. ` : ""}
-              Talk directly in your browser — no phone rings first.
+              {direction === "Inbound"
+                ? `Connected from ${number}. Talk directly in your browser.`
+                : `${callerLabel ? `Calling from ${callerLabel}. ` : ""}Talk directly in your browser — no phone rings first.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -1146,13 +1733,38 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
                   {status === "connecting"
                     ? "Connecting…"
                     : status === "ringing"
-                      ? `Ringing ${contactName}…`
+                      ? direction === "Inbound"
+                        ? `Incoming call from ${contactName}…`
+                        : `Ringing ${contactName}…`
                       : contactName}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {status === "in-call" ? formatClock(seconds) : number.trim()}
                 </p>
               </div>
+
+              {status === "in-call" ? (
+                <div className="flex w-full items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-left">
+                  <div>
+                    <p className="text-xs font-medium text-foreground">Recording consent</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {recording ? "Recording is active" : "Not recording"}
+                    </p>
+                  </div>
+                  <select
+                    value={consent}
+                    onChange={(event) => applyConsent(event.target.value as CallConsent)}
+                    className={cn(fieldClass, "h-8 w-28")}
+                    aria-label="Recording consent"
+                  >
+                    {CONSENTS.map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
 
               {status === "in-call" ? (
                 <div className="w-full">

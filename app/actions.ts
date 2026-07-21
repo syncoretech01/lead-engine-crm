@@ -2460,6 +2460,8 @@ export async function logSoftphoneCallAction(
   const contactId = stringValue(formData.get("contactId"));
   const durationSeconds = Math.max(0, Math.round(numberValue(formData.get("durationSeconds"))));
   const outcome = stringValue(formData.get("outcome"), "no-answer");
+  const direction =
+    stringValue(formData.get("direction"), "Outbound") === "Inbound" ? "Inbound" : "Outbound";
   const recordingConsent = recordingConsentValue(formData.get("recordingConsent"));
   const providerCallId = stringValue(formData.get("providerCallId")) || undefined;
   // The RingCentral telephony session id ("s-…") — the reconcile worker matches it
@@ -2497,21 +2499,22 @@ export async function logSoftphoneCallAction(
         workspaceId: session.workspace.id,
         contactId,
         sdrUserId: session.user.id,
-        direction: "Outbound",
+        direction,
         callStatus,
         disposition: "No answer",
         durationSeconds,
         recordingConsent,
-        recordingConsentSource: "Softphone disclosure",
+        recordingConsentSource:
+          direction === "Inbound" ? "Inbound softphone disclosure" : "Softphone disclosure",
         providerCallId,
         telephonySessionId,
         liveState: outcome === "failed" ? "failed" : "completed",
         callSummary:
           callStatus === "Connected"
-            ? `Browser softphone call — connected for ${durationSeconds}s.`
+            ? `${direction} browser softphone call — connected for ${durationSeconds}s.`
             : callStatus === "Failed"
-              ? "Browser softphone call — failed to connect."
-              : "Browser softphone call — no answer."
+              ? `${direction} browser softphone call — failed to connect.`
+              : `${direction} browser softphone call — no answer.`
       });
       appendAudit(state, session, {
         objectType: "tracked_call",
@@ -2519,6 +2522,7 @@ export async function logSoftphoneCallAction(
         action: "call_logged",
         newValue: {
           source: "softphone",
+          direction,
           durationSeconds,
           outcome,
           providerCallId,
