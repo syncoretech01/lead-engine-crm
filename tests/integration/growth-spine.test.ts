@@ -66,6 +66,57 @@ async function db() {
   return (await import("@/lib/prisma")).prisma;
 }
 
+/**
+ * Drive one request all the way to an approved brief.
+ *
+ * ⚠️ `claimNextResearchRun` is deliberately GLOBAL — it claims the oldest queued
+ * run across all workspaces, because the Console Agent is one local machine
+ * serving the operator, not a per-tenant worker. That makes the queue shared
+ * state, so a test that leaves a run queued changes what the next test claims.
+ * Every helper below therefore consumes exactly the run it enqueues, and the
+ * rejection test cleans up after itself.
+ */
+async function seedApprovedBrief(workspaceId: string) {
+  const request = await createNicheRequest({
+    workspaceId,
+    createdBy: "usr_1",
+    sourceChannel: "slack",
+    structuredPayload: payload
+  });
+  await confirmNicheRequest({ workspaceId, nicheRequestId: request.id });
+  const run = await enqueueResearchRun({ workspaceId, nicheRequestId: request.id });
+
+  const claimed = await claimNextResearchRun({ consoleAgentId: "agent_1" });
+  if (claimed?.id !== run.id) {
+    throw new Error(
+      `Queue leak: claimed ${claimed?.id ?? "nothing"} but enqueued ${run.id}. ` +
+        "A previous test left a queued run behind."
+    );
+  }
+
+  await completeResearchRun({ workspaceId, researchRunId: run.id, warnings: [] });
+  const { brief, approval } = await createNicheBriefWithApproval({
+    workspaceId,
+    researchRunId: run.id,
+    document: briefDocument,
+    requestedBy: "usr_1"
+  });
+  return { request, run, brief, approval };
+}
+
+/** An approved brief plus the campaign it justifies. */
+async function seedCampaign(workspaceId: string) {
+  const seeded = await seedApprovedBrief(workspaceId);
+  await markNicheBriefApproved({ workspaceId, nicheBriefId: seeded.brief.id });
+  const campaign = await createCampaign({
+    workspaceId,
+    nicheBriefId: seeded.brief.id,
+    createdBy: "usr_1",
+    budgetCapCents: 8500
+  });
+  return { ...seeded, campaign };
+}
+
 describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
   afterAll(async () => {
     if (!enabled) return;
@@ -112,6 +163,11 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
       await prisma.approval.count({ where: { workspaceId: ids.a, type: "NICHE_TEST" } })
     ).toBe(0);
     expect(await prisma.nicheBrief.count({ where: { workspaceId: ids.a } })).toBe(0);
+
+    // Consume the run: the claim queue is global, so leaving this queued would
+    // change what the next test claims. (This is how the suite first went red.)
+    await prisma.researchRun.delete({ where: { id: run.id } });
+    await prisma.nicheRequest.delete({ where: { id: request.id } });
   });
 
   it("runs the full spine: request → research → brief → approval → campaign → stage run", async () => {
@@ -135,24 +191,26 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
 
     const claimed = await claimNextResearchRun({ consoleAgentId: "agent_1" });
     expect(claimed?.status).toBe("running");
+    // The claim is global FIFO; assert we got OUR run rather than a leftover.
+    expect(claimed?.id).toBe(run.id);
 
     expect(
       await completeResearchRun({
         workspaceId: ids.a,
-        researchRunId: claimed!.id,
+        researchRunId: run.id,
         warnings: []
       })
     ).toBe(true);
 
     const { brief, approval } = await createNicheBriefWithApproval({
       workspaceId: ids.a,
-      researchRunId: claimed!.id,
+      researchRunId: run.id,
       document: briefDocument,
       requestedBy: "usr_1"
     });
 
     expect(brief.status).toBe("pending_approval");
-    expect(brief.researchRunId).toBe(claimed!.id);
+    expect(brief.researchRunId).toBe(run.id);
     expect(approval.type).toBe("NICHE_TEST");
     expect(approval.status).toBe("pending");
     expect(approval.payloadSha256).toMatch(/^[a-f0-9]{64}$/);
@@ -208,23 +266,8 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
   });
 
   it("refuses a campaign from an unapproved brief", async () => {
-    const request = await createNicheRequest({
-      workspaceId: ids.a,
-      createdBy: "usr_1",
-      sourceChannel: "dashboard",
-      structuredPayload: payload
-    });
-    await confirmNicheRequest({ workspaceId: ids.a, nicheRequestId: request.id });
-    const run = await enqueueResearchRun({ workspaceId: ids.a, nicheRequestId: request.id });
-    const claimed = await claimNextResearchRun({ consoleAgentId: "agent_1" });
-    await completeResearchRun({ workspaceId: ids.a, researchRunId: claimed!.id, warnings: [] });
-    const { brief } = await createNicheBriefWithApproval({
-      workspaceId: ids.a,
-      researchRunId: claimed!.id,
-      document: briefDocument,
-      requestedBy: "usr_1"
-    });
-    void run;
+    // Seeded, but deliberately NOT approved.
+    const { brief } = await seedApprovedBrief(ids.a);
 
     await expect(
       createCampaign({
@@ -238,10 +281,10 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
 
   it("rejects an illegal stage transition at the repository layer", async () => {
     const prisma = await db();
-    const campaign = await prisma.campaign.findFirst({ where: { workspaceId: ids.a } });
+    const { campaign } = await seedCampaign(ids.a);
     const stage = await createStageRun({
       workspaceId: ids.a,
-      campaignId: campaign!.id,
+      campaignId: campaign.id,
       stageType: "SCAN"
     });
 
@@ -338,18 +381,18 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
 
   it("paginates rather than capping", async () => {
     const prisma = await db();
-    const campaign = await prisma.campaign.findFirst({ where: { workspaceId: ids.a } });
+    const { campaign } = await seedCampaign(ids.a);
     for (let i = 0; i < 5; i += 1) {
       await createStageRun({
         workspaceId: ids.a,
-        campaignId: campaign!.id,
+        campaignId: campaign.id,
         stageType: "TIERING"
       });
     }
 
     const first = await listStageRuns({
       workspaceId: ids.a,
-      campaignId: campaign!.id,
+      campaignId: campaign.id,
       pageSize: 2
     });
     expect(first.rows).toHaveLength(2);
@@ -357,7 +400,7 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
 
     const second = await listStageRuns({
       workspaceId: ids.a,
-      campaignId: campaign!.id,
+      campaignId: campaign.id,
       pageSize: 2,
       cursor: first.nextCursor!
     });
@@ -371,7 +414,7 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
     do {
       const page: { rows: { id: string }[]; nextCursor: string | null } = await listStageRuns({
         workspaceId: ids.a,
-        campaignId: campaign!.id,
+        campaignId: campaign.id,
         pageSize: 3,
         cursor: cursor ?? undefined
       });
@@ -381,8 +424,9 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
 
     expect(seen).toBe(
       await prisma.campaignStageRun.count({
-        where: { workspaceId: ids.a, campaignId: campaign!.id }
+        where: { workspaceId: ids.a, campaignId: campaign.id }
       })
     );
   });
 });
+
