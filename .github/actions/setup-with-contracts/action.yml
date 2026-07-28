@@ -1,0 +1,75 @@
+name: Setup with contracts
+description: >-
+  Reproduce the sibling repo layout that `@syncore/contracts` is installed from,
+  then install this repo's dependencies.
+
+# `@syncore/contracts` is installed as `file:../syncore-contracts`, so CI must
+# recreate that sibling layout before `npm ci` can resolve anything.
+#
+# This lives in a composite action rather than inline in each job because the CRM
+# workflow has five jobs that all run `npm ci`. The contracts ref below must be
+# bumped in the same commit that bumps the dependency — with the ref copied into
+# five jobs, one of them eventually gets missed and CI silently tests the wrong
+# contract version. One place, one bump.
+
+inputs:
+  contracts-token:
+    description: >-
+      Fine-grained PAT with read-only Contents access to syncoretech01/syncore-contracts.
+      The workflow's default GITHUB_TOKEN is scoped to its own repository and CANNOT
+      read another private repo — GitHub reports that as "Repository not found" rather
+      than a permission error, which sends you hunting for a repo that is sitting right
+      there. Set it once with:
+        gh secret set CONTRACTS_READ_TOKEN --repo syncoretech01/lead-engine-crm
+      Fine-grained PATs expire. If this job starts failing for no apparent reason,
+      check the token's expiry first.
+    required: true
+  contracts-ref:
+    description: Tag to pin syncore-contracts to. Pinned, never a branch.
+    required: false
+    default: v0.2.0
+  node-version:
+    required: false
+    default: "22"
+
+runs:
+  using: composite
+  steps:
+    - name: Check the contracts token is configured
+      shell: bash
+      env:
+        CONTRACTS_READ_TOKEN: ${{ inputs.contracts-token }}
+      run: |
+        if [ -z "$CONTRACTS_READ_TOKEN" ]; then
+          echo "::error::CONTRACTS_READ_TOKEN is not set. The default GITHUB_TOKEN cannot read another private repository; see .github/actions/setup-with-contracts/action.yml for the one-time setup."
+          exit 1
+        fi
+
+    - name: Check out syncore-contracts as a sibling
+      uses: actions/checkout@v4
+      with:
+        repository: syncoretech01/syncore-contracts
+        path: syncore-contracts
+        ref: ${{ inputs.contracts-ref }}
+        token: ${{ inputs.contracts-token }}
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: lead-engine-crm/package-lock.json
+
+    # A `file:` dependency is linked, not packed, so npm does not run the linked
+    # package's `prepare`. Its `dist/` has to be built here or every import of
+    # @syncore/contracts resolves to a missing entry point.
+    - name: Build contracts
+      shell: bash
+      working-directory: syncore-contracts
+      run: |
+        npm ci
+        npm run build
+
+    - name: Install
+      shell: bash
+      working-directory: lead-engine-crm
+      run: npm ci

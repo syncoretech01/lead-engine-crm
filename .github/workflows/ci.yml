@@ -2,11 +2,61 @@ name: CI
 
 on:
   pull_request:
+  # Every branch, not just main. The projection invariant guards against a
+  # change that silently empties a production table, so it should report on a
+  # feature branch the moment the commit lands — not first at PR-open time.
+  # Cost: a branch with an open PR runs CI twice (push + pull_request).
   push:
-    branches:
-      - main
+
+# Every job checks this repo out into ./lead-engine-crm and the contracts package
+# into ./syncore-contracts, because `@syncore/contracts` is installed as
+# `file:../syncore-contracts`. See .github/actions/setup-with-contracts.
 
 jobs:
+  projection-invariant:
+    # CRM-0 guardrail. Deliberately its OWN job, and deliberately first.
+    #
+    # Golden rule 1 (blob-projected XOR Prisma-native) is the one rule whose
+    # violation destroys production data silently: adding a Growth OS table to
+    # persistence-projection.ts puts it in upsertOrder's blast radius, where
+    # deleteMany({ where: { workspaceId, id: { notIn: ids } } }) empties it on the
+    # next sync with no error and no log line.
+    #
+    # Because of that, its verdict must never be maskable. Inside `validate` a
+    # lint or typecheck failure short-circuits the job and the invariant is simply
+    # never evaluated — "not run" and "passed" look identical in a red build. As a
+    # separate job it always runs, always reports, and cannot be starved by an
+    # unrelated failure elsewhere in the matrix.
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: lead-engine-crm
+
+      # Runs on a bare checkout, before any install and before the contracts
+      # sibling exists. The checker has zero dependencies (node: builtins only),
+      # so neither a broken lockfile, an expired contracts token, nor a registry
+      # outage can stop it from reporting.
+      - name: Projection invariant
+        working-directory: lead-engine-crm
+        run: node scripts/check-projection-invariant.mjs
+
+      - name: Setup
+        uses: ./lead-engine-crm/.github/actions/setup-with-contracts
+        with:
+          contracts-token: ${{ secrets.CONTRACTS_READ_TOKEN }}
+
+      # Proves the checker above is still ARMED. A no-op'd matcher reports
+      # "✓ free of all guarded models" and exits 0 — indistinguishable from a
+      # clean repo. This meta-test is what tells the two apart, so it gets the
+      # same isolation from lint/typecheck that the checker does.
+      - name: Projection invariant is armed
+        working-directory: lead-engine-crm
+        run: npx vitest run tests/unit/projection-invariant.test.ts
+
   validate:
     runs-on: ubuntu-latest
     env:
@@ -16,29 +66,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          path: lead-engine-crm
 
-      - name: Install
-        run: npm ci
+      - name: Setup
+        uses: ./lead-engine-crm/.github/actions/setup-with-contracts
+        with:
+          contracts-token: ${{ secrets.CONTRACTS_READ_TOKEN }}
 
       - name: Validate Prisma schema
+        working-directory: lead-engine-crm
         run: npm run prisma:validate
 
       - name: Generate Prisma client
+        working-directory: lead-engine-crm
         run: npm run prisma:generate
 
       - name: Lint
+        working-directory: lead-engine-crm
         run: npm run lint
 
       - name: Typecheck
+        working-directory: lead-engine-crm
         run: npm run typecheck
 
       - name: Unit tests
+        working-directory: lead-engine-crm
         run: npm run test
 
   build:
@@ -52,20 +105,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          path: lead-engine-crm
 
-      - name: Install
-        run: npm ci
+      - name: Setup
+        uses: ./lead-engine-crm/.github/actions/setup-with-contracts
+        with:
+          contracts-token: ${{ secrets.CONTRACTS_READ_TOKEN }}
 
       - name: Generate Prisma client
+        working-directory: lead-engine-crm
         run: npm run prisma:generate
 
       - name: Build
+        working-directory: lead-engine-crm
         run: npm run build
 
   integration:
@@ -94,23 +147,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          path: lead-engine-crm
 
-      - name: Install
-        run: npm ci
+      - name: Setup
+        uses: ./lead-engine-crm/.github/actions/setup-with-contracts
+        with:
+          contracts-token: ${{ secrets.CONTRACTS_READ_TOKEN }}
 
       - name: Generate Prisma client
+        working-directory: lead-engine-crm
         run: npm run prisma:generate
 
       - name: Apply migrations
+        working-directory: lead-engine-crm
         run: npm run prisma:migrate:deploy
 
       - name: Integration tests (real Postgres)
+        working-directory: lead-engine-crm
         run: npm run test:integration
 
   e2e:
@@ -148,28 +202,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          path: lead-engine-crm
 
-      - name: Install
-        run: npm ci
+      - name: Setup
+        uses: ./lead-engine-crm/.github/actions/setup-with-contracts
+        with:
+          contracts-token: ${{ secrets.CONTRACTS_READ_TOKEN }}
 
       - name: Generate Prisma client
+        working-directory: lead-engine-crm
         run: npm run prisma:generate
 
       - name: Apply migrations
+        working-directory: lead-engine-crm
         run: npm run prisma:migrate:deploy
 
       - name: Seed Prisma (native tables + snapshot)
+        working-directory: lead-engine-crm
         run: npm run db:seed
 
       - name: Install Playwright browser
+        working-directory: lead-engine-crm
         run: npx playwright install --with-deps chromium
 
       - name: Smoke tests
         continue-on-error: true
+        working-directory: lead-engine-crm
         run: npm run test:e2e
