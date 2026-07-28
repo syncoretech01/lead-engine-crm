@@ -51,7 +51,9 @@ test.describe("Syncore app smoke coverage", () => {
 
     await page.getByRole("link", { name: /^CRM$/i }).click();
     await expect(page.getByRole("heading", { name: "CRM workspace", level: 1 })).toBeVisible();
-    await primaryNav.getByRole("link", { name: /^Campaigns$/i }).click();
+    // "Sequences", not "Campaigns": the legacy outreach item was renamed in
+    // CRM-1 so it no longer collides with the Growth OS Campaigns nav root.
+    await primaryNav.getByRole("link", { name: /^Sequences$/i }).click();
     await expect(page.getByRole("heading", { name: "Outreach campaigns", level: 1 })).toBeVisible();
 
     await page.getByRole("link", { name: /^Dev$/i }).click();

@@ -28,6 +28,12 @@ export type InboxRow = {
   title: string;
   summary: string;
   estimatedCostCents: number | null;
+  /**
+   * The stored payload, verbatim. The detail renderer parses it against the
+   * contracts union, and the revise form pre-fills from it — re-serialising a
+   * parsed copy would be a quiet way to change what gets re-hashed.
+   */
+  payloadJson: unknown;
   campaignId: string | null;
   stageRunId: string | null;
   requestedBy: string;
@@ -121,6 +127,7 @@ export async function listApprovalInbox(
       type: row.type,
       status: row.status,
       ...described,
+      payloadJson: row.payloadJson,
       campaignId: row.campaignId,
       stageRunId: row.stageRunId,
       requestedBy: row.requestedBy,

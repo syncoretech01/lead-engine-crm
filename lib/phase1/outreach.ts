@@ -336,6 +336,12 @@ export function simulateCampaignSend(state: AppState, workspaceId: string, campa
     throw new Error("Campaign not found.");
   }
 
+  // ⚠️ LEGACY (v9.1 §5.5, §26.17). `OutreachCampaign` is legacy and nothing new
+  // may reference it. This is also the inert engine: only step 1 is ever
+  // resolved, so sequence delays, stop-on-reply and SMS do nothing. Mailshake
+  // owns cold + warm sending from CRM-6 (anti-scope: do NOT build a native
+  // sending engine here). New campaign work belongs on `Campaign` /
+  // `CampaignStageRun` under lib/growth.
   const sequence = state.campaignSequences.find((item) => item.campaignId === campaign.id);
   const firstStep = sequence
     ? state.sequenceSteps.find((step) => step.sequenceId === sequence.id && step.stepNumber === 1)
@@ -819,6 +825,9 @@ function seedOutreachEvents(state: AppState, workspaceId: string, now: string) {
   const actorUserId = ownerUserIdForName(state, "Nora West");
 
   for (const [index, contact] of contacts.slice(0, 5).entries()) {
+    // ⚠️ LEGACY (v9.1 §5.5, §26.17) — second of the two step-1-only sites, the
+    // other at :341. `OutreachCampaign` is legacy; the sequence engine resolves
+    // step 1 and nothing else. Do not extend this path. See lib/growth.
     const campaign = campaigns.find((item) => contact.segment.includes(item.targetSegment)) ?? campaigns[index % campaigns.length];
     const sequence = state.campaignSequences.find((item) => item.campaignId === campaign?.id);
     const step = state.sequenceSteps.find((item) => item.sequenceId === sequence?.id && item.stepNumber === 1);
