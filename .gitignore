@@ -1,6 +1,9 @@
 node_modules
 .next
 .syncore-data
+# Session workspace, not project state. Untracked-but-not-ignored made local
+# lint/typecheck fail on files CI never sees — two signals disagreeing for no reason.
+scratchpad
 out
 dist
 coverage
