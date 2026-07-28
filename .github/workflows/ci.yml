@@ -2,9 +2,11 @@ name: CI
 
 on:
   pull_request:
+  # Every branch, not just main. The projection invariant guards against a
+  # change that silently empties a production table, so it should report on a
+  # feature branch the moment the commit lands — not first at PR-open time.
+  # Cost: a branch with an open PR runs CI twice (push + pull_request).
   push:
-    branches:
-      - main
 
 jobs:
   projection-invariant:
