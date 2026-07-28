@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * CRM-0 GUARDRAIL — the projection invariant.
  * ============================================================================

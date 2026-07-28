@@ -115,6 +115,22 @@ model Workspace {
   providerJobRuns                 ProviderJobRun[]
   providerUsageLedger             ProviderUsageLedger[]
   providerMetricsDaily            ProviderMetricDaily[]
+
+  // --- Growth OS (CRM-1) --------------------------------------------------
+  // Spend thresholds for the approval gates (v9.1 §10). At or above T2 a second
+  // distinct approver is required before an approval reaches `approved`; below
+  // T1 any authorized approver may decide alone. Null T2 disables the
+  // two-person rule for the workspace.
+  approvalThresholdT1Cents        Int                              @default(0)
+  approvalThresholdT2Cents        Int?
+  nicheRequests                   NicheRequest[]
+  researchRuns                    ResearchRun[]
+  nicheBriefs                     NicheBrief[]
+  campaigns                       Campaign[]
+  campaignStageRuns               CampaignStageRun[]
+  approvals                       Approval[]
+  costEntries                     CostEntry[]
+  // ------------------------------------------------------------------------
   searchProfiles                  SearchProfile[]
   leadJobs                        LeadJob[]
   asyncJobRuns                    AsyncJobRun[]
@@ -1969,4 +1985,380 @@ model AuditLog {
   actor       User?     @relation(fields: [actorUserId], references: [id])
 
   @@index([workspaceId, objectType, objectId])
+}
+
+// ===========================================================================
+// GROWTH OS — CRM-1 (the spine)
+// ===========================================================================
+//
+// 🔴 EVERY MODEL BELOW IS PRISMA-NATIVE AND MUST STAY THAT WAY.
+//
+// None of them appears in `AppState`, in `syncNormalizedProjectionToPrisma`, or
+// in `upsertOrder`, and none is written through `updateState`. They are written
+// only by transactional repositories in `lib/growth/` (the
+// `lib/phase1/auth-fast-path.ts` precedent).
+//
+// Adding one to the projection puts it in the blast radius of
+// `persistence-projection.ts:1599` — `deleteMany({ where: { workspaceId, id:
+// { notIn: ids } } })` — which empties the table on the next sync, silently.
+// `npm run check:projection-invariant` fails the build if any of these names
+// reaches that file. Do not work around it.
+//
+// Enum values mirror `@syncore/contracts@0.2.0` **verbatim**, including its
+// lowercase members. That is why casing is inconsistent below: contracts is
+// lowercase for record statuses and uppercase for types/stages, and mirroring it
+// exactly means no mapping layer exists to drift. `tests/unit/growth-enums.test.ts`
+// asserts each enum equals its contracts counterpart member-for-member.
+// `StageRunStatus` and `CampaignStatus` are the exceptions — contracts
+// deliberately omits them (stage-type.ts: "belongs with the CampaignStageRun
+// record in C3"), so they follow v9.1 §11 and this repo's uppercase convention.
+// ===========================================================================
+
+/// @syncore/contracts NICHE_REQUEST_SOURCE_CHANNELS. All three members stay
+/// regardless of which surface is live (ERRATA 3: Slack is the pilot surface).
+enum NicheRequestSourceChannel {
+  telegram
+  slack
+  dashboard
+}
+
+/// @syncore/contracts NICHE_REQUEST_STATUSES (v9.1 §6).
+enum NicheRequestStatus {
+  draft
+  confirmed
+  researching
+  briefed
+  cancelled
+}
+
+/// @syncore/contracts RESEARCH_RUN_STATUSES (v9.1 §6).
+enum ResearchRunStatus {
+  queued
+  running
+  completed
+  failed
+  cancelled
+}
+
+/// @syncore/contracts NICHE_BRIEF_STATUSES (v9.1 §6).
+enum NicheBriefStatus {
+  pending_approval
+  approved
+  edited
+  declined
+  superseded
+}
+
+/// @syncore/contracts APPROVAL_TYPES — the 11 gates (v9.1 §10).
+enum ApprovalType {
+  NICHE_TEST
+  PROVIDER_RUN
+  ENRICHMENT_RUN
+  PAID_VERIFICATION
+  PERSONALIZATION_SAMPLES
+  CAMPAIGN_LAUNCH
+  SPEND_EXCEPTION
+  SCALE
+  REPLY_EXCEPTION
+  SUPPRESS_BULK
+  RESUME_AFTER_BREAKER
+}
+
+/// @syncore/contracts APPROVAL_STATUSES. There is no `cancelled`: an approval
+/// that should not have been asked is declined, and the record of having asked
+/// survives. `superseded` is reachable only through a revision, never an edit.
+enum ApprovalStatus {
+  pending
+  approved
+  declined
+  superseded
+}
+
+/// @syncore/contracts STAGE_TYPES — 18 members in v9.1 §8 pipeline order, not
+/// alphabetical: the dashboard renders progress as completed/planned stages, so
+/// the sequence carries meaning.
+enum StageType {
+  RESEARCH
+  HUB_SEARCH
+  ACQUISITION
+  NORMALIZATION
+  DEDUPLICATION
+  ENRICHMENT
+  FREE_VERIFICATION
+  PAID_VERIFICATION
+  GOLDEN_SYNC
+  SCAN
+  TIERING
+  PERSONALIZATION
+  COLD_OUTREACH
+  INTENT_ROUTING
+  FULL_AUDIT
+  WARM_OUTREACH
+  SDR_EXECUTION
+  REPORTING
+}
+
+/// v9.1 §11. NOT in contracts by design. `PARKED` is a budget/overrun/breaker
+/// hold awaiting an approval; `FAILED` carries failureCode + retryCount.
+/// Legal transitions are enforced in the repository, not here — see
+/// `lib/growth/stage-run-transitions.ts`.
+enum StageRunStatus {
+  PENDING
+  AWAITING_APPROVAL
+  APPROVED
+  RUNNING
+  COMPLETED
+  FAILED
+  PARKED
+  CANCELLED
+}
+
+/// v9.1 §6 names `Campaign.status` without enumerating it, and contracts does
+/// not define it. Defined here; recorded in docs/CRM-1-CONTRACTS-FEEDBACK.md as
+/// a candidate for a future contracts addition.
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+/// Template A — what you want. NOT a brief (v9.1 §7, §26.3).
+model NicheRequest {
+  id                String                    @id @default(cuid())
+  workspaceId       String
+  createdBy         String
+  sourceChannel     NicheRequestSourceChannel
+  sourceMessageId   String?
+  voiceAssetRef     String?
+  transcript        String?
+  /// contracts NicheRequestPayload. Note `budgetHintCents` — contracts refines
+  /// v9.1 §6's `budgetHint` to integer minor units; never a float, never prose.
+  structuredPayload Json
+  status            NicheRequestStatus        @default(draft)
+  /// Denormalised pointer to the run this request spawned. The owning FK is
+  /// ResearchRun.nicheRequestId; this side is a plain column so the two models
+  /// do not form a required cycle.
+  researchRunId     String?
+  confirmedAt       DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  researchRuns      ResearchRun[]
+  nicheBriefs       NicheBrief[]
+
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+/// The durable research queue entry (v9.1 §9.1). The Console Agent polls it.
+model ResearchRun {
+  id                String            @id @default(cuid())
+  workspaceId       String
+  nicheRequestId    String
+  campaignDraftId   String?
+  status            ResearchRunStatus @default(queued)
+  consoleAgentId    String?
+  /// 0.0–1.0 inclusive. A fraction, not a percentage (contracts ResearchRunProgress).
+  progress          Float?
+  /// Denormalised pointer; the owning FK is NicheBrief.researchRunId.
+  nicheBriefId      String?
+  reportAssetRef    Json?
+  warnings          Json              @default("[]")
+  failureCode       String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  retryCount        Int               @default(0)
+  callbackSecretRef String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nicheRequest      NicheRequest      @relation(fields: [nicheRequestId], references: [id], onDelete: Cascade)
+  nicheBriefs       NicheBrief[]
+
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, nicheRequestId])
+  /// The Agent's claim query: oldest queued run first.
+  @@index([status, createdAt])
+}
+
+/// Template B — what research recommends. Exists ONLY after a run completes.
+model NicheBrief {
+  id             String           @id @default(cuid())
+  workspaceId    String
+  nicheRequestId String
+  /// 🔴 REQUIRED, not optional. This is the schema-level enforcement of v9.1 §7
+  /// and §26.3: "no NicheBrief before research completes". A brief with no run
+  /// behind it is not representable. Contracts encodes the same rule as a
+  /// required field on the NicheBrief record. Do not relax this to optional.
+  researchRunId  String
+  /// contracts NicheBriefDocument (the validated niche-brief.json payload).
+  document       Json
+  status         NicheBriefStatus @default(pending_approval)
+  /// The NICHE_TEST approval this brief opened.
+  approvalId     String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nicheRequest   NicheRequest     @relation(fields: [nicheRequestId], references: [id], onDelete: Cascade)
+  researchRun    ResearchRun      @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
+  campaigns      Campaign[]
+
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, nicheRequestId])
+  @@index([workspaceId, researchRunId])
+}
+
+/// The universal parent (v9.1 §5.5, §26.1). Orphan work is a bug.
+model Campaign {
+  id                    String             @id @default(cuid())
+  workspaceId           String
+  nicheBriefId          String
+  hubSegmentId          String?
+  eligibilityPolicyId   String?
+  budgetCapCents        Int
+  spendWarnThresholdPct Int                @default(80)
+  overrunTolerancePct   Int                @default(20)
+  killRuleConfig        Json               @default("{}")
+  automationLevel       String             @default("B")
+  status                CampaignStatus     @default(DRAFT)
+  createdBy             String
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  workspace             Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nicheBrief            NicheBrief         @relation(fields: [nicheBriefId], references: [id])
+  stageRuns             CampaignStageRun[]
+  approvals             Approval[]
+  costEntries           CostEntry[]
+
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, nicheBriefId])
+}
+
+/// The execution backbone (v9.1 §11). One durable record per pipeline stage —
+/// the single source for the admin dashboard, chat status, cost reports,
+/// retries, progress % and historical reconstruction.
+model CampaignStageRun {
+  id                 String         @id @default(cuid())
+  workspaceId        String
+  campaignId         String
+  stageType          StageType
+  status             StageRunStatus @default(PENDING)
+  estimatedCostCents Int            @default(0)
+  approvedCostCents  Int            @default(0)
+  actualCostCents    Int            @default(0)
+  estimatedRecords   Int            @default(0)
+  inputRecords       Int            @default(0)
+  outputRecords      Int            @default(0)
+  provider           String?
+  providerJobId      String?
+  approvalId         String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  /// Retryable-vs-terminal is read from this (v9.1 §19).
+  failureCode        String?
+  retryCount         Int            @default(0)
+  reportPayload      Json           @default("{}")
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  workspace          Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign           Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  approvals          Approval[]
+  costEntries        CostEntry[]
+
+  @@index([workspaceId, campaignId, createdAt])
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, stageType, status])
+}
+
+/// Immutable: create + decide + revise only (v9.1 §10, §26.13).
+///
+/// 🔴 There is no update path on `payload` or `payloadSha256`, and the
+/// repository exposes none. An edit is a revision: the original goes
+/// `superseded` and a NEW row is created carrying `supersedesApprovalId`, the
+/// replacement payload and a fresh SHA-256.
+model Approval {
+  id                   String            @id @default(cuid())
+  workspaceId          String
+  campaignId           String?
+  stageRunId           String?
+  type                 ApprovalType
+  /// contracts ApprovalPayload (discriminated on `type`). Content only —
+  /// ERRATA 5: `approvalId` and `payloadSha256` are NOT in the hashed payload.
+  /// Hashing the id would make identical content hash differently across
+  /// revisions, destroying the one question a revision chain exists to answer.
+  payloadJson          Json
+  /// SHA-256 over the payload's canonical JSON form. See lib/growth/approval-hash.ts.
+  payloadSha256        String
+  status               ApprovalStatus    @default(pending)
+  requestedBy          String
+  decidedBy            String?
+  decidedAt            DateTime?
+  /// Two-person approval above T2 (v9.1 §10). The first approver lands here and
+  /// `status` stays `pending`; the second distinct approver moves it to
+  /// `approved`. Contracts fixes ApprovalStatus at four members and its tests
+  /// fail if a fifth appears, so the intermediate state is carried by these
+  /// columns rather than by a status member.
+  firstApprovedBy      String?
+  firstApprovedAt      DateTime?
+  /// Set only on a revision. Its target is left at `superseded`.
+  supersedesApprovalId String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  workspace            Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign             Campaign?         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stageRun             CampaignStageRun? @relation(fields: [stageRunId], references: [id], onDelete: SetNull)
+  supersedes           Approval?         @relation("ApprovalRevision", fields: [supersedesApprovalId], references: [id])
+  supersededBy         Approval[]        @relation("ApprovalRevision")
+
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, campaignId, createdAt])
+  @@index([workspaceId, stageRunId])
+  @@index([workspaceId, type, status])
+  @@index([supersedesApprovalId])
+}
+
+/// The Growth OS cost ledger (v9.1 §6 `CostEntry`).
+///
+/// ⚠️ Why this is a separate table rather than columns on `ProviderUsageLedger`,
+/// which golden rule 3 would otherwise require:
+///
+/// `providerUsageLedger` is blob-projected — written at `money.ts:139` via
+/// `state.providerUsageLedger`, listed in `upsertOrder`
+/// (`persistence-projection.ts:198`), projected at `:466`. A natively-written
+/// row in that table is absent from the blob, so the `deleteMany` at `:1599`
+/// deletes it on the next sync. Golden rule 1 and golden rule 3 cannot both be
+/// satisfied while the ledger lives in the blob, and peeling it is anti-scope
+/// for the pilot.
+///
+/// Resolution: this table is the native generation of the ONE logical ledger.
+/// `lib/growth/read-models/cost-ledger.ts` unions it with the legacy blob rows
+/// so callers still see a single ledger. This is not a second ledger — it is the
+/// same ledger mid-migration. Do NOT add a third, and do NOT write Growth OS
+/// cost rows into `providerUsageLedger`: the projection check cannot catch that
+/// (it guards the name `CostEntry`, not `providerUsageLedger`).
+model CostEntry {
+  id            String            @id @default(cuid())
+  workspaceId   String
+  campaignId    String?
+  stageRunId    String?
+  provider      String
+  action        String
+  units         Int               @default(0)
+  unit          String
+  unitCostCents Int               @default(0)
+  totalCents    Int               @default(0)
+  status        String
+  referenceType String?
+  referenceId   String?
+  metadata      Json              @default("{}")
+  createdAt     DateTime          @default(now())
+  workspace     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign      Campaign?         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stageRun      CampaignStageRun? @relation(fields: [stageRunId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, campaignId, createdAt])
+  @@index([workspaceId, stageRunId])
+  @@index([workspaceId, provider, action, createdAt])
 }
