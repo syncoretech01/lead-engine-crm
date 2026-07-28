@@ -12,6 +12,7 @@
     "test:all": "npm run typecheck && npm run test && npm run test:e2e",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "check:projection-invariant": "node scripts/check-projection-invariant.mjs",
     "postinstall": "prisma generate",
     "db:bootstrap": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run db:seed",
     "db:seed": "tsx scripts/seed-prisma.ts",
