@@ -45,14 +45,13 @@ untracked files:
 | `npm run lint` | clean | 4 errors + 2 warnings, all in `scratchpad/redesign-brief/**/support.js` |
 | `npm run typecheck` | clean | 1 error: `scratchpad/reset-and-import-zack.ts:249` (TS2345) |
 
-⚠️ **Latent CI break — flagged, deliberately not fixed in CRM-0.** `scratchpad/` is **neither
-tracked nor listed in `.gitignore`** (`git check-ignore` exits 1; `git ls-files scratchpad` is
-empty). A fresh CI checkout therefore does not contain it and CI is green — but a single
-`git add .` would commit it and instantly break `lint` and `typecheck` for everyone.
+**Resolved at CRM-0 close.** `scratchpad/` was **neither tracked nor listed in `.gitignore`**, so a
+fresh CI checkout did not contain it (CI green) while local `lint`/`typecheck` failed on files CI
+would never see — two signals disagreeing for no reason, and one `git add .` away from breaking the
+build for everyone. It is now in `.gitignore` as session workspace, not project state.
 
-One-line fix, for whoever owns that call: add `scratchpad/` to `.gitignore`. Not done here
-because CRM-0 adds guardrails and does not change repo behaviour, and because the directory may
-be intentionally stageable later.
+The numbers above are the *local working-tree* readings taken before that fix; tracked code was
+clean throughout.
 
 This is also exactly why the projection check is its own CI job: had it lived inside `validate`,
 a lint failure like the one above would short-circuit the job and the invariant would never be

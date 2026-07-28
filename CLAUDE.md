@@ -106,15 +106,17 @@ proven blocker · the blob migration (out of pilot scope) · anything referencin
 
 Precedence, highest first. **Do not re-litigate a resolved conflict.**
 
-1. **`GROWTH_OS_ERRATA.md`** — supersedes v9.1 on the points it names.
-2. **`GROWTH_OS_END_TO_END_PLAN_v9.1.md`** — the single source of truth otherwise. Read §3.1,
-   §5.1, §5, §6, §9, §10, §11, §26.
-3. **`GROWTH_OS_EXECUTION_ROADMAP.md`** — build order and where new pieces live.
-4. **`GROWTH_OS_PLAN.lead-engine-crm.md`** — this repo's phases (CRM-0 … CRM-8).
+1. **[`GROWTH_OS_ERRATA.md`](./GROWTH_OS_ERRATA.md)** — supersedes v9.1 on the points it names.
+   A supersession that isn't in that file hasn't happened.
+2. **[`GROWTH_OS_END_TO_END_PLAN_v9.1.md`](./GROWTH_OS_END_TO_END_PLAN_v9.1.md)** — the single
+   source of truth otherwise. Read §3.1, §5.1, §5, §6, §9, §10, §11, §26.
+3. **[`GROWTH_OS_EXECUTION_ROADMAP.md`](./GROWTH_OS_EXECUTION_ROADMAP.md)** — build order and
+   where new pieces live.
+4. **[`GROWTH_OS_PLAN.lead-engine-crm.md`](./GROWTH_OS_PLAN.lead-engine-crm.md)** — this repo's
+   phases (CRM-0 … CRM-8).
 
-> ⚠️ **None of these four files is currently committed to this repo.** They were supplied
-> out-of-band during CRM-0. Commit them here (or add a resolvable pointer) — otherwise every
-> session starts without its constraints, which is the exact failure this file exists to prevent.
+Also authoritative, narrower: **`@syncore/contracts`** wins over v9.1 §6 prose wherever they
+differ on wire shapes (errata #4, #5).
 
 **Required in-repo reading before proposing architecture** (plan §6 session protocol):
 `docs/CAMPAIGN_WATERFALLS.md` · `docs/PROVIDER_INTEGRATION_PLAN.md` ·
@@ -132,17 +134,21 @@ CRM-0). If one ever appears, it is stale by definition: delete it rather than re
 
 Settled. Do not reopen, and do not "correct" code that follows these.
 
-| # | Conflict | Resolution |
-|---|---|---|
-| 1 | v9.1 §13 says the Console's email writer becomes a remote personalization microservice | **Personalization runs *inside* `lead-engine-crm`** as an inline pipeline stage. The Console is on a local Windows box that may be off — tolerable for research, not for a stage that blocks campaigns. Personalization also has data gravity here (audit findings, tier, brief angles, cost ledger). **Port the Console's writing logic and QA rules; do not call it remotely.** |
-| 2 | v9.1 header governs **five** repos | **Seven repos.** Plus `syncore-contracts` (shared schemas) and `syncore-growth-bot` (chat control surface). |
-| 3 | `FindingCatalog` ownership | **Split.** Finding *codes* + evidence *schemas* live in `syncore-contracts` (the Audit Bot emits, the CRM consumes). The *phrase templates* that turn codes into sentences live **here** — they are copy, they change often, they are campaign-tunable. |
-| 4 | Console Agent placement | Lives **inside `syncore-research-console`** (`/agent`), not its own repo. It deploys to the same machine and versions with the Console. |
-| 5 | v9.1 says Telegram-first | **Slack, not Telegram.** Build behind the platform-neutral interface either way. |
+Numbered to match [`GROWTH_OS_ERRATA.md`](./GROWTH_OS_ERRATA.md), which is authoritative — read it
+for the full reasoning before acting on any of these.
 
-> ⚠️ Entries 1–4 were reconstructed from `GROWTH_OS_EXECUTION_ROADMAP.md` §1 during CRM-0, because
-> `GROWTH_OS_ERRATA.md` and the `syncore-growth-bot` `CLAUDE.md` were not available in this repo.
-> **Reconcile this table against those two sources** when they land, and correct any drift.
+| # | Supersedes | Resolution |
+|---|---|---|
+| 1 | v9.1 §13, §31 | **Personalization runs *inside* `lead-engine-crm`** as an inline stage between "list ready" and "launch". The Console's writing logic and QA rules are **ported**, never called remotely — it runs on a local Windows box that may be off, which is fine for research but not for a stage that blocks campaigns. Data gravity is here too: audit findings, tiers, brief angles, and the cost ledger its Tier-A calls must write to. |
+| 2 | v9.1 §1, §5.3 | **Seven repos, not five** — the five originals plus `syncore-contracts` and `syncore-growth-bot`. The Console Agent stays **inside `syncore-research-console` at `/agent`** (not its own repo). |
+| 3 | v9.1 §15, §18, §22 G0 + the Roadmap repo table | **Slack is the pilot chat surface, not Telegram** — Telegram does not open in Pakistan without a VPN, and a remote control that needs a VPN is not a remote control. The `ChatPlatform` interface is unchanged, the Telegram adapter stays implemented and selectable via `SYNCORE_BOT_PLATFORM=telegram`, and **all platform enums keep `telegram \| slack \| dashboard` members** — including `NicheRequest.sourceChannel`. Deferred cost: Slack voice is weaker; decision point at B2, do not pre-empt it. |
+| 4 | v9.1 §3.4 | **`@syncore/contracts` ≥ 0.1.0 is authoritative for every verifier wire shape.** v9.1's verifier summary is directionally right but wrong in most details. Notably: the verifier signs the **raw body alone** (no timestamp/nonce); `BATCH_MAX_EMAILS` is 10,000 with a 65,536-byte body cap that binds first; results paging is offset/limit; batch states are `queued \| running \| done`. |
+| 5 | v9.1 §6 field lists | **Decision and identity fields are not approved content.** The hashed `ApprovalPayload` is **content only**: `approvalId` and `payloadSha256` live on a separate `ApprovalRecord`, because hashing the id would make identical content hash differently across revisions — destroying the one question a revision chain exists to answer. `ProviderRunProposal` carries **no `decision` field** in the approved payload: a decision is an outcome, and embedding it means the hashed content mutates when someone decides, which is exactly the mutation §10 forbids. Decisions go on the `ApprovalRecord` / decide payload. |
+
+**Not an errata entry, but settled and relevant here:** `FindingCatalog` is split — finding *codes*
+and evidence *schemas* live in `syncore-contracts`; the *phrase templates* that turn codes into
+sentences live in **this repo** (they are copy, they change often, they are campaign-tunable).
+Source: Execution Roadmap §1.
 
 ---
 
@@ -189,21 +195,33 @@ union, add the `Unknown` member, and make the fallthrough explicit. **Never map 
 | `lib/phase1/lead-dashboard-read-model.ts:1316` | guard duplicating the full vocabulary |
 | `lib/phase1/lead-dashboard-read-model.ts:1321` | grade → status mapping |
 | `lib/phase1/reporting.ts:677` | `"Risky"` filter |
+| **`lib/phase1/persistence-projection.ts:210`** | **`{ table: "verificationResults", delegate: "verificationResult", workspaceScoped: true }` — the `upsertOrder` entry that makes all of the above projection-adjacent. Read rule 1 before touching any of them: `VerificationResult` is blob-projected, so it must NOT gain a transactional repository or be written natively. The CRM-3 fix changes the *vocabulary*, not the storage path.** |
 
-### Why CRM-0 did not do the `@syncore/contracts` import
+### Why the `VerificationStatus` import is still not done
 
-Two independent blockers, either sufficient:
+`@syncore/contracts@0.2.0` **is now installed** (see below) and exports `VerificationStatus`. The
+import is deliberately **not** made, on the CRM-0 brief's own terms: `VerificationResult` is a
+projected table (`persistence-projection.ts:210`), so every local copy of the vocabulary is
+projection-adjacent, and `verification.ts` *is* the fallthrough logic. CRM-0 excludes both and
+requires zero runtime behaviour change. **Do it in CRM-3, all six locations together.**
 
-1. **The package is not installable.** `npm view @syncore/contracts version` →
-   `E404 ... is not in this registry` against `https://registry.npmjs.org/`. No scoped registry is
-   configured. The roadmap says it is published privately; that registry config does not exist here
-   yet.
-2. **Even if it were, the swap is out of CRM-0's remit.** `VerificationResult` is a **projected
-   table** (`verificationResults`, `upsertOrder` entry at `persistence-projection.ts:210`), so
-   `types.ts:676` is projection-adjacent, and `verification.ts` *is* the fallthrough logic. CRM-0's
-   brief excludes both, and requires zero runtime behaviour change.
+## `@syncore/contracts` — how it is wired
 
-**Before CRM-1**, `@syncore/contracts` must be installable and **pinned** to an exact version.
+Installed as **`file:../syncore-contracts`** — a sibling checkout, not a registry package (it is a
+private repo and is not published to npmjs.org).
+
+- **Local dev:** clone `syncoretech01/syncore-contracts` next to this repo and build it
+  (`npm ci && npm run build`). A `file:` dependency is **linked, not packed**, so npm does *not*
+  run the linked package's `prepare` — without an explicit build its `dist/` is missing and every
+  import resolves to a dead entry point.
+- **CI:** `.github/actions/setup-with-contracts` recreates the sibling layout, pinned to a tag.
+  **Bump the ref there in the same commit that bumps the dependency** — it is deliberately in one
+  place because five jobs consume it.
+- **Auth:** the `CONTRACTS_READ_TOKEN` secret (fine-grained PAT, read-only Contents on that one
+  repo). A workflow's default `GITHUB_TOKEN` cannot read another private repo, and GitHub reports
+  that as **"Repository not found"** rather than a permission error. Fine-grained PATs expire — if
+  CI starts failing here for no apparent reason, check the expiry first.
+- **Pinning:** currently `v0.2.0`. Pin exact versions and upgrade deliberately; never track a branch.
 
 ---
 
@@ -213,15 +231,13 @@ Two independent blockers, either sufficient:
 
 - `npm run check:projection-invariant` — 21 guarded models, own unmaskable CI job, proven to fail
   when violated, meta-test proves it stays armed.
-- CI runs lint + typecheck + vitest + the projection check on every PR and every push to `main`.
+- CI runs lint + typecheck + vitest + the projection check on **every push and every PR**.
+- `@syncore/contracts@0.2.0` wired via the sibling-checkout pattern (above). Installed, not imported.
 - `docs/CRM-0-BASELINE.md` — verified ground truth with real numbers.
-- This file.
+- The canonical docs committed to the repo root, and this file.
 
 **Baseline at CRM-0:** 92 test files / 455 tests / 0 failed / 0 skipped · 77 models + 8 enums ·
 `upsertOrder` 70 entries · 6 live adapters registered (`ringcentral` absent).
-
-**Flagged, not fixed:** `scratchpad/` is neither tracked nor gitignored — it breaks `lint` and
-`typecheck` locally while CI stays green. One `git add .` makes that everyone's problem.
 
 ### CRM-1 — the spine (next)
 
@@ -231,9 +247,19 @@ extended with `stageRunId`, the stage state machine
 (`PENDING → AWAITING_APPROVAL → APPROVED → RUNNING → COMPLETED | FAILED | PARKED | CANCELLED`),
 Approval Inbox UI + revision flow, the chat APIs, IA change.
 
-**CRM-1 needs from `syncore-contracts` (C2): the `ApprovalPayload` shapes** — the payload that gets
-SHA-256'd and must round-trip byte-identically between the CRM and the bot, or the hash check on
-`/decide` and `/revise` breaks. **Pin the version**; do not float it.
+**CRM-1 takes its `Approval` shapes from `@syncore/contracts@0.2.0`, not from v9.1 §6 prose**
+(errata #5 — the contracts package wins). Concretely, and this changes the schema:
+
+- The hashed **`ApprovalPayload` is content only.** `approvalId` and `payloadSha256` belong on a
+  separate **`ApprovalRecord`**. Do not hash the id — identical content would then hash differently
+  across revisions, which destroys the only question a revision chain exists to answer.
+- **`ProviderRunProposal` has no `decision` field in the approved payload.** A decision is an
+  outcome; embedding it means the hashed content mutates when someone decides — the exact mutation
+  rule 5 forbids. Record decisions on the `ApprovalRecord` / decide payload.
+- The payload must round-trip byte-identically between the CRM and the bot or the hash check on
+  `/decide` and `/revise` breaks. Pin the version; do not float it.
+- `NicheRequest.sourceChannel` keeps all three members `telegram | slack | dashboard` (errata #3),
+  even though Slack is the pilot surface.
 
 **Before CRM-1 starts:** confirm RDS backups and **run a restore drill**. For persistence changes
 `git revert` is not a rollback — forward-fix plus PITR is the story.
