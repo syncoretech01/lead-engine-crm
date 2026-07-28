@@ -25,14 +25,14 @@ async function loginAs(page: import("@playwright/test").Page, email: string) {
 test.describe("Growth OS — IA change", () => {
   test("Campaigns is the nav root and Outreach is marked legacy", async ({ page }) => {
     await loginAs(page, OPERATOR);
-    await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    // The sidebar renders the groups the CURRENT WORKSPACE grants. The landing
-    // workspace has lead-generation permissions only, so switch to the CRM one
-    // first — the same step app-smoke takes before touching outreach nav.
-    // Without it the Campaigns group simply is not rendered, which is what made
-    // this spec's first CI run red.
-    await page.getByRole("link", { name: /^CRM$/i }).click();
+    // Land ON a Campaigns-group route rather than clicking the workspace
+    // switcher from "/". The sidebar renders the groups the CURRENT WORKSPACE
+    // grants, and the landing workspace has lead-generation permissions only —
+    // which is why asserting from "/" found no Campaigns group at all. Driving
+    // the switcher instead was worse: that link is not reliably present from
+    // "/", and the click just burned the 60s timeout.
+    await page.goto("/approvals", { waitUntil: "domcontentloaded" });
     const nav = page.getByLabel("Primary navigation");
 
     // v9.1 §5.6: Campaigns is the nav root, above the function-oriented groups.
@@ -83,6 +83,13 @@ test.describe("Growth OS — Approval Inbox", () => {
     // would otherwise expect an in-place edit.
     await loginAs(page, OPERATOR);
     await page.goto("/approvals", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText(/creates a revision/i)).toBeVisible();
+
+    // Filtered to the visible one: the shared PageHeader renders its copy twice
+    // (responsive variants, one hidden), so a bare getByText is a strict-mode
+    // violation that reports "unexpected value hidden" rather than a missing
+    // string — a confusing way to learn the text is actually present.
+    await expect(
+      page.getByText(/creates a revision/i).filter({ visible: true }).first()
+    ).toBeVisible();
   });
 });
