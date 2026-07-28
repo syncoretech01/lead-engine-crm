@@ -50,6 +50,28 @@ test pins the computed value above, so this repo's canonicalization is locked to
 The value's authority is this repo's until contracts adopts it. On the bump, the test should switch
 to reading `payloadSha256` from the fixture rather than hard-coding it.
 
+### 1.2 `ApprovalDecide` and `ApprovalRevise` carry no `workspaceId`
+
+**Severity: medium — a decision, not a bug.** Both shapes identify the approval by
+`approvalId` alone. Every consumer of these endpoints is multi-tenant, and the CRM's repository
+puts `workspaceId` in every `where` (that is what the tenant-isolation test asserts), so the
+tenant has to arrive somehow.
+
+CRM-1 passes it as an `X-Syncore-Workspace-Id` header rather than adding a field locally, because
+a local addition is exactly the silent divergence this file exists to prevent. That works, but it
+means tenancy is transport-level for these two calls and payload-level nowhere — and the bot has
+to know that convention without the contract stating it.
+
+**The question for contracts:** should tenancy be modelled on the payload (`workspaceId: Id` on
+both shapes, matching `ApprovalRecord`, which does carry it), or explicitly documented as a
+transport concern with the header named in the package? Either is fine; the current state — where
+it is simply absent and each consumer improvises — is the one that produces two services
+disagreeing.
+
+**Note:** an `approvalId` is unguessable, so this is not the tenant-isolation boundary; the
+server-side `workspaceId` filter is. This is about the contract being complete, not about access
+control.
+
 ---
 
 ## 2. Observations — no schema change, but the README should say so
@@ -105,35 +127,69 @@ reconcile so the open-items list is trustworthy.
 
 ## 3. CRM-1 confirmation duties — 11 items
 
-Status filled in as each gate's payload is implemented. `PENDING` means not yet reached in the
-phase, **not** "no comment".
+**All 11 are answered.** None is left open: where CRM-1 could not produce a payload for real, the
+entry says so explicitly rather than going quiet.
 
 ### 3.1 Approval payloads (9) — `src/approvals/approval-payload.ts`
 
-| # | Shape / field | Line | Status |
-|---|---|---|---|
-| 1 | `EnrichmentRunApprovalPayload.uniqueRecordCount` | 111 | PENDING |
-| 2 | `PaidVerificationApprovalPayload` — count vs `contactEmailIds[]` | 121 | PENDING |
-| 3 | `PersonalizationSamplesApprovalPayload` | 142 | PENDING |
-| 4 | `CampaignLaunchApprovalPayload` | 156 | PENDING |
-| 5 | `SpendExceptionApprovalPayload` | 170 | PENDING |
-| 6 | `ScaleApprovalPayload` | 182 | PENDING |
-| 7 | `ReplyExceptionApprovalPayload` | 193 | PENDING |
-| 8 | `SuppressBulkApprovalPayload` | 204 | PENDING |
-| 9 | `ResumeAfterBreakerApprovalPayload` | 215 | PENDING |
+**Evidence levels**, because they are not equal and the contracts repo should be able to tell
+them apart:
 
-> Note on scope honesty: CRM-1 builds the **spine** — the approval machinery, the inbox, the
-> revision flow. Only `NICHE_TEST` has a real producer in this phase; the gates that fire in CRM-4
-> through CRM-8 are exercised here as payload shapes and inbox rendering, not end to end. Items
-> confirmed on that basis will say so, because "the type-checks and renders" is weaker evidence
-> than "a real stage produced it" and the contracts repo should be able to tell the two apart.
+- **PRODUCED** — a real code path in this repo builds this payload, hashes it, and stores it.
+- **EXERCISED** — constructed and round-tripped through the hash and the inbox renderer in tests,
+  but nothing in CRM-1 produces it for real; its producer lands in a later phase.
+- **RENDERED** — implemented in the exhaustive inbox switch and type-checked, nothing more.
+
+CRM-1 builds the spine, so only `NICHE_TEST` reaches PRODUCED. "It type-checks and renders" is
+weaker evidence than "a real stage produced it", and saying so is the point of this table.
+
+| # | Shape / field | Line | Status | Evidence |
+|---|---|---|---|---|
+| 1 | `EnrichmentRunApprovalPayload.uniqueRecordCount` | 111 | **CONFIRMED — keep optional** | RENDERED |
+| 2 | `PaidVerificationApprovalPayload` — count vs `contactEmailIds[]` | 121 | **CONFIRMED — keep the count, do not add ids** | RENDERED |
+| 3 | `PersonalizationSamplesApprovalPayload` | 142 | **CONFIRMED as-is** | RENDERED |
+| 4 | `CampaignLaunchApprovalPayload` | 156 | **CONFIRMED**, one note below | RENDERED |
+| 5 | `SpendExceptionApprovalPayload` | 170 | **CONFIRMED as-is** | RENDERED |
+| 6 | `ScaleApprovalPayload` | 182 | **CONFIRMED as-is** | RENDERED |
+| 7 | `ReplyExceptionApprovalPayload` | 193 | **CONFIRMED**, one note below | RENDERED |
+| 8 | `SuppressBulkApprovalPayload` | 204 | **CONFIRMED as-is** | EXERCISED |
+| 9 | `ResumeAfterBreakerApprovalPayload` | 215 | **CONFIRMED as-is** | RENDERED |
+
+**② `PAID_VERIFICATION` — the open question is answered: keep the count.** Two reasons found by
+building it. First, the hash: a 300-element id list is part of the hashed content, so the digest
+changes whenever the Hub's `unknown` set shifts between proposing and deciding — an approval would
+go stale for a reason that has nothing to do with what the operator agreed to. Second, the inbox:
+the detail panel renders the payload, and 300 ids is an unusable wall in both the dashboard and
+Slack. The set is derivable from the stage run, and §9.7 already sends `contactEmailIds[]` to the
+Hub on the authorize call, which is where it belongs. Auditability is served by the stage run,
+not by inflating the approved content.
+
+**① Same argument for `uniqueRecordCount`** — a count is the renderable, stable summary; the
+record set lives on the stage run. Optional is right: the field is meaningless until dedupe has
+run.
+
+**④ `CAMPAIGN_LAUNCH.approvedCopyHash` is typed `z.string().min(1).max(128)`.** Everywhere else a
+digest appears the package uses `Sha256Hex`, and v9.1 §9.8 requires this to *match* the export —
+an equality check against a loosely-typed string is where a casing or prefix mismatch hides.
+Suggest `Sha256Hex`. Flagged rather than assumed, because narrowing is a MAJOR bump and CRM-6
+owns the producer.
+
+**⑦ `ReplyExceptionApprovalPayload.replyClassification` is free text.** Fine for now — nothing
+classifies replies until CRM-7. Worth revisiting as a closed enum then, since routing decisions
+keyed off a free string are the kind of thing that quietly accumulates variants.
 
 ### 3.2 Hint types (2) — `src/request/niche-request.ts`
 
-| # | Field | Line | Status |
-|---|---|---|---|
-| 10 | `testSizeHint` — a count of companies | 65 | PENDING |
-| 11 | `budgetHint` — `Cents`, never a float | 67 | PENDING |
+| # | Field | Line | Status | Evidence |
+|---|---|---|---|---|
+| 10 | `testSizeHint` — a count of companies | 65 | **CONFIRMED** | PRODUCED |
+| 11 | `budgetHintCents` — `Cents`, never a float | 67 | **CONFIRMED** | PRODUCED |
+
+Both are consumed as typed by `POST /api/chat/niche-request` and the integration suite.
+`budgetHintCents` in particular: contracts already renamed v9.1 §6's `budgetHint` to integer minor
+units, and this repo consumes that as-is. A voice note saying "about a hundred bucks" must become
+`10000` upstream or fail validation — it can never be stored as prose, and the route's
+`NicheRequestPayload.parse` enforces it.
 
 ---
 
