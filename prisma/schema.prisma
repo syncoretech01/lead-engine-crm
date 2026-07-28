@@ -130,6 +130,7 @@ model Workspace {
   campaignStageRuns               CampaignStageRun[]
   approvals                       Approval[]
   costEntries                     CostEntry[]
+  notifyOutbox                    NotifyOutbox[]
   // ------------------------------------------------------------------------
   searchProfiles                  SearchProfile[]
   leadJobs                        LeadJob[]
@@ -2338,6 +2339,45 @@ model Approval {
 /// same ledger mid-migration. Do NOT add a third, and do NOT write Growth OS
 /// cost rows into `providerUsageLedger`: the projection check cannot catch that
 /// (it guards the name `CostEntry`, not `providerUsageLedger`).
+/// Outbound `/notify` deliveries to the chat bot (v9.1 §9.4, §19).
+///
+/// The bot is a remote control, not a system of record: "a missed notify is
+/// retried; approvals valid in the dashboard regardless of bot uptime" (§19).
+/// That is only true if the delivery outlives the request that produced it —
+/// hence a durable outbox rather than a fire-and-forget fetch. A decision is
+/// never delayed or blocked by a bot outage; it commits, and the notify drains
+/// afterwards.
+///
+/// Prisma-native like every other Growth OS table, and guarded by name in
+/// scripts/check-projection-invariant.mjs.
+model NotifyOutbox {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  /// contracts NotifyKind.
+  kind         String
+  /// The full signed NotifyEnvelope body, stored verbatim. The signature covers
+  /// these exact bytes, so re-serialising on retry would invalidate it.
+  envelopeJson Json
+  /// Idempotency key the receiver dedupes on (contracts webhookEnvelope.eventId).
+  eventId      String
+  approvalId   String?
+  campaignId   String?
+  stageRunId   String?
+  deliveredAt  DateTime?
+  attempts     Int       @default(0)
+  lastError    String?
+  /// Exponential backoff target; null means "ready now".
+  nextAttemptAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  /// One row per event: a retry must never become a second delivery.
+  @@unique([eventId])
+  @@index([workspaceId, deliveredAt, nextAttemptAt])
+  @@index([deliveredAt, nextAttemptAt])
+}
+
 model CostEntry {
   id            String            @id @default(cuid())
   workspaceId   String

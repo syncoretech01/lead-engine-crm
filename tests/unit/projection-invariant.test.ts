@@ -57,11 +57,35 @@ const V9_1_GROWTH_OS_MODELS = [
   "HubSync"
 ];
 
+/**
+ * Growth OS tables added by later phases that v9.1 §6 does not name.
+ *
+ * Kept separate from the list above so the two assertions say different things:
+ * every v9.1 model must still be guarded (dropping one is a silent loss of
+ * protection), and the total list must be exactly v9.1 plus these (adding one
+ * requires editing this file, which is the deliberate step).
+ */
+const LATER_PHASE_ADDITIONS = [
+  /** CRM-1. Implements v9.1 §19's "a missed notify is retried". */
+  "NotifyOutbox"
+];
+
 const repoRoot = path.resolve(__dirname, "../..");
 
 describe("projection invariant — guarded list", () => {
   it("still guards every Growth OS model from Plan v9.1 §6", () => {
-    expect([...GUARDED_MODELS].sort()).toEqual([...V9_1_GROWTH_OS_MODELS].sort());
+    // A missing entry is a silent loss of protection for that table.
+    for (const model of V9_1_GROWTH_OS_MODELS) {
+      expect(GUARDED_MODELS, `${model} is no longer guarded`).toContain(model);
+    }
+  });
+
+  it("guards exactly v9.1 §6 plus the recorded later-phase additions", () => {
+    // Adding a model to the guard therefore requires editing this file too,
+    // which is the deliberate step that keeps the list honest.
+    expect([...GUARDED_MODELS].sort()).toEqual(
+      [...V9_1_GROWTH_OS_MODELS, ...LATER_PHASE_ADDITIONS].sort()
+    );
   });
 
   it("derives four surface forms, including the camelCase ones upsertOrder uses", () => {

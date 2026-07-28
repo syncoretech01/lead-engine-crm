@@ -42,7 +42,8 @@ const GROWTH_TABLES = [
   "campaign",
   "campaignStageRun",
   "approval",
-  "costEntry"
+  "costEntry",
+  "notifyOutbox"
 ] as const;
 
 const plural = (name: string) => (name.endsWith("y") ? `${name.slice(0, -1)}ies` : `${name}s`);

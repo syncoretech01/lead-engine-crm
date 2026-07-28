@@ -129,7 +129,10 @@ export const GUARDED_MODELS = [
   // Engagement, eligibility, sync
   "EngagementEvent",
   "CampaignEligibilityPolicy",
-  "HubSync"
+  "HubSync",
+  // Added CRM-1. Not in v9.1 §6 — the outbox is an implementation of §19's
+  // "a missed notify is retried", and it is native like everything else here.
+  "NotifyOutbox"
 ];
 
 /** The file the invariant protects, relative to the repo root. */
