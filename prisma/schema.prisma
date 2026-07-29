@@ -2005,7 +2005,7 @@ model AuditLog {
 // `npm run check:projection-invariant` fails the build if any of these names
 // reaches that file. Do not work around it.
 //
-// Enum values mirror `@syncore/contracts@0.2.0` **verbatim**, including its
+// Enum values mirror `@syncore/contracts@0.2.1` **verbatim**, including its
 // lowercase members. That is why casing is inconsistent below: contracts is
 // lowercase for record statuses and uppercase for types/stages, and mirroring it
 // exactly means no mapping layer exists to drift. `tests/unit/growth-enums.test.ts`
@@ -2368,6 +2368,15 @@ model NotifyOutbox {
   lastError    String?
   /// Exponential backoff target; null means "ready now".
   nextAttemptAt DateTime?
+  /// A terminal delivery that exhausted the configured attempt budget. Kept
+  /// separate from deliveredAt so pending, delivered, and dead-lettered rows are
+  /// unambiguous without inventing a Contracts-owned enum.
+  deadLetteredAt DateTime?
+  /// A short database lease. claimToken is unique per attempt and is checked on
+  /// settlement; claimedBy is the operational worker identity.
+  claimedBy      String?
+  claimToken     String?
+  claimExpiresAt DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -2376,6 +2385,7 @@ model NotifyOutbox {
   @@unique([eventId])
   @@index([workspaceId, deliveredAt, nextAttemptAt])
   @@index([deliveredAt, nextAttemptAt])
+  @@index([deliveredAt, deadLetteredAt, nextAttemptAt, claimExpiresAt])
 }
 
 model CostEntry {

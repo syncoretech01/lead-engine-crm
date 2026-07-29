@@ -16,13 +16,13 @@ import { ApprovalPayload } from "@syncore/contracts";
  *     hash      = lowercase hex SHA-256 of those bytes
  *
  * ⚠️ PARSE FIRST. This is the part that is easy to get wrong and expensive to
- * debug, and it is not stated in the contracts README (reported in
- * docs/CRM-1-CONTRACTS-FEEDBACK.md § 2.1).
+ * debug. Contracts v0.2.1 made it explicit after the CRM-1 feedback in
+ * docs/CRM-1-CONTRACTS-FEEDBACK.md § 2.1.
  *
  * `JSON.stringify` serialises keys in insertion order, so the digest depends on
  * key order. Zod rebuilds objects in schema-declaration order, which means
  * `ApprovalPayload.parse()` IS the key-order canonicalizer and `stringify` only
- * fixes whitespace. Measured against contracts 0.2.0:
+ * fixes whitespace. Confirmed against contracts 0.2.1:
  *
  *     parse(x) vs parse(shuffled x)        -> same hash   (top level AND nested)
  *     raw x    vs raw nested-shuffled x    -> DIFFERENT hash

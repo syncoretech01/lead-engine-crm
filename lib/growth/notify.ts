@@ -60,6 +60,30 @@ export function signNotifyBody(rawBody: string, timestamp: string, secret: strin
 }
 
 /**
+ * Re-sign the stored, canonical body for one delivery attempt.
+ *
+ * Retry timestamps must be fresh enough for the Contracts replay window, while
+ * the body bytes, event id, and nonce remain unchanged so the Growth Bot can
+ * deduplicate an attempt accepted before the CRM lost the response.
+ */
+export function signNotifyDeliveryAttempt(
+  delivery: SignedNotify,
+  attemptedAt: Date,
+  secret = notifySecret()
+): SignedNotify {
+  const timestamp = attemptedAt.toISOString();
+  return {
+    ...delivery,
+    body: delivery.body,
+    headers: {
+      ...delivery.headers,
+      [WEBHOOK_SIGNATURE_HEADER]: signNotifyBody(delivery.body, timestamp, secret),
+      [WEBHOOK_TIMESTAMP_HEADER]: timestamp
+    }
+  };
+}
+
+/**
  * Verify a signature the way the receiver must — exported so the fake bot in the
  * tests checks deliveries exactly as the real bot will, rather than a
  * re-implementation that could agree with a bug.

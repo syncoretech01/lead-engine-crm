@@ -14,8 +14,8 @@ and the exact next implementation slice. It is not a replacement for the product
 
 **Current Growth phase:** **CRM-1 — IN PROGRESS**
 
-**Current contracts dependency:** **`@syncore/contracts` 0.2.0**, locally resolved from
-`file:../syncore-contracts` and pinned to tag `v0.2.0` in CI
+**Current contracts dependency:** **`@syncore/contracts` 0.2.1**, locally resolved from
+`file:../syncore-contracts` and pinned to tag `v0.2.1` in CI and the EC2 build procedure
 
 ## How to use and maintain this tracker
 
@@ -42,16 +42,107 @@ Only these implementation statuses are used:
 | BLOCKED | Completion depends on an unresolved external repository, credential, environment, or owner decision. |
 | NOT STARTED | No phase-level implementation exists in this repository. Pre-existing legacy capability does not count. |
 
+## Wave implementation history
+
+### Wave 1, Step 1.2 — Contracts v0.2.1 and CRM notification worker — 2026-07-29
+
+**Status: COMPLETE**
+
+Contracts consumption moved from v0.2.0 to the released `v0.2.1` tag at contracts commit
+`579a12853641b75b453325f6f08af7bb6521af9b`. The dependency remains
+`file:../syncore-contracts`, which is the repository's deliberate sibling-checkout strategy.
+`.github/actions/setup-with-contracts/action.yml` now pins `v0.2.1`, the active npm lockfile records
+package version `0.2.1`, and `deploy/aws/deploy-app.sh` both documents the tag and refuses an
+on-host build if the sibling package version is not exactly `0.2.1`. No Contracts schema was copied
+into this repository. The corrected v0.2.1 approval fixture hash is now consumed directly.
+
+The production delivery path remains PostgreSQL/Prisma-native. Migration
+`20260729200000_growth_os_notify_delivery_leases` adds `deadLetteredAt`, `claimedBy`, `claimToken`,
+and `claimExpiresAt` plus a claimability index. `drainNotifyOutbox` atomically claims one due row at
+a time with `FOR UPDATE SKIP LOCKED`, a unique claim token, worker ownership, and a bounded lease.
+It holds no transaction during HTTP. Expired leases are reclaimable after process termination.
+Settlement checks the owner and token so a worker cannot settle a claim another worker recovered.
+
+The canonical `NotifyEnvelope` body is still serialized once and stored verbatim. Each delivery
+attempt refreshes only `X-Syncore-Timestamp` and its HMAC over the exact unchanged body bytes; the
+event ID, delivery ID, and nonce remain stable for Bot deduplication. The current configured Bot
+URL is the send target/allow-list, production requires HTTPS, the request has a bounded timeout,
+and only the Growth Bot's documented `202 {status:"accepted",deduped:boolean}` and
+`200 {status:"duplicate"}` acknowledgements settle a row. Malformed success bodies, non-2xx
+responses, timeouts, and connection failures are explicit retryable errors.
+
+Retries preserve the attempt count, enforce `nextAttemptAt`, start at the configured base delay,
+double exponentially, and cap at the configured maximum. Exhausting the configured maximum sets
+`deadLetteredAt` and stops further claims. Structured delivery events contain notification ID,
+delivery ID, workspace ID, event type, kind, attempt count, correlation ID, worker ID, recovery
+flag, result, and safe error code; they contain no URL, headers, secret, token, or payload. The
+existing `/api/health` route exposes safe pending, active-claim, repeatedly-failing, dead-letter,
+and oldest-pending-age aggregates.
+
+`scripts/run-background-worker.ts`, the real systemd entry point, now calls the shared
+`runBackgroundWorkerTick`, which preserves the provider, lead, recording, and daily-report lanes
+and adds NotifyOutbox delivery. It handles both SIGINT and SIGTERM, wakes immediately from its idle
+interval, finishes the one in-flight bounded request, claims no further row, and then disconnects
+Prisma. A hard termination remains recoverable through lease expiry.
+
+Environment and deployment settings added/documented:
+
+- `SYNCORE_BOT_NOTIFY_URL` and `SYNCORE_BOT_NOTIFY_SECRET`;
+- `SYNCORE_BOT_NOTIFY_TIMEOUT_MS` and `SYNCORE_BOT_NOTIFY_LEASE_MS`;
+- `SYNCORE_BOT_NOTIFY_MAX_ATTEMPTS`;
+- `SYNCORE_BOT_NOTIFY_RETRY_BASE_MS` and `SYNCORE_BOT_NOTIFY_RETRY_MAX_MS`;
+- `SYNCORE_BOT_NOTIFY_BATCH_SIZE`;
+- the previously undocumented `SYNCORE_CHAT_API_TOKEN` and `SYNCORE_HUB_URL` were also added to
+  the shared example/deployment configuration.
+
+Files changed in Step 1.2:
+
+- dependency/CI: `package-lock.json`, `.github/actions/setup-with-contracts/action.yml`;
+- schema/runtime: `prisma/schema.prisma`, the new migration, `lib/growth/notify.ts`,
+  `lib/growth/notify-outbox.ts`, `lib/phase1/background-worker-runner.ts`,
+  `scripts/run-background-worker.ts`, and `app/api/health/route.ts`;
+- consumer alignment: `lib/growth/approval-hash.ts`, `tests/unit/growth-approval-hash.test.ts`,
+  `tests/unit/growth-notify.test.ts`, `tests/unit/growth-contracts-version.test.ts`,
+  `tests/unit/growth-notify-worker.test.ts`, and
+  `tests/integration/growth-notify-outbox.test.ts`;
+- configuration/deployment: `.env.example`, `deploy/ec2/worker.env.example`,
+  `deploy/ec2/web.env.example`, `deploy/ec2/syncore-worker.service`,
+  `deploy/aws/deploy-app.sh`, `deploy/aws/README.md`, and `docs/EC2_WORKER_SETUP.md`;
+- guidance/history: `CLAUDE.md`, `docs/CRM-1-CONTRACTS-FEEDBACK.md`, and this tracker.
+
+Verification evidence:
+
+- `npm ls @syncore/contracts --depth=0`: `@syncore/contracts@0.2.1`;
+- contracts consumer/focused unit tests: 5 files, 46 tests, all passed;
+- full unit lane: 100 files, 612 tests, all passed;
+- PostgreSQL 16 migration run: all 17 migrations applied to isolated local database
+  `lead_engine_crm` on port 55432;
+- focused real-PostgreSQL outbox lane: 1 file, 9 tests, all passed;
+- full real-PostgreSQL integration lane: 8 files, 39 tests, all passed;
+- projection invariant, Prisma generation/validation, lint, TypeScript, and Next.js production build:
+  all passed. Playwright was not required or rerun for this worker-only step.
+
+Delivery semantics remain **at least once**. The unavoidable duplicate edge is a crash after the
+Bot accepts the request but before CRM settlement, or a pathological pause longer than the lease.
+The stable event/delivery ID lets the current Bot return its idempotent `duplicate` acknowledgement,
+which the CRM treats as success. Exactly-once delivery is not claimed. Live credentials, a deployed
+migration, an external heartbeat/alert rule, and a joint CRM-to-real-Bot run remain deployment
+evidence gaps; local PostgreSQL and fake-Bot coverage do not prove production rollout.
+
+Deferred deliberately: transactional approval-event creation, chat-route notification creation,
+initial `APPROVAL_REQUESTED`, NICHE_TEST business side effects, joint Bot testing, and all CRM-2
+work. The next exact step is **Wave 1, Step 1.3 — NICHE_TEST approval side effects**.
+
 ## Current executive snapshot
 
 | Area | Status | Current fact |
 |---|---|---|
 | CRM-0 guardrails | COMPLETE | Projection invariant, CI isolation, contracts checkout, and the baseline are present and verified. |
-| CRM-1 spine | IN PROGRESS | Native models, repositories, approvals, routes, UI, state machine, and tests exist; notification delivery and approval side effects do not complete the phase acceptance loop. |
+| CRM-1 spine | IN PROGRESS | Native models, repositories, approvals, routes, UI, state machine, and tests exist; Wave 1 Step 1.2 completed notification delivery, while approval side effects still do not complete phase acceptance. |
 | CRM-2 through CRM-8 | NOT STARTED | Some CRM-2 domain primitives landed as CRM-1 prerequisites, but none of the later phase acceptance paths is connected. |
-| Contracts consumption | IN PROGRESS | Version 0.2.0 is installed and used, but documented feedback requires a contracts patch before the joint bot test. |
+| Contracts consumption | COMPLETE | Version 0.2.1 is installed, locked, pinned in CI/on-host deployment, and directly consumer-tested. |
 | GitHub `main` CI at the implementation baseline | COMPLETE | Run `30478238419` passed projection, validate, build, real-PostgreSQL integration, legacy Playwright, and blocking Growth OS Playwright steps. |
-| Latest CRM-1 production deployment | IMPLEMENTED — NOT VERIFIED | Deployment scripts exist and AWS production is documented, but this review found no evidence that `bb603d3` and both CRM-1 migrations are live. |
+| Latest CRM-1 production deployment | IMPLEMENTED — NOT VERIFIED | Deployment scripts exist and AWS production is documented, but no evidence shows the Step 1.2 commit or its third CRM-1 migration is live. |
 
 ## 1. Repository responsibility and boundaries
 
@@ -113,7 +204,7 @@ legacy sequences; their navigation is deliberately labeled **Outreach (legacy se
 | Phase | Status | Implemented evidence | Required before phase completion |
 |---|---|---|---|
 | CRM-0 — guardrails | COMPLETE | Root Growth rules; measured baseline; contracts sibling checkout; projection checker in its own CI job; meta-test proving the checker fails when violated; CI on every push and PR. | Keep the guarded-model list and tracker current as models are added. |
-| CRM-1 — Growth spine | IN PROGRESS | Eight native Growth models, nine new enums, two migrations, transactional repositories, paginated read models, immutable approval flow, T2 two-person approval, stage state machine, three chat routes, Approval Inbox, Campaigns/Lead Hub IA, signed notify builder, outbox schema/helper, real-PostgreSQL spine test, and blocking Growth Playwright coverage. | Close contracts feedback; make approval creation/decision/revision side effects one idempotent application flow; enqueue notifications transactionally; wire and verify outbox delivery; run the joint bot round trip; prove a final `NICHE_TEST` decision produces the approved brief and campaign without manual repository calls. |
+| CRM-1 — Growth spine | IN PROGRESS | Eight native Growth models, nine new enums, three migrations, transactional repositories, paginated read models, immutable approval flow, T2 two-person approval, stage state machine, three chat routes, Approval Inbox, Campaigns/Lead Hub IA, Contracts v0.2.1, leased/dead-lettered NotifyOutbox delivery in the production worker, real-PostgreSQL tests, and blocking Growth Playwright coverage. | Implement one idempotent approval application flow; enqueue approval events transactionally; add NICHE_TEST side effects; run the joint Bot round trip; and prove a final decision produces one approved brief and one campaign. |
 | CRM-2 — research loop | NOT STARTED | CRM-1 created `ResearchRun`, its repository, and the guarded `NicheBrief` constructor as prerequisites. | Add authenticated claim-next and heartbeat APIs, signed research progress/completion webhook, automatic brief/approval creation, approval-to-campaign orchestration, and the voice/text-to-approved-campaign cross-repository test. |
 | CRM-3 — Hub integration and verification control | NOT STARTED | Lead Hub launch placeholder only. | Add `HubSync`, golden intake, Hub identifiers, Hub search/golden contracts, Hub-executed MV authorization/results, `VerificationStatus` vocabulary correction, suppression reconciliation, and stage/cost integration. |
 | CRM-4 — acquisition and enrichment waterfall | NOT STARTED | Legacy provider adapters and workers exist, but they are not Growth campaign stages. | Add `ProviderRunProposal`, Hub overlap preflight, approval options, shared budget gate, stage-bound provider execution, provider-result push to Hub, actual-cost reconciliation, and overrun parking. |
@@ -183,8 +274,9 @@ file are independently checked by tests.
 ## 4. Existing Growth OS Prisma models
 
 The Growth spine was added by migrations
-`20260728120000_growth_os_crm1_spine` and
-`20260728180000_growth_os_notify_outbox`.
+`20260728120000_growth_os_crm1_spine`,
+`20260728180000_growth_os_notify_outbox`, and
+`20260729200000_growth_os_notify_delivery_leases`.
 
 | Model or schema change | Status | Current responsibility and implementation |
 |---|---|---|
@@ -197,7 +289,7 @@ The Growth spine was added by migrations
 | `CampaignStageRun` | IN PROGRESS | Execution record with stage/status, costs, record counts, provider/job/approval pointers, failure/retry fields, report payload, and timestamps. Creation, transition validation, and paged timeline reads exist; no orchestrator uses them. |
 | `Approval` | IN PROGRESS | Immutable payload/hash record with campaign/stage links, requester/decider, T2 first-approver fields, and revision self-relation. Core repository behavior is verified; business side effects and full bot round trip are incomplete. |
 | `CostEntry` | IN PROGRESS | Native Growth cost generation with campaign/stage attribution. Read and aggregate functions exist; no production code currently creates a `CostEntry`. |
-| `NotifyOutbox` | IN PROGRESS | Durable signed delivery row with event identity, target references, serialized envelope, attempts, retry time, error, and delivery time. Rows can be enqueued; no worker drains them. |
+| `NotifyOutbox` | COMPLETE | Durable exact-body delivery with event identity, target references, attempts, scheduled retry, owner/token/expiry lease, terminal dead-letter time, structured attempt logs, health aggregates, and production background-worker drain. Real PostgreSQL proves concurrency and recovery. |
 
 The nine Growth-related enums added by CRM-1 are:
 
@@ -271,7 +363,7 @@ cannot be revised. Decision replay returns the already-final state without chang
 | Apply approved `NICHE_TEST` to `NicheBrief` | NOT STARTED | `markNicheBriefApproved` exists but neither decision surface calls it. |
 | Create campaign after approved niche test | NOT STARTED | `createCampaign` exists but neither decision surface calls it. |
 | Other approval-specific side effects | NOT STARTED | No provider, budget, launch, scale, suppression, reply, or breaker application service exists. |
-| Joint dashboard/bot final-state round trip | BLOCKED | Contracts feedback must be patched and the bot must be tested against the same CRM record. |
+| Joint dashboard/bot final-state round trip | IMPLEMENTED — NOT VERIFIED | Contracts feedback is resolved in v0.2.1 and CRM delivery is implemented; the real Bot and same-record final-state round trip have not been run. |
 
 Approval side effects must be idempotent and must execute through one application service used by
 both dashboard actions and chat routes. Adding side effects separately to each surface would create
@@ -281,26 +373,33 @@ two behavior definitions and eventually two outcomes for the same approval.
 
 ### Implemented behavior
 
-`buildSignedNotify` validates a contracts `NotifyEnvelope`, serializes it once, and signs
+`buildSignedNotify` validates a contracts v0.2.1 `NotifyEnvelope`, serializes it once, and signs
 `timestamp + "." + rawBody` with HMAC-SHA256. It emits the contracts signature, timestamp, nonce,
-and delivery-ID headers. Unit tests cover valid delivery, tampering, timestamp changes, expiry,
-nonce replay in a fake receiver, wrong secrets, and missing headers.
+and delivery-ID headers. On each attempt the worker re-signs the same exact stored body bytes with
+a fresh timestamp while retaining event ID and nonce. Unit tests cover valid delivery, tampering,
+timestamp changes, expiry, nonce replay in a fake receiver, wrong secrets, missing headers, and
+exact-body retry signing.
 
-`enqueueNotify` stores the exact URL, body, and headers so the signed bytes are preserved. The
-outbox enforces a unique event ID. `drainNotifyOutbox` selects pending deliveries, performs HTTP
-POSTs, records delivery or error state, limits attempts to eight, and computes exponential retry
-times capped at one hour.
+`enqueueNotify` stores the exact body and headers and enforces a unique event ID.
+`drainNotifyOutbox` atomically claims one due row at a time with Postgres
+`FOR UPDATE SKIP LOCKED`, worker/token ownership, and an expiring lease. It performs a bounded HTTP
+POST outside the transaction, validates the Bot acknowledgement, settles only its own claim,
+schedules exponential retry from one minute up to one hour by default, and marks exhausted rows
+dead-lettered. Expired claims are recoverable after termination. The configured current Bot URL is
+the only send target, and production requires HTTPS.
 
 ### Delivery reality
 
 | Outbox capability | Status | Evidence or gap |
 |---|---|---|
-| Schema and migration | COMPLETE | Prisma schema and migration exist; main CI applied them to PostgreSQL. |
+| Schema and migration | COMPLETE | Base outbox and additive lease/dead-letter migrations applied cleanly in local PostgreSQL 16. |
 | Notify envelope and HMAC generation | COMPLETE | Direct unit coverage against contracts constants and a fake receiver. |
 | Durable enqueue helper | IMPLEMENTED — NOT VERIFIED | Used by dashboard actions, but no direct real-PostgreSQL outbox test verifies persistence/uniqueness with the decision transaction. |
-| Drain implementation | IMPLEMENTED — NOT VERIFIED | Function exists; no test calls `drainNotifyOutbox`. |
-| Background-worker wiring | NOT STARTED | `run-background-worker.ts` drains provider, lead, recording, and daily-report work only. |
-| Live CRM-to-bot delivery | BLOCKED | No worker caller, no joint bot test, and no production configuration evidence. |
+| Drain implementation | COMPLETE | Nine direct PostgreSQL integration tests cover success, timeout/connection failure, retry timing, non-2xx/malformed responses, terminal failure, concurrency, stale recovery, duplicate acknowledgement, and graceful stop. |
+| Background-worker wiring | COMPLETE | The production `worker:background`/systemd path preserves all existing lanes and drains NotifyOutbox each tick; unit regression coverage proves each call. |
+| Claim and crash recovery | COMPLETE | Atomic one-row claim, owner/token settlement, active-lease exclusion, stale-lease recovery, and process-restart simulation pass against PostgreSQL. |
+| Terminal visibility | COMPLETE | Dead-letter timestamps, safe structured attempt events, tick summary, and `/api/health` aggregates exist and are tested. |
+| Live CRM-to-bot delivery | IMPLEMENTED — NOT VERIFIED | Production code/config exists, but no deployment record or joint real-Bot request is evidence yet. |
 
 Known delivery risks:
 
@@ -308,15 +407,14 @@ Known delivery risks:
   after decision commit and before enqueue loses the event.
 - Chat API decisions and revisions never enqueue an event.
 - Initial approval creation never enqueues an event.
-- The drain query has no claim/lease. Concurrent drainers could send the same row.
-- The first retry delay is calculated from the incremented attempt count, so code currently starts
-  at approximately two minutes even though the comment says one minute.
-- Signatures are minted at enqueue time. A delivery delayed beyond the replay window may be rejected
-  as stale; delayed/retry behavior past the window is not tested.
-- `SYNCORE_BOT_NOTIFY_URL` is trusted directly. The CRM-1 requirement for an allow-listed origin is
-  not implemented.
-- Rows that reach the attempt limit remain undelivered, but there is no dead-letter dashboard,
-  alert, or Growth health metric.
+- External delivery is at least once, not exactly once. A process crash after Bot acceptance but
+  before database settlement can retry; the Bot must continue deduplicating the stable event ID.
+- A pathological process pause beyond the lease can permit a second worker to retry the same row.
+  The default 60-second lease exceeds the 15-second request timeout, but no finite lease removes
+  this distributed-systems edge case.
+- Terminal failures are visible in logs and health, but no external alert rule or admin retry UI is
+  configured in this repository.
+- Production configuration and a real CRM-to-Bot delivery have not been observed.
 
 ## 7. Campaign and CampaignStageRun status
 
@@ -406,14 +504,14 @@ in projection ownership.
 | Check | Status | Result on 2026-07-29 |
 |---|---|---|
 | Projection invariant | COMPLETE | Passed; projection file free of all 22 guarded Growth model names. |
-| Unit tests | COMPLETE | 98 test files, 605 tests, zero failures. |
+| Unit tests | COMPLETE | 100 test files, 612 tests, zero failures. |
 | Lint | COMPLETE | `npm run lint` exited zero. |
 | TypeScript | COMPLETE | `npm run typecheck` exited zero. |
 | Production build | COMPLETE | `npm run build` exited zero with Next.js 16.2.7 and emitted all current routes. |
-| Local real-PostgreSQL integration | IMPLEMENTED — NOT VERIFIED | Not rerun locally during this review; verified in GitHub Actions instead. |
+| Local real-PostgreSQL integration | COMPLETE | PostgreSQL 16 on isolated port 55432 applied all 17 migrations; 8 files and 39 tests passed, including 9 direct outbox delivery tests. |
 | Local Playwright | IMPLEMENTED — NOT VERIFIED | Not rerun locally during this review; verified in GitHub Actions instead. |
 
-Current test inventory is 98 unit files, 7 integration files, and 13 Playwright files.
+Current test inventory is 100 unit files, 8 integration files, and 13 Playwright files.
 
 ### GitHub evidence
 
@@ -444,14 +542,16 @@ Verified:
   request → confirm → research queue/claim/complete → brief + approval → manual decision → manual
   brief approval → campaign → stage run.
 - Illegal stage transitions and paginated stage reads.
+- Contracts v0.2.1 resolution and the corrected approval fixture digest.
+- Exact-body notification signing, PostgreSQL claim concurrency, retry scheduling, Bot timeout,
+  malformed/non-2xx acknowledgement handling, dead-letter visibility, expired-claim/process-restart
+  recovery, duplicate acknowledgement, graceful shutdown, and existing combined-worker lanes.
 - Growth pages render under Playwright.
 
 Not verified:
 
 - a real API-to-bot approval round trip;
 - initial approval-request notification creation;
-- outbox persistence and drain behavior;
-- delayed retry behavior;
 - approval-specific side effects;
 - a browser interaction against a seeded approval row—the blocking Playwright spec primarily proves
   route rendering and explanatory copy;
@@ -461,12 +561,12 @@ Not verified:
 
 | Environment | Status | Evidence and limitation |
 |---|---|---|
-| Local build/toolchain | COMPLETE | Sibling contracts checkout is present at v0.2.0; lint, typecheck, unit tests, invariant, and production build pass. |
+| Local build/toolchain | COMPLETE | Sibling contracts checkout is exactly v0.2.1; lint, typecheck, 612 unit tests, invariant, Prisma checks, and production build pass. |
 | Local running app with PostgreSQL | IMPLEMENTED — NOT VERIFIED | Scripts and `.env.example` exist, but this review did not start a local server or database-backed browser session. |
 | Staging procedure | IMPLEMENTED — NOT VERIFIED | Database cutover documentation describes staging migration/seed/write checks. No staging environment, URL, deployment workflow, or current CRM-1 staging result is recorded in the repository. |
 | AWS infrastructure code | IMPLEMENTED — NOT VERIFIED | Terraform, Caddy configuration, systemd units, migration, deploy, redeploy, health, and rollback scripts exist; they were inspected but not applied during this review. |
 | AWS production infrastructure claim | IMPLEMENTED — NOT VERIFIED | `docs/AWS_MIGRATION.md` says the EC2/RDS migration completed 2026-07-10, but this review did not query AWS or the production health endpoint. |
-| CRM-1 production rollout | IMPLEMENTED — NOT VERIFIED | No deployment record proves `bb603d3`, `20260728120000_growth_os_crm1_spine`, and `20260728180000_growth_os_notify_outbox` are live. |
+| CRM-1 production rollout | IMPLEMENTED — NOT VERIFIED | No deployment record proves the current Step 1.2 commit or `20260729200000_growth_os_notify_delivery_leases` is live. |
 
 The documented AWS topology is one `t4g.small` EC2 instance running the Next.js standalone server,
 the background worker, and Caddy; one private `db.t4g.micro` PostgreSQL RDS instance; SSM; S3; and
@@ -477,26 +577,27 @@ Deployment is manual rather than a GitHub Actions deployment workflow. `redeploy
 repository, optionally applies migrations when `MIGRATE=1`, builds on the EC2 host, atomically swaps
 the standalone bundle, restarts services, and checks `/api/health`.
 
-The on-host build requires a sibling, built checkout of `syncore-contracts` at v0.2.0. Building on
-the 2 GB instance is protected by swap and memory limits but remains operationally fragile. CI-built
+The on-host build requires a sibling, built checkout of `syncore-contracts` at v0.2.1 and now fails
+closed on any other package version. Building on the 2 GB instance is protected by swap and memory
+limits but remains operationally fragile. CI-built
 release artifacts would remove that dependency and reduce production build risk.
 
 The infrastructure provisions S3, but this repository has no runtime `@aws-sdk/client-s3` usage.
 Application object storage for exports, attachments, and recordings is therefore not proven by the
 current runtime code.
 
-### Environment configuration gaps
+### Environment configuration status
 
-The runtime reads these Growth settings, but they are absent from `.env.example` and the reviewed
-AWS environment templates:
+The shared example, EC2 web/worker templates, and AWS SSM procedure now document the Growth
+settings, including delivery timeout, lease, retry, maximum-attempt, and batch controls:
 
 - `SYNCORE_CHAT_API_TOKEN`;
 - `SYNCORE_BOT_NOTIFY_SECRET`;
 - `SYNCORE_BOT_NOTIFY_URL`;
 - `SYNCORE_HUB_URL`.
 
-Until they are documented and provisioned, chat intake, signed bot notification enqueueing, and the
-Hub launch link can fail closed or remain unavailable.
+Repository documentation is COMPLETE for these settings. Staging/production provisioning remains
+IMPLEMENTED — NOT VERIFIED because no environment query or deployment record was captured.
 
 ## 11. Cross-repository dependencies
 
@@ -505,8 +606,8 @@ repositories.
 
 | Dependency | Status | Current contract with this repository |
 |---|---|---|
-| `syncore-contracts` | IN PROGRESS | Sibling checkout on `main` at `ecb6fe04942e139434b93229ca6ac5d5cdf60074`, tag/version v0.2.0. CI pins the tag and requires `CONTRACTS_READ_TOKEN`. CRM consumes approval, request, research, stage, notify, primitive, and webhook shapes. |
-| Contracts CRM-1 patch | BLOCKED | `docs/CRM-1-CONTRACTS-FEEDBACK.md` reports the placeholder approval fixture hash and the undocumented workspace transport for decide/revise, plus documentation observations. A patch release is required before the joint bot test. |
+| `syncore-contracts` | COMPLETE | Sibling checkout at `579a12853641b75b453325f6f08af7bb6521af9b`, exact tag/version v0.2.1. Lockfile, CI, consumer test, and on-host version guard agree. CRM consumes approval, request, research, stage, notify, primitive, and webhook shapes. |
+| Contracts CRM-1 patch | COMPLETE | v0.2.1 corrected/conformance-tested the fixture hash and documented the CRM feedback; the CRM deleted its local temporary hash authority. |
 | `syncore-growth-bot` | BLOCKED | Slack is the pilot surface; Telegram remains an adapter. CRM has routes and outbound envelope code, but no joint same-record round trip is recorded. |
 | `syncore-research-console` | NOT STARTED | CRM-2 requires the `/agent` poller, progress/heartbeat, and validated Template B completion contract. |
 | `syncore-lead-hub` | NOT STARTED | CRM-3 requires golden search/export/sync, MV authorization/result, suppression reconciliation, and provider-result imports. Current CRM page is only a launch placeholder. |
@@ -514,7 +615,7 @@ repositories.
 | `syncore-audit-bot` | NOT STARTED | CRM-5/7 require factual scan and full/video job contracts with signed callbacks and typed findings/assets. |
 | Mailshake | NOT STARTED | No adapter, event poller, export, or IDs exist in this repository. |
 
-Contracts version 0.2.0 is authoritative for every wire shape it defines. Contract corrections must
+Contracts version 0.2.1 is authoritative for every wire shape it defines. Contract corrections must
 land in `syncore-contracts` first, receive a version/tag bump, and then be consumed here together
 with the CI `contracts-ref` update. Local redeclarations are prohibited.
 
@@ -525,26 +626,25 @@ with the CI `contracts-ref` update. Local redeclarations are prohibited.
 1. **CRM-1 acceptance is not end to end.** Repository calls prove the spine, but no single product
    path confirms research, creates the approval, applies the decision, creates the campaign, and
    notifies the bot.
-2. **Outbox rows are not delivered.** The worker never calls the drain function.
-3. **Approval side effects differ by surface.** Dashboard actions enqueue some events; chat routes
+2. **Approval side effects differ by surface.** Dashboard actions enqueue some events; chat routes
    enqueue none; neither advances the business object.
-4. **Outbox insertion is not atomic with decisions.** A committed decision can permanently lose its
+3. **Outbox insertion is not atomic with decisions.** A committed decision can permanently lose its
    notification.
-5. **The contracts fixture hash is known-invalid in 0.2.0.** CRM pins the computed correct value as
-   a temporary tripwire.
-6. **`CostEntry` has no writers.** Campaign/stage spend and budget controls currently read an empty
+4. **Notify delivery is at least once.** Crash-after-acceptance and lease-expiry races can retry the
+   stable event ID; correctness depends on the Bot retaining its documented deduplication behavior.
+5. **`CostEntry` has no writers.** Campaign/stage spend and budget controls currently read an empty
    Growth ledger.
-7. **No budget gate exists.** Stored caps and thresholds do not prevent paid execution.
-8. **The chat actor is trusted.** Shared bearer authentication does not independently establish a
+6. **No budget gate exists.** Stored caps and thresholds do not prevent paid execution.
+7. **The chat actor is trusted.** Shared bearer authentication does not independently establish a
    human identity for adversarial two-person approval.
-9. **Approval concurrency is not locked or compare-and-set.** Decision and revision code reads then
+8. **Approval concurrency is not locked or compare-and-set.** Decision and revision code reads then
    updates inside a transaction, but does not lock the row or condition the update on its prior
    status. Concurrent decisions or revisions can race even though sequential replay is tested.
-10. **Stage transition concurrency is not locked or compare-and-set.** A transaction alone does not
+9. **Stage transition concurrency is not locked or compare-and-set.** A transaction alone does not
     prevent two callers from reading the same old status and applying different legal transitions.
-11. **No cross-workspace campaign check exists in `createStageRun`.** Independent foreign keys can
+10. **No cross-workspace campaign check exists in `createStageRun`.** Independent foreign keys can
    represent an inconsistent workspace/campaign pair.
-12. **In-memory rate limiting is instance-local.** It does not coordinate if the web tier scales.
+11. **In-memory rate limiting is instance-local.** It does not coordinate if the web tier scales.
 
 ### Persistence debt
 
@@ -562,7 +662,7 @@ with the CI `contracts-ref` update. Local redeclarations are prohibited.
 - Web and worker share one small EC2 host; RDS is single-AZ.
 - Builds occur on the production-sized host and require the contracts sibling checkout.
 - S3 exists in infrastructure but runtime object-storage integration is absent.
-- Notify outbox depth, dead letters, and oldest age are not exposed in health reporting.
+- Notify outbox health is exposed, but no external alert rule or operator retry UI is configured.
 - MFA is represented but not enforced; SSO is absent.
 
 ### Stale or contradictory documentation
@@ -580,8 +680,8 @@ with the CI `contracts-ref` update. Local redeclarations are prohibited.
   storage, and the AWS migration.
 - `docs/PHASE_6_DATABASE_CUTOVER.md` and `docs/PERSISTENCE_HARDENING.md` retain file-driver fallback
   language that no longer matches `storage-driver.ts`.
-- `docs/EC2_WORKER_SETUP.md` still describes Vercel plus Neon and a separate EC2 worker; the newer
-  AWS migration document places web and worker on the same EC2 instance with RDS.
+- `docs/EC2_WORKER_SETUP.md` retains its dedicated-worker procedure but now labels it historical;
+  the newer AWS migration document places web and worker on the same EC2 instance with RDS.
 - `GROWTH_OS_END_TO_END_PLAN_v9.1.md` describes five repositories and Telegram-first operation;
   `GROWTH_OS_ERRATA.md` supersedes those points with seven repositories and Slack-first operation.
 - `GROWTH_OS_EXECUTION_ROADMAP.md` retains Telegram wording in phase acceptance; the errata wins.
@@ -591,7 +691,6 @@ with the CI `contracts-ref` update. Local redeclarations are prohibited.
   canonical plans were uncommitted and contracts were unavailable are no longer current.
 - `tests/unit/growth-schema-invariants.test.ts` comments that CRM-1 adds seven tables while its own
   list contains eight.
-- `.env.example` lacks all four current Growth integration variables listed above.
 
 ### Working-tree evidence at review start
 
@@ -607,8 +706,21 @@ reference and was also preserved outside this commit.
 
 ## 13. Exact next Growth OS step
 
-**Next step: close CRM-1 with one idempotent approval-application and notification-delivery slice.
-Do not start CRM-2 APIs first.**
+**Next exact step: Lead Engine CRM Wave 1, Step 1.3 — NICHE_TEST approval side effects. Do not
+start CRM-2 APIs first.**
+
+Step 1.3 must add one transaction-aware, idempotent approval application service used by dashboard
+and chat routes. For a final `NICHE_TEST` approval it must mark the linked brief approved, create
+exactly one campaign from the approved budget/kill configuration, and enqueue the corresponding
+notification in the same transaction. Replay must return the same final state without creating a
+second campaign, side effect, or outbox event. Initial `APPROVAL_REQUESTED` creation and joint Bot
+same-record coverage remain part of CRM-1 closure, but no Step 1.3 code was begun in Step 1.2.
+
+### Historical closure ordering retained from the initial tracker
+
+The following sequence is preserved as tracker history. Wave execution subsequently released
+Contracts v0.2.1 and completed the notification-delivery item first; it is not the current exact
+ordering.
 
 The slice must be implemented in this order:
 
@@ -650,13 +762,15 @@ the signed Research Console completion webhook.
 - Architecture/operations documentation: AWS migration and Terraform README, background jobs,
   worker setup, production architecture, persistence/cutover, provider, outreach, secrets,
   remediation, and roadmap documents.
-- Persistence: complete Prisma schema, all migration names, both CRM-1 migration SQL files,
+- Persistence: complete Prisma schema, all migration names, all three CRM-1 migration SQL files,
   storage-driver code, projection code/invariant, and normalized write boundaries.
 - Growth implementation: every file under `lib/growth`, the three Growth API routes, Approval Inbox
   actions/UI, Campaigns/Lead Hub pages, and navigation definitions.
-- Workers: combined, provider, lead, and recording entry points plus systemd units.
-- Tests: Growth schema/hash/approval/auth/notify/state-machine unit tests, real-PostgreSQL Growth
-  spine integration test, Growth Playwright spec, test inventory, and projection tests.
+- Workers: combined runner/entry point, provider, lead, recording, daily-report, heartbeat, signal
+  handling, and systemd units.
+- Tests: Growth schema/hash/approval/auth/notify/state-machine unit tests, Contracts v0.2.1 consumer
+  test, real-PostgreSQL Growth spine and NotifyOutbox integration tests, Growth Playwright spec,
+  test inventory, and projection tests.
 - CI/deployment/configuration: `.github/workflows/ci.yml`, contracts setup action, `.env.example`,
   AWS Terraform and deploy/redeploy scripts, package scripts, Git state, PR #170, and post-merge CI
   run `30478238419`.

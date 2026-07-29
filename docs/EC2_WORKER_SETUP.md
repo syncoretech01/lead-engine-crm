@@ -1,6 +1,10 @@
 # EC2 Background Worker Setup
 
-Use EC2 as a dedicated background worker for Syncore. The Vercel app stays responsible for the web UI and API routes; EC2 continuously drains queued lead jobs and provider jobs.
+This is the historical dedicated-worker procedure. The current AWS topology in
+`docs/AWS_MIGRATION.md` runs web and worker on the same EC2 host with RDS, but the
+service behavior and environment requirements below still apply. The worker drains
+provider jobs, lead jobs, recording reconciliation, daily reports, and the Growth OS
+PostgreSQL `NotifyOutbox`.
 
 The worker runs:
 
@@ -74,6 +78,11 @@ Use the same production values as Vercel for:
 - `SYNCORE_APP_URL`
 - `SYNCORE_ENABLE_LIVE_PROVIDERS`
 - `SYNCORE_RINGCENTRAL_SAM_PHONE_NUMBER`
+- `SYNCORE_BOT_NOTIFY_URL` (the HTTPS Growth Bot `/notify` endpoint)
+- `SYNCORE_BOT_NOTIFY_SECRET` (same bytes as the Bot's `SYNCORE_BOT_NOTIFY_SIGNING_KEY`)
+- `SYNCORE_BOT_NOTIFY_TIMEOUT_MS`, `SYNCORE_BOT_NOTIFY_LEASE_MS`,
+  `SYNCORE_BOT_NOTIFY_MAX_ATTEMPTS`, `SYNCORE_BOT_NOTIFY_RETRY_BASE_MS`,
+  `SYNCORE_BOT_NOTIFY_RETRY_MAX_MS`, and `SYNCORE_BOT_NOTIFY_BATCH_SIZE`
 - provider keys if live provider execution is enabled
 
 Start the worker:
@@ -112,7 +121,7 @@ sudo journalctl -u syncore-worker --since "15 minutes ago"
 You should see lines like:
 
 ```txt
-provider-mock=0/0 provider-live=0 lead-jobs=1/1 failed=0
+provider-mock=0/0 provider-live=0 lead-jobs=1/1 failed=0 notify=1/1 notify-failed=0 notify-dead=0 notify-pending=0
 ```
 
 If CSV uploads stay queued, check:
@@ -122,6 +131,10 @@ If CSV uploads stay queued, check:
 3. `/etc/syncore/worker.env` has the production `DATABASE_URL`
 4. The EC2 security group allows outbound internet access
 5. Neon allows the connection from EC2
+
+The public `/api/health` response exposes only safe outbox aggregates: pending,
+active claims, repeatedly failing, dead-lettered, and oldest pending age. Delivery
+attempts are also emitted as structured JSON without URL, headers, secrets, or payloads.
 
 ## Cost Notes
 

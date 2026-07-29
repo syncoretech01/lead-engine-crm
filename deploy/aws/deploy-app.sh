@@ -37,17 +37,24 @@ systemctl stop syncore-worker 2>/dev/null || true
 #
 #   git clone git@github.com:syncoretech01/syncore-contracts.git \
 #     "$(dirname "$APP_DIR")/syncore-contracts"
-#   cd "$(dirname "$APP_DIR")/syncore-contracts" && git checkout v0.2.0 \
+#   cd "$(dirname "$APP_DIR")/syncore-contracts" && git checkout v0.2.1 \
 #     && npm ci && npm run build
 #
 # This is the on-box consequence of building on the instance. FIX-PRIORITY-LIST
 # P1.4 (ship the CI-built standalone tarball and stop building here) removes the
 # requirement entirely, and is now worth more than it was.
 CONTRACTS_DIR="$(dirname "$APP_DIR")/syncore-contracts"
+CONTRACTS_VERSION="0.2.1"
 if [ ! -d "$CONTRACTS_DIR/dist" ]; then
   echo "ERROR: $CONTRACTS_DIR/dist is missing." >&2
   echo "       @syncore/contracts is a file: dependency; clone it beside the app," >&2
   echo "       check out the pinned tag, and run npm ci && npm run build there." >&2
+  exit 1
+fi
+ACTUAL_CONTRACTS_VERSION=$(node -p "require('$CONTRACTS_DIR/package.json').version")
+if [ "$ACTUAL_CONTRACTS_VERSION" != "$CONTRACTS_VERSION" ]; then
+  echo "ERROR: expected @syncore/contracts $CONTRACTS_VERSION, found $ACTUAL_CONTRACTS_VERSION." >&2
+  echo "       Check out tag v$CONTRACTS_VERSION and rebuild the sibling package." >&2
   exit 1
 fi
 
