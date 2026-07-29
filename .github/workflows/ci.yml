@@ -226,7 +226,20 @@ jobs:
         working-directory: lead-engine-crm
         run: npx playwright install --with-deps chromium
 
-      - name: Smoke tests
+      # LEGACY, advisory only. `continue-on-error` means failures here are logged
+      # and ignored, so a green `e2e` job does NOT certify these passed. The
+      # suite is unstable in CI (mobile responsive-overflow + SDR-scoped
+      # routing); stabilising it is its own piece of work.
+      #
+      # Growth OS specs are excluded here and run blocking in the step below.
+      - name: Smoke tests (legacy, advisory)
         continue-on-error: true
         working-directory: lead-engine-crm
-        run: npm run test:e2e
+        run: npx playwright test --grep-invert "Growth OS"
+
+      # BLOCKING. Everything built from CRM-1 onward gets real enforcement:
+      # if this fails, the job fails. A test that cannot fail the build is
+      # documentation, not a test.
+      - name: Growth OS e2e (blocking)
+        working-directory: lead-engine-crm
+        run: npx playwright test --grep "Growth OS"

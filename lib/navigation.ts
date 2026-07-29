@@ -9,12 +9,15 @@ import {
   Crosshair,
   Database,
   Download,
+  ExternalLink,
   Gem,
   GitMerge,
   History,
+  Inbox,
   Layers,
   LayoutDashboard,
   Megaphone,
+  Rocket,
   PhoneCall,
   PlugZap,
   ShieldCheck,
@@ -44,7 +47,14 @@ import type { Permission, Session, WorkspaceRole } from "@/lib/phase1/types";
  * `workspaceRoleLabel` are unchanged).
  */
 
-export type NavGroupId = "lead-generation" | "crm" | "records" | "outreach" | "admin";
+export type NavGroupId =
+  /** Growth OS. v9.1 §5.6: Campaigns are the CRM's nav root. */
+  | "campaigns"
+  | "lead-generation"
+  | "crm"
+  | "records"
+  | "outreach"
+  | "admin";
 
 export type NavItem = {
   href: string;
@@ -70,6 +80,36 @@ export type NavGroup = {
 };
 
 export const navGroups: NavGroup[] = [
+  {
+    // FIRST, deliberately. v9.1 §5.5/§5.6: `Campaign` is the spine and Campaigns
+    // are the nav root; the existing function-oriented groups below become the
+    // secondary library. Everything a campaign does hangs off this group, so it
+    // reads top-down in the order the pipeline actually runs (§8).
+    id: "campaigns",
+    label: "Campaigns",
+    description: "Growth OS campaigns, approvals, and the Lead Hub.",
+    canAccess: canUseCrmWorkspace,
+    items: [
+      { href: "/campaigns", label: "Campaigns", icon: Rocket, permission: "manage_outreach", exact: true },
+      {
+        // One Approval object, two surfaces — this and the chat bot render the
+        // same rows, and this one stays authoritative when the bot is down
+        // (v9.1 §15).
+        href: "/approvals",
+        label: "Approval Inbox",
+        icon: Inbox,
+        permission: "manage_outreach"
+      },
+      {
+        // Placeholder tile: the Hub is a separate app (roadmap §1). It owns lead
+        // data; this repo owns campaign execution.
+        href: "/campaigns/lead-hub",
+        label: "Lead Hub",
+        icon: ExternalLink,
+        permission: "manage_outreach"
+      }
+    ]
+  },
   {
     id: "lead-generation",
     label: "Lead Generation",
@@ -128,11 +168,27 @@ export const navGroups: NavGroup[] = [
   },
   {
     id: "outreach",
-    label: "Outreach",
-    description: "Campaigns and direct outreach.",
+    // LEGACY. v9.1 §5.5, §26.17: `OutreachCampaign` and the raw lead-ingestion
+    // path are legacy, and nothing new references them. The engine behind this
+    // group is inert anyway — send paths only ever resolve stepNumber === 1
+    // (outreach.ts:341, :824), so delays, stop-on-reply and SMS do nothing.
+    // Mailshake owns sending from CRM-6. Labelled so nobody builds here by
+    // mistake.
+    label: "Outreach (legacy sequences)",
+    description: "Legacy sequence tooling. New campaign work belongs under Campaigns.",
     canAccess: canUseCrmWorkspace,
     items: [
-      { href: "/outreach/campaigns", label: "Campaigns", icon: Megaphone, permission: "manage_outreach" },
+      {
+        // Renamed from "Campaigns" so it does not collide with the Growth OS
+        // Campaigns root above — two nav entries with the same name is
+        // ambiguous for a human and a strict-mode violation for Playwright.
+        // "Sequences" is also just more accurate: this screen manages
+        // `campaignSequences` / `sequenceSteps`.
+        href: "/outreach/campaigns",
+        label: "Sequences",
+        icon: Megaphone,
+        permission: "manage_outreach"
+      },
       {
         href: "/outreach/events",
         label: "Outreach Events",
@@ -197,7 +253,12 @@ export function accessibleNav(session: Session): { group: NavGroup; items: NavIt
   // the Lead Generation view and still rendered whatever items the role had
   // item-level permission for (typically just the Lead Dashboard). Keep that so
   // those roles aren't stranded with an empty sidebar.
-  const leadGeneration = navGroups[0]!;
+  //
+  // Looked up BY ID, not by index. This was `navGroups[0]`, which silently meant
+  // "whatever group happens to be first" — and CRM-1 put Campaigns there, which
+  // Viewer and Compliance Admin cannot use, stranding them with exactly the
+  // empty sidebar this fallback exists to prevent.
+  const leadGeneration = navGroups.find((group) => group.id === "lead-generation")!;
   const fallbackItems = allowedItems(leadGeneration, session);
   return fallbackItems.length > 0 ? [{ group: leadGeneration, items: fallbackItems }] : [];
 }

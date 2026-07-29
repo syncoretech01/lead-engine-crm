@@ -31,7 +31,8 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
     ],
     crm: ["CRM Dashboard", "SDR Queue", "Focus", "Calendar", "Session History", "Manager Dashboard"],
     records: ["Contacts", "Accounts", "Opportunities", "Call Log"],
-    outreach: ["Campaigns", "Outreach Events"],
+    campaigns: ["Campaigns", "Approval Inbox", "Lead Hub"],
+    outreach: ["Sequences", "Outreach Events"],
     admin: [
       "Integration Center",
       "User Access",
@@ -55,7 +56,8 @@ const EXPECTED: Record<WorkspaceRole, Record<string, string[]>> = {
     ],
     crm: ["CRM Dashboard", "SDR Queue", "Focus", "Calendar", "Session History", "Manager Dashboard"],
     records: ["Contacts", "Accounts", "Opportunities", "Call Log"],
-    outreach: ["Campaigns", "Outreach Events"]
+    campaigns: ["Campaigns", "Approval Inbox", "Lead Hub"],
+    outreach: ["Sequences", "Outreach Events"]
   },
   SDR: {
     crm: ["My Day", "Focus", "Calendar", "Session History"],

@@ -152,6 +152,25 @@ Source: Execution Roadmap §1.
 
 ---
 
+## Open items
+
+### (E2E) A green `e2e` job does not mean the e2e tests passed
+
+The `e2e` job's **Smoke tests** step carries `continue-on-error: true`
+(`.github/workflows/ci.yml`). The step's failures are logged and then ignored, so the job reports
+✓ while Playwright is red. This is pre-existing and deliberate — the legacy suite is unstable in
+CI (mobile responsive-overflow + SDR-scoped routing) — and **stabilising it is not in scope for
+CRM-1**.
+
+The consequence to actually internalise: **never read "e2e ✓" as evidence.** If you need to know
+whether the smoke suite passed, open the step log. As of CRM-0's close it was failing
+(`Process completed with exit code 1`) inside a green job.
+
+**Rule for new UI.** Any surface built from CRM-1 onward — the Approval Inbox, the revision flow,
+the IA changes — gets its Playwright coverage in a step **outside** the `continue-on-error` one,
+so new work is genuinely enforced while the legacy smoke stays advisory. Do not add new specs to
+the existing smoke step; a test that cannot fail the build is documentation, not a test.
+
 ## Open items inherited from `syncore-contracts`
 
 ### (C) `emailStatus` has no `Unknown` member and `emailStatusFor` falls through to `"Valid"`

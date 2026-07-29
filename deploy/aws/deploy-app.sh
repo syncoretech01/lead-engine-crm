@@ -27,6 +27,30 @@ cd "$APP_DIR"
 # it stays UP through the build. (No-op on first install; the worker isn't running.)
 systemctl stop syncore-worker 2>/dev/null || true
 
+# ⚠️ REQUIRES A SIBLING CHECKOUT OF syncore-contracts.
+#
+# `@syncore/contracts` is installed as `file:../syncore-contracts` (CRM-1), so
+# `npm ci` below FAILS unless that directory exists next to $APP_DIR at the
+# pinned tag, with its `dist/` built. A `file:` dependency is linked rather than
+# packed, so npm does not run the linked package's `prepare` — the build is not
+# optional.
+#
+#   git clone git@github.com:syncoretech01/syncore-contracts.git \
+#     "$(dirname "$APP_DIR")/syncore-contracts"
+#   cd "$(dirname "$APP_DIR")/syncore-contracts" && git checkout v0.2.0 \
+#     && npm ci && npm run build
+#
+# This is the on-box consequence of building on the instance. FIX-PRIORITY-LIST
+# P1.4 (ship the CI-built standalone tarball and stop building here) removes the
+# requirement entirely, and is now worth more than it was.
+CONTRACTS_DIR="$(dirname "$APP_DIR")/syncore-contracts"
+if [ ! -d "$CONTRACTS_DIR/dist" ]; then
+  echo "ERROR: $CONTRACTS_DIR/dist is missing." >&2
+  echo "       @syncore/contracts is a file: dependency; clone it beside the app," >&2
+  echo "       check out the pinned tag, and run npm ci && npm run build there." >&2
+  exit 1
+fi
+
 # Build with the standalone output (next.config.mjs output:"standalone").
 # Cap Node's heap at 3 GB so `next build` doesn't OOM during type-check/page-data
 # on the 2 GB instance (3 GB fits in RAM + the 2 GB swapfile). `sudo -u` drops the
@@ -40,7 +64,22 @@ sudo -u "$SERVICE_USER" env NODE_OPTIONS="--max-old-space-size=3072" npm run bui
 STAGE="${WEB_DIR}.new"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-cp -r "$APP_DIR/.next/standalone/." "$STAGE/"
+# ⚠️ The standalone output NESTS one level as of CRM-1.
+#
+# next.config.mjs sets `turbopack.root` to the parent directory so the
+# `file:../syncore-contracts` sibling resolves; Next then emits
+# `.next/standalone/<app-dir-name>/server.js` rather than
+# `.next/standalone/server.js`. Copying the old path would stage a directory
+# with no server.js at its root and systemd would fail to start.
+#
+# Located by finding server.js rather than hard-coding the directory name, so a
+# renamed checkout does not silently break the deploy.
+STANDALONE_ROOT="$(dirname "$(find "$APP_DIR/.next/standalone" -maxdepth 2 -name server.js -print -quit)")"
+if [ -z "$STANDALONE_ROOT" ] || [ ! -f "$STANDALONE_ROOT/server.js" ]; then
+  echo "ERROR: could not find server.js under $APP_DIR/.next/standalone" >&2
+  exit 1
+fi
+cp -r "$STANDALONE_ROOT/." "$STAGE/"
 mkdir -p "$STAGE/.next"
 cp -r "$APP_DIR/.next/static" "$STAGE/.next/static"
 if [ -d "$APP_DIR/public" ]; then
