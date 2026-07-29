@@ -32,6 +32,118 @@ export type CreateCampaignInput = {
 };
 
 /**
+ * The only stage rows materialized by NICHE_TEST acceptance.
+ *
+ * RESEARCH records the already-completed prerequisite in the campaign timeline;
+ * HUB_SEARCH is the next canonical stage from v9.1 §8 and remains PENDING.
+ * Nothing is started, approved for spend, or sent to another service here.
+ */
+export const NICHE_TEST_INITIAL_STAGE_RUNS = [
+  { stageType: "RESEARCH", status: "COMPLETED" },
+  { stageType: "HUB_SEARCH", status: "PENDING" }
+] as const satisfies readonly { stageType: StageType; status: StageRunStatus }[];
+
+export type CreateNicheTestCampaignInput = {
+  workspaceId: string;
+  nicheRequestId: string;
+  researchRunId: string;
+  researchCompletedAt: Date;
+  nicheBriefId: string;
+  approvalId: string;
+  createdBy: string;
+  budgetCapCents: number;
+  recommendedTestSize: number;
+};
+
+/**
+ * Create the execution container and its safe initial timeline exactly once.
+ *
+ * `Campaign.originApprovalId` and each stage's `orchestrationKey` are unique in
+ * PostgreSQL. The lookup makes normal replay cheap; the constraints remain the
+ * authority if a transaction or process races this code.
+ */
+export async function createCampaignForApprovedNicheTest(
+  input: CreateNicheTestCampaignInput,
+  client?: GrowthPrismaClient
+) {
+  const db = client ?? (await growthPrisma());
+
+  return inGrowthTransaction(db, async (tx) => {
+    const existing = await tx.campaign.findUnique({
+      where: { originApprovalId: input.approvalId },
+      include: { stageRuns: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } }
+    });
+    if (existing) {
+      if (
+        existing.workspaceId !== input.workspaceId ||
+        existing.nicheBriefId !== input.nicheBriefId
+      ) {
+        throw new Error(
+          `Approval ${input.approvalId} is already linked to a different campaign chain.`
+        );
+      }
+      return existing;
+    }
+
+    const brief = await tx.nicheBrief.findFirst({
+      where: { id: input.nicheBriefId, workspaceId: input.workspaceId },
+      select: { id: true, status: true }
+    });
+    if (!brief) throw new Error(`NicheBrief ${input.nicheBriefId} not found in workspace`);
+    if (brief.status !== "approved") {
+      throw new Error(
+        `NicheBrief ${brief.id} is "${brief.status}"; a campaign may only be created from an approved brief (v9.1 §7).`
+      );
+    }
+
+    const correlation = {
+      source: "NICHE_TEST_APPROVAL",
+      nicheRequestId: input.nicheRequestId,
+      researchRunId: input.researchRunId,
+      nicheBriefId: input.nicheBriefId,
+      approvalId: input.approvalId
+    };
+
+    return tx.campaign.create({
+      data: {
+        workspaceId: input.workspaceId,
+        nicheBriefId: brief.id,
+        originApprovalId: input.approvalId,
+        createdBy: input.createdBy,
+        budgetCapCents: input.budgetCapCents,
+        spendWarnThresholdPct: 80,
+        overrunTolerancePct: 20,
+        killRuleConfig: {},
+        status: "DRAFT",
+        stageRuns: {
+          create: [
+            {
+              workspaceId: input.workspaceId,
+              stageType: "RESEARCH",
+              status: "COMPLETED",
+              approvalId: input.approvalId,
+              orchestrationKey: `niche-test:${input.approvalId}:RESEARCH`,
+              completedAt: input.researchCompletedAt,
+              reportPayload: correlation
+            },
+            {
+              workspaceId: input.workspaceId,
+              stageType: "HUB_SEARCH",
+              status: "PENDING",
+              estimatedRecords: input.recommendedTestSize,
+              approvalId: input.approvalId,
+              orchestrationKey: `niche-test:${input.approvalId}:HUB_SEARCH`,
+              reportPayload: correlation
+            }
+          ]
+        }
+      },
+      include: { stageRuns: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } }
+    });
+  });
+}
+
+/**
  * A campaign may only be created from an APPROVED brief (v9.1 §7: "on accept:
  * Campaign created"). Creating one from a pending brief would mean the ICP gate
  * had been skipped.

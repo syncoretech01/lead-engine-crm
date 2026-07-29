@@ -97,24 +97,24 @@ enum SuppressionType {
 }
 
 model Workspace {
-  id                              String                           @id @default(cuid())
-  name                            String
-  market                          String?
-  seats                           Int                              @default(0)
-  health                          String?
-  createdAt                       DateTime                         @default(now())
-  updatedAt                       DateTime                         @updatedAt
-  members                         WorkspaceMember[]
-  authSessions                    AuthSession[]
-  userInvites                     UserInvite[]
-  integrations                    Integration[]
-  providerConnections             ProviderConnection[]
-  providerCredentialAudits        ProviderCredentialAudit[]
-  providerEncryptedSecrets        ProviderEncryptedSecret[]
-  providerJobs                    ProviderJob[]
-  providerJobRuns                 ProviderJobRun[]
-  providerUsageLedger             ProviderUsageLedger[]
-  providerMetricsDaily            ProviderMetricDaily[]
+  id                       String                    @id @default(cuid())
+  name                     String
+  market                   String?
+  seats                    Int                       @default(0)
+  health                   String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  members                  WorkspaceMember[]
+  authSessions             AuthSession[]
+  userInvites              UserInvite[]
+  integrations             Integration[]
+  providerConnections      ProviderConnection[]
+  providerCredentialAudits ProviderCredentialAudit[]
+  providerEncryptedSecrets ProviderEncryptedSecret[]
+  providerJobs             ProviderJob[]
+  providerJobRuns          ProviderJobRun[]
+  providerUsageLedger      ProviderUsageLedger[]
+  providerMetricsDaily     ProviderMetricDaily[]
 
   // --- Growth OS (CRM-1) --------------------------------------------------
   // Spend thresholds for the approval gates (v9.1 §10). At or above T2 a second
@@ -1281,37 +1281,37 @@ model SdrTeam {
 }
 
 model SdrAssignment {
-  id                 String             @id @default(cuid())
-  workspaceId        String
-  accountId          String?
-  contactId          String?
-  assignedSdrId      String?
-  assignedTeamId     String?
-  assignedById       String?
-  assignmentMethod   String
-  assignmentReason   String
-  assignedAt         DateTime           @default(now())
-  firstTouchDueAt    DateTime?
-  followUpDueAt      DateTime?
-  status             String
-  reassignmentReason String?
-  previousOwnerId    String?
-  slaStatus          String
-  firstTouchedAt     DateTime?
-  lastTouchAt        DateTime?
-  touchCount         Int                @default(0)
-  firstCallCompletedAt DateTime?
+  id                    String             @id @default(cuid())
+  workspaceId           String
+  accountId             String?
+  contactId             String?
+  assignedSdrId         String?
+  assignedTeamId        String?
+  assignedById          String?
+  assignmentMethod      String
+  assignmentReason      String
+  assignedAt            DateTime           @default(now())
+  firstTouchDueAt       DateTime?
+  followUpDueAt         DateTime?
+  status                String
+  reassignmentReason    String?
+  previousOwnerId       String?
+  slaStatus             String
+  firstTouchedAt        DateTime?
+  lastTouchAt           DateTime?
+  touchCount            Int                @default(0)
+  firstCallCompletedAt  DateTime?
   secondCallCompletedAt DateTime?
-  callCycleCompletedAt DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account            Account?           @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  contact            CrmContact?        @relation(fields: [contactId], references: [id])
-  assignedSdr        User?              @relation("AssignedSdr", fields: [assignedSdrId], references: [id])
-  assignedBy         User?              @relation("AssignmentCreator", fields: [assignedById], references: [id])
-  assignedTeam       SdrTeam?           @relation(fields: [assignedTeamId], references: [id])
-  reminders          FollowUpReminder[]
+  callCycleCompletedAt  DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  workspace             Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account               Account?           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact               CrmContact?        @relation(fields: [contactId], references: [id])
+  assignedSdr           User?              @relation("AssignedSdr", fields: [assignedSdrId], references: [id])
+  assignedBy            User?              @relation("AssignmentCreator", fields: [assignedById], references: [id])
+  assignedTeam          SdrTeam?           @relation(fields: [assignedTeamId], references: [id])
+  reminders             FollowUpReminder[]
 
   @@unique([workspaceId, contactId])
   @@index([workspaceId, assignedSdrId, status])
@@ -1617,25 +1617,25 @@ model TrackedCall {
 }
 
 model SdrCallingSession {
-  id                       String    @id
-  workspaceId              String
-  sdrUserId                String
-  status                   String    @default("Active")
-  startedAt                DateTime
-  endedAt                  DateTime?
-  activeDurationSeconds    Int       @default(0)
-  totalCalls               Int       @default(0)
-  connectedCalls           Int       @default(0)
-  voicemailCalls           Int       @default(0)
-  unansweredCalls          Int       @default(0)
-  suppressedContacts       Int       @default(0)
-  followUpContacts         Int       @default(0)
-  totalTalkTimeSeconds     Int       @default(0)
-  completedContactIds      Json
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
-  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  sdr                      User      @relation(fields: [sdrUserId], references: [id], onDelete: Cascade)
+  id                    String    @id
+  workspaceId           String
+  sdrUserId             String
+  status                String    @default("Active")
+  startedAt             DateTime
+  endedAt               DateTime?
+  activeDurationSeconds Int       @default(0)
+  totalCalls            Int       @default(0)
+  connectedCalls        Int       @default(0)
+  voicemailCalls        Int       @default(0)
+  unansweredCalls       Int       @default(0)
+  suppressedContacts    Int       @default(0)
+  followUpContacts      Int       @default(0)
+  totalTalkTimeSeconds  Int       @default(0)
+  completedContactIds   Json
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sdr                   User      @relation(fields: [sdrUserId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, sdrUserId, startedAt])
   @@index([workspaceId, status, startedAt])
@@ -2198,12 +2198,13 @@ model NicheBrief {
   document       Json
   status         NicheBriefStatus @default(pending_approval)
   /// The NICHE_TEST approval this brief opened.
-  approvalId     String?
+  approvalId     String?          @unique
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   nicheRequest   NicheRequest     @relation(fields: [nicheRequestId], references: [id], onDelete: Cascade)
   researchRun    ResearchRun      @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
+  approval       Approval?        @relation("NicheBriefApproval", fields: [approvalId], references: [id], onDelete: SetNull)
   campaigns      Campaign[]
 
   @@index([workspaceId, status, createdAt])
@@ -2216,6 +2217,9 @@ model Campaign {
   id                    String             @id @default(cuid())
   workspaceId           String
   nicheBriefId          String
+  /// The final NICHE_TEST approval that created this execution container.
+  /// Nullable for pre-Wave-1/manual rows; unique makes approval replay safe.
+  originApprovalId      String?            @unique
   hubSegmentId          String?
   eligibilityPolicyId   String?
   budgetCapCents        Int
@@ -2229,8 +2233,9 @@ model Campaign {
   updatedAt             DateTime           @updatedAt
   workspace             Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   nicheBrief            NicheBrief         @relation(fields: [nicheBriefId], references: [id])
+  originApproval        Approval?          @relation("CampaignOriginApproval", fields: [originApprovalId], references: [id], onDelete: SetNull)
   stageRuns             CampaignStageRun[]
-  approvals             Approval[]
+  approvals             Approval[]         @relation("CampaignApprovals")
   costEntries           CostEntry[]
 
   @@index([workspaceId, status, createdAt])
@@ -2255,6 +2260,9 @@ model CampaignStageRun {
   provider           String?
   providerJobId      String?
   approvalId         String?
+  /// Stable key for transaction replay of orchestration-created rows. It is
+  /// nullable because later retries are legitimate new stage-run records.
+  orchestrationKey   String?        @unique
   startedAt          DateTime?
   completedAt        DateTime?
   /// Retryable-vs-terminal is read from this (v9.1 §19).
@@ -2296,6 +2304,11 @@ model Approval {
   requestedBy          String
   decidedBy            String?
   decidedAt            DateTime?
+  /// Optional CRM policy metadata. Contracts owns the immutable payload and
+  /// does not define expiry; null means the approval does not expire.
+  expiresAt            DateTime?
+  /// Audit marker written with the NICHE_TEST side effects, never into payload.
+  sideEffectsAppliedAt DateTime?
   /// Two-person approval above T2 (v9.1 §10). The first approver lands here and
   /// `status` stays `pending`; the second distinct approver moves it to
   /// `approved`. Contracts fixes ApprovalStatus at four members and its tests
@@ -2308,7 +2321,9 @@ model Approval {
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   workspace            Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  campaign             Campaign?         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign             Campaign?         @relation("CampaignApprovals", fields: [campaignId], references: [id], onDelete: Cascade)
+  originatedCampaign   Campaign?         @relation("CampaignOriginApproval")
+  nicheBrief           NicheBrief?       @relation("NicheBriefApproval")
   stageRun             CampaignStageRun? @relation(fields: [stageRunId], references: [id], onDelete: SetNull)
   supersedes           Approval?         @relation("ApprovalRevision", fields: [supersedesApprovalId], references: [id])
   supersededBy         Approval[]        @relation("ApprovalRevision")
@@ -2317,6 +2332,7 @@ model Approval {
   @@index([workspaceId, campaignId, createdAt])
   @@index([workspaceId, stageRunId])
   @@index([workspaceId, type, status])
+  @@index([workspaceId, status, expiresAt])
   @@index([supersedesApprovalId])
 }
 
@@ -2351,23 +2367,23 @@ model Approval {
 /// Prisma-native like every other Growth OS table, and guarded by name in
 /// scripts/check-projection-invariant.mjs.
 model NotifyOutbox {
-  id           String    @id @default(cuid())
-  workspaceId  String
+  id             String    @id @default(cuid())
+  workspaceId    String
   /// contracts NotifyKind.
-  kind         String
+  kind           String
   /// The full signed NotifyEnvelope body, stored verbatim. The signature covers
   /// these exact bytes, so re-serialising on retry would invalidate it.
-  envelopeJson Json
+  envelopeJson   Json
   /// Idempotency key the receiver dedupes on (contracts webhookEnvelope.eventId).
-  eventId      String
-  approvalId   String?
-  campaignId   String?
-  stageRunId   String?
-  deliveredAt  DateTime?
-  attempts     Int       @default(0)
-  lastError    String?
+  eventId        String
+  approvalId     String?
+  campaignId     String?
+  stageRunId     String?
+  deliveredAt    DateTime?
+  attempts       Int       @default(0)
+  lastError      String?
   /// Exponential backoff target; null means "ready now".
-  nextAttemptAt DateTime?
+  nextAttemptAt  DateTime?
   /// A terminal delivery that exhausted the configured attempt budget. Kept
   /// separate from deliveredAt so pending, delivered, and dead-lettered rows are
   /// unambiguous without inventing a Contracts-owned enum.
@@ -2377,9 +2393,9 @@ model NotifyOutbox {
   claimedBy      String?
   claimToken     String?
   claimExpiresAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   /// One row per event: a retry must never become a second delivery.
   @@unique([eventId])

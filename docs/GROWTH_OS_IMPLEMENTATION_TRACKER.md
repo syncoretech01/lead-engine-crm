@@ -133,12 +133,108 @@ Deferred deliberately: transactional approval-event creation, chat-route notific
 initial `APPROVAL_REQUESTED`, NICHE_TEST business side effects, joint Bot testing, and all CRM-2
 work. The next exact step is **Wave 1, Step 1.3 — NICHE_TEST approval side effects**.
 
+### Wave 1, Step 1.3 — NICHE_TEST approval side effects — 2026-07-29
+
+**Status: COMPLETE**
+
+Requested: turn a final approved `NICHE_TEST` into the authoritative approved `NicheBrief`, exactly
+one native Growth OS `Campaign`, the safe initial campaign timeline, and one durable final-decision
+notification. Repeated requests, Slack callbacks, concurrent decisions, transaction retries, and
+process replay had to remain exactly-once at the database state level. Declined, revised, pending,
+expired, superseded, malformed, cross-workspace, missing-chain, and non-`NICHE_TEST` approvals had
+to create no campaign. No provider, Hub, verifier, Mailshake, Audit Bot, paid work, CRM-2, or
+CostEntry/ProviderUsageLedger architecture change was permitted.
+
+Implemented sequence:
+
+1. Dashboard actions and the bearer-authenticated chat decision route call the single
+   `decideApprovalWithSideEffects` application service.
+2. A serializable PostgreSQL transaction locks the authoritative Approval row with `FOR UPDATE`.
+   Serialization conflicts retry as new transactions up to the bounded attempt limit.
+3. A pending approval is checked for optional CRM-policy expiry. A `NICHE_TEST` payload is parsed
+   with Contracts v0.2.1, its type is compared with the stored column, and its SHA-256 is recomputed
+   from the Contracts-canonical payload before any decision write.
+4. The service resolves the payload's NicheRequest and NicheBrief plus the brief's completed
+   ResearchRun. It verifies one workspace, the current brief-to-approval pointer, request/run/brief
+   pointers, completed research, `briefed` request state, and exact stored-document equality with
+   the approved payload.
+5. The existing T2 decision behavior runs inside that same locked transaction. The first actor
+   leaves the Approval pending; the same actor cannot occupy the second slot; only a second distinct
+   actor reaches final approval.
+6. A final approved `NICHE_TEST` calls `markNicheBriefApproved`, creates or reuses the one Campaign
+   whose `originApprovalId` is that Approval, links the Approval back to the Campaign, records
+   `sideEffectsAppliedAt`, and creates the two canonical initial stage rows.
+7. `RESEARCH` is recorded as `COMPLETED`, using the authoritative ResearchRun completion time;
+   `HUB_SEARCH` is created `PENDING`. No stage is `RUNNING` or spend-approved. Later paid/external
+   stages are not pre-created because their estimates and approvals do not exist yet.
+8. One deterministic `APPROVAL_DECIDED` event is upserted into NotifyOutbox inside the transaction.
+   It references the authoritative Approval and Campaign and includes safe request/run/brief/hash
+   audit identifiers. The HTTP request performs no Bot delivery; the Step 1.2 worker delivers later.
+9. Commit makes the decision, brief, campaign, stages, links, and outbox visible together. Any
+   validation, injected, or database failure rolls all of them back.
+
+Revision remains immutable: the old Approval becomes `superseded`, a successor gets a fresh
+canonical hash, and a `NICHE_TEST` revision advances the still-pending NicheBrief pointer/document
+to that successor without creating a Campaign. A later final decision on the successor uses the
+same application sequence while the original Approval payload/hash remain unchanged.
+
+Database and idempotency changes are in migration
+`20260729214000_growth_os_niche_approval_side_effects`:
+
+- `NicheBrief.approvalId` is now a unique foreign key to the current Approval;
+- `Campaign.originApprovalId` is a nullable unique foreign key for rolling compatibility and is
+  the one-Campaign-per-final-approval authority;
+- `CampaignStageRun.orchestrationKey` is nullable and unique. Only the two initialization rows use
+  it, so later legitimate retry/history rows of the same stage type remain possible;
+- `Approval.expiresAt` is optional CRM policy metadata outside the Contracts payload/hash;
+- `Approval.sideEffectsAppliedAt` records application audit time; and
+- `NotifyOutbox.eventId` remains the unique authority for one final notification.
+
+The migration is additive and compatible with the native-versus-projection guard. The previous
+application can run while the nullable columns are present. Rollback requires deploying the old
+application first, then dropping the two new foreign keys, four indexes, and four columns; doing so
+loses origin, orchestration, expiry, and application audit metadata but not the immutable Approval
+payload/history. Real PostgreSQL also proves a full legacy projection cleanup leaves Approval,
+NicheBrief, Campaign, CampaignStageRun, and NotifyOutbox rows intact.
+
+Files changed in Step 1.3:
+
+- orchestration/routes: `lib/growth/approval-orchestration.ts`,
+  `lib/growth/repositories/approval-repository.ts`,
+  `lib/growth/repositories/campaign-repository.ts`, `lib/growth/notify-outbox.ts`,
+  `app/approvals/actions.ts`, `app/api/approvals/[id]/decide/route.ts`;
+- M2M boundary: `lib/phase1/auth-routes.ts`, `proxy.ts`;
+- schema/migration: `prisma/schema.prisma` and
+  `prisma/migrations/20260729214000_growth_os_niche_approval_side_effects/migration.sql`;
+- tests/CI: `tests/unit/growth-approval-orchestration.test.ts`,
+  `tests/unit/growth-chat-auth-routes.test.ts`,
+  `tests/integration/growth-approval-side-effects.test.ts`,
+  `tests/e2e/growth-approval-side-effects.spec.ts`, `playwright.config.ts`, and
+  `.github/workflows/ci.yml`;
+- documentation: `CLAUDE.md`, `docs/CRM-1-BRIEF.md`, and this tracker.
+
+Verification evidence at Step 1.3 close:
+
+- full unit lane: 102 files, 624 tests, all passed;
+- focused real-PostgreSQL orchestration lane: 1 file, 13 tests, all passed;
+- full real-PostgreSQL integration lane: 9 files, 52 tests, all passed;
+- blocking Growth OS Playwright lane: 5 tests passed against Next.js plus PostgreSQL;
+- Prisma format/generation/validation, migration from an empty PostgreSQL 16 database, projection
+  invariant, lint, TypeScript, and production build: all passed.
+
+Known limitations and deferred evidence: initial `APPROVAL_REQUESTED` is still not enqueued with
+brief/approval creation; chat revision notification is not yet transactional; the Bot actor header
+is trusted after shared-bearer authentication; delivery remains at least once; the real Growth Bot,
+staging, and production have not run this migration/flow. The exact next implementation step is
+**Wave 1, Step 1.4 — resolve the CostEntry versus ProviderUsageLedger architecture**. No Step 1.4
+code or ADR was begun here.
+
 ## Current executive snapshot
 
 | Area | Status | Current fact |
 |---|---|---|
 | CRM-0 guardrails | COMPLETE | Projection invariant, CI isolation, contracts checkout, and the baseline are present and verified. |
-| CRM-1 spine | IN PROGRESS | Native models, repositories, approvals, routes, UI, state machine, and tests exist; Wave 1 Step 1.2 completed notification delivery, while approval side effects still do not complete phase acceptance. |
+| CRM-1 spine | IN PROGRESS | Wave 1 Steps 1.2 and 1.3 completed leased notification delivery plus atomic/idempotent NICHE_TEST decision-to-brief/campaign/stage/outbox orchestration. Initial approval-request enqueue, real-Bot acceptance, and deployment evidence still block CRM-1 completion. |
 | CRM-2 through CRM-8 | NOT STARTED | Some CRM-2 domain primitives landed as CRM-1 prerequisites, but none of the later phase acceptance paths is connected. |
 | Contracts consumption | COMPLETE | Version 0.2.1 is installed, locked, pinned in CI/on-host deployment, and directly consumer-tested. |
 | GitHub `main` CI at the implementation baseline | COMPLETE | Run `30478238419` passed projection, validate, build, real-PostgreSQL integration, legacy Playwright, and blocking Growth OS Playwright steps. |
@@ -204,7 +300,7 @@ legacy sequences; their navigation is deliberately labeled **Outreach (legacy se
 | Phase | Status | Implemented evidence | Required before phase completion |
 |---|---|---|---|
 | CRM-0 — guardrails | COMPLETE | Root Growth rules; measured baseline; contracts sibling checkout; projection checker in its own CI job; meta-test proving the checker fails when violated; CI on every push and PR. | Keep the guarded-model list and tracker current as models are added. |
-| CRM-1 — Growth spine | IN PROGRESS | Eight native Growth models, nine new enums, three migrations, transactional repositories, paginated read models, immutable approval flow, T2 two-person approval, stage state machine, three chat routes, Approval Inbox, Campaigns/Lead Hub IA, Contracts v0.2.1, leased/dead-lettered NotifyOutbox delivery in the production worker, real-PostgreSQL tests, and blocking Growth Playwright coverage. | Implement one idempotent approval application flow; enqueue approval events transactionally; add NICHE_TEST side effects; run the joint Bot round trip; and prove a final decision produces one approved brief and one campaign. |
+| CRM-1 — Growth spine | IN PROGRESS | Eight native Growth models, nine enums, four migrations, immutable/T2 approvals, one locked and retryable decision service shared by dashboard/chat, exactly-once NICHE_TEST brief/Campaign/initial-stage application, transactional final-decision outbox, leased delivery worker, PostgreSQL concurrency/rollback/projection tests, and blocking seeded-approval Playwright coverage. | Enqueue the initial approval request transactionally, close remaining revision notification parity, run the joint real-Bot round trip, and record staging/production migration evidence. |
 | CRM-2 — research loop | NOT STARTED | CRM-1 created `ResearchRun`, its repository, and the guarded `NicheBrief` constructor as prerequisites. | Add authenticated claim-next and heartbeat APIs, signed research progress/completion webhook, automatic brief/approval creation, approval-to-campaign orchestration, and the voice/text-to-approved-campaign cross-repository test. |
 | CRM-3 — Hub integration and verification control | NOT STARTED | Lead Hub launch placeholder only. | Add `HubSync`, golden intake, Hub identifiers, Hub search/golden contracts, Hub-executed MV authorization/results, `VerificationStatus` vocabulary correction, suppression reconciliation, and stage/cost integration. |
 | CRM-4 — acquisition and enrichment waterfall | NOT STARTED | Legacy provider adapters and workers exist, but they are not Growth campaign stages. | Add `ProviderRunProposal`, Hub overlap preflight, approval options, shared budget gate, stage-bound provider execution, provider-result push to Hub, actual-cost reconciliation, and overrun parking. |
@@ -284,10 +380,10 @@ The Growth spine was added by migrations
 | `Workspace.approvalThresholdT2Cents` | COMPLETE | Read by approval decisions and the inbox; at/above T2, two distinct approvers are enforced server-side. |
 | `NicheRequest` | COMPLETE | Template A; stores source channel/message, optional voice/transcript, validated structured request, creator, status, and research pointer. Create, confirm, and cursor-paged list functions exist. |
 | `ResearchRun` | COMPLETE | Durable global FIFO research queue record with claim, progress, completion, retry/failure, warnings, assets, agent, and timestamps. Repository behavior is covered by real PostgreSQL integration, but no public Console Agent API exists. |
-| `NicheBrief` | COMPLETE | Template B; requires `researchRunId`. Creation rejects incomplete research and creates the brief plus `NICHE_TEST` approval in one transaction. Mark-approved remains a separate manual repository call. |
+| `NicheBrief` | COMPLETE | Template B; requires completed `researchRunId`. Creation atomically creates its `NICHE_TEST`; a final valid decision now approves it exactly once. Revision advances the pending brief to the immutable successor Approval. |
 | `Campaign` | IN PROGRESS | Universal parent with approved-brief guard, Hub/policy pointers, budget configuration, kill config, automation level, and status. Repository creation and paged listing exist; user creation and lifecycle orchestration do not. |
-| `CampaignStageRun` | IN PROGRESS | Execution record with stage/status, costs, record counts, provider/job/approval pointers, failure/retry fields, report payload, and timestamps. Creation, transition validation, and paged timeline reads exist; no orchestrator uses them. |
-| `Approval` | IN PROGRESS | Immutable payload/hash record with campaign/stage links, requester/decider, T2 first-approver fields, and revision self-relation. Core repository behavior is verified; business side effects and full bot round trip are incomplete. |
+| `CampaignStageRun` | IN PROGRESS | The NICHE_TEST orchestrator creates historical `RESEARCH/COMPLETED` and next-step `HUB_SEARCH/PENDING` rows with unique orchestration keys. Later phase execution/lifecycle orchestration remains absent. |
+| `Approval` | IN PROGRESS | Immutable payload/hash plus T2 and revision history. Final NICHE_TEST validation/application/notification is atomic, locked, retryable, and replay-safe; later approval-type side effects and the live Bot round trip remain incomplete. |
 | `CostEntry` | IN PROGRESS | Native Growth cost generation with campaign/stage attribution. Read and aggregate functions exist; no production code currently creates a `CostEntry`. |
 | `NotifyOutbox` | COMPLETE | Durable exact-body delivery with event identity, target references, attempts, scheduled retry, owner/token/expiry lease, terminal dead-letter time, structured attempt logs, health aggregates, and production background-worker drain. Real PostgreSQL proves concurrency and recovery. |
 
@@ -351,23 +447,23 @@ cannot be revised. Decision replay returns the already-final state without chang
 | Behavior | Status | Current implementation |
 |---|---|---|
 | Validate, canonicalize, hash, and create approval | COMPLETE | Repository and hash tests cover invalid payloads, key-order stability, exact bytes, and stored hash. |
-| Decide or decline from dashboard | COMPLETE | Uses the shared repository and authenticated session actor. |
-| Decide or decline through chat API | IMPLEMENTED — NOT VERIFIED | Route is built and uses the shared repository; no joint bot/API test proves the cross-repository call. |
+| Decide or decline from dashboard | COMPLETE | Uses the shared locked application service and authenticated session actor. |
+| Decide or decline through chat API | COMPLETE | Exact proxy allow-list reaches the fail-closed bearer route; blocking Playwright and PostgreSQL tests prove decision/replay through HTTP. Real-Bot acceptance remains separate. |
 | Revise from dashboard | COMPLETE | Full JSON replacement is validated; original is superseded and successor created. |
 | Revise through chat API | IMPLEMENTED — NOT VERIFIED | Route is built; no joint bot/API test proves it. |
-| T2 two-person rule | COMPLETE | Unit coverage verifies distinct actors, replay, and decline; PostgreSQL integration separately verifies tenant isolation of approval decisions. |
+| T2 two-person rule | COMPLETE | Unit and PostgreSQL concurrency coverage prove first-actor pending, same-actor rejection, second-distinct finalization, replay, and decline. |
 | T1 policy | NOT STARTED | Field exists but no code consumes it. |
 | Enqueue initial approval request | NOT STARTED | Brief/approval creation does not call `enqueueNotify`. |
-| Notify after dashboard decision/revision | IN PROGRESS | Dashboard actions enqueue after the repository transaction commits. The decision survives an enqueue failure, but notification creation is not atomic with the decision. |
-| Notify after chat API decision/revision | NOT STARTED | API routes call the repository directly and never enqueue. |
-| Apply approved `NICHE_TEST` to `NicheBrief` | NOT STARTED | `markNicheBriefApproved` exists but neither decision surface calls it. |
-| Create campaign after approved niche test | NOT STARTED | `createCampaign` exists but neither decision surface calls it. |
+| Notify after dashboard decision/revision | IN PROGRESS | Final decisions enqueue once inside the decision transaction. Dashboard revision notification retains the older post-transaction path. |
+| Notify after chat API decision/revision | IN PROGRESS | Final decisions enqueue transactionally through the shared service. Chat revision notification remains absent. |
+| Apply approved `NICHE_TEST` to `NicheBrief` | COMPLETE | Contracts/hash/chain validation precedes the decision; final approval marks the current workspace-scoped brief once in the same transaction. |
+| Create campaign after approved niche test | COMPLETE | Unique origin Approval plus row lock/serializable retry create one DRAFT Campaign, `RESEARCH/COMPLETED`, `HUB_SEARCH/PENDING`, and one final outbox event. |
 | Other approval-specific side effects | NOT STARTED | No provider, budget, launch, scale, suppression, reply, or breaker application service exists. |
 | Joint dashboard/bot final-state round trip | IMPLEMENTED — NOT VERIFIED | Contracts feedback is resolved in v0.2.1 and CRM delivery is implemented; the real Bot and same-record final-state round trip have not been run. |
 
-Approval side effects must be idempotent and must execute through one application service used by
-both dashboard actions and chat routes. Adding side effects separately to each surface would create
-two behavior definitions and eventually two outcomes for the same approval.
+NICHE_TEST decision side effects now execute through one idempotent application service used by
+both dashboard actions and chat routes. Later approval types must extend that boundary rather than
+adding surface-specific application logic.
 
 ## 6. NotifyOutbox creation and delivery
 
@@ -394,7 +490,7 @@ the only send target, and production requires HTTPS.
 |---|---|---|
 | Schema and migration | COMPLETE | Base outbox and additive lease/dead-letter migrations applied cleanly in local PostgreSQL 16. |
 | Notify envelope and HMAC generation | COMPLETE | Direct unit coverage against contracts constants and a fake receiver. |
-| Durable enqueue helper | IMPLEMENTED — NOT VERIFIED | Used by dashboard actions, but no direct real-PostgreSQL outbox test verifies persistence/uniqueness with the decision transaction. |
+| Durable enqueue helper | COMPLETE | Deterministic event upsert is verified inside the real-PostgreSQL decision transaction under replay, concurrency, retry, restart, and rollback. |
 | Drain implementation | COMPLETE | Nine direct PostgreSQL integration tests cover success, timeout/connection failure, retry timing, non-2xx/malformed responses, terminal failure, concurrency, stale recovery, duplicate acknowledgement, and graceful stop. |
 | Background-worker wiring | COMPLETE | The production `worker:background`/systemd path preserves all existing lanes and drains NotifyOutbox each tick; unit regression coverage proves each call. |
 | Claim and crash recovery | COMPLETE | Atomic one-row claim, owner/token settlement, active-lease exclusion, stale-lease recovery, and process-restart simulation pass against PostgreSQL. |
@@ -403,9 +499,8 @@ the only send target, and production requires HTTPS.
 
 Known delivery risks:
 
-- Decision/revision and outbox insertion are separate transactions at current call sites. A crash
-  after decision commit and before enqueue loses the event.
-- Chat API decisions and revisions never enqueue an event.
+- Final decision and outbox insertion are one transaction on dashboard and chat paths. Dashboard
+  revision notify remains post-transaction, and chat revision notify remains absent.
 - Initial approval creation never enqueues an event.
 - External delivery is at least once, not exactly once. A process crash after Bot acceptance but
   before database settlement can retry; the Bot must continue deduplicating the stable event ID.
@@ -424,6 +519,10 @@ Known delivery risks:
 `approved`, then creates a `DRAFT` campaign. It stores budget cap, warning threshold, overrun
 tolerance, kill configuration, automation level, Hub segment, eligibility-policy pointer, creator,
 and timestamps.
+
+The NICHE_TEST application path additionally requires a unique `originApprovalId`, validates the
+complete request/run/brief/approval chain, and creates the Campaign with its initial stages in the
+same transaction as approval and outbox state.
 
 The current `/campaigns` UI is a cursor-paged, read-only list that renders campaign IDs. There is no
 campaign creation form, detail page, status transition service, stage timeline, budget display, or
@@ -457,8 +556,9 @@ paged.
 | Campaign detail and lifecycle UI | NOT STARTED | No route or action exists. |
 | Stage-run transition matrix | COMPLETE | Exhaustive unit matrix and PostgreSQL illegal-transition test. |
 | Stage timeline read model | COMPLETE | Cursor-paged repository read exists. |
-| Automatic stage orchestration | NOT STARTED | No scheduler/application service creates or advances real stages. |
-| Approval-to-stage transition | NOT STARTED | Approval decisions do not update `CampaignStageRun`. |
+| Initial stage orchestration | COMPLETE | Final NICHE_TEST creates `RESEARCH/COMPLETED` plus `HUB_SEARCH/PENDING` once; it starts no work. |
+| Later automatic stage orchestration | NOT STARTED | No scheduler advances HUB_SEARCH or creates later paid/external stage runs. |
+| Approval-to-stage transition | IN PROGRESS | NICHE_TEST initializes the safe timeline; later approval types do not yet advance stage runs. |
 | Provider job-to-stage integration | NOT STARTED | Legacy provider runs are not attached to Growth stage runs. |
 | Budget preflight and actual reconciliation | NOT STARTED | Cost aggregate helpers exist but are unused. |
 | Campaign kill rules and circuit breakers | NOT STARTED | Configuration is stored only. |
@@ -504,14 +604,14 @@ in projection ownership.
 | Check | Status | Result on 2026-07-29 |
 |---|---|---|
 | Projection invariant | COMPLETE | Passed; projection file free of all 22 guarded Growth model names. |
-| Unit tests | COMPLETE | 100 test files, 612 tests, zero failures. |
+| Unit tests | COMPLETE | 102 test files, 624 tests, zero failures. |
 | Lint | COMPLETE | `npm run lint` exited zero. |
 | TypeScript | COMPLETE | `npm run typecheck` exited zero. |
 | Production build | COMPLETE | `npm run build` exited zero with Next.js 16.2.7 and emitted all current routes. |
-| Local real-PostgreSQL integration | COMPLETE | PostgreSQL 16 on isolated port 55432 applied all 17 migrations; 8 files and 39 tests passed, including 9 direct outbox delivery tests. |
-| Local Playwright | IMPLEMENTED — NOT VERIFIED | Not rerun locally during this review; verified in GitHub Actions instead. |
+| Local real-PostgreSQL integration | COMPLETE | PostgreSQL 16 on isolated port 55432 applied all 18 migrations; 9 files and 52 tests passed, including 13 approval-orchestration and 9 direct delivery tests. |
+| Local Playwright | COMPLETE | All 5 blocking Growth OS tests passed against Next.js and PostgreSQL on isolated port 3011, including the seeded NICHE_TEST decision-route replay test. |
 
-Current test inventory is 100 unit files, 8 integration files, and 13 Playwright files.
+Current test inventory is 102 unit files, 9 integration files, and 14 Playwright files.
 
 ### GitHub evidence
 
@@ -537,7 +637,7 @@ Verified:
 - Growth models stay outside the blob/projection/write lists.
 - Contract-owned enums match the contracts package.
 - `NicheBrief.researchRunId` is required.
-- Approval hashing, immutable revision, idempotent decision, tenant scoping, and T2 behavior.
+- Approval hashing, immutable revision, locked/idempotent decision, tenant scoping, and T2 behavior.
 - Full repository spine against PostgreSQL:
   request → confirm → research queue/claim/complete → brief + approval → manual decision → manual
   brief approval → campaign → stage run.
@@ -546,27 +646,30 @@ Verified:
 - Exact-body notification signing, PostgreSQL claim concurrency, retry scheduling, Bot timeout,
   malformed/non-2xx acknowledgement handling, dead-letter visibility, expired-claim/process-restart
   recovery, duplicate acknowledgement, graceful shutdown, and existing combined-worker lanes.
-- Growth pages render under Playwright.
+- Final NICHE_TEST application against PostgreSQL: first decision, revision successor, replay,
+  process restart, duplicate HTTP callback, concurrency, transaction retry, T2, every non-approved
+  path, malformed/hash-invalid/missing/cross-workspace chains, rollback, outbox uniqueness, and
+  native-row survival through legacy projection cleanup.
+- Growth pages render under Playwright, and a seeded signed decision route creates one Campaign,
+  the two safe stage rows, and one outbox event under blocking Playwright.
 
 Not verified:
 
 - a real API-to-bot approval round trip;
 - initial approval-request notification creation;
-- approval-specific side effects;
-- a browser interaction against a seeded approval row—the blocking Playwright spec primarily proves
-  route rendering and explanatory copy;
+- side effects for the ten approval types after `NICHE_TEST`;
 - staging or production rollout of the CRM-1 migrations and code.
 
 ## 10. Local, staging, and production deployment evidence
 
 | Environment | Status | Evidence and limitation |
 |---|---|---|
-| Local build/toolchain | COMPLETE | Sibling contracts checkout is exactly v0.2.1; lint, typecheck, 612 unit tests, invariant, Prisma checks, and production build pass. |
-| Local running app with PostgreSQL | IMPLEMENTED — NOT VERIFIED | Scripts and `.env.example` exist, but this review did not start a local server or database-backed browser session. |
+| Local build/toolchain | COMPLETE | Sibling contracts checkout is exactly v0.2.1; lint, typecheck, 624 unit tests, invariant, Prisma checks, and production build pass. |
+| Local running app with PostgreSQL | COMPLETE | All 18 migrations applied to isolated PostgreSQL 16; 52 integration tests and the focused seeded-approval Next.js/Playwright route test pass. |
 | Staging procedure | IMPLEMENTED — NOT VERIFIED | Database cutover documentation describes staging migration/seed/write checks. No staging environment, URL, deployment workflow, or current CRM-1 staging result is recorded in the repository. |
 | AWS infrastructure code | IMPLEMENTED — NOT VERIFIED | Terraform, Caddy configuration, systemd units, migration, deploy, redeploy, health, and rollback scripts exist; they were inspected but not applied during this review. |
 | AWS production infrastructure claim | IMPLEMENTED — NOT VERIFIED | `docs/AWS_MIGRATION.md` says the EC2/RDS migration completed 2026-07-10, but this review did not query AWS or the production health endpoint. |
-| CRM-1 production rollout | IMPLEMENTED — NOT VERIFIED | No deployment record proves the current Step 1.2 commit or `20260729200000_growth_os_notify_delivery_leases` is live. |
+| CRM-1 production rollout | IMPLEMENTED — NOT VERIFIED | No deployment record proves Steps 1.2/1.3 or migrations `20260729200000_growth_os_notify_delivery_leases` and `20260729214000_growth_os_niche_approval_side_effects` are live. |
 
 The documented AWS topology is one `t4g.small` EC2 instance running the Next.js standalone server,
 the background worker, and Caddy; one private `db.t4g.micro` PostgreSQL RDS instance; SSM; S3; and
@@ -623,28 +726,27 @@ with the CI `contracts-ref` update. Local redeclarations are prohibited.
 
 ### Growth-critical risks
 
-1. **CRM-1 acceptance is not end to end.** Repository calls prove the spine, but no single product
-   path confirms research, creates the approval, applies the decision, creates the campaign, and
-   notifies the bot.
-2. **Approval side effects differ by surface.** Dashboard actions enqueue some events; chat routes
-   enqueue none; neither advances the business object.
-3. **Outbox insertion is not atomic with decisions.** A committed decision can permanently lose its
-   notification.
-4. **Notify delivery is at least once.** Crash-after-acceptance and lease-expiry races can retry the
+1. **CRM-1 acceptance is not fully cross-repository.** Local HTTP/PostgreSQL/Playwright now proves
+   final NICHE_TEST application, but initial APPROVAL_REQUESTED creation and the same-record real-Bot
+   round trip remain unverified.
+2. **Revision notification parity remains incomplete.** Final decisions are transactional on both
+   surfaces; dashboard revision notify is still post-transaction and chat revision notify is absent.
+3. **Notify delivery is at least once.** Crash-after-acceptance and lease-expiry races can retry the
    stable event ID; correctness depends on the Bot retaining its documented deduplication behavior.
-5. **`CostEntry` has no writers.** Campaign/stage spend and budget controls currently read an empty
+4. **`CostEntry` has no writers.** Campaign/stage spend and budget controls currently read an empty
    Growth ledger.
-6. **No budget gate exists.** Stored caps and thresholds do not prevent paid execution.
-7. **The chat actor is trusted.** Shared bearer authentication does not independently establish a
+5. **No budget gate exists.** Stored caps and thresholds do not prevent paid execution.
+6. **The chat actor is trusted.** Shared bearer authentication does not independently establish a
    human identity for adversarial two-person approval.
-8. **Approval concurrency is not locked or compare-and-set.** Decision and revision code reads then
-   updates inside a transaction, but does not lock the row or condition the update on its prior
-   status. Concurrent decisions or revisions can race even though sequential replay is tested.
-9. **Stage transition concurrency is not locked or compare-and-set.** A transaction alone does not
+7. **Revision concurrency still uses the repository transaction without the decision service's row
+   lock.** Concurrent decision application is locked/retried; concurrent revisions need the same
+   treatment before multi-operator revision traffic.
+8. **Stage transition concurrency is not locked or compare-and-set.** A transaction alone does not
     prevent two callers from reading the same old status and applying different legal transitions.
-10. **No cross-workspace campaign check exists in `createStageRun`.** Independent foreign keys can
-   represent an inconsistent workspace/campaign pair.
-11. **In-memory rate limiting is instance-local.** It does not coordinate if the web tier scales.
+9. **No cross-workspace campaign check exists in generic `createStageRun`.** The NICHE_TEST
+   initializer validates the chain, but independent generic foreign keys can still represent an
+   inconsistent workspace/campaign pair.
+10. **In-memory rate limiting is instance-local.** It does not coordinate if the web tier scales.
 
 ### Persistence debt
 
@@ -667,9 +769,7 @@ with the CI `contracts-ref` update. Local redeclarations are prohibited.
 
 ### Stale or contradictory documentation
 
-- `CLAUDE.md` says CRM-0 is current and CRM-1 is next. CRM-1 code is merged but remains in closure;
-  this tracker is authoritative for phase status.
-- `CLAUDE.md` says 21 guarded models; the checker currently guards 22 after `NotifyOutbox`.
+- `CLAUDE.md` now labels CRM-1 as in closure and points here for the authoritative wave status.
 - `README.md` says local file storage remains available and production has an emergency file-mode
   escape hatch. The storage driver now accepts Prisma only.
 - `README.md` and `docs/PRODUCTION_ARCHITECTURE.md` describe older Smartlead/Redis/target-state
@@ -706,15 +806,14 @@ reference and was also preserved outside this commit.
 
 ## 13. Exact next Growth OS step
 
-**Next exact step: Lead Engine CRM Wave 1, Step 1.3 — NICHE_TEST approval side effects. Do not
-start CRM-2 APIs first.**
+**Next exact step: Lead Engine CRM Wave 1, Step 1.4 — CostEntry versus ProviderUsageLedger ADR and
+decision. Do not start CRM-2 APIs first.**
 
-Step 1.3 must add one transaction-aware, idempotent approval application service used by dashboard
-and chat routes. For a final `NICHE_TEST` approval it must mark the linked brief approved, create
-exactly one campaign from the approved budget/kill configuration, and enqueue the corresponding
-notification in the same transaction. Replay must return the same final state without creating a
-second campaign, side effect, or outbox event. Initial `APPROVAL_REQUESTED` creation and joint Bot
-same-record coverage remain part of CRM-1 closure, but no Step 1.3 code was begun in Step 1.2.
+Step 1.4 must resolve the documented conflict between golden rule 3 (one logical ledger, extend
+`ProviderUsageLedger`) and golden rule 1 (Growth-native rows cannot safely enter a blob-projected
+table). It must produce the ADR, select the target schema/migration direction, define rollout and
+rollback, and update the repository plan before any paid-stage writer or budget gate is added. This
+Step 1.3 commit intentionally changes no cost-ledger model or behavior.
 
 ### Historical closure ordering retained from the initial tracker
 
@@ -762,7 +861,7 @@ the signed Research Console completion webhook.
 - Architecture/operations documentation: AWS migration and Terraform README, background jobs,
   worker setup, production architecture, persistence/cutover, provider, outreach, secrets,
   remediation, and roadmap documents.
-- Persistence: complete Prisma schema, all migration names, all three CRM-1 migration SQL files,
+- Persistence: complete Prisma schema, all migration names, all four CRM-1 migration SQL files,
   storage-driver code, projection code/invariant, and normalized write boundaries.
 - Growth implementation: every file under `lib/growth`, the three Growth API routes, Approval Inbox
   actions/UI, Campaigns/Lead Hub pages, and navigation definitions.

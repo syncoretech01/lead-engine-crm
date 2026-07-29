@@ -4,6 +4,7 @@ import {
   isPublicAuthPath,
   isPublicHealthPath,
   isPublicUnsubscribePath,
+  isChatMachineApiPath,
   isSignedWebhookPath
 } from "@/lib/phase1/auth-routes";
 
@@ -18,6 +19,7 @@ export function proxy(request: NextRequest) {
     isPublicAssetPath(pathname) ||
     isPublicAuthPath(pathname) ||
     isSignedWebhookPath(pathname) ||
+    isChatMachineApiPath(pathname) ||
     isPublicUnsubscribePath(pathname) ||
     isPublicHealthPath(pathname)
   ) {

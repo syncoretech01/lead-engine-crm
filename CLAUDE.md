@@ -248,7 +248,7 @@ private repo and is not published to npmjs.org).
 
 ### CRM-0 — complete
 
-- `npm run check:projection-invariant` — 21 guarded models, own unmaskable CI job, proven to fail
+- `npm run check:projection-invariant` — 22 guarded models, own unmaskable CI job, proven to fail
   when violated, meta-test proves it stays armed.
 - CI runs lint + typecheck + vitest + the projection check on **every push and every PR**.
 - `@syncore/contracts@0.2.1` wired via the sibling-checkout pattern (above). Installed and consumed by CRM-1.
@@ -258,13 +258,20 @@ private repo and is not published to npmjs.org).
 **Baseline at CRM-0:** 92 test files / 455 tests / 0 failed / 0 skipped · 77 models + 8 enums ·
 `upsertOrder` 70 entries · 6 live adapters registered (`ringcentral` absent).
 
-### CRM-1 — the spine (next)
+### CRM-1 — the spine (in closure)
 
 Prisma-native, none in the blob: `NicheRequest` · `ResearchRun` · `NicheBrief` · `Campaign` ·
 `CampaignStageRun` · `Approval`. Transactional repositories, paginated read models, `CostEntry`
 extended with `stageRunId`, the stage state machine
 (`PENDING → AWAITING_APPROVAL → APPROVED → RUNNING → COMPLETED | FAILED | PARKED | CANCELLED`),
 Approval Inbox UI + revision flow, the chat APIs, IA change.
+
+Wave 1 Steps 1.2 and 1.3 are implemented: the production worker drains leased/retryable
+`NotifyOutbox` rows, and both dashboard/chat final decisions use one serializable, row-locked
+application service. A valid final `NICHE_TEST` atomically approves its brief, creates one `DRAFT`
+Campaign, records `RESEARCH/COMPLETED` plus `HUB_SEARCH/PENDING`, links the Approval, and enqueues one
+deterministic final notification. No provider or paid work starts. The authoritative current status
+and next step are in `docs/GROWTH_OS_IMPLEMENTATION_TRACKER.md`.
 
 **CRM-1 takes its `Approval` shapes from `@syncore/contracts@0.2.1`, not from v9.1 §6 prose**
 (errata #5 — the contracts package wins). Concretely, and this changes the schema:
