@@ -27,7 +27,7 @@ inputs:
   contracts-ref:
     description: Tag to pin syncore-contracts to. Pinned, never a branch.
     required: false
-    default: v0.2.0
+    default: v0.2.1
   node-version:
     required: false
     default: "22"

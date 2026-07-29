@@ -16,6 +16,8 @@ EnvironmentFile=/etc/syncore/worker.env
 ExecStart=/usr/bin/bash -lc 'npm run worker:background -- --loop "${SYNCORE_WORKER_LOOP_MS:-60000}"'
 Restart=always
 RestartSec=10
+# The notify worker finishes its one in-flight HTTP attempt (default timeout 15s),
+# then leaves the remaining rows unclaimed. A hard kill is recovered by lease expiry.
 TimeoutStopSec=30
 KillSignal=SIGINT
 # Memory guard — see syncore-web.service. The worker peaked ~970M during the

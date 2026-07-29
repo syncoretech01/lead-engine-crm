@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getNotifyOutboxHealth } from "@/lib/growth/notify-outbox";
 
 // Liveness/readiness probe for external uptime monitoring and deploy verification.
 // Intentionally unauthenticated and cheap: a single-row DB round-trip plus snapshot
@@ -12,18 +13,25 @@ export async function GET() {
   const startedAt = Date.now();
 
   try {
-    const snapshot = await prisma.appStateSnapshot.findFirst({
-      select: { version: true, updatedAt: true }
-    });
+    const now = new Date();
+    const [snapshot, notifyOutbox] = await Promise.all([
+      prisma.appStateSnapshot.findFirst({
+        select: { version: true, updatedAt: true }
+      }),
+      getNotifyOutboxHealth(now, prisma)
+    ]);
 
-    const now = Date.now();
+    const nowMs = now.getTime();
     return Response.json(
       {
         status: "ok",
         db: "up",
-        latencyMs: now - startedAt,
+        latencyMs: nowMs - startedAt,
         snapshotVersion: snapshot?.version ?? null,
-        snapshotAgeSeconds: snapshot ? Math.round((now - snapshot.updatedAt.getTime()) / 1000) : null
+        snapshotAgeSeconds: snapshot
+          ? Math.round((nowMs - snapshot.updatedAt.getTime()) / 1000)
+          : null,
+        notifyOutbox
       },
       { status: 200, headers: { "cache-control": "no-store" } }
     );

@@ -7,7 +7,12 @@ import {
   WEBHOOK_SIGNATURE_HEADER,
   WEBHOOK_TIMESTAMP_HEADER
 } from "@syncore/contracts";
-import { buildSignedNotify, signNotifyBody, verifyNotifySignature } from "@/lib/growth/notify";
+import {
+  buildSignedNotify,
+  signNotifyBody,
+  signNotifyDeliveryAttempt,
+  verifyNotifySignature
+} from "@/lib/growth/notify";
 
 const SECRET = "notify-secret-for-tests";
 const saved = {
@@ -169,6 +174,28 @@ describe("signing", () => {
     const body = '{"a":1}';
     const ts = "2026-07-28T12:00:00.000Z";
     expect(signNotifyBody(body, ts, SECRET)).not.toBe(signNotifyBody(body, "2026-07-28T12:00:01.000Z", SECRET));
+  });
+
+  it("refreshes retry headers while preserving the exact payload bytes and identity", () => {
+    const original = notify();
+    const attemptedAt = new Date("2026-07-29T15:00:00.000Z");
+    const retried = signNotifyDeliveryAttempt(original, attemptedAt, SECRET);
+
+    expect(retried.body).toBe(original.body);
+    expect(retried.headers[WEBHOOK_NONCE_HEADER]).toBe(original.headers[WEBHOOK_NONCE_HEADER]);
+    expect(retried.headers[WEBHOOK_DELIVERY_ID_HEADER]).toBe(
+      original.headers[WEBHOOK_DELIVERY_ID_HEADER]
+    );
+    expect(retried.headers[WEBHOOK_TIMESTAMP_HEADER]).toBe(attemptedAt.toISOString());
+    expect(
+      verifyNotifySignature({
+        rawBody: retried.body,
+        timestamp: retried.headers[WEBHOOK_TIMESTAMP_HEADER],
+        signature: retried.headers[WEBHOOK_SIGNATURE_HEADER],
+        secret: SECRET,
+        nowMs: attemptedAt.getTime()
+      }).valid
+    ).toBe(true);
   });
 
   it("fails closed when the secret is not configured", () => {

@@ -1,6 +1,11 @@
 # CRM-1 → `syncore-contracts` feedback
 
-**Consuming repo:** `lead-engine-crm` · **Contracts version under test:** `0.2.0` · **Phase:** CRM-1
+**Consuming repo:** `lead-engine-crm` · **Contracts version under test:** `0.2.1` · **Phase:** CRM-1
+
+**Resolution (2026-07-29):** Contracts v0.2.1 incorporated this feedback. It corrected and
+conformance-tested the approval fixture hash, documented parse-first canonical hashing, confirmed
+all inferred CRM-1 shapes, and documented `X-Syncore-Workspace-Id` as transport context. The
+historical findings below are preserved as the audit trail for that patch.
 
 This file is CRM-1's half of the contracts confirmation duty. `@syncore/contracts` 0.2.0 marks
 shapes `INFERRED (CRM-1)` — named by v9.1 but never specified — and names this repo as the one

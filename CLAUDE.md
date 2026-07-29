@@ -218,7 +218,7 @@ union, add the `Unknown` member, and make the fallthrough explicit. **Never map 
 
 ### Why the `VerificationStatus` import is still not done
 
-`@syncore/contracts@0.2.0` **is now installed** (see below) and exports `VerificationStatus`. The
+`@syncore/contracts@0.2.1` **is now installed** (see below) and exports `VerificationStatus`. The
 import is deliberately **not** made, on the CRM-0 brief's own terms: `VerificationResult` is a
 projected table (`persistence-projection.ts:210`), so every local copy of the vocabulary is
 projection-adjacent, and `verification.ts` *is* the fallthrough logic. CRM-0 excludes both and
@@ -240,7 +240,7 @@ private repo and is not published to npmjs.org).
   repo). A workflow's default `GITHUB_TOKEN` cannot read another private repo, and GitHub reports
   that as **"Repository not found"** rather than a permission error. Fine-grained PATs expire — if
   CI starts failing here for no apparent reason, check the expiry first.
-- **Pinning:** currently `v0.2.0`. Pin exact versions and upgrade deliberately; never track a branch.
+- **Pinning:** currently `v0.2.1`. Pin exact versions and upgrade deliberately; never track a branch.
 
 ---
 
@@ -251,7 +251,7 @@ private repo and is not published to npmjs.org).
 - `npm run check:projection-invariant` — 21 guarded models, own unmaskable CI job, proven to fail
   when violated, meta-test proves it stays armed.
 - CI runs lint + typecheck + vitest + the projection check on **every push and every PR**.
-- `@syncore/contracts@0.2.0` wired via the sibling-checkout pattern (above). Installed, not imported.
+- `@syncore/contracts@0.2.1` wired via the sibling-checkout pattern (above). Installed and consumed by CRM-1.
 - `docs/CRM-0-BASELINE.md` — verified ground truth with real numbers.
 - The canonical docs committed to the repo root, and this file.
 
@@ -266,7 +266,7 @@ extended with `stageRunId`, the stage state machine
 (`PENDING → AWAITING_APPROVAL → APPROVED → RUNNING → COMPLETED | FAILED | PARKED | CANCELLED`),
 Approval Inbox UI + revision flow, the chat APIs, IA change.
 
-**CRM-1 takes its `Approval` shapes from `@syncore/contracts@0.2.0`, not from v9.1 §6 prose**
+**CRM-1 takes its `Approval` shapes from `@syncore/contracts@0.2.1`, not from v9.1 §6 prose**
 (errata #5 — the contracts package wins). Concretely, and this changes the schema:
 
 - The hashed **`ApprovalPayload` is content only.** `approvalId` and `payloadSha256` belong on a

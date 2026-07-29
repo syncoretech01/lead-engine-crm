@@ -1,7 +1,7 @@
-import { runLeadJobWorkerTick } from "@/lib/phase1/lead-job-worker-runner";
-import { runProviderWorkerTick } from "@/lib/phase1/provider-worker-runner";
-import { runRecordingWorkerTick } from "@/lib/phase1/recording-worker-runner";
-import { runSdrDailyReportWorkerTick } from "@/lib/phase1/sdr-daily-report-worker";
+import {
+  runBackgroundWorkerTick,
+  waitForBackgroundWorkerInterval
+} from "@/lib/phase1/background-worker-runner";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import { pingWorkerHeartbeat } from "@/lib/phase1/worker-heartbeat";
 
@@ -32,22 +32,16 @@ async function disconnectPrisma() {
   await prisma.$disconnect();
 }
 
-async function runTick(args: BackgroundWorkerArgs) {
-  const provider = await runProviderWorkerTick({
-    workspaceId: args.workspaceId,
-    maxLiveRuns: args.maxRuns,
-    workerId: args.workerId
-  });
-  const lead = await runLeadJobWorkerTick({
+async function runTick(args: BackgroundWorkerArgs, shouldStop?: () => boolean) {
+  const { provider, lead, recording, dailyReports, notify } = await runBackgroundWorkerTick({
     workspaceId: args.workspaceId,
     maxRuns: args.maxRuns,
-    workerId: args.workerId
+    workerId: args.workerId,
+    shouldStop
   });
-  const recording = await runRecordingWorkerTick({ workspaceId: args.workspaceId });
-  const dailyReports = await runSdrDailyReportWorkerTick({ workspaceId: args.workspaceId });
 
   console.log(
-    `[${new Date().toISOString()}] provider-mock=${provider.mock.completed}/${provider.mock.claimed} provider-live=${provider.live.executed} lead-jobs=${lead.completed}/${lead.claimed} failed=${lead.failed} recordings=${recording.updated}/${recording.scanned} daily-reports=${dailyReports.created}`
+    `[${new Date().toISOString()}] provider-mock=${provider.mock.completed}/${provider.mock.claimed} provider-live=${provider.live.executed} lead-jobs=${lead.completed}/${lead.claimed} failed=${lead.failed} recordings=${recording.updated}/${recording.scanned} daily-reports=${dailyReports.created} notify=${notify.delivered}/${notify.claimed} notify-failed=${notify.failed} notify-dead=${notify.deadLettered} notify-pending=${notify.remaining}`
   );
 }
 
@@ -61,22 +55,34 @@ async function main() {
   }
 
   let stopping = false;
-  process.on("SIGINT", () => {
-    console.log("\nStopping after current tick...");
+  const shutdown = new AbortController();
+  const requestStop = (signal: NodeJS.Signals) => {
+    if (stopping) return;
+    console.log(`\n${signal} received; stopping after current delivery...`);
     stopping = true;
-  });
+    shutdown.abort();
+  };
+  const onSigint = () => requestStop("SIGINT");
+  const onSigterm = () => requestStop("SIGTERM");
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
 
-  while (!stopping) {
-    try {
-      await runTick(args);
-      await pingWorkerHeartbeat(true);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`Tick error: ${message}`);
-      await pingWorkerHeartbeat(false, message);
+  try {
+    while (!stopping) {
+      try {
+        await runTick(args, () => stopping);
+        await pingWorkerHeartbeat(true);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Tick error: ${message}`);
+        await pingWorkerHeartbeat(false, message);
+      }
+      if (stopping) break;
+      await waitForBackgroundWorkerInterval(args.loopMs, shutdown.signal);
     }
-    if (stopping) break;
-    await new Promise((resolve) => setTimeout(resolve, args.loopMs));
+  } finally {
+    process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigterm);
   }
 }
 
