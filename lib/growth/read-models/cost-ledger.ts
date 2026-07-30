@@ -1,3 +1,8 @@
+import { FinancialEventKind } from "@prisma/client";
+import {
+  calculateCampaignFinancialTotals,
+  calculateStageFinancialTotals
+} from "@/lib/growth/repositories/financial-ledger-repository";
 import {
   type GrowthPage,
   type GrowthPageRequest,
@@ -7,39 +12,33 @@ import {
 } from "@/lib/growth/repositories/client";
 
 /**
- * The cost ledger read model — ONE logical ledger, two storage generations.
+ * ADR-001 Option C read seam.
  *
- * Golden rule 3 says extend `ProviderUsageLedger` and never create a second
- * ledger. Golden rule 1 says Growth OS models are Prisma-native and never
- * blob-projected. Those cannot both be satisfied literally, because
- * `providerUsageLedger` IS blob-projected — written at `money.ts:139`,
- * `upsertOrder` entry at `persistence-projection.ts:198`, projected at `:466` —
- * so a natively-written row there is absent from the blob and the `deleteMany`
- * at `:1599` deletes it on the next sync.
- *
- * Resolution (CRM-1, recorded in the schema): the native `CostEntry` table is
- * the new generation, and this read model unions it with the legacy rows so
- * every caller still sees a single ledger. It is not a second ledger — it is the
- * same ledger mid-migration, and this file is the seam.
- *
- * 🔴 DO NOT write Growth OS cost rows into `providerUsageLedger`. The projection
- * check cannot catch it: it guards the name `CostEntry`, not that table. The
- * rows would simply disappear.
- *
- * When the blob peel finally happens (post-pilot, v9.1 §32.2), the legacy branch
- * below is deleted and this becomes a plain query. Nothing else has to change,
- * which is the point of putting the seam here rather than at every call site.
+ * CostEntry is the only authoritative Growth financial source. The projected
+ * ProviderUsageLedger branch is retained solely as labelled operational
+ * history. It never contributes to campaign, stage, action, budget, overrun,
+ * reconciliation, or unit-economics totals. Linked evidence remains visible
+ * as evidence, never as a second financial charge.
  */
 
 export type LedgerEntry = {
   id: string;
-  source: "growth" | "legacy";
+  source: "growth_financial" | "legacy_operational_evidence";
+  sourceGeneration: 2 | 1;
+  isAuthoritativeFinancial: boolean;
   workspaceId: string;
   campaignId: string | null;
   stageRunId: string | null;
-  provider: string;
+  provider: string | null;
+  service: string | null;
   action: string;
-  totalCents: number;
+  eventKind: FinancialEventKind | null;
+  currency: string | null;
+  /** Signed authoritative financial effect; null for operational evidence. */
+  financialEffectCents: number | null;
+  /** Provider-reported telemetry only; never included in financial totals. */
+  operationalReportedCostCents: number | null;
+  occurredAt: Date | null;
   createdAt: Date;
 };
 
@@ -49,13 +48,81 @@ export type LedgerQuery = {
   stageRunId?: string;
 } & GrowthPageRequest;
 
+type LedgerCursor = {
+  createdAt: string;
+  sourceGeneration: 2 | 1;
+  id: string;
+};
+
+function encodeCursor(entry: LedgerEntry): string {
+  const cursor: LedgerCursor = {
+    createdAt: entry.createdAt.toISOString(),
+    sourceGeneration: entry.sourceGeneration,
+    id: entry.id
+  };
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeCursor(cursor: string | undefined): LedgerCursor | null {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Partial<LedgerCursor>;
+    if (
+      typeof parsed.createdAt !== "string" ||
+      Number.isNaN(Date.parse(parsed.createdAt)) ||
+      (parsed.sourceGeneration !== 1 && parsed.sourceGeneration !== 2) ||
+      typeof parsed.id !== "string" ||
+      !parsed.id
+    ) {
+      throw new Error("invalid cursor fields");
+    }
+    return parsed as LedgerCursor;
+  } catch {
+    throw new Error("Invalid cost-ledger cursor.");
+  }
+}
+
+function cursorWhere(
+  cursor: LedgerCursor | null,
+  sourceGeneration: 2 | 1
+): { OR?: Array<{ createdAt: { lt?: Date; lte?: Date; equals?: Date } } | { createdAt: Date; id: { lt: string } }> } {
+  if (!cursor) return {};
+  const timestamp = new Date(cursor.createdAt);
+  if (sourceGeneration < cursor.sourceGeneration) {
+    return { OR: [{ createdAt: { lt: timestamp } }, { createdAt: { equals: timestamp } }] };
+  }
+  if (sourceGeneration > cursor.sourceGeneration) {
+    return { OR: [{ createdAt: { lt: timestamp } }] };
+  }
+  return { OR: [{ createdAt: { lt: timestamp } }, { createdAt: timestamp, id: { lt: cursor.id } }] };
+}
+
+function compareEntries(a: LedgerEntry, b: LedgerEntry): number {
+  const timestamp = b.createdAt.getTime() - a.createdAt.getTime();
+  if (timestamp !== 0) return timestamp;
+  const generation = b.sourceGeneration - a.sourceGeneration;
+  if (generation !== 0) return generation;
+  return b.id.localeCompare(a.id);
+}
+
+function financialEffect(
+  kind: FinancialEventKind | null,
+  amountCents: number | null,
+  reversedAmountCents: number | null
+): number | null {
+  if (!kind || amountCents === null) return null;
+  if (kind === FinancialEventKind.ACTUAL || kind === FinancialEventKind.ADJUSTMENT) return amountCents;
+  if (kind === FinancialEventKind.REVERSAL) {
+    if (reversedAmountCents === null) throw new Error("Financial reversal is missing its target amount.");
+    return -reversedAmountCents;
+  }
+  return 0;
+}
+
 /**
- * Paginated across both generations.
- *
- * Cursoring over a union of two tables cannot use a single primary-key cursor,
- * so this pages by `createdAt` — the one ordering both generations share. The
- * cursor is an ISO timestamp rather than an id, and the shape is otherwise the
- * same as every other Growth OS read model.
+ * Stable total ordering is (createdAt DESC, sourceGeneration DESC, id DESC).
+ * The opaque cursor contains all three components, so equal timestamps cannot
+ * skip or repeat rows across the two physical stores.
  */
 export async function listCostEntries(
   query: LedgerQuery,
@@ -63,14 +130,14 @@ export async function listCostEntries(
 ): Promise<GrowthPage<LedgerEntry>> {
   const db = client ?? (await growthPrisma());
   const pageSize = resolvePageSize(query.pageSize);
-  const before = query.cursor ? new Date(query.cursor) : undefined;
+  const cursor = decodeCursor(query.cursor);
 
   const growthRows = await db.costEntry.findMany({
     where: {
       workspaceId: query.workspaceId,
       ...(query.campaignId ? { campaignId: query.campaignId } : {}),
       ...(query.stageRunId ? { stageRunId: query.stageRunId } : {}),
-      ...(before ? { createdAt: { lt: before } } : {})
+      ...cursorWhere(cursor, 2)
     },
     select: {
       id: true,
@@ -78,23 +145,28 @@ export async function listCostEntries(
       campaignId: true,
       stageRunId: true,
       provider: true,
+      service: true,
       action: true,
-      totalCents: true,
+      eventKind: true,
+      currency: true,
+      amountCents: true,
+      reversesCostEntry: { select: { amountCents: true } },
+      occurredAt: true,
       createdAt: true
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: pageSize + 1
   });
 
-  // Legacy rows predate campaigns and stage runs entirely, so a query filtered
-  // by either can skip them — they cannot match, and the DB should not be asked.
+  // Legacy rows have no authoritative Campaign or stage attribution. They are
+  // always labelled non-financial, including when an ACTUAL references one.
   const legacyRows =
     query.campaignId || query.stageRunId
       ? []
       : await db.providerUsageLedger.findMany({
           where: {
             workspaceId: query.workspaceId,
-            ...(before ? { createdAt: { lt: before } } : {})
+            ...cursorWhere(cursor, 1)
           },
           select: {
             id: true,
@@ -102,6 +174,7 @@ export async function listCostEntries(
             provider: true,
             operation: true,
             totalCostCents: true,
+            currency: true,
             createdAt: true
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -109,59 +182,65 @@ export async function listCostEntries(
         });
 
   const merged: LedgerEntry[] = [
-    ...growthRows.map((row) => ({ ...row, source: "growth" as const })),
+    ...growthRows.map((row) => ({
+      id: row.id,
+      source: "growth_financial" as const,
+      sourceGeneration: 2 as const,
+      isAuthoritativeFinancial: row.eventKind !== null,
+      workspaceId: row.workspaceId,
+      campaignId: row.campaignId,
+      stageRunId: row.stageRunId,
+      provider: row.provider,
+      service: row.service,
+      action: row.action,
+      eventKind: row.eventKind,
+      currency: row.currency,
+      financialEffectCents: financialEffect(
+        row.eventKind,
+        row.amountCents,
+        row.reversesCostEntry?.amountCents ?? null
+      ),
+      operationalReportedCostCents: null,
+      occurredAt: row.occurredAt,
+      createdAt: row.createdAt
+    })),
     ...legacyRows.map((row) => ({
       id: row.id,
-      source: "legacy" as const,
+      source: "legacy_operational_evidence" as const,
+      sourceGeneration: 1 as const,
+      isAuthoritativeFinancial: false,
       workspaceId: row.workspaceId,
       campaignId: null,
       stageRunId: null,
       provider: row.provider,
+      service: null,
       action: row.operation,
-      totalCents: row.totalCostCents,
+      eventKind: null,
+      currency: row.currency,
+      financialEffectCents: null,
+      operationalReportedCostCents: row.totalCostCents,
+      occurredAt: null,
       createdAt: row.createdAt
     }))
-  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  ].sort(compareEntries);
 
   if (merged.length <= pageSize) return { rows: merged, nextCursor: null };
   const page = merged.slice(0, pageSize);
-  return { rows: page, nextCursor: page[page.length - 1]?.createdAt.toISOString() ?? null };
+  return { rows: page, nextCursor: encodeCursor(page[page.length - 1]!) };
 }
 
-/**
- * Total spend for a campaign — the number the budget gate compares against the
- * cap (v9.1 §5.7).
- *
- * Aggregated in the database, not by paging rows into memory: a campaign that
- * has run for weeks has more ledger rows than anyone wants to materialise just
- * to add them up.
- *
- * Legacy rows are excluded deliberately, and this is a real semantic choice
- * rather than an oversight: legacy entries carry no `campaignId`, so attributing
- * them to a campaign would be a guess, and a budget gate must never guess
- * upward or downward. Growth OS spend is fully captured by the native table.
- */
+/** Authoritative campaign actual spend. Operational evidence never enters this calculation. */
 export async function campaignSpendCents(
   input: { workspaceId: string; campaignId: string },
   client?: GrowthPrismaClient
 ): Promise<number> {
-  const db = client ?? (await growthPrisma());
-  const result = await db.costEntry.aggregate({
-    where: { workspaceId: input.workspaceId, campaignId: input.campaignId },
-    _sum: { totalCents: true }
-  });
-  return result._sum.totalCents ?? 0;
+  return (await calculateCampaignFinancialTotals(input, client)).actualCents;
 }
 
-/** Per-stage actual spend, for the admin dashboard's cost column (v9.1 §20). */
+/** Authoritative stage actual spend. CampaignStageRun.actualCostCents is only a reconstructible cache. */
 export async function stageRunSpendCents(
   input: { workspaceId: string; stageRunId: string },
   client?: GrowthPrismaClient
 ): Promise<number> {
-  const db = client ?? (await growthPrisma());
-  const result = await db.costEntry.aggregate({
-    where: { workspaceId: input.workspaceId, stageRunId: input.stageRunId },
-    _sum: { totalCents: true }
-  });
-  return result._sum.totalCents ?? 0;
+  return (await calculateStageFinancialTotals(input, client)).actualCents;
 }
