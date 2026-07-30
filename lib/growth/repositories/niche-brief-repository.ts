@@ -1,11 +1,16 @@
 import type { Prisma } from "@prisma/client";
 import { NicheBriefDocument } from "@syncore/contracts";
 import { hashApprovalPayload } from "@/lib/growth/approval-hash";
+import { enqueueApprovalRequestedNotification } from "@/lib/growth/approval-notifications";
+import {
+  type ApprovalRecordRow,
+  createApproval
+} from "@/lib/growth/repositories/approval-repository";
 import {
   type GrowthPrismaClient,
-  growthPrisma,
-  inGrowthTransaction
+  growthPrisma
 } from "@/lib/growth/repositories/client";
+import { runSerializableGrowthTransaction } from "@/lib/growth/transaction";
 
 /**
  * `NicheBrief` — Template B, what research recommends (v9.1 §6, §7).
@@ -39,6 +44,13 @@ export type CreateNicheBriefInput = {
   requestedBy: string;
 };
 
+export type CreateNicheBriefOptions = {
+  now?: Date;
+  maxTransactionAttempts?: number;
+  /** Test seam executed after every write/outbox upsert but before commit. */
+  beforeCommit?: (context: { briefId: string; approvalId: string }) => Promise<void> | void;
+};
+
 export class ResearchNotCompleteError extends Error {
   constructor(researchRunId: string, status: string) {
     super(
@@ -56,15 +68,27 @@ export class ResearchNotCompleteError extends Error {
  */
 export async function createNicheBriefWithApproval(
   input: CreateNicheBriefInput,
-  client?: GrowthPrismaClient
+  client?: GrowthPrismaClient,
+  options: CreateNicheBriefOptions = {}
 ) {
   const db = client ?? (await growthPrisma());
+  const now = options.now ?? new Date();
   // Validate before opening the transaction: an invalid document should not
   // hold a write lock, and §9.2 says underivable fields are surfaced for edit,
   // never fabricated — so a malformed brief must fail loudly here.
   const document = NicheBriefDocument.parse(input.document);
 
-  return inGrowthTransaction(db, async (tx) => {
+  return runSerializableGrowthTransaction(db, async (tx) => {
+    if ("$queryRaw" in tx) {
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "ResearchRun"
+        WHERE "id" = ${input.researchRunId}
+          AND "workspaceId" = ${input.workspaceId}
+        FOR UPDATE
+      `;
+    }
+
     const run = await tx.researchRun.findFirst({
       where: { id: input.researchRunId, workspaceId: input.workspaceId },
       select: { id: true, status: true, nicheRequestId: true }
@@ -73,6 +97,40 @@ export async function createNicheBriefWithApproval(
 
     // Guard 2. The required FK alone would happily point at a queued run.
     if (run.status !== "completed") throw new ResearchNotCompleteError(run.id, run.status);
+
+    const existingBrief = await tx.nicheBrief.findFirst({
+      where: { researchRunId: run.id, workspaceId: input.workspaceId }
+    });
+    if (existingBrief) {
+      if (!existingBrief.approvalId) {
+        throw new Error(`NicheBrief ${existingBrief.id} has no approval.`);
+      }
+      const approval = (await tx.approval.findFirst({
+        where: { id: existingBrief.approvalId, workspaceId: input.workspaceId }
+      })) as ApprovalRecordRow | null;
+      if (!approval) throw new Error(`Approval ${existingBrief.approvalId} not found in workspace.`);
+
+      const expectedPayload = {
+        type: "NICHE_TEST" as const,
+        title: `Approve ICP: ${document.niche} / ${document.geography}`,
+        summary: `Research scored this niche ${document.priorityScore}/100 and recommends a ${document.recommendedTestSize}-company test.`,
+        estimatedCostCents: document.estimatedCostCents,
+        nicheRequestId: run.nicheRequestId,
+        nicheBriefId: existingBrief.id,
+        brief: document
+      };
+      if (
+        approval.type !== "NICHE_TEST" ||
+        approval.payloadSha256 !== hashApprovalPayload(expectedPayload)
+      ) {
+        throw new Error(
+          `ResearchRun ${run.id} already has a NicheBrief with different approval content; revise it instead.`
+        );
+      }
+
+      await enqueueApprovalRequestedNotification(tx, approval, now);
+      return { brief: existingBrief, approval };
+    }
 
     const brief = await tx.nicheBrief.create({
       data: {
@@ -97,16 +155,16 @@ export async function createNicheBriefWithApproval(
       brief: document
     };
 
-    const approval = await tx.approval.create({
-      data: {
+    const approval = await createApproval(
+      {
         workspaceId: input.workspaceId,
-        type: "NICHE_TEST",
-        payloadJson: payload as unknown as Prisma.InputJsonValue,
-        payloadSha256: hashApprovalPayload(payload),
-        status: "pending",
-        requestedBy: input.requestedBy
-      }
-    });
+        payload,
+        requestedBy: input.requestedBy,
+        idempotencyKey: `niche-test:${run.id}`,
+        now
+      },
+      tx
+    );
 
     await tx.nicheBrief.update({ where: { id: brief.id }, data: { approvalId: approval.id } });
     await tx.researchRun.update({ where: { id: run.id }, data: { nicheBriefId: brief.id } });
@@ -115,8 +173,9 @@ export async function createNicheBriefWithApproval(
       data: { status: "briefed" }
     });
 
+    await options.beforeCommit?.({ briefId: brief.id, approvalId: approval.id });
     return { brief: { ...brief, approvalId: approval.id }, approval };
-  });
+  }, options.maxTransactionAttempts);
 }
 
 /**

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { ApprovalRevise } from "@syncore/contracts";
-import { CHAT_WORKSPACE_HEADER, authenticateChatRequest } from "@/lib/growth/chat-auth";
+import {
+  CHAT_WORKSPACE_HEADER,
+  authenticateChatRequest,
+  authorizeChatApprovalActor
+} from "@/lib/growth/chat-auth";
 import { reviseApproval } from "@/lib/growth/repositories/approval-repository";
 import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
 
@@ -32,6 +36,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!auth.workspaceId) {
     return NextResponse.json({ error: `Missing ${CHAT_WORKSPACE_HEADER}.` }, { status: 400 });
   }
+  const authorization = await authorizeChatApprovalActor({ ...auth, workspaceId: auth.workspaceId });
+  if (!authorization.ok) {
+    return NextResponse.json({ error: authorization.error }, { status: authorization.status });
+  }
 
   const { id } = await context.params;
 
@@ -58,10 +66,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const result = await reviseApproval({
-    workspaceId: auth.workspaceId,
+    workspaceId: authorization.workspaceId,
     approvalId: id,
     payload: parsed.data.payload,
-    actorId: auth.actorId
+    actorId: authorization.actorId,
+    reason: parsed.data.reason
   });
 
   switch (result.outcome) {
@@ -80,6 +89,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         { status: 409 }
       );
 
+    case "expired":
+      return NextResponse.json(
+        {
+          error: "Approval is expired and cannot be revised.",
+          approvalId: result.approval.id,
+          status: result.approval.status
+        },
+        { status: 409 }
+      );
+
+    case "already_revised":
     case "revised":
       return NextResponse.json(
         {
@@ -88,7 +108,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           supersededByApprovalId: result.created.id,
           payloadSha256: result.created.payloadSha256
         },
-        { status: 201 }
+        { status: result.outcome === "revised" ? 201 : 200 }
       );
   }
 }

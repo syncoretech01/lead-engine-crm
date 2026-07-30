@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { ApprovalDecide } from "@syncore/contracts";
-import { CHAT_WORKSPACE_HEADER, authenticateChatRequest } from "@/lib/growth/chat-auth";
+import {
+  CHAT_WORKSPACE_HEADER,
+  authenticateChatRequest,
+  authorizeChatApprovalActor
+} from "@/lib/growth/chat-auth";
 import {
   decideApprovalWithSideEffects,
   isApprovalApplicationError
@@ -37,6 +41,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       { status: 400 }
     );
   }
+  const authorization = await authorizeChatApprovalActor({ ...auth, workspaceId: auth.workspaceId });
+  if (!authorization.ok) {
+    return NextResponse.json({ error: authorization.error }, { status: authorization.status });
+  }
 
   const { id } = await context.params;
 
@@ -67,10 +75,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   let result;
   try {
     result = await decideApprovalWithSideEffects({
-      workspaceId: auth.workspaceId,
+      workspaceId: authorization.workspaceId,
       approvalId: id,
       decision: parsed.data.decision,
-      actorId: auth.actorId
+      actorId: authorization.actorId
     });
   } catch (error) {
     if (isApprovalApplicationError(error)) {

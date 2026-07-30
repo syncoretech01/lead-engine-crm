@@ -42,6 +42,9 @@ async function createWorkspace(t2: number | null = null) {
   await (await db()).workspace.create({
     data: { id: workspaceId, name: `Niche apply ${sequence}`, approvalThresholdT2Cents: t2 }
   });
+  await (await db()).workspaceMember.create({
+    data: { workspaceId, userId: "usr_slack", role: "MANAGER" }
+  });
   createdWorkspaces.add(workspaceId);
   return workspaceId;
 }
@@ -111,11 +114,16 @@ function decisionRequest(input: {
 }
 
 describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     process.env.SYNCORE_STORAGE_DRIVER = "prisma";
     process.env.SYNCORE_CHAT_API_TOKEN = "integration-chat-token";
     process.env.SYNCORE_BOT_NOTIFY_SECRET = "integration-notify-secret";
     process.env.SYNCORE_BOT_NOTIFY_URL = "https://bot.example.test/notify";
+    await (await db()).user.upsert({
+      where: { id: "usr_slack" },
+      create: { id: "usr_slack", email: "usr-slack-approval@example.test", name: "Slack Approver" },
+      update: {}
+    });
   });
 
   afterEach(async () => {
@@ -126,7 +134,9 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
 
   afterAll(async () => {
     if (!enabled) return;
-    await (await db()).$disconnect();
+    const prisma = await db();
+    await prisma.user.deleteMany({ where: { id: "usr_slack" } });
+    await prisma.$disconnect();
   });
 
   it("atomically approves the brief, creates one related campaign and safe initial stages, and enqueues one final notification", async () => {
@@ -149,7 +159,9 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
         where: { campaignId: result.campaignId! },
         orderBy: { createdAt: "asc" }
       }),
-      prisma.notifyOutbox.findMany({ where: { approvalId: seeded.approval.id } })
+      prisma.notifyOutbox.findMany({
+        where: { approvalId: seeded.approval.id, kind: "APPROVAL_DECIDED" }
+      })
     ]);
 
     expect(approval).toMatchObject({
@@ -221,7 +233,9 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
     expect(replay.campaignId).toBe(first.campaignId);
     expect(await prisma.campaign.count({ where: { originApprovalId: seeded.approval.id } })).toBe(1);
     expect(await prisma.campaignStageRun.count({ where: { campaignId: first.campaignId } })).toBe(2);
-    expect(await prisma.notifyOutbox.count({ where: { approvalId: seeded.approval.id } })).toBe(1);
+    expect(await prisma.notifyOutbox.count({
+      where: { approvalId: seeded.approval.id, kind: "APPROVAL_DECIDED" }
+    })).toBe(1);
   });
 
   it("treats repeated signed callback requests as one decision and one durable event", async () => {
@@ -248,7 +262,9 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
     expect((await replay.json()).campaignId).toBe((await first.json()).campaignId);
     const prisma = await db();
     expect(await prisma.campaign.count({ where: { originApprovalId: seeded.approval.id } })).toBe(1);
-    expect(await prisma.notifyOutbox.count({ where: { approvalId: seeded.approval.id } })).toBe(1);
+    expect(await prisma.notifyOutbox.count({
+      where: { approvalId: seeded.approval.id, kind: "APPROVAL_DECIDED" }
+    })).toBe(1);
   });
 
   it("serializes concurrent final decisions with database locks and uniqueness constraints", async () => {
@@ -271,7 +287,9 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
     const prisma = await db();
     expect(await prisma.campaign.count({ where: { originApprovalId: seeded.approval.id } })).toBe(1);
     expect(await prisma.campaignStageRun.count({ where: { campaignId: decisions[0]!.campaignId } })).toBe(2);
-    expect(await prisma.notifyOutbox.count({ where: { approvalId: seeded.approval.id } })).toBe(1);
+    expect(await prisma.notifyOutbox.count({
+      where: { approvalId: seeded.approval.id, kind: "APPROVAL_DECIDED" }
+    })).toBe(1);
   });
 
   it("retries a serialization conflict as a fresh transaction and still commits exactly once", async () => {
@@ -295,7 +313,9 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
     const prisma = await db();
     expect(await prisma.campaign.count({ where: { originApprovalId: seeded.approval.id } })).toBe(1);
     expect(await prisma.campaignStageRun.count({ where: { campaignId: result.campaignId } })).toBe(2);
-    expect(await prisma.notifyOutbox.count({ where: { approvalId: seeded.approval.id } })).toBe(1);
+    expect(await prisma.notifyOutbox.count({
+      where: { approvalId: seeded.approval.id, kind: "APPROVAL_DECIDED" }
+    })).toBe(1);
   });
 
   it("enforces two distinct approvers before any campaign exists", async () => {
@@ -487,7 +507,8 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
     const missing = await createApproval({
       workspaceId: missingWorkspace,
       payload: missingPayload,
-      requestedBy: "usr_requester"
+      requestedBy: "usr_requester",
+      idempotencyKey: `missing-brief:${missingWorkspace}`
     });
 
     const foreign = await seedNiche();
@@ -495,7 +516,8 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
     const cross = await createApproval({
       workspaceId: localWorkspace,
       payload: foreign.approval.payloadJson,
-      requestedBy: "usr_requester"
+      requestedBy: "usr_requester",
+      idempotencyKey: `cross-workspace:${localWorkspace}`
     });
     const other = await createApproval({
       workspaceId: localWorkspace,
@@ -506,7 +528,8 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
         recordCount: 12,
         reason: "hard bounce"
       },
-      requestedBy: "usr_requester"
+      requestedBy: "usr_requester",
+      idempotencyKey: `non-niche:${localWorkspace}`
     });
 
     await expectApplicationError(
@@ -565,7 +588,12 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
     );
     expect(await prisma.campaign.count({ where: { workspaceId: seeded.workspaceId } })).toBe(0);
     expect(await prisma.campaignStageRun.count({ where: { workspaceId: seeded.workspaceId } })).toBe(0);
-    expect(await prisma.notifyOutbox.count({ where: { workspaceId: seeded.workspaceId } })).toBe(0);
+    expect(await prisma.notifyOutbox.count({
+      where: { workspaceId: seeded.workspaceId, kind: "APPROVAL_DECIDED" }
+    })).toBe(0);
+    expect(await prisma.notifyOutbox.count({
+      where: { workspaceId: seeded.workspaceId, kind: "APPROVAL_REQUESTED" }
+    })).toBe(1);
   });
 
   it("survives a legacy projection cleanup because all new records remain Prisma-native", async () => {
@@ -588,7 +616,9 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
     expect(await prisma.nicheBrief.count({ where: { id: seeded.brief.id } })).toBe(1);
     expect(await prisma.campaign.count({ where: { id: applied.campaignId } })).toBe(1);
     expect(await prisma.campaignStageRun.count({ where: { campaignId: applied.campaignId } })).toBe(2);
-    expect(await prisma.notifyOutbox.count({ where: { approvalId: seeded.approval.id } })).toBe(1);
+    expect(await prisma.notifyOutbox.count({
+      where: { approvalId: seeded.approval.id, kind: "APPROVAL_DECIDED" }
+    })).toBe(1);
 
     // Do not delete the shared seeded workspace; remove only this native chain.
     await prisma.notifyOutbox.deleteMany({ where: { approvalId: seeded.approval.id } });

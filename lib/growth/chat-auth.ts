@@ -1,4 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
+import type { GrowthPrismaClient } from "@/lib/growth/repositories/client";
+import { growthPrisma } from "@/lib/growth/repositories/client";
 
 /**
  * Bearer auth for the chat-surface API (v9.1 §9.4, §23).
@@ -44,6 +46,10 @@ export const CHAT_WORKSPACE_HEADER = "x-syncore-workspace-id";
 export type ChatAuthResult =
   | { ok: true; actorId: string; workspaceId: string | null }
   | { ok: false; status: 401 | 500; error: string };
+
+export type ChatApprovalAuthorizationResult =
+  | { ok: true; actorId: string; workspaceId: string }
+  | { ok: false; status: 403; error: string };
 
 function constantTimeEquals(a: string, b: string): boolean {
   const left = Buffer.from(a, "utf8");
@@ -100,4 +106,36 @@ export function authenticateChatRequest(headers: Headers): ChatAuthResult {
     // and each states its own requirement.
     workspaceId: headers.get(CHAT_WORKSPACE_HEADER)?.trim() || null
   };
+}
+
+/**
+ * Bind the bot-reported actor to the requested workspace before an approval
+ * route reaches any mutator. ADMIN and MANAGER are the Prisma roles carrying
+ * the dashboard's `manage_outreach` permission; accepting a valid global bearer
+ * alone would otherwise let an arbitrary workspace header cross tenant scope.
+ */
+export async function authorizeChatApprovalActor(
+  auth: Extract<ChatAuthResult, { ok: true }> & { workspaceId: string },
+  client?: GrowthPrismaClient
+): Promise<ChatApprovalAuthorizationResult> {
+  const db = client ?? (await growthPrisma());
+  const membership = await db.workspaceMember.findUnique({
+    where: {
+      workspaceId_userId: {
+        workspaceId: auth.workspaceId,
+        userId: auth.actorId
+      }
+    },
+    select: { role: true }
+  });
+
+  if (!membership || (membership.role !== "ADMIN" && membership.role !== "MANAGER")) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Actor is not authorized to manage approvals in this workspace."
+    };
+  }
+
+  return { ok: true, actorId: auth.actorId, workspaceId: auth.workspaceId };
 }

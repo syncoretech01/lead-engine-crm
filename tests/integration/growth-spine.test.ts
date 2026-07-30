@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createApproval,
   decideApproval,
@@ -118,6 +118,11 @@ async function seedCampaign(workspaceId: string) {
 }
 
 describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
+  beforeAll(() => {
+    process.env.SYNCORE_BOT_NOTIFY_SECRET = "integration-notify-secret";
+    process.env.SYNCORE_BOT_NOTIFY_URL = "https://bot.example.test/notify";
+  });
+
   afterAll(async () => {
     if (!enabled) return;
     const prisma = await db();
@@ -310,7 +315,8 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
     const original = await createApproval({
       workspaceId: ids.a,
       payload: payloadV1,
-      requestedBy: "usr_1"
+      requestedBy: "usr_1",
+      idempotencyKey: `growth-spine-revision:${ids.a}`
     });
 
     const revised = await reviseApproval({
@@ -331,7 +337,7 @@ describe.skipIf(!enabled)("growth spine (real Postgres)", () => {
       where: { id: original.id },
       include: { supersededBy: true }
     });
-    expect(withSuccessor?.supersededBy.map((row) => row.id)).toContain(revised.created.id);
+    expect(withSuccessor?.supersededBy?.id).toBe(revised.created.id);
   });
 
   it("isolates tenants — a two-workspace roundtrip returns zero cross-tenant rows", async () => {

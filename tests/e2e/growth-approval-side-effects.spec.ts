@@ -8,6 +8,8 @@ const requestId = `nr_growth_e2e_apply_${Date.now()}`;
 const researchRunId = `rr_growth_e2e_apply_${Date.now()}`;
 const nicheBriefId = `nb_growth_e2e_apply_${Date.now()}`;
 const approvalId = `apr_growth_e2e_apply_${Date.now()}`;
+const actorId = `usr_growth_e2e_apply_${Date.now()}`;
+const otherWorkspaceId = `ws_growth_e2e_other_${Date.now()}`;
 
 const brief = {
   version: "1.0",
@@ -41,7 +43,14 @@ const approvalPayload = {
 test.describe("Growth OS — NICHE_TEST approval application", () => {
   test.beforeAll(async () => {
     await prisma.$transaction([
+      prisma.user.create({
+        data: { id: actorId, email: `${actorId}@example.test`, name: "Growth E2E Approver" }
+      }),
       prisma.workspace.create({ data: { id: workspaceId, name: "Growth approval E2E" } }),
+      prisma.workspace.create({ data: { id: otherWorkspaceId, name: "Other Growth E2E" } }),
+      prisma.workspaceMember.create({
+        data: { workspaceId, userId: actorId, role: "MANAGER" }
+      }),
       prisma.nicheRequest.create({
         data: {
           id: requestId,
@@ -98,8 +107,52 @@ test.describe("Growth OS — NICHE_TEST approval application", () => {
   });
 
   test.afterAll(async () => {
-    await prisma.workspace.deleteMany({ where: { id: workspaceId } });
+    await prisma.workspace.deleteMany({ where: { id: { in: [workspaceId, otherWorkspaceId] } } });
+    await prisma.user.deleteMany({ where: { id: actorId } });
     await prisma.$disconnect();
+  });
+
+  test("missing, invalid, and cross-workspace machine credentials create no side effects", async ({
+    request
+  }) => {
+    const before = await Promise.all([
+      prisma.approval.count({ where: { workspaceId } }),
+      prisma.campaign.count({ where: { workspaceId } }),
+      prisma.notifyOutbox.count({ where: { workspaceId } })
+    ]);
+    const data = { approvalId, decision: "approve" };
+    const missing = await request.post(`/api/approvals/${approvalId}/decide`, {
+      headers: {
+        "x-syncore-actor-id": actorId,
+        "x-syncore-workspace-id": workspaceId
+      },
+      data
+    });
+    const invalid = await request.post(`/api/approvals/${approvalId}/decide`, {
+      headers: {
+        authorization: "Bearer invalid-token",
+        "x-syncore-actor-id": actorId,
+        "x-syncore-workspace-id": workspaceId
+      },
+      data
+    });
+    const crossWorkspace = await request.post(`/api/approvals/${approvalId}/decide`, {
+      headers: {
+        authorization: `Bearer ${process.env.SYNCORE_CHAT_API_TOKEN}`,
+        "x-syncore-actor-id": actorId,
+        "x-syncore-workspace-id": otherWorkspaceId
+      },
+      data
+    });
+
+    expect(missing.status()).toBe(401);
+    expect(invalid.status()).toBe(401);
+    expect(crossWorkspace.status()).toBe(403);
+    expect(await Promise.all([
+      prisma.approval.count({ where: { workspaceId } }),
+      prisma.campaign.count({ where: { workspaceId } }),
+      prisma.notifyOutbox.count({ where: { workspaceId } })
+    ])).toEqual(before);
   });
 
   test("a repeated signed decision request creates one campaign and one outbox event", async ({
@@ -107,7 +160,7 @@ test.describe("Growth OS — NICHE_TEST approval application", () => {
   }) => {
     const headers = {
       authorization: `Bearer ${process.env.SYNCORE_CHAT_API_TOKEN}`,
-      "x-syncore-actor-id": "usr_e2e_approver",
+      "x-syncore-actor-id": actorId,
       "x-syncore-workspace-id": workspaceId
     };
     const data = { approvalId, decision: "approve" };

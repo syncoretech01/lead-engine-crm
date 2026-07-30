@@ -29,7 +29,28 @@ type Row = Record<string, unknown> & { id: string; workspaceId: string; status: 
  */
 function fakeDb(opts: { t2?: number | null } = {}) {
   const rows = new Map<string, Row>();
+  const outbox = new Map<string, Record<string, unknown>>();
   let seq = 0;
+
+  const createRow = (data: Record<string, unknown>) => {
+    seq += 1;
+    const row = {
+      id: `apr_${seq}`,
+      decidedBy: null,
+      decidedAt: null,
+      expiresAt: null,
+      sideEffectsAppliedAt: null,
+      firstApprovedBy: null,
+      firstApprovedAt: null,
+      creationKey: null,
+      supersedesApprovalId: null,
+      revisionReason: null,
+      createdAt: new Date(),
+      ...data
+    } as unknown as Row;
+    rows.set(row.id, row);
+    return row;
+  };
 
   return {
     rows,
@@ -37,23 +58,32 @@ function fakeDb(opts: { t2?: number | null } = {}) {
       findUnique: async () => ({ approvalThresholdT2Cents: opts.t2 ?? null })
     },
     approval: {
-      create: async ({ data }: { data: Record<string, unknown> }) => {
-        seq += 1;
-        const row = {
-          id: `apr_${seq}`,
-          decidedBy: null,
-          decidedAt: null,
-          firstApprovedBy: null,
-          firstApprovedAt: null,
-          supersedesApprovalId: null,
-          createdAt: new Date(),
-          ...data
-        } as unknown as Row;
-        rows.set(row.id, row);
-        return row;
+      create: async ({ data }: { data: Record<string, unknown> }) => createRow(data),
+      findUnique: async ({ where }: { where: { creationKey?: string } }) => {
+        return [...rows.values()].find((row) => row.creationKey === where.creationKey) ?? null;
       },
-      findFirst: async ({ where }: { where: { id: string; workspaceId: string } }) => {
-        const row = rows.get(where.id);
+      upsert: async ({
+        where,
+        create
+      }: {
+        where: { creationKey: string };
+        create: Record<string, unknown>;
+        update: Record<string, unknown>;
+      }) => {
+        return (
+          [...rows.values()].find((row) => row.creationKey === where.creationKey) ?? createRow(create)
+        );
+      },
+      findFirst: async ({
+        where
+      }: {
+        where: { id?: string; workspaceId: string; supersedesApprovalId?: string };
+      }) => {
+        const row = where.id
+          ? rows.get(where.id)
+          : [...rows.values()].find(
+              (candidate) => candidate.supersedesApprovalId === where.supersedesApprovalId
+            );
         // Tenant scoping lives in the query, exactly as the repository writes it.
         return row && row.workspaceId === where.workspaceId ? row : null;
       },
@@ -62,12 +92,29 @@ function fakeDb(opts: { t2?: number | null } = {}) {
         rows.set(where.id, row);
         return row;
       }
+    },
+    notifyOutbox: {
+      upsert: async ({
+        where,
+        create
+      }: {
+        where: { eventId: string };
+        create: Record<string, unknown>;
+        update: Record<string, unknown>;
+      }) => {
+        const row = outbox.get(where.eventId) ?? { id: `notify_${outbox.size + 1}`, ...create };
+        outbox.set(where.eventId, row);
+        return row;
+      }
     }
   };
 }
 
 const WS = "ws_1";
 const OTHER_WS = "ws_2";
+
+process.env.SYNCORE_BOT_NOTIFY_SECRET ||= "unit-notify-secret";
+process.env.SYNCORE_BOT_NOTIFY_URL ||= "https://bot.example.test/notify";
 
 describe("approval repository — the surface is three verbs", () => {
   it("exports no fourth mutating verb", () => {
@@ -92,7 +139,7 @@ describe("createApproval", () => {
   it("stores the hash, the type from the payload, and status pending", async () => {
     const db = fakeDb();
     const row = await createApproval(
-      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1" },
+      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1", idempotencyKey: "create-1" },
       db as never
     );
 
@@ -106,7 +153,15 @@ describe("createApproval", () => {
   it("refuses a payload that does not parse", async () => {
     const db = fakeDb();
     await expect(
-      createApproval({ workspaceId: WS, payload: { type: "NOPE" }, requestedBy: "usr_1" }, db as never)
+      createApproval(
+        {
+          workspaceId: WS,
+          payload: { type: "NOPE" },
+          requestedBy: "usr_1",
+          idempotencyKey: "invalid-1"
+        },
+        db as never
+      )
     ).rejects.toThrow();
   });
 });
@@ -118,7 +173,7 @@ describe("decideApproval — single approver", () => {
   beforeEach(async () => {
     db = fakeDb({ t2: null });
     const row = await createApproval(
-      { workspaceId: WS, payload: payloadCosting(100), requestedBy: "usr_1" },
+      { workspaceId: WS, payload: payloadCosting(100), requestedBy: "usr_1", idempotencyKey: "single-1" },
       db as never
     );
     id = row.id;
@@ -175,7 +230,7 @@ describe("decideApproval — two-person threshold (T2)", () => {
   beforeEach(async () => {
     db = fakeDb({ t2: T2 });
     const row = await createApproval(
-      { workspaceId: WS, payload: payloadCosting(T2), requestedBy: "usr_1" },
+      { workspaceId: WS, payload: payloadCosting(T2), requestedBy: "usr_1", idempotencyKey: "t2-1" },
       db as never
     );
     id = row.id;
@@ -225,7 +280,7 @@ describe("decideApproval — two-person threshold (T2)", () => {
 
   it("applies below the threshold with a single approver", async () => {
     const cheap = await createApproval(
-      { workspaceId: WS, payload: payloadCosting(T2 - 1), requestedBy: "usr_1" },
+      { workspaceId: WS, payload: payloadCosting(T2 - 1), requestedBy: "usr_1", idempotencyKey: "t2-cheap" },
       db as never
     );
     const result = await decideApproval(
@@ -250,7 +305,7 @@ describe("reviseApproval", () => {
   it("supersedes the original and creates a referencing successor", async () => {
     const db = fakeDb();
     const original = await createApproval(
-      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1" },
+      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1", idempotencyKey: "revise-1" },
       db as never
     );
     const edited = { ...fixture.payload, title: "Approve ICP: revised scope" };
@@ -277,7 +332,7 @@ describe("reviseApproval", () => {
     // If re-hashing identical content moved the digest, it could not.
     const db = fakeDb();
     const original = await createApproval(
-      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1" },
+      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1", idempotencyKey: "revise-2" },
       db as never
     );
     const result = await reviseApproval(
@@ -293,7 +348,7 @@ describe("reviseApproval", () => {
   it("refuses to revise an already-decided approval", async () => {
     const db = fakeDb();
     const original = await createApproval(
-      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1" },
+      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1", idempotencyKey: "revise-3" },
       db as never
     );
     await decideApproval(
@@ -311,7 +366,7 @@ describe("reviseApproval", () => {
   it("does not reach across workspaces", async () => {
     const db = fakeDb();
     const original = await createApproval(
-      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1" },
+      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1", idempotencyKey: "revise-4" },
       db as never
     );
     const result = await reviseApproval(
@@ -324,7 +379,7 @@ describe("reviseApproval", () => {
   it("chains: an approval can be revised more than once", async () => {
     const db = fakeDb();
     const v1 = await createApproval(
-      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1" },
+      { workspaceId: WS, payload: fixture.payload, requestedBy: "usr_1", idempotencyKey: "revise-chain" },
       db as never
     );
     const r1 = await reviseApproval(

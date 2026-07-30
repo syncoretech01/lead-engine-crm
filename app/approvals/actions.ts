@@ -7,7 +7,6 @@ import {
   isApprovalApplicationError
 } from "@/lib/growth/approval-orchestration";
 import { reviseApproval } from "@/lib/growth/repositories/approval-repository";
-import { enqueueNotify } from "@/lib/growth/notify-outbox";
 import { getWorkspaceSessionContext } from "@/lib/phase1/store";
 
 /**
@@ -119,16 +118,9 @@ export async function reviseApprovalAction(
       error: `Approval is ${result.approval.status}; only a pending approval can be revised.`
     };
   }
-
-  await enqueueNotify({
-    kind: "APPROVAL_REVISED",
-    workspaceId,
-    approvalId,
-    payload: {
-      supersededByApprovalId: result.created.id,
-      payloadSha256: result.created.payloadSha256
-    }
-  });
+  if (result.outcome === "expired") {
+    return { ok: false, error: "Approval is expired and cannot be revised." };
+  }
 
   revalidatePath("/approvals");
   return {
