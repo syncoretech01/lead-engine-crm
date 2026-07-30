@@ -15,13 +15,16 @@ Scope, per the repo plan:
 
 3. CampaignStageRun state machine: PENDING → AWAITING_APPROVAL → APPROVED → RUNNING → COMPLETED | FAILED | PARKED | CANCELLED. Illegal transitions rejected at the repository layer; failureCode + retryCount on FAILED; a transition-matrix test covering every pair.
 
-4. CostEntry: extend ProviderUsageLedger with stageRunId (nullable for legacy rows). One ledger — never a second table.
-
-   **Architecture review pending:** the current `ProviderUsageLedger` is blob-projected, while the
-   CRM-1 `CostEntry` table is Prisma-native. `docs/adr/ADR-001-growth-os-cost-ledger.md` proposes a
-   safe operational-usage versus financial-control boundary, but remains `PROPOSED`. This brief's
-   original instruction is not resolved until human review and a binding erratum; do not implement
-   either migration direction from this note alone.
+4. **Cost ledger — ADR-001 Option C is accepted and binding.** `CostEntry` is the authoritative
+   Prisma-native Growth financial control ledger. `ProviderUsageLedger` remains legacy,
+   `AppState`-projected operational provider evidence; native Growth financial code must not write
+   financial events into it while it remains projection-owned. The stores have distinct ownership
+   and semantics. Only `CostEntry` contributes to Growth financial totals, and linked provider
+   evidence must never be counted as another charge. The public reporting surface must expose one
+   authoritative Growth financial view rather than treat the current raw union as final. Step 1.4B
+   implementation is `NOT STARTED`; this accepted documentation neither approves a final schema nor
+   authorizes any paid stage. `GROWTH_OS_ERRATA.md` entry 6 supersedes the earlier direct-write and
+   one-physical-table instruction.
 
 5. Read models: server-side pagination, tight select, workspaceId in every where. No take:500/take:1500 caps — the baseline documents the existing anti-pattern; do not replicate it in anything new.
 

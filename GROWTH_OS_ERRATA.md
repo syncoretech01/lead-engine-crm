@@ -77,6 +77,68 @@ when someone decides, which is exactly the mutation §10 forbids. Decisions are 
 **Consequence for implementers:** where v9.1 §6 prose and `@syncore/contracts` differ on these
 shapes, the contracts package wins.
 
+## 6. Provider usage evidence and the Growth financial ledger are separate concerns (2026-07-30, ADR-001)
+
+Supersedes `GROWTH_OS_END_TO_END_PLAN_v9.1.md` §§6, 21, and 26;
+`CLAUDE.md`; `docs/CRM-1-BRIEF.md`; and every repository instruction that:
+
+- requires native Growth financial events to be written directly into the existing
+  `ProviderUsageLedger`;
+- interprets "one cost ledger" as requiring one physical database table;
+- treats provider operational usage and financial-control events as the same record; or
+- requires `CostEntry` to be removed merely because it is a second physical table.
+
+**Decision:** the Syncore Tech project owner accepted ADR-001 Option C on 2026-07-30. Provider
+operational usage evidence and Growth financial-control events are separate concerns with distinct
+ownership and semantics:
+
+1. `CostEntry` is the authoritative Prisma-native Growth OS financial control ledger.
+2. `ProviderUsageLedger` remains legacy operational provider evidence while it is owned by the
+   `AppState` projection.
+3. Native Growth financial events must not be written directly into `ProviderUsageLedger` while it
+   remains projection-owned.
+4. Only authoritative `CostEntry` financial events contribute to Growth OS spend, campaign spend,
+   stage spend, budget consumption, authorization reconciliation, overrun calculations, and unit
+   economics.
+5. A provider-usage row may link to a `CostEntry` financial event as supporting evidence, but it is
+   not another financial charge and must never be counted twice.
+6. Growth financial facts are append-only.
+7. Corrections use explicit adjustment or reversal events, never destructive amount updates or
+   deletion.
+8. Historical provider rows must not be assigned to campaigns, stages, approvals, authorizations,
+   or financial actions unless authoritative evidence proves the linkage.
+9. Existing rows in both tables must be preserved.
+10. Implementation must use additive, reversible schema changes and preflight existing data.
+11. The current timestamp-only union of `CostEntry` and `ProviderUsageLedger` is a temporary
+    compatibility seam, not the final authoritative public financial read model.
+12. The legacy blob ownership peel remains a separate, deferred project and is not required before
+    the pilot.
+
+**Meaning of one ledger:** the public Growth OS "cost ledger" is one authoritative financial
+reporting model. It does not require one physical database table. Only `CostEntry` financial events
+count toward authoritative financial totals; linked operational evidence remains evidence.
+
+**Reasoning:**
+
+- Projection synchronization deletes normalized database rows whose IDs are absent from the
+  `AppState` blob.
+- Projection upserts can overwrite database rows with matching IDs.
+- Native financial facts therefore cannot safely live in the currently projected
+  `ProviderUsageLedger`.
+- Mutable provider telemetry and immutable financial control records serve different operational,
+  audit, authorization, and correction purposes.
+- Option C avoids silent financial data loss and makes the no-double-counting rule explicit.
+- A native financial event model supports non-provider expenses—including research,
+  MillionVerifier authorization/results, Audit Bot scans, full audits, videos, personalization and
+  AI models, Mailshake, and other outreach tools—without fabricating provider-job records.
+- The separation permits incremental implementation without forcing the full blob migration before
+  the pilot.
+
+**Implementation boundary:** this erratum makes the ownership decision binding; it does not approve
+a final Prisma schema or authorize implementation. Exact fields, constraints, migrations, writers,
+budget gates, reconciliation, and the public financial read model belong to a separately approved
+Wave 1, Step 1.4B. No paid Growth OS execution is enabled by this documentation decision.
+
 ---
 
 *Maintained alongside v9.1. New supersessions append here with date, source, decision, and

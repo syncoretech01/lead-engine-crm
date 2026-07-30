@@ -1,8 +1,12 @@
 # ADR-001: Growth OS cost-ledger ownership
 
-**Status:** PROPOSED
+**Status:** ACCEPTED
 
-**Date:** 2026-07-30
+**Decision date:** 2026-07-30
+
+**Approver:** Syncore Tech project owner
+
+**Accepted option:** Option C — separate operational provider usage from financial cost events
 
 ## Context
 
@@ -19,8 +23,9 @@ Two plan rules collide in the cost area:
    cost ledger.
 
 CRM-1 introduced a Prisma-native `CostEntry` table and a combined logical read model without first
-settling that conflict in an ADR. This decision is required before any Growth OS paid-stage writer,
-budget gate, or actual-versus-approved reconciliation is implemented.
+settling that conflict in an ADR. This ADR now settles the ownership model. Acceptance does not
+authorize the additive schema, writers, budget gate, actual-versus-approved reconciliation, or any
+paid Growth OS execution; those require a separately approved implementation step.
 
 This ADR uses "ledger" in two distinct senses:
 
@@ -133,8 +138,9 @@ The conflict is present inside the canonical plan itself:
 - `CLAUDE.md` and `docs/CRM-1-BRIEF.md` say to extend `ProviderUsageLedger` and never create a
   second ledger.
 
-The current physical implementation chose a safe migration seam, but the documentation has not
-defined whether that seam is temporary, redundant, or the intended semantic boundary.
+Before this ADR was accepted, the current physical implementation had chosen a safe migration seam
+without defining whether that seam was temporary, redundant, or the intended semantic boundary.
+The accepted decision below makes the operational-evidence/financial-control distinction binding.
 
 ## Requirements
 
@@ -281,11 +287,14 @@ assume production is empty. Unknown legacy attribution remains unknown.
 
 ## Recommended decision
 
-**Recommend Option C: separate operational provider usage from the native Growth OS financial
-control ledger.**
+**Accepted decision: Option C — separate operational provider usage from the native Growth OS
+financial control ledger.**
 
-`CostEntry` should be the authoritative native store for every Growth OS financial event.
-`ProviderUsageLedger` should remain a legacy, blob-projected operational usage store until a future
+On 2026-07-30, the Syncore Tech project owner reviewed this recommendation and formally accepted
+Option C.
+
+`CostEntry` is the authoritative native store for every Growth OS financial event.
+`ProviderUsageLedger` remains a legacy, blob-projected operational usage store until a future
 blob-peel decision. Native Growth code must not write financial facts directly to
 `ProviderUsageLedger` while it is projection-owned.
 
@@ -298,12 +307,14 @@ The phrase "one cost ledger" should mean **one authoritative public financial le
 calculation**, not one physical table containing both legacy operational telemetry and Growth
 financial control events.
 
-This recommendation is not accepted by this document. Human review is required before any schema,
-writer, budget, or migration work begins.
+Acceptance makes this ownership and no-double-counting model binding. It does not approve the final
+Prisma schema or authorize schema, writer, budget, read-model, reconciliation, migration, or paid
+execution work. The exact additive schema remains subject to environment row inventory and the
+separate Wave 1, Step 1.4B implementation design.
 
-## Proposed ownership rules
+## Accepted ownership rules
 
-If this ADR is accepted:
+The following rules are binding:
 
 1. `CostEntry` is Prisma-native and owned exclusively by Growth transactional repositories.
 2. `CostEntry` never enters `AppState`, projection mapping, `upsertOrder`, or legacy write-table
@@ -351,7 +362,7 @@ because equal timestamps can be skipped.
 
 ## Proposed idempotency rules
 
-The implementation design following human acceptance should add database-enforced identities:
+The Step 1.4B implementation design should add database-enforced identities:
 
 - a stable `costActionKey` groups the estimate, authorization, actuals, adjustments, and reversals
   for one economic action;
@@ -432,18 +443,17 @@ Future actions map to the model as follows:
 
 ## Rollout plan
 
-No rollout is authorized by this proposed ADR. If humans accept it, the next implementation plan
-should use small, reversible steps:
+ADR acceptance does not authorize rollout. A separately approved Wave 1, Step 1.4B implementation
+plan should use small, reversible steps:
 
-1. record the accepted decision in the ADR and add a binding Growth OS erratum;
-2. inventory production/staging rows and define the exact additive schema;
-3. add nullable fields, indexes, foreign keys, and uniqueness constraints with preflight checks;
-4. add a transaction-aware, append-only `CostEntry` repository and concurrency/rollback tests;
-5. implement one idempotent cost-action writer and reconciliation path at a time;
-6. replace the raw union with the normalized logical read model and stable cursor;
-7. make Growth budget gates consume only authoritative financial events;
-8. validate legacy provider-evidence linkage without changing legacy projection ownership; and
-9. deploy to local, staging, and production with reconciliation reports before enabling paid work.
+1. inventory production/staging rows and define the exact additive schema;
+2. add nullable fields, indexes, foreign keys, and uniqueness constraints with preflight checks;
+3. add a transaction-aware, append-only `CostEntry` repository and concurrency/rollback tests;
+4. implement one idempotent cost-action writer and reconciliation path at a time;
+5. replace the raw union with the normalized logical read model and stable cursor;
+6. make Growth budget gates consume only authoritative financial events;
+7. validate legacy provider-evidence linkage without changing legacy projection ownership; and
+8. deploy to local, staging, and production with reconciliation reports before enabling paid work.
 
 The future implementation must keep `CostEntry` in every native/projection-boundary invariant that
 already protects Growth models and must prove that legacy projection cleanup cannot delete native
@@ -497,26 +507,41 @@ Human and implementation review must still settle:
 7. retention and eventual peel/archive policy for `ProviderUsageLedger`;
 8. whether historical `CostEntry` rows exist outside the checked-out application's known writers;
 9. exact API versioning and compatibility for the logical read model; and
-10. who approves the binding erratum and migration rollout.
+10. who approves the exact implementation schema and migration rollout.
 
 ## Consequences
 
-If accepted, Growth OS gains one authoritative and loss-resistant financial ledger with explicit
-authorization and reconciliation semantics. Legacy provider usage remains available as operational
-evidence, and the pilot avoids a high-risk blob migration. Reporting must understand the semantic
+With this decision accepted, Growth OS has one authoritative and loss-resistant financial ownership
+model with explicit authorization and reconciliation semantics. Legacy provider usage remains
+available as operational evidence, and the pilot avoids a high-risk blob migration. Reporting must
+understand the semantic
 split and prevent double counting. Future work must extend `CostEntry` substantially before paid
 execution is enabled; the current table and combined read model are not sufficient by themselves.
 
-The recommendation intentionally preserves data and defers destructive consolidation. It may leave
+The accepted decision intentionally preserves data and defers destructive consolidation. It may leave
 two physical stores for a long time, but it avoids pretending that mutable provider telemetry and
 immutable financial control are the same object.
 
-## Approval required
+## Acceptance
 
-This ADR is **PROPOSED — AWAITING HUMAN DECISION**.
-
-Reviewers must explicitly accept, reject, or request revision of Option C before any Prisma model,
-migration, repository, writer, API, test-code, budget-gate, or cost behavior change begins. On
-acceptance, update this ADR to `ACCEPTED`, record the approver/date, add the binding plan erratum,
-and create a separately scoped implementation step. This documentation commit does not implement
-the recommendation.
+- **Status:** ACCEPTED
+- **Accepted option:** Option C — separate operational provider usage from financial cost events
+- **Decision date:** 2026-07-30
+- **Approver:** Syncore Tech project owner
+- **Binding ownership rule:** `CostEntry` is the authoritative Prisma-native Growth OS financial
+  control ledger. `ProviderUsageLedger` remains the legacy, `AppState`-projected operational
+  provider-usage evidence store.
+- **No-double-counting rule:** only authoritative `CostEntry` financial events count toward Growth
+  spend, campaign spend, stage spend, budget consumption, authorization reconciliation, overrun
+  calculations, and unit economics. Linked provider-usage evidence is not a second charge.
+- **Projection prohibition:** native Growth financial code must not write financial events directly
+  into `ProviderUsageLedger` while that table remains projection-owned.
+- **Immutability rule:** financial events are append-only. Corrections use explicit adjustment or
+  reversal events rather than destructive update or deletion, and historical attribution is never
+  guessed without authoritative evidence.
+- **Implementation boundary:** acceptance binds the ownership model but does not authorize a final
+  Prisma schema, migration, runtime change, cost writer, budget gate, paid execution, or deployment.
+  The exact additive design requires environment row inventory and a separate approved
+  implementation step.
+- **Next exact step:** Wave 1, Step 1.4B — implement the additive `CostEntry` financial-ledger
+  foundation.
