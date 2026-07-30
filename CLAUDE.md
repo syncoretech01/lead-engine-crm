@@ -80,6 +80,12 @@ Adding a future Growth OS model to the guard is **one line** in `GUARDED_MODELS`
     transactional/warm/system.
 14. **`OutreachCampaign` and the raw lead-ingestion path are legacy.** Nothing new references them.
 
+> **Cost-ledger decision pending:** Rule 3 conflicts with Rule 1 while
+> `ProviderUsageLedger` remains blob-projected. `docs/adr/ADR-001-growth-os-cost-ledger.md`
+> recommends treating it as operational provider evidence and `CostEntry` as the native financial
+> control ledger behind one public spend view. The ADR is `PROPOSED`, not accepted. Do not change
+> schema or cost-writing behavior until human review records the decision and a binding erratum.
+
 ---
 
 ## What this repo is and is not

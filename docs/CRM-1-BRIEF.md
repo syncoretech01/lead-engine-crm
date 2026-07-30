@@ -17,6 +17,12 @@ Scope, per the repo plan:
 
 4. CostEntry: extend ProviderUsageLedger with stageRunId (nullable for legacy rows). One ledger — never a second table.
 
+   **Architecture review pending:** the current `ProviderUsageLedger` is blob-projected, while the
+   CRM-1 `CostEntry` table is Prisma-native. `docs/adr/ADR-001-growth-os-cost-ledger.md` proposes a
+   safe operational-usage versus financial-control boundary, but remains `PROPOSED`. This brief's
+   original instruction is not resolved until human review and a binding erratum; do not implement
+   either migration direction from this note alone.
+
 5. Read models: server-side pagination, tight select, workspaceId in every where. No take:500/take:1500 caps — the baseline documents the existing anti-pattern; do not replicate it in anything new.
 
 6. Approval Inbox UI + revision flow. Render from the contracts discriminated union — exhaustive switch, so an unhandled approval type is a compile error. Approve / Decline / Edit; Edit routes through revise, never a mutated decide. Two-person threshold (T1/T2) lands as workspace config fields with enforcement in the decide path — a decide above T2 requires a second distinct approver before the approval reaches APPROVED; keep the UI minimal, full policy UI is later. Playwright coverage for the Inbox and revision flow, outside the continue-on-error step.

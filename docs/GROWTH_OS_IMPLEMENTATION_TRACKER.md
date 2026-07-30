@@ -6,11 +6,11 @@ and the exact next implementation slice. It is not a replacement for the product
 
 **Last repository review:** 2026-07-30
 
-**Implementation baseline:** GitHub `main` at `bb603d344b1f31a73afecba4eef8b3a9715c9a3b`
-(PR #170, CRM-1 spine)
+**Implementation baseline:** GitHub `main` at `6d5830f15216254404290a576fdf22c2b2cc93a5`
+(PR #173, Wave 1 Step 1.3A approval-notification lifecycle)
 
-**Review branch before this tracker commit:** `crm-1-spine` at
-`57ba98a82e4d62d7249c17a3c4d929bcdba6c51e`
+**Review branch before this tracker commit:** `growth-os/w1-cost-ledger-adr` at
+`6d5830f15216254404290a576fdf22c2b2cc93a5`
 
 **Current Growth phase:** **CRM-1 — IN PROGRESS**
 
@@ -359,16 +359,107 @@ decision, not local schema drift. Remaining CRM-1 work is the same-record live B
 deployment evidence. The exact next step remains **Wave 1, Step 1.4 — CostEntry versus
 ProviderUsageLedger ADR and decision**. Step 1.4 was not begun.
 
+### Wave 1, Step 1.4A — Growth OS cost-ledger architecture decision — 2026-07-30
+
+**Implementation status: COMPLETE**
+
+**ADR decision status: PROPOSED — AWAITING HUMAN DECISION**
+
+This documentation-only step was required because the canonical plans simultaneously require one
+existing `ProviderUsageLedger`, forbid native Growth data from entering blob-projected tables, and
+refer to paid actions as `CostEntry` writes. CRM-1 chose a safe physical seam—legacy
+`ProviderUsageLedger` plus native `CostEntry` and a combined read—but did not establish the durable
+ownership, financial semantics, or migration decision. No Prisma, migration, repository, runtime,
+API, dependency, test-code, or cost-writing behavior was changed in Step 1.4A.
+
+Evidence reviewed:
+
+- this tracker, `CLAUDE.md`, `docs/CRM-1-BRIEF.md`, the Lead Engine CRM repository plan, v9.1,
+  the execution roadmap, errata, campaign-waterfall/provider-execution plans, and blob-migration
+  rules;
+- all Prisma definitions and migrations for `ProviderUsageLedger`, `CostEntry`, `Campaign`, and
+  `CampaignStageRun`;
+- all application writes and reads of both cost models, including `recordProviderUsage()`, provider
+  jobs, live/mock execution, enrichment, waterfall execution, default/seed repair, budget and money
+  calculations, and Growth cost reads;
+- the complete AppState projection lifecycle: mapping, table/write-list membership,
+  workspace-scoped cleanup, upsert, and projection invariants;
+- Contracts v0.2.1 approval, provider, stage, cap, estimate, and spend-exception shapes;
+- current unit/integration/projection coverage and future CRM-3 through CRM-8 requirements for
+  research, paid data, MillionVerifier, Audit Bot scan/full/video, personalization models,
+  Mailshake/outreach, reconciliation, and unit economics.
+
+The evidence establishes:
+
+1. `ProviderUsageLedger` is a legacy, AppState-owned operational provider-usage table. It is in the
+   projection table list, workspace `upsertOrder`, and four normalized write-table sets.
+2. Projection sync deletes workspace rows whose IDs are absent from the blob and then upserts blob
+   values. A native financial row inserted directly into this table can therefore be deleted or
+   overwritten silently. The Growth projection guard cannot protect such a row because this legacy
+   table is intentionally projected.
+3. `CostEntry` is native and protected from the projection, but its current schema is only a CRM-1
+   seam. It has campaign/stage attribution and aggregate helpers, but no writer, approval/
+   authorization/idempotency/source-event fields, complete currency semantics, or direct tests.
+4. The combined `listCostEntries()` read model merges both tables by time. Campaign/stage totals use
+   `CostEntry` only. The union is unverified, exposes too little reconciliation context, and its
+   timestamp-only cursor can skip equal-timestamp rows.
+5. No trustworthy migration can infer campaign, stage, approval, or authorization identity for
+   historical legacy provider rows.
+
+Options analyzed fairly in `docs/adr/ADR-001-growth-os-cost-ledger.md`:
+
+- **Option A:** use `CostEntry` for all native Growth costs, retain legacy
+  `ProviderUsageLedger`, and present one combined logical ledger;
+- **Option B:** peel and extend `ProviderUsageLedger`, move all Growth writes into it, and retire or
+  migrate `CostEntry`; and
+- **Option C:** keep `ProviderUsageLedger` as operational provider evidence, make `CostEntry` the
+  native financial control ledger, link/reconcile provider-backed actuals, and expose one
+  authoritative financial reporting view.
+
+**Sol's recommendation is Option C.** It gives each physical table one owner and one semantic role,
+prevents projection-driven financial data loss, supports non-provider costs, preserves immutable
+authorization/reconciliation history, avoids guessing legacy attribution, and defers the broad blob
+peel. "One ledger" becomes one public authoritative financial ledger rather than one physical table
+that mixes mutable provider telemetry with financial control events. The main tradeoff is continued
+two-table and reconciliation/read-model complexity, including an explicit no-double-counting rule.
+
+The proposed ownership/idempotency design is append-only `CostEntry` financial events grouped by a
+stable cost-action key, with database uniqueness for workspace idempotency keys and source events.
+Provider-backed actuals may link to provider job/run and legacy usage evidence, but only the native
+financial event counts toward Growth spend. Each action must preserve workspace, campaign/stage when
+applicable, provider or service, approval/authorization, estimate, ceiling, actual, currency,
+source event, and idempotency identity. `CampaignStageRun` estimate/approved/actual fields remain
+reconciled control caches rather than an independent financial source of truth.
+
+ADR path: `docs/adr/ADR-001-growth-os-cost-ledger.md`.
+
+Risks and dependencies before implementation:
+
+- a human must accept, reject, or revise the recommendation; the ADR remains `PROPOSED`;
+- an accepted decision requires a binding plan erratum before product implementation;
+- production/staging row inventories must precede schema assumptions or backfills;
+- CostEntry needs additive financial, tenant-consistency, idempotency, immutability, currency, and
+  evidence-link design plus real-PostgreSQL tests;
+- pre-campaign research attribution and service identities not represented by Contracts v0.2.1
+  need explicit decisions;
+- the logical read model needs stable composite pagination and no-double-counting semantics; and
+- the legacy blob peel remains separately deferred and must not be smuggled into this step.
+
+**Exact next step: human review and acceptance, rejection, or requested revision of ADR-001.**
+Implementation work has not started. Do not change the cost schema or writers, begin CRM-2, or begin
+Growth Bot work until that decision is recorded.
+
 ## Current executive snapshot
 
 | Area | Status | Current fact |
 |---|---|---|
 | CRM-0 guardrails | COMPLETE | Projection invariant, CI isolation, contracts checkout, and the baseline are present and verified. |
-| CRM-1 spine | IN PROGRESS | Wave 1 Steps 1.2, 1.3, and 1.3A completed leased delivery plus atomic/idempotent creation, revision/replacement, final decision, NICHE_TEST Campaign, and outbox orchestration. Real-Bot acceptance and deployment evidence still block CRM-1 completion. |
+| CRM-1 spine | IN PROGRESS | Wave 1 Steps 1.2, 1.3, and 1.3A completed leased delivery plus atomic/idempotent creation, revision/replacement, final decision, NICHE_TEST Campaign, and outbox orchestration. Step 1.4A completed the cost-architecture analysis, but the ADR is not accepted. Real-Bot acceptance and deployment evidence still block CRM-1 completion. |
 | CRM-2 through CRM-8 | NOT STARTED | Some CRM-2 domain primitives landed as CRM-1 prerequisites, but none of the later phase acceptance paths is connected. |
 | Contracts consumption | COMPLETE | Version 0.2.1 is installed, locked, pinned in CI/on-host deployment, and directly consumer-tested. |
-| GitHub `main` CI at the implementation baseline | COMPLETE | Run `30478238419` passed projection, validate, build, real-PostgreSQL integration, legacy Playwright, and blocking Growth OS Playwright steps. |
-| Latest CRM-1 production deployment | IMPLEMENTED — NOT VERIFIED | Deployment scripts exist and AWS production is documented, but no evidence shows the Step 1.2 commit or its third CRM-1 migration is live. |
+| Cost-ledger architecture review | COMPLETE | ADR-001 recommends Option C and remains `PROPOSED — AWAITING HUMAN DECISION`; no implementation started. |
+| GitHub `main` CI at the implementation baseline | COMPLETE | Run `30560105195` passed for exact baseline SHA `6d5830f`; another duplicate run was still in progress when reviewed. |
+| Latest CRM-1 production deployment | IMPLEMENTED — NOT VERIFIED | Deployment scripts exist and AWS production is documented, but no evidence shows the Wave 1 Steps 1.2 through 1.3A commits and migrations are live. |
 
 ## 1. Repository responsibility and boundaries
 
@@ -714,6 +805,12 @@ instruction cannot be followed literally while `ProviderUsageLedger` remains blo
 native Growth rows inserted into it would not exist in `AppStateSnapshot` and could be deleted by
 the next projection sync.
 
+Step 1.4A documents the evidence and recommends Option C in
+`docs/adr/ADR-001-growth-os-cost-ledger.md`: treat `ProviderUsageLedger` as legacy operational
+provider evidence and `CostEntry` as the native financial control ledger behind one authoritative
+public spend view. The ADR is **PROPOSED — AWAITING HUMAN DECISION**. This is not yet a binding
+architecture decision, no plan erratum has been added, and no product implementation has changed.
+
 CRM-1 therefore implemented a migration seam:
 
 - `ProviderUsageLedger` remains the legacy, blob-projected generation.
@@ -729,7 +826,8 @@ CRM-1 therefore implemented a migration seam:
 | Growth cost writer | NOT STARTED | No `costEntry.create`, `createMany`, or `upsert` call exists in application code. |
 | Budget-gate consumption | NOT STARTED | Aggregate helpers have no callers. |
 | Legacy campaign attribution | NOT STARTED | Historical rows lack campaign/stage identity; guessing attribution is intentionally rejected. |
-| Final single-table ledger after blob peel | NOT STARTED | The read seam remains necessary until legacy ledger ownership becomes native. |
+| Target architecture implementation | NOT STARTED | ADR-001 recommends an operational-usage/financial-control split, but human acceptance and a binding erratum are required first. |
+| Legacy ledger ownership peel | NOT STARTED | Separately deferred; the proposed Option C does not require it before the pilot. |
 
 This is physically two tables but intentionally one logical ledger during migration. The native
 table must not be replaced by direct native writes to `ProviderUsageLedger` while that table remains
@@ -753,8 +851,13 @@ Current test inventory is 103 unit files, 10 integration files, and 14 Playwrigh
 
 ### GitHub evidence
 
-PR #170 merged `crm-1-spine` into `main` as `bb603d3` on 2026-07-29. The post-merge push CI run
-`30478238419` completed successfully for that exact SHA:
+PR #173 merged Step 1.3A into `main` as `6d5830f` on 2026-07-30. Post-merge push CI run
+`30560105195` completed successfully for that exact SHA. A duplicate push run `30560226803` was
+still in progress when Step 1.4A evidence was recorded; the completed exact-SHA run is the baseline
+used by this tracker.
+
+Earlier, PR #170 merged `crm-1-spine` into `main` as `bb603d3` on 2026-07-29. Post-merge push CI run
+`30478238419` completed successfully for that exact SHA and included:
 
 - projection invariant and armed meta-test;
 - Prisma validation/generation, lint, typecheck, and unit tests;
@@ -875,20 +978,22 @@ with the CI `contracts-ref` update. Local redeclarations are prohibited.
    approval recipients within that workspace.
 3. **Notify delivery is at least once.** Crash-after-acceptance and lease-expiry races can retry the
    stable event ID; correctness depends on the Bot retaining its documented deduplication behavior.
-4. **`CostEntry` has no writers.** Campaign/stage spend and budget controls currently read an empty
+4. **The cost architecture is not accepted.** ADR-001 recommends Option C, but schema and writer
+   work is blocked on explicit human review and a binding plan erratum.
+5. **`CostEntry` has no writers.** Campaign/stage spend and budget controls currently read an empty
    Growth ledger.
-5. **No budget gate exists.** Stored caps and thresholds do not prevent paid execution.
-6. **The Bot's actor assertion remains a shared-bearer trust boundary.** CRM now requires that actor
+6. **No budget gate exists.** Stored caps and thresholds do not prevent paid execution.
+7. **The Bot's actor assertion remains a shared-bearer trust boundary.** CRM now requires that actor
    to be an authorized `ADMIN`/`MANAGER` member of the stated workspace, but the shared bearer does
    not cryptographically establish the individual human behind the assertion.
-7. **Approval behavior beyond `NICHE_TEST` remains repository-only.** The notification lifecycle is
+8. **Approval behavior beyond `NICHE_TEST` remains repository-only.** The notification lifecycle is
    generic, but later approval types still need their phase-specific side-effect orchestration.
-8. **Stage transition concurrency is not locked or compare-and-set.** A transaction alone does not
+9. **Stage transition concurrency is not locked or compare-and-set.** A transaction alone does not
     prevent two callers from reading the same old status and applying different legal transitions.
-9. **No cross-workspace campaign check exists in generic `createStageRun`.** The NICHE_TEST
+10. **No cross-workspace campaign check exists in generic `createStageRun`.** The NICHE_TEST
    initializer validates the chain, but independent generic foreign keys can still represent an
    inconsistent workspace/campaign pair.
-10. **In-memory rate limiting is instance-local.** It does not coordinate if the web tier scales.
+11. **In-memory rate limiting is instance-local.** It does not coordinate if the web tier scales.
 
 ### Persistence debt
 
@@ -948,14 +1053,16 @@ reference and was also preserved outside this commit.
 
 ## 13. Exact next Growth OS step
 
-**Next exact step: Lead Engine CRM Wave 1, Step 1.4 — CostEntry versus ProviderUsageLedger ADR and
-decision. Do not start CRM-2 APIs first.**
+**Next exact step: human review and acceptance, rejection, or requested revision of
+`docs/adr/ADR-001-growth-os-cost-ledger.md`. Do not start implementation, CRM-2 APIs, or Growth Bot
+work first.**
 
-Step 1.4 must resolve the documented conflict between golden rule 3 (one logical ledger, extend
-`ProviderUsageLedger`) and golden rule 1 (Growth-native rows cannot safely enter a blob-projected
-table). It must produce the ADR, select the target schema/migration direction, define rollout and
-rollback, and update the repository plan before any paid-stage writer or budget gate is added.
-Steps 1.3 and 1.3A intentionally change no cost-ledger model or behavior.
+Step 1.4A completed the evidence review and proposed Option C: `ProviderUsageLedger` remains legacy
+operational provider evidence, while `CostEntry` becomes the native financial control ledger behind
+one authoritative public spend view. The decision is not binding while ADR-001 remains `PROPOSED`.
+After human acceptance, update the ADR status, add the binding plan erratum, and scope a separate
+implementation step with additive schema, rollout, rollback, and PostgreSQL verification. Steps
+1.3, 1.3A, and 1.4A changed no cost-ledger runtime behavior.
 
 ### Historical closure ordering retained from the initial tracker
 
