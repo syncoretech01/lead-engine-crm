@@ -5,6 +5,14 @@
 **Stack:** Next.js 16 · React 19 · TypeScript (strict) · Prisma/Postgres
 **Deploy:** AWS — EC2 (t4g) app + RDS Postgres, us-east-1; separate EC2 worker host (systemd `syncore-worker`)
 
+> **Binding cost-ledger supersession (2026-07-30):** ADR-001 Option C is accepted, and
+> `GROWTH_OS_ERRATA.md` entry 6 supersedes this plan's original "extend
+> `ProviderUsageLedger`"/one-physical-table instruction. `CostEntry` is the authoritative native
+> Growth financial ledger; `ProviderUsageLedger` remains projection-owned operational evidence and
+> must not receive native Growth financial writes. Only `CostEntry` counts toward Growth financial
+> totals, and linked provider evidence is never counted twice. Step 1.4B implementation is not
+> started or authorized by the acceptance documentation.
+
 > **This repo is the control room.** It is also the one carrying real architectural debt. Read §2 before writing a single line — one of those rules prevents silent data loss.
 
 ---

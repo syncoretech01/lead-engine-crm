@@ -58,7 +58,12 @@ Adding a future Growth OS model to the guard is **one line** in `GUARDED_MODELS`
 
 2. **Every real stage is a `CampaignStageRun`.** No orphan work. `CostEntry` and `Approval`
    reference `stageRunId`.
-3. **One cost ledger.** Extend `ProviderUsageLedger`. Never create a second.
+3. **One authoritative Growth financial ledger (ADR-001 Option C).** `CostEntry` is the
+   Prisma-native financial source of truth. `ProviderUsageLedger` remains projection-owned
+   operational provider evidence; native Growth financial code must never write into it. Only
+   `CostEntry` counts toward Growth spend, budgets, reconciliation, overruns, and unit economics.
+   Linked provider evidence is never a second charge. Financial events are append-only;
+   corrections use explicit adjustment or reversal events.
 4. **Every paid call passes the budget gate first**, and reconciles actual-vs-approved after
    (CRM-4). Overrun beyond `overrunTolerancePct` → auto-park + `SPEND_EXCEPTION`.
 5. **Approvals are immutable.** Create + decide + **revise** only. An edit supersedes the original
@@ -80,18 +85,21 @@ Adding a future Growth OS model to the guard is **one line** in `GUARDED_MODELS`
     transactional/warm/system.
 14. **`OutreachCampaign` and the raw lead-ingestion path are legacy.** Nothing new references them.
 
-> **Cost-ledger decision pending:** Rule 3 conflicts with Rule 1 while
-> `ProviderUsageLedger` remains blob-projected. `docs/adr/ADR-001-growth-os-cost-ledger.md`
-> recommends treating it as operational provider evidence and `CostEntry` as the native financial
-> control ledger behind one public spend view. The ADR is `PROPOSED`, not accepted. Do not change
-> schema or cost-writing behavior until human review records the decision and a binding erratum.
+> **Cost-ledger decision accepted:** ADR-001 Option C and `GROWTH_OS_ERRATA.md` entry 6 are binding.
+> "One ledger" means one authoritative public Growth financial view, not one physical table.
+> Historical provider rows keep their known evidence only; never guess campaign, stage, approval,
+> authorization, or financial-action attribution. The blob ownership peel remains separately
+> deferred and is not required before the pilot. The next exact implementation step is Wave 1,
+> Step 1.4B. Do not change schema, writers, budget behavior, reconciliation, or paid execution
+> outside that separately approved scope.
 
 ---
 
 ## What this repo is and is not
 
-**IS:** the campaign control plane — campaigns, approvals, all spending decisions, the single cost
-ledger, paid enrichment, lead tiering, audit orchestration, **personalization**, outreach
+**IS:** the campaign control plane — campaigns, approvals, all spending decisions, the authoritative
+Growth financial ledger/reporting view, paid enrichment, lead tiering, audit orchestration,
+**personalization**, outreach
 orchestration, SDR workflow, hosted audit pages, every dashboard.
 
 **IS NOT:** the lead-data system of record. This repo **does not ingest, normalize, deduplicate or
@@ -104,7 +112,8 @@ is the Hub; everything right of it is here.
 
 Raw lead ingestion/normalization/dedupe/verification · a verifier adapter · a native cold-sending
 engine (Mailshake owns sequencing/sending/tracking; `docs/PHASE_B_OUTREACH_SPEC.md` is read-only
-context) · a second cost ledger · BullMQ/Prometheus/Grafana/OTel/Temporal/Trigger.dev before a
+context) · a second authoritative Growth financial ledger (`ProviderUsageLedger` is operational
+evidence, not a financial ledger) · BullMQ/Prometheus/Grafana/OTel/Temporal/Trigger.dev before a
 proven blocker · the blob migration (out of pilot scope) · anything referencing `OutreachCampaign`.
 
 ---
