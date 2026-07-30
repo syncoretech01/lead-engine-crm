@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { ApprovalPayload } from "@syncore/contracts";
-import { decideApproval, reviseApproval } from "@/lib/growth/repositories/approval-repository";
+import {
+  decideApprovalWithSideEffects,
+  isApprovalApplicationError
+} from "@/lib/growth/approval-orchestration";
+import { reviseApproval } from "@/lib/growth/repositories/approval-repository";
 import { enqueueNotify } from "@/lib/growth/notify-outbox";
 import { getWorkspaceSessionContext } from "@/lib/phase1/store";
 
@@ -28,12 +32,20 @@ export async function decideApprovalAction(
 ): Promise<DecideActionResult> {
   const { session, workspaceId } = await getWorkspaceSessionContext("manage_outreach");
 
-  const result = await decideApproval({
-    workspaceId,
-    approvalId,
-    decision,
-    actorId: session.user.id
-  });
+  let result;
+  try {
+    result = await decideApprovalWithSideEffects({
+      workspaceId,
+      approvalId,
+      decision,
+      actorId: session.user.id
+    });
+  } catch (error) {
+    if (isApprovalApplicationError(error)) {
+      return { ok: false, error: `${error.code}: ${error.message}` };
+    }
+    throw error;
+  }
 
   switch (result.outcome) {
     case "not_found":
@@ -46,14 +58,6 @@ export async function decideApprovalAction(
       };
 
     case "awaiting_second_approver":
-      // Notify so the OTHER approver learns there is something waiting; the
-      // approval is deliberately still pending.
-      await enqueueNotify({
-        kind: "APPROVAL_REQUESTED",
-        workspaceId,
-        approvalId,
-        payload: { awaitingSecondApprover: true, firstApprovedBy: session.user.id }
-      });
       revalidatePath("/approvals");
       return { ok: true, status: result.approval.status, awaitingSecondApprover: true };
 
@@ -62,14 +66,6 @@ export async function decideApprovalAction(
       return { ok: true, status: result.approval.status };
 
     case "decided":
-      // Enqueued, not sent: the decision is already committed and a bot outage
-      // must not surface as a failed approval (v9.1 §19).
-      await enqueueNotify({
-        kind: "APPROVAL_DECIDED",
-        workspaceId,
-        approvalId,
-        payload: { status: result.approval.status, decidedBy: session.user.id }
-      });
       revalidatePath("/approvals");
       return { ok: true, status: result.approval.status };
   }

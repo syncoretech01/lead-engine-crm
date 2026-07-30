@@ -131,19 +131,53 @@ export async function enqueueNotify(
   const envelope = JSON.parse(signed.body) as { eventId: string };
 
   return db.notifyOutbox.create({
-    data: {
-      workspaceId: input.workspaceId,
-      kind: input.kind,
-      eventId: envelope.eventId,
-      approvalId: input.approvalId ?? null,
-      campaignId: input.campaignId ?? null,
-      stageRunId: input.stageRunId ?? null,
-      envelopeJson: {
-        body: signed.body,
-        headers: signed.headers,
-        url: signed.url
-      } as unknown as PrismaTypes.InputJsonValue
-    }
+    data: notifyOutboxData(input, envelope.eventId, signed)
+  });
+}
+
+function notifyOutboxData(
+  input: BuildNotifyInput & { kind: NotifyKind },
+  eventId: string,
+  signed: ReturnType<typeof buildSignedNotify>
+) {
+  return {
+    workspaceId: input.workspaceId,
+    kind: input.kind,
+    eventId,
+    approvalId: input.approvalId ?? null,
+    campaignId: input.campaignId ?? null,
+    stageRunId: input.stageRunId ?? null,
+    envelopeJson: {
+      body: signed.body,
+      headers: signed.headers,
+      url: signed.url
+    } as unknown as PrismaTypes.InputJsonValue
+  };
+}
+
+/**
+ * Transactional enqueue for an application event with a deterministic id.
+ *
+ * The unique eventId is the database idempotency authority: a repeated HTTP
+ * request, callback, transaction retry, or process replay returns the existing
+ * row without producing a second Bot event. Callers must derive the id from the
+ * immutable business event, never from request-local data.
+ */
+export async function enqueueNotifyOnce(
+  input: BuildNotifyInput & { kind: NotifyKind; eventId: string },
+  client?: GrowthPrismaClient
+) {
+  const db = client ?? (await growthPrisma());
+  const signed = buildSignedNotify(input);
+  const envelope = JSON.parse(signed.body) as { eventId: string };
+  const data = notifyOutboxData(input, envelope.eventId, signed);
+
+  return db.notifyOutbox.upsert({
+    where: { eventId: input.eventId },
+    create: data,
+    // The existing exact body is retained. Replacing it on replay would rotate
+    // nonce/occurredAt and turn one durable event into two logical events.
+    update: {}
   });
 }
 

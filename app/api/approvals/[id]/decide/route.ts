@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { ApprovalDecide } from "@syncore/contracts";
 import { CHAT_WORKSPACE_HEADER, authenticateChatRequest } from "@/lib/growth/chat-auth";
-import { decideApproval } from "@/lib/growth/repositories/approval-repository";
+import {
+  decideApprovalWithSideEffects,
+  isApprovalApplicationError
+} from "@/lib/growth/approval-orchestration";
 import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
 
 /**
@@ -61,12 +64,23 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     );
   }
 
-  const result = await decideApproval({
-    workspaceId: auth.workspaceId,
-    approvalId: id,
-    decision: parsed.data.decision,
-    actorId: auth.actorId
-  });
+  let result;
+  try {
+    result = await decideApprovalWithSideEffects({
+      workspaceId: auth.workspaceId,
+      approvalId: id,
+      decision: parsed.data.decision,
+      actorId: auth.actorId
+    });
+  } catch (error) {
+    if (isApprovalApplicationError(error)) {
+      return NextResponse.json(
+        { error: error.message, code: error.code, approvalId: id },
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 
   switch (result.outcome) {
     case "not_found":
@@ -103,7 +117,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           approvalId: result.approval.id,
           status: result.approval.status,
           decidedBy: result.approval.decidedBy ?? undefined,
-          decidedAt: result.approval.decidedAt?.toISOString()
+          decidedAt: result.approval.decidedAt?.toISOString(),
+          campaignId: result.campaignId
         },
         { status: 200 }
       );

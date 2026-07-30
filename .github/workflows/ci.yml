@@ -196,6 +196,11 @@ jobs:
       CI: "true"
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_engine_crm
       SYNCORE_STORAGE_DRIVER: prisma
+      # Deterministic, non-production values for the blocking Growth OS route
+      # test. Delivery remains queued; the E2E job never contacts this URL.
+      SYNCORE_CHAT_API_TOKEN: ci-growth-chat-token
+      SYNCORE_BOT_NOTIFY_SECRET: ci-growth-notify-secret
+      SYNCORE_BOT_NOTIFY_URL: https://bot.example.test/notify
       # Lets db:seed write the AppStateSnapshot (readStateFromPrisma needs it) and
       # keeps the dev server from refusing to auto-seed.
       SYNCORE_SEED_SNAPSHOT: "true"

@@ -39,6 +39,8 @@ export type ApprovalRecordRow = {
   requestedBy: string;
   decidedBy: string | null;
   decidedAt: Date | null;
+  expiresAt: Date | null;
+  sideEffectsAppliedAt: Date | null;
   firstApprovedBy: string | null;
   firstApprovedAt: Date | null;
   supersedesApprovalId: string | null;
@@ -50,6 +52,8 @@ export type CreateApprovalInput = {
   /** Validated and hashed here; callers pass the plain object. */
   payload: unknown;
   requestedBy: string;
+  /** CRM policy metadata; not part of the immutable Contracts payload/hash. */
+  expiresAt?: Date;
 };
 
 export type DecideApprovalInput = {
@@ -62,6 +66,8 @@ export type DecideApprovalInput = {
    * `decidedBy` in the body is a claim about who you are.
    */
   actorId: string;
+  /** One transaction timestamp, injectable for deterministic orchestration tests. */
+  now?: Date;
 };
 
 export type ReviseApprovalInput = {
@@ -114,7 +120,8 @@ export async function createApproval(
       payloadJson: input.payload as Prisma.InputJsonValue,
       payloadSha256: hashApprovalPayload(input.payload),
       status: "pending",
-      requestedBy: input.requestedBy
+      requestedBy: input.requestedBy,
+      expiresAt: input.expiresAt
     }
   })) as ApprovalRecordRow;
 }
@@ -151,7 +158,7 @@ export async function decideApproval(
     if (input.decision === "decline") {
       const declined = (await tx.approval.update({
         where: { id: approval.id },
-        data: { status: "declined", decidedBy: input.actorId, decidedAt: new Date() }
+        data: { status: "declined", decidedBy: input.actorId, decidedAt: input.now ?? new Date() }
       })) as ApprovalRecordRow;
       return { outcome: "decided", approval: declined };
     }
@@ -167,7 +174,7 @@ export async function decideApproval(
     if (needsTwo && approval.firstApprovedBy === null) {
       const held = (await tx.approval.update({
         where: { id: approval.id },
-        data: { firstApprovedBy: input.actorId, firstApprovedAt: new Date() }
+        data: { firstApprovedBy: input.actorId, firstApprovedAt: input.now ?? new Date() }
       })) as ApprovalRecordRow;
       return { outcome: "awaiting_second_approver", approval: held };
     }
@@ -181,7 +188,7 @@ export async function decideApproval(
 
     const approved = (await tx.approval.update({
       where: { id: approval.id },
-      data: { status: "approved", decidedBy: input.actorId, decidedAt: new Date() }
+      data: { status: "approved", decidedBy: input.actorId, decidedAt: input.now ?? new Date() }
     })) as ApprovalRecordRow;
     return { outcome: "decided", approval: approved };
   };
@@ -220,7 +227,23 @@ export async function reviseApproval(
     if (!original) return { outcome: "not_found" as const };
     if (original.status !== "pending") return { outcome: "already_final" as const, approval: original };
 
-    const { type, campaignId, stageRunId } = recordColumnsFrom(input.payload);
+    const originalPayload = ApprovalPayload.parse(original.payloadJson);
+    const replacementPayload = ApprovalPayload.parse(input.payload);
+    if (replacementPayload.type !== originalPayload.type) {
+      throw new Error(
+        `Approval revision cannot change type from ${originalPayload.type} to ${replacementPayload.type}.`
+      );
+    }
+    if (
+      originalPayload.type === "NICHE_TEST" &&
+      replacementPayload.type === "NICHE_TEST" &&
+      (replacementPayload.nicheBriefId !== originalPayload.nicheBriefId ||
+        replacementPayload.nicheRequestId !== originalPayload.nicheRequestId)
+    ) {
+      throw new Error("A NICHE_TEST revision must remain on the same request and brief chain.");
+    }
+
+    const { type, campaignId, stageRunId } = recordColumnsFrom(replacementPayload);
 
     const superseded = (await tx.approval.update({
       where: { id: original.id },
@@ -233,13 +256,40 @@ export async function reviseApproval(
         type,
         campaignId,
         stageRunId,
-        payloadJson: input.payload as Prisma.InputJsonValue,
-        payloadSha256: hashApprovalPayload(input.payload),
+        payloadJson: replacementPayload as unknown as Prisma.InputJsonValue,
+        payloadSha256: hashApprovalPayload(replacementPayload),
         status: "pending",
         requestedBy: input.actorId,
+        expiresAt: original.expiresAt,
         supersedesApprovalId: original.id
       }
     })) as ApprovalRecordRow;
+
+    // A NICHE_TEST revision keeps the same pending business object, but advances
+    // its pointer to the immutable successor approval and replaces the not-yet-
+    // approved draft document. The original Approval payload/hash never change.
+    // The runtime guard keeps the repository's in-memory unit stand-in small;
+    // every real Prisma client has this delegate and PostgreSQL integration
+    // tests exercise the complete branch.
+    if (replacementPayload.type === "NICHE_TEST" && "nicheBrief" in tx) {
+      const advanced = await tx.nicheBrief.updateMany({
+        where: {
+          id: replacementPayload.nicheBriefId,
+          workspaceId: input.workspaceId,
+          approvalId: original.id,
+          status: "pending_approval"
+        },
+        data: {
+          approvalId: created.id,
+          document: replacementPayload.brief as unknown as Prisma.InputJsonValue
+        }
+      });
+      if (advanced.count !== 1) {
+        throw new Error(
+          `NICHE_TEST revision ${created.id} could not advance NicheBrief ${replacementPayload.nicheBriefId}.`
+        );
+      }
+    }
 
     return { outcome: "revised" as const, superseded, created };
   };

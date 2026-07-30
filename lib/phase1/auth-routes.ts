@@ -30,6 +30,19 @@ export function isSignedWebhookPath(pathname: string) {
   );
 }
 
+/**
+ * Chat-machine endpoints authenticate themselves with the fail-closed M2M
+ * bearer in lib/growth/chat-auth.ts. They must reach that route without a human
+ * browser-session cookie; the exact allow-list keeps every other API protected
+ * by the global session proxy.
+ */
+export function isChatMachineApiPath(pathname: string) {
+  return (
+    pathname === "/api/chat/niche-request" ||
+    /^\/api\/approvals\/[^/]+\/(decide|revise)$/.test(pathname)
+  );
+}
+
 export function isPublicUnsubscribePath(pathname: string) {
   return pathname === "/api/unsubscribe" || pathname.startsWith("/unsubscribe/");
 }
