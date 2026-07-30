@@ -302,6 +302,159 @@ describe.skipIf(!enabled)("Growth financial ledger foundation (real PostgreSQL)"
     expect(cache?.actualCostCents).toBe(0);
   });
 
+  it("permits adjustments only for authoritative ACTUAL targets", async () => {
+    const action = `adjustment-targets-${token}`;
+    const estimate = await recordEstimate(command({ costActionKey: action, amountCents: 100 }), prisma);
+    const authorization = await recordAuthorization(
+      {
+        ...command({ costActionKey: action, amountCents: 90 }),
+        authorizationSource: "approval",
+        authorizationId: approvalA
+      },
+      prisma
+    );
+    const actual = await recordActual(command({ costActionKey: action, amountCents: 70 }), prisma);
+
+    const correction = (label: string) => ({
+      workspaceId: ids.workspaceA,
+      idempotencyKey: `${label}-${token}`,
+      sourceSystem: "growth-financial-integration",
+      sourceEventId: `${label}-${token}`,
+      occurredAt: new Date()
+    });
+    const adjustment = await recordAdjustment(
+      { ...correction("allowed-actual-adjustment"), adjustsCostEntryId: actual.id, amountCents: -5 },
+      prisma
+    );
+    expect(adjustment.totalCents).toBe(-5);
+
+    for (const [label, targetId] of [
+      ["estimate", estimate.id],
+      ["authorization", authorization.id],
+      ["adjustment", adjustment.id]
+    ] as const) {
+      await expect(
+        recordAdjustment(
+          { ...correction(`reject-${label}-adjustment`), adjustsCostEntryId: targetId, amountCents: -1 },
+          prisma
+        )
+      ).rejects.toThrow("An ADJUSTMENT may target only an ACTUAL");
+    }
+
+    const reversedActual = await recordActual(command({ costActionKey: action, amountCents: 20 }), prisma);
+    const reversal = await recordReversal(
+      { ...correction("reversal-adjustment-target"), reversesCostEntryId: reversedActual.id },
+      prisma
+    );
+    await expect(
+      recordAdjustment(
+        { ...correction("reject-reversal-adjustment"), adjustsCostEntryId: reversal.id, amountCents: -1 },
+        prisma
+      )
+    ).rejects.toThrow("A reversal cannot itself be adjusted or reversed");
+
+    const historical = await prisma.costEntry.create({
+      data: {
+        workspaceId: ids.workspaceA,
+        provider: "legacy-provider",
+        action: "legacy",
+        unit: "request",
+        totalCents: 1,
+        status: "RECORDED"
+      }
+    });
+    await expect(
+      recordAdjustment(
+        { ...correction("reject-historical-adjustment"), adjustsCostEntryId: historical.id, amountCents: -1 },
+        prisma
+      )
+    ).rejects.toThrow("A pre-foundation CostEntry cannot be corrected");
+  });
+
+  it("negates each reversal target bucket and signed compatibility effect exactly", async () => {
+    const action = `target-aware-reversals-${token}`;
+    const correction = (label: string) => ({
+      workspaceId: ids.workspaceA,
+      idempotencyKey: `${label}-${token}`,
+      sourceSystem: "growth-financial-integration",
+      sourceEventId: `${label}-${token}`,
+      occurredAt: new Date()
+    });
+
+    const estimate = await recordEstimate(command({ costActionKey: action, amountCents: 100 }), prisma);
+    const estimateReversal = await recordReversal(
+      { ...correction("reverse-estimate"), reversesCostEntryId: estimate.id },
+      prisma
+    );
+    const authorization = await recordAuthorization(
+      {
+        ...command({ costActionKey: action, amountCents: 90 }),
+        authorizationSource: "approval",
+        authorizationId: approvalA
+      },
+      prisma
+    );
+    const authorizationReversal = await recordReversal(
+      { ...correction("reverse-authorization"), reversesCostEntryId: authorization.id },
+      prisma
+    );
+    const actual = await recordActual(command({ costActionKey: action, amountCents: 70 }), prisma);
+    const actualReversal = await recordReversal(
+      { ...correction("reverse-actual"), reversesCostEntryId: actual.id },
+      prisma
+    );
+    const positiveBase = await recordActual(command({ costActionKey: action, amountCents: 50 }), prisma);
+    const positiveAdjustment = await recordAdjustment(
+      { ...correction("positive-adjustment"), adjustsCostEntryId: positiveBase.id, amountCents: 10 },
+      prisma
+    );
+    const positiveAdjustmentReversal = await recordReversal(
+      { ...correction("reverse-positive-adjustment"), reversesCostEntryId: positiveAdjustment.id },
+      prisma
+    );
+    const negativeBase = await recordActual(command({ costActionKey: action, amountCents: 50 }), prisma);
+    const negativeAdjustment = await recordAdjustment(
+      { ...correction("negative-adjustment"), adjustsCostEntryId: negativeBase.id, amountCents: -15 },
+      prisma
+    );
+    const negativeAdjustmentReversal = await recordReversal(
+      { ...correction("reverse-negative-adjustment"), reversesCostEntryId: negativeAdjustment.id },
+      prisma
+    );
+
+    expect(estimate.totalCents).toBe(0);
+    expect(estimateReversal.amountCents).toBe(100);
+    expect(estimateReversal.totalCents).toBe(0);
+    expect(authorization.totalCents).toBe(0);
+    expect(authorizationReversal.amountCents).toBe(90);
+    expect(authorizationReversal.totalCents).toBe(0);
+    expect(actual.totalCents).toBe(70);
+    expect(actualReversal.amountCents).toBe(70);
+    expect(actualReversal.totalCents).toBe(-70);
+    expect(positiveAdjustment.totalCents).toBe(10);
+    expect(positiveAdjustmentReversal.amountCents).toBe(10);
+    expect(positiveAdjustmentReversal.totalCents).toBe(-10);
+    expect(negativeAdjustment.totalCents).toBe(-15);
+    expect(negativeAdjustmentReversal.amountCents).toBe(15);
+    expect(negativeAdjustmentReversal.totalCents).toBe(15);
+
+    const totals = await calculateCostActionTotals({ workspaceId: ids.workspaceA, costActionKey: action }, prisma);
+    expect(totals).toEqual({ currency: "USD", estimatedCents: 0, authorizedCents: 0, actualCents: 100 });
+    const compatibility = await prisma.costEntry.aggregate({
+      where: { workspaceId: ids.workspaceA, costActionKey: action },
+      _sum: { totalCents: true }
+    });
+    expect(compatibility._sum.totalCents).toBe(totals.actualCents);
+
+    const page = await listCostEntries({ workspaceId: ids.workspaceA, campaignId: campaignA, pageSize: 100 }, prisma);
+    const effectById = new Map(page.rows.map((entry) => [entry.id, entry.financialEffectCents]));
+    expect(effectById.get(estimateReversal.id)).toBe(0);
+    expect(effectById.get(authorizationReversal.id)).toBe(0);
+    expect(effectById.get(actualReversal.id)).toBe(-70);
+    expect(effectById.get(positiveAdjustmentReversal.id)).toBe(-10);
+    expect(effectById.get(negativeAdjustmentReversal.id)).toBe(15);
+  });
+
   it("returns identical command and source replays, including process/worker/lost-ack retries", async () => {
     const original = command({ campaignId: campaignA2, stageRunId: stageA2, costActionKey: `replay-${token}` });
     const first = await recordActual(original, prisma);
@@ -392,6 +545,34 @@ describe.skipIf(!enabled)("Growth financial ledger foundation (real PostgreSQL)"
     ).rejects.toBeTruthy();
     expect(await prisma.costEntry.count({ where: { reversesCostEntryId: target.id } })).toBe(1);
     expect((await prisma.costEntry.findUnique({ where: { id: target.id } }))?.eventKind).toBe("ACTUAL");
+
+    const concurrentTarget = await recordActual(
+      command({ campaignId: campaignA2, stageRunId: stageA2, costActionKey: `concurrent-reversal-${token}` }),
+      prisma
+    );
+    const concurrentResults = await Promise.allSettled([
+      recordReversal(
+        {
+          ...correction,
+          idempotencyKey: `concurrent-reversal-a-${token}`,
+          sourceEventId: `concurrent-reversal-a-${token}`,
+          reversesCostEntryId: concurrentTarget.id
+        },
+        prisma
+      ),
+      recordReversal(
+        {
+          ...correction,
+          idempotencyKey: `concurrent-reversal-b-${token}`,
+          sourceEventId: `concurrent-reversal-b-${token}`,
+          reversesCostEntryId: concurrentTarget.id
+        },
+        prisma
+      )
+    ]);
+    expect(concurrentResults.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(concurrentResults.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(await prisma.costEntry.count({ where: { reversesCostEntryId: concurrentTarget.id } })).toBe(1);
   });
 
   it("rejects incomplete, unsafe, negative-normal, and fictitious identity inputs", async () => {

@@ -543,9 +543,13 @@ The accepted ownership model is implemented as an additive repository foundation
   event or block the authoritative projection transaction. Repository validation enforces the
   workspace/provider/job chain at append time, and the stable ID remains audit history if evidence
   is later projected away.
-- Authoritative action, Campaign, and stage totals read only native financial events, apply signed
-  adjustments and target-aware reversals, and reject mixed currencies. The workspace compatibility
-  view labels provider rows `legacy_operational_evidence` and gives them no financial effect.
+- Authoritative action, Campaign, and stage totals read only native financial events. Adjustments are
+  signed corrections to `ACTUAL` events only; estimate/authorization correction uses reversal plus
+  a replacement immutable event. Reversals negate the target's exact bucket and signed effect, and
+  mixed-currency aggregation is rejected. The retained `totalCents` compatibility value and logical
+  read-model effect are target-aware actual-spend projections, while authoritative calculations use
+  event kind, amount, and target identity. The workspace compatibility view labels provider rows
+  `legacy_operational_evidence` and gives them no financial effect.
 - The compatibility cursor is now a stable `(createdAt, sourceGeneration, id)` total order.
 - `CampaignStageRun` cost columns remain reconstructible caches. Step 1.4B does not update them or
   enable dispatch, paid work, the full budget gate, or `SPEND_EXCEPTION` orchestration.

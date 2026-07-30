@@ -23,8 +23,10 @@ Scope, per the repo plan:
    evidence must never be counted as another charge. The public reporting surface must expose one
    authoritative Growth financial view rather than treat the old raw union as final. Wave 1 Step
    1.4B implements the additive repository foundation: immutable estimate/authorization/actual/
-   adjustment/reversal events, stable command and source identities, transaction-time tenant
-   validation, CostEntry-only totals, explicit non-provider services, optional operational evidence
+   adjustment/reversal events, with signed adjustments restricted to `ACTUAL` targets and
+   estimate/authorization correction performed by reversal plus replacement; stable command and
+   source identities, transaction-time tenant validation, CostEntry-only totals, explicit
+   non-provider services, optional operational evidence
    identity, read-only inventory, and stable composite pagination. Historical fields remain nullable
    and unattributed. Provider operational references are not foreign keys because projection cleanup
    still owns those rows; the repository validates them before append. `CampaignStageRun` cost fields

@@ -189,10 +189,51 @@ type NormalizedFinancialEvent = {
   contentSha256: string;
 };
 
+export type FinancialEffectTarget = {
+  eventKind: FinancialEventKind;
+  amountCents: number;
+};
+
+/**
+ * Signed actual-spend effect used by the compatibility projection and read
+ * model. Authoritative bucket totals still derive from event kind and target
+ * identity rather than trusting CostEntry.totalCents.
+ */
+export function actualSpendEffectCents(
+  kind: FinancialEventKind,
+  amountCents: number,
+  reversalTarget?: FinancialEffectTarget
+): number {
+  if (kind === FinancialEventKind.ACTUAL || kind === FinancialEventKind.ADJUSTMENT) {
+    return amountCents;
+  }
+  if (kind !== FinancialEventKind.REVERSAL) return 0;
+  if (!reversalTarget) {
+    throw new FinancialLedgerValidationError("A REVERSAL requires its authoritative target effect.");
+  }
+  if (
+    reversalTarget.eventKind === FinancialEventKind.ESTIMATE ||
+    reversalTarget.eventKind === FinancialEventKind.AUTHORIZATION
+  ) {
+    return 0;
+  }
+  if (
+    reversalTarget.eventKind === FinancialEventKind.ACTUAL ||
+    reversalTarget.eventKind === FinancialEventKind.ADJUSTMENT
+  ) {
+    return -reversalTarget.amountCents;
+  }
+  throw new FinancialLedgerValidationError("A reversal cannot itself be reversed.");
+}
+
 function normalizeEvent(
   kind: FinancialEventKind,
   input: FinancialEventCommand,
-  links: { adjustsCostEntryId?: string; reversesCostEntryId?: string } = {}
+  links: {
+    adjustsCostEntryId?: string;
+    reversesCostEntryId?: string;
+    reversalTarget?: FinancialEffectTarget;
+  } = {}
 ): NormalizedFinancialEvent {
   const provider = normalizeOptional(input.provider) ?? null;
   const service = normalizeOptional(input.service) ?? null;
@@ -251,12 +292,7 @@ function normalizeEvent(
     units,
     unit: normalizeOptional(input.unit) ?? null,
     unitCostCents,
-    totalCents:
-      kind === FinancialEventKind.ACTUAL || kind === FinancialEventKind.ADJUSTMENT
-        ? amountCents
-        : kind === FinancialEventKind.REVERSAL
-          ? -amountCents
-          : 0,
+    totalCents: actualSpendEffectCents(kind, amountCents, links.reversalTarget),
     reconciliationStatus:
       kind === FinancialEventKind.ACTUAL ||
       kind === FinancialEventKind.ADJUSTMENT ||
@@ -457,7 +493,8 @@ export async function recordActual(
 async function loadCorrectionTarget(
   tx: GrowthPrismaClient,
   workspaceId: string,
-  id: string
+  id: string,
+  correctionKind: FinancialEventKind
 ): Promise<CostEntry> {
   const target = await tx.costEntry.findUnique({ where: { id } });
   if (!target) throw new FinancialLedgerValidationError(`Financial event ${id} does not exist.`);
@@ -465,10 +502,15 @@ async function loadCorrectionTarget(
     throw new FinancialLedgerValidationError(`Financial event ${id} belongs to another workspace.`);
   }
   if (!target.eventKind || !target.currency || target.amountCents === null || !target.occurredAt || !target.costActionKey) {
-    throw new FinancialLedgerValidationError("A pre-foundation CostEntry cannot be adjusted without reconciliation.");
+    throw new FinancialLedgerValidationError("A pre-foundation CostEntry cannot be corrected without reconciliation.");
   }
   if (target.eventKind === FinancialEventKind.REVERSAL) {
     throw new FinancialLedgerValidationError("A reversal cannot itself be adjusted or reversed.");
+  }
+  if (correctionKind === FinancialEventKind.ADJUSTMENT && target.eventKind !== FinancialEventKind.ACTUAL) {
+    throw new FinancialLedgerValidationError(
+      "An ADJUSTMENT may target only an ACTUAL. Correct an ESTIMATE or AUTHORIZATION with a reversal and replacement event."
+    );
   }
   return target;
 }
@@ -514,10 +556,15 @@ async function persistCorrection(
 ): Promise<CostEntry> {
   const db = client ?? (await growthPrisma());
   const operation = async (tx: GrowthPrismaClient): Promise<CostEntry> => {
-    const target = await loadCorrectionTarget(tx, command.workspaceId, targetId);
+    const target = await loadCorrectionTarget(tx, command.workspaceId, targetId, kind);
     const event = normalizeEvent(kind, correctionEventInput(command, target, amount(target)), {
       ...(kind === FinancialEventKind.ADJUSTMENT ? { adjustsCostEntryId: target.id } : {}),
-      ...(kind === FinancialEventKind.REVERSAL ? { reversesCostEntryId: target.id } : {})
+      ...(kind === FinancialEventKind.REVERSAL
+        ? {
+            reversesCostEntryId: target.id,
+            reversalTarget: { eventKind: target.eventKind!, amountCents: target.amountCents! }
+          }
+        : {})
     });
     const replay = await findReplay(tx, event);
     if (replay) return replay;
@@ -531,10 +578,15 @@ async function persistCorrection(
   } catch (error) {
     if (isUniqueViolation(error) && "$transaction" in db) {
       // Rebuild from the committed target, then resolve the concurrent winner.
-      const target = await loadCorrectionTarget(db, command.workspaceId, targetId);
+      const target = await loadCorrectionTarget(db, command.workspaceId, targetId, kind);
       const event = normalizeEvent(kind, correctionEventInput(command, target, amount(target)), {
         ...(kind === FinancialEventKind.ADJUSTMENT ? { adjustsCostEntryId: target.id } : {}),
-        ...(kind === FinancialEventKind.REVERSAL ? { reversesCostEntryId: target.id } : {})
+        ...(kind === FinancialEventKind.REVERSAL
+          ? {
+              reversesCostEntryId: target.id,
+              reversalTarget: { eventKind: target.eventKind!, amountCents: target.amountCents! }
+            }
+          : {})
       });
       const replay = await findReplay(db, event);
       if (replay) return replay;

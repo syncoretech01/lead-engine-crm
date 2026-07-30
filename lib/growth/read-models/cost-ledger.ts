@@ -1,5 +1,6 @@
 import { FinancialEventKind } from "@prisma/client";
 import {
+  actualSpendEffectCents,
   calculateCampaignFinancialTotals,
   calculateStageFinancialTotals
 } from "@/lib/growth/repositories/financial-ledger-repository";
@@ -108,15 +109,10 @@ function compareEntries(a: LedgerEntry, b: LedgerEntry): number {
 function financialEffect(
   kind: FinancialEventKind | null,
   amountCents: number | null,
-  reversedAmountCents: number | null
+  reversalTarget: { eventKind: FinancialEventKind; amountCents: number } | null
 ): number | null {
   if (!kind || amountCents === null) return null;
-  if (kind === FinancialEventKind.ACTUAL || kind === FinancialEventKind.ADJUSTMENT) return amountCents;
-  if (kind === FinancialEventKind.REVERSAL) {
-    if (reversedAmountCents === null) throw new Error("Financial reversal is missing its target amount.");
-    return -reversedAmountCents;
-  }
-  return 0;
+  return actualSpendEffectCents(kind, amountCents, reversalTarget ?? undefined);
 }
 
 /**
@@ -150,7 +146,7 @@ export async function listCostEntries(
       eventKind: true,
       currency: true,
       amountCents: true,
-      reversesCostEntry: { select: { amountCents: true } },
+      reversesCostEntry: { select: { eventKind: true, amountCents: true } },
       occurredAt: true,
       createdAt: true
     },
@@ -198,7 +194,12 @@ export async function listCostEntries(
       financialEffectCents: financialEffect(
         row.eventKind,
         row.amountCents,
-        row.reversesCostEntry?.amountCents ?? null
+        row.reversesCostEntry?.eventKind && row.reversesCostEntry.amountCents !== null
+          ? {
+              eventKind: row.reversesCostEntry.eventKind,
+              amountCents: row.reversesCostEntry.amountCents
+            }
+          : null
       ),
       operationalReportedCostCents: null,
       occurredAt: row.occurredAt,

@@ -62,8 +62,10 @@ Adding a future Growth OS model to the guard is **one line** in `GUARDED_MODELS`
    Prisma-native financial source of truth. `ProviderUsageLedger` remains projection-owned
    operational provider evidence; native Growth financial code must never write into it. Only
    `CostEntry` counts toward Growth spend, budgets, reconciliation, overruns, and unit economics.
-   Linked provider evidence is never a second charge. Financial events are append-only;
-   corrections use explicit adjustment or reversal events.
+   Linked provider evidence is never a second charge. Financial events are append-only. An
+   adjustment is a signed correction to an `ACTUAL` only; correct an estimate or authorization by
+   reversing the immutable original and appending a replacement event. Reversals negate the
+   target's exact bucket and signed effect.
 4. **Every paid call passes the budget gate first**, and reconciles actual-vs-approved after
    (CRM-4). Overrun beyond `overrunTolerancePct` → auto-park + `SPEND_EXCEPTION`.
 5. **Approvals are immutable.** Create + decide + **revise** only. An edit supersedes the original
@@ -298,6 +300,9 @@ Wave 1 Step 1.4B implements the accepted ADR-001 financial foundation. `CostEntr
 immutable `ESTIMATE`, `AUTHORIZATION`, `ACTUAL`, `ADJUSTMENT`, and `REVERSAL` events with stable
 command/source identities, normalized currency, tenant-checked attribution, explicit provider or
 non-provider service identity, optional operational evidence identity, and serializable replay.
+Adjustments target `ACTUAL` events only; estimate/authorization correction uses reversal plus a new
+replacement event. Reversals negate the target's exact bucket and signed effect, including the
+retained `totalCents` actual-spend compatibility projection.
 Campaign/stage/action totals use these native events only and reject mixed currencies; the
 workspace history view labels projected rows as non-financial evidence and uses a stable composite
 cursor. Historical rows stay nullable/unattributed. `CampaignStageRun` cost fields remain caches.

@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { FinancialEventKind } from "@prisma/client";
 import { describe, expect, it } from "vitest";
+import { actualSpendEffectCents } from "@/lib/growth/repositories/financial-ledger-repository";
 
 const read = (path: string) => readFileSync(resolve(path), "utf8");
 
@@ -62,5 +64,36 @@ describe("Growth financial-ledger foundation invariants", () => {
     expect(readModel).toContain("calculateCampaignFinancialTotals");
     expect(readModel).toContain("calculateStageFinancialTotals");
     expect(readModel).not.toMatch(/providerUsageLedger\.(aggregate|groupBy)/);
+  });
+
+  it("projects target-aware actual-spend effects for every immutable event kind", () => {
+    expect(actualSpendEffectCents(FinancialEventKind.ESTIMATE, 100)).toBe(0);
+    expect(actualSpendEffectCents(FinancialEventKind.AUTHORIZATION, 90)).toBe(0);
+    expect(actualSpendEffectCents(FinancialEventKind.ACTUAL, 70)).toBe(70);
+    expect(actualSpendEffectCents(FinancialEventKind.ADJUSTMENT, -15)).toBe(-15);
+    expect(
+      actualSpendEffectCents(FinancialEventKind.REVERSAL, 100, {
+        eventKind: FinancialEventKind.ESTIMATE,
+        amountCents: 100
+      })
+    ).toBe(0);
+    expect(
+      actualSpendEffectCents(FinancialEventKind.REVERSAL, 90, {
+        eventKind: FinancialEventKind.AUTHORIZATION,
+        amountCents: 90
+      })
+    ).toBe(0);
+    expect(
+      actualSpendEffectCents(FinancialEventKind.REVERSAL, 70, {
+        eventKind: FinancialEventKind.ACTUAL,
+        amountCents: 70
+      })
+    ).toBe(-70);
+    expect(
+      actualSpendEffectCents(FinancialEventKind.REVERSAL, 15, {
+        eventKind: FinancialEventKind.ADJUSTMENT,
+        amountCents: -15
+      })
+    ).toBe(15);
   });
 });

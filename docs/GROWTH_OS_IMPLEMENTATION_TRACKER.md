@@ -442,8 +442,9 @@ Binding ownership rules:
   economics.
 - A linked provider-usage row is supporting evidence, not an additional financial charge; the
   evidence and financial event must never be counted twice.
-- Growth financial events are append-only. Corrections require explicit adjustment or reversal
-  events rather than destructive updates or deletion.
+- Growth financial events are append-only. An adjustment is a signed correction to an `ACTUAL`;
+  estimate/authorization correction requires reversal plus replacement. Corrections never use
+  destructive updates or deletion.
 - Historical campaign, stage, approval, authorization, and financial-action attribution must not be
   guessed without authoritative evidence.
 - Existing legacy and native rows remain preserved.
@@ -558,8 +559,34 @@ Append-only repository:
   and personal-contact keys are rejected. Exactly one real provider or explicit non-provider
   service is required; no Contracts provider enum was invented.
 - Normal estimate, authorization, actual, and reversal amounts are non-negative integer minor
-  units. Adjustments are explicit signed deltas; reversals point to and negate one immutable target.
-  Estimates and authorizations never overwrite actuals.
+  units. An adjustment is a non-zero signed correction to an `ACTUAL` only; estimates,
+  authorizations, other adjustments, reversals, and historical rows are rejected as adjustment
+  targets. Correcting an estimate or authorization requires reversal of the immutable original and
+  a new replacement event. A reversal points to one immutable non-reversal target and negates that
+  target's exact bucket and signed effect.
+
+Target-safety correction on PR #176 (2026-07-30):
+
+- Review found that the initial Step 1.4B repository allowed adjustments to any non-reversal native
+  event, while every adjustment was aggregated as actual spend. It also projected every reversal as
+  `-abs(target.amountCents)`, which gave estimate/authorization reversals non-zero compatibility
+  spend and gave reversal of a negative adjustment the wrong compatibility sign.
+- `recordAdjustment()` now validates inside the serializable transaction that the authoritative
+  target is an `ACTUAL`. PostgreSQL cannot express another row's `eventKind` in an ordinary check
+  constraint, so this remains a transaction-time repository invariant with real PostgreSQL tests;
+  no fragile trigger or new migration was added.
+- A shared target-aware calculation now sets `totalCents` and read-model `financialEffectCents` to
+  zero for estimates/authorizations and their reversals, to the signed amount for actuals and
+  adjustments, and to `-target.amountCents` for reversal of an actual or adjustment. Reversing a
+  negative adjustment therefore produces a positive compatibility effect.
+- `totalCents` remains a non-authoritative compatibility projection. Authoritative totals continue
+  to calculate from event kind, amount, and immutable reversal target identity. The finalized
+  target-aware compatibility value is part of the canonical content hash used for replay conflict
+  detection.
+- Focused validation passed: 6/6 financial-foundation unit tests and 14/14 real PostgreSQL ledger
+  integration tests, including rejected target kinds, every reversal bucket/sign, direct stored
+  compatibility assertions, compatibility-sum equality, read-model effects, replay, and concurrent
+  one-reversal enforcement. Complete regression and CI evidence is recorded below.
 
 Provider evidence and financial reads:
 
@@ -571,7 +598,8 @@ Provider evidence and financial reads:
   `legacy_operational_evidence`. Evidence has `isAuthoritativeFinancial=false`, no financial effect,
   and remains visible only as operational history—even when linked.
 - Cost-action, Campaign, and stage totals use `CostEntry` financial events only. Actuals and signed
-  adjustments affect spend; a reversal negates its target's exact effect. Mixed currency raises
+  ACTUAL-only adjustments affect spend; a reversal negates its target's exact bucket and signed
+  effect. Mixed currency raises
   `MixedFinancialCurrencyError`. A scope containing pre-foundation rows raises
   `HistoricalFinancialEventError` until inventory/reconciliation gives them authoritative semantics.
 - Workspace compatibility pagination uses opaque `(createdAt, sourceGeneration, id)` ordering.
@@ -605,7 +633,7 @@ Files changed for Step 1.4B:
 
 Validation evidence:
 
-- Exact local commands: `npm run prisma:validate`, `npm run prisma:generate`,
+- Exact local commands: `npx prisma format`, `npx prisma validate`, `npx prisma generate`,
   `npm run test:ledger:migration`, `npm run test`, `npm run test:integration`,
   `npm run check:projection-invariant`, `npm run lint`, `npm run typecheck`, `npm run build`, and
   `npx playwright test --grep "Growth OS"` with the documented isolated database and deterministic
@@ -614,10 +642,12 @@ Validation evidence:
 - Migration: all 20 migrations passed on an empty PostgreSQL 16 database; the foundation migration
   also passed after the first 19 migrations with representative rows, preserving both rows and
   null historical compatibility.
-- Unit: 104 files / 638 tests passed.
-- PostgreSQL integration: 11 files / 74 tests passed, including 12 financial-foundation tests for
-  event semantics, partial actuals, replay/conflict, concurrency, serializable retry, inner/outer
-  rollback, tenant links, evidence, projection cleanup, currencies, and pagination.
+- Unit: 104 files / 639 tests passed, including 6 focused financial-foundation tests.
+- PostgreSQL integration: 11 files / 76 tests passed, including 14 financial-foundation tests for
+  event semantics, ACTUAL-only adjustment targets, target-aware reversal buckets and signed effects,
+  direct `totalCents` compatibility values, compatibility-sum equality, read-model effects, partial
+  actuals, replay/conflict, concurrent reversal protection, serializable retry, inner/outer rollback,
+  tenant links, evidence, projection cleanup, currencies, and pagination.
 - Projection invariant: passed for all 22 guarded native models; the real cleanup test also passed.
 - Lint and TypeScript: passed.
 - Production build: passed under Next.js 16.2.7.

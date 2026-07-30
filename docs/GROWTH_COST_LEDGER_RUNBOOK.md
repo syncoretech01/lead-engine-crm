@@ -94,7 +94,15 @@ restore point from authoritative source events before service resumes.
   independently approved evidence-backed repair was performed.
 - New command and source identities are unique within their defined scope.
 - No mixed-currency aggregate is emitted.
-- Campaign/stage totals count only `CostEntry` actuals, adjustments, and reversals.
+- Adjustments target `ACTUAL` events only. Correct an estimate or authorization by reversing the
+  immutable original and appending a replacement event.
+- Reversals negate the target's exact bucket and signed effect. In particular, reversing a negative
+  adjustment adds its absolute effect back to actual spend.
+- `totalCents` is only a target-aware actual-spend compatibility projection: estimate/authorization
+  events and their reversals are zero; actuals/adjustments use their signed amount; actual/adjustment
+  reversals use `-target.amountCents`. Authoritative reconciliation still derives from event kind,
+  amount, and target identity rather than trusting this column.
+- Campaign/stage totals count only authoritative `CostEntry` actual effects.
 - Provider evidence is labelled operational and contributes zero authoritative spend.
 - Projection sync can delete projected provider evidence without deleting `CostEntry`.
 - `CampaignStageRun` cost columns remain reconstructible caches, not the source of truth.
