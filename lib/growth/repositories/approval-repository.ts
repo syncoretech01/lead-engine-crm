@@ -1,6 +1,11 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { ApprovalPayload, type ApprovalStatus, type ApprovalType } from "@syncore/contracts";
 import { hashApprovalPayload } from "@/lib/growth/approval-hash";
+import {
+  enqueueApprovalRequestedNotification,
+  enqueueApprovalRevisedNotification
+} from "@/lib/growth/approval-notifications";
+import { runSerializableGrowthTransaction } from "@/lib/growth/transaction";
 
 /**
  * The Approval repository — v9.1 §10, §26.13.
@@ -43,7 +48,9 @@ export type ApprovalRecordRow = {
   sideEffectsAppliedAt: Date | null;
   firstApprovedBy: string | null;
   firstApprovedAt: Date | null;
+  creationKey: string | null;
   supersedesApprovalId: string | null;
+  revisionReason: string | null;
   createdAt: Date;
 };
 
@@ -52,8 +59,11 @@ export type CreateApprovalInput = {
   /** Validated and hashed here; callers pass the plain object. */
   payload: unknown;
   requestedBy: string;
+  /** Stable identity of the business request, not of this HTTP attempt. */
+  idempotencyKey: string;
   /** CRM policy metadata; not part of the immutable Contracts payload/hash. */
   expiresAt?: Date;
+  now?: Date;
 };
 
 export type DecideApprovalInput = {
@@ -76,6 +86,16 @@ export type ReviseApprovalInput = {
   /** A COMPLETE replacement payload, never a delta. */
   payload: unknown;
   actorId: string;
+  reason?: string;
+  now?: Date;
+};
+
+export type ReviseApprovalOptions = {
+  maxTransactionAttempts?: number;
+  /** Test seam executed after all writes and outbox upserts, before commit. */
+  beforeCommit?: (context: { originalApprovalId: string; replacementApprovalId: string }) =>
+    | Promise<void>
+    | void;
 };
 
 export type DecideOutcome =
@@ -98,6 +118,10 @@ function recordColumnsFrom(payload: unknown) {
   };
 }
 
+function sameOptionalInstant(left: Date | null | undefined, right: Date | null | undefined) {
+  return (left?.getTime() ?? null) === (right?.getTime() ?? null);
+}
+
 /**
  * Create a pending approval.
  *
@@ -110,20 +134,61 @@ export async function createApproval(
 ): Promise<ApprovalRecordRow> {
   const db = client ?? (await prismaClient());
   const { type, campaignId, stageRunId } = recordColumnsFrom(input.payload);
+  const payloadSha256 = hashApprovalPayload(input.payload);
+  const now = input.now ?? new Date();
 
-  return (await db.approval.create({
-    data: {
-      workspaceId: input.workspaceId,
-      type,
-      campaignId,
-      stageRunId,
-      payloadJson: input.payload as Prisma.InputJsonValue,
-      payloadSha256: hashApprovalPayload(input.payload),
-      status: "pending",
-      requestedBy: input.requestedBy,
-      expiresAt: input.expiresAt
+  return runSerializableGrowthTransaction(db, async (tx) => {
+    const existing = (await tx.approval.findUnique({
+      where: { creationKey: input.idempotencyKey }
+    })) as ApprovalRecordRow | null;
+    if (existing) {
+      if (
+        existing.workspaceId !== input.workspaceId ||
+        existing.type !== type ||
+        existing.payloadSha256 !== payloadSha256 ||
+        existing.requestedBy !== input.requestedBy ||
+        !sameOptionalInstant(existing.expiresAt, input.expiresAt)
+      ) {
+        throw new Error(`Approval idempotency key ${input.idempotencyKey} was reused for different content.`);
+      }
+      await enqueueApprovalRequestedNotification(tx, existing, now);
+      return existing;
     }
-  })) as ApprovalRecordRow;
+
+    if (input.expiresAt && input.expiresAt <= now) {
+      throw new Error("Cannot create an approval that is already expired.");
+    }
+
+    const created = (await tx.approval.upsert({
+      where: { creationKey: input.idempotencyKey },
+      create: {
+        workspaceId: input.workspaceId,
+        type,
+        campaignId,
+        stageRunId,
+        payloadJson: input.payload as Prisma.InputJsonValue,
+        payloadSha256,
+        status: "pending",
+        requestedBy: input.requestedBy,
+        expiresAt: input.expiresAt,
+        creationKey: input.idempotencyKey
+      },
+      update: {}
+    })) as ApprovalRecordRow;
+
+    if (
+      created.workspaceId !== input.workspaceId ||
+      created.type !== type ||
+      created.payloadSha256 !== payloadSha256 ||
+      created.requestedBy !== input.requestedBy ||
+      !sameOptionalInstant(created.expiresAt, input.expiresAt)
+    ) {
+      throw new Error(`Approval idempotency key ${input.idempotencyKey} was reused for different content.`);
+    }
+
+    await enqueueApprovalRequestedNotification(tx, created, now);
+    return created;
+  });
 }
 
 /**
@@ -211,21 +276,47 @@ export async function decideApproval(
  */
 export async function reviseApproval(
   input: ReviseApprovalInput,
-  client?: GrowthPrismaClient
+  client?: GrowthPrismaClient,
+  options: ReviseApprovalOptions = {}
 ): Promise<
   | { outcome: "revised"; superseded: ApprovalRecordRow; created: ApprovalRecordRow }
+  | { outcome: "already_revised"; superseded: ApprovalRecordRow; created: ApprovalRecordRow }
   | { outcome: "already_final"; approval: ApprovalRecordRow }
+  | { outcome: "expired"; approval: ApprovalRecordRow }
   | { outcome: "not_found" }
 > {
   const db = client ?? (await prismaClient());
+  const now = input.now ?? new Date();
 
   const run = async (tx: GrowthPrismaClient) => {
+    if ("$queryRaw" in tx) {
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "Approval"
+        WHERE "id" = ${input.approvalId}
+          AND "workspaceId" = ${input.workspaceId}
+        FOR UPDATE
+      `;
+    }
+
     const original = (await tx.approval.findFirst({
       where: { id: input.approvalId, workspaceId: input.workspaceId }
     })) as ApprovalRecordRow | null;
 
     if (!original) return { outcome: "not_found" as const };
+    if (original.status === "superseded") {
+      const created = (await tx.approval.findFirst({
+        where: { supersedesApprovalId: original.id, workspaceId: input.workspaceId }
+      })) as ApprovalRecordRow | null;
+      if (!created) return { outcome: "already_final" as const, approval: original };
+      await enqueueApprovalRevisedNotification(tx, original, created);
+      await enqueueApprovalRequestedNotification(tx, created, now);
+      return { outcome: "already_revised" as const, superseded: original, created };
+    }
     if (original.status !== "pending") return { outcome: "already_final" as const, approval: original };
+    if (original.expiresAt !== null && original.expiresAt <= now) {
+      return { outcome: "expired" as const, approval: original };
+    }
 
     const originalPayload = ApprovalPayload.parse(original.payloadJson);
     const replacementPayload = ApprovalPayload.parse(input.payload);
@@ -250,8 +341,9 @@ export async function reviseApproval(
       data: { status: "superseded" }
     })) as ApprovalRecordRow;
 
-    const created = (await tx.approval.create({
-      data: {
+    const created = (await tx.approval.upsert({
+      where: { creationKey: `approval-revision:${original.id}` },
+      create: {
         workspaceId: input.workspaceId,
         type,
         campaignId,
@@ -261,8 +353,11 @@ export async function reviseApproval(
         status: "pending",
         requestedBy: input.actorId,
         expiresAt: original.expiresAt,
-        supersedesApprovalId: original.id
-      }
+        creationKey: `approval-revision:${original.id}`,
+        supersedesApprovalId: original.id,
+        revisionReason: input.reason
+      },
+      update: {}
     })) as ApprovalRecordRow;
 
     // A NICHE_TEST revision keeps the same pending business object, but advances
@@ -291,10 +386,15 @@ export async function reviseApproval(
       }
     }
 
+    await enqueueApprovalRevisedNotification(tx, superseded, created);
+    await enqueueApprovalRequestedNotification(tx, created, now);
+    await options.beforeCommit?.({
+      originalApprovalId: superseded.id,
+      replacementApprovalId: created.id
+    });
+
     return { outcome: "revised" as const, superseded, created };
   };
 
-  return "$transaction" in db
-    ? await (db as PrismaClient).$transaction((tx) => run(tx))
-    : await run(db);
+  return runSerializableGrowthTransaction(db, run, options.maxTransactionAttempts);
 }

@@ -144,7 +144,7 @@ describe("no-brief-before-research is structural", () => {
     );
     // `String?` would make a brief with no run behind it representable, which is
     // exactly what v9.1 §7 and §26.3 forbid.
-    expect(model).toMatch(/^\s*researchRunId\s+String\s*$/m);
+    expect(model).toMatch(/^\s*researchRunId\s+String\s+@unique\s*$/m);
     expect(model).not.toMatch(/^\s*researchRunId\s+String\?/m);
   });
 });

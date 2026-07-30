@@ -2176,7 +2176,7 @@ model ResearchRun {
   updatedAt         DateTime          @updatedAt
   workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   nicheRequest      NicheRequest      @relation(fields: [nicheRequestId], references: [id], onDelete: Cascade)
-  nicheBriefs       NicheBrief[]
+  nicheBrief        NicheBrief?
 
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, nicheRequestId])
@@ -2193,7 +2193,7 @@ model NicheBrief {
   /// and §26.3: "no NicheBrief before research completes". A brief with no run
   /// behind it is not representable. Contracts encodes the same rule as a
   /// required field on the NicheBrief record. Do not relax this to optional.
-  researchRunId  String
+  researchRunId  String           @unique
   /// contracts NicheBriefDocument (the validated niche-brief.json payload).
   document       Json
   status         NicheBriefStatus @default(pending_approval)
@@ -2316,8 +2316,13 @@ model Approval {
   /// columns rather than by a status member.
   firstApprovedBy      String?
   firstApprovedAt      DateTime?
+  /// Stable identity of the business request that created this approval.
+  /// Nullable only for approvals created before Wave 1 Step 1.3A.
+  creationKey          String?           @unique
   /// Set only on a revision. Its target is left at `superseded`.
-  supersedesApprovalId String?
+  supersedesApprovalId String?           @unique
+  /// Contracts ApprovalRevise.reason persisted on the replacement row.
+  revisionReason       String?
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   workspace            Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -2326,14 +2331,13 @@ model Approval {
   nicheBrief           NicheBrief?       @relation("NicheBriefApproval")
   stageRun             CampaignStageRun? @relation(fields: [stageRunId], references: [id], onDelete: SetNull)
   supersedes           Approval?         @relation("ApprovalRevision", fields: [supersedesApprovalId], references: [id])
-  supersededBy         Approval[]        @relation("ApprovalRevision")
+  supersededBy         Approval?         @relation("ApprovalRevision")
 
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, campaignId, createdAt])
   @@index([workspaceId, stageRunId])
   @@index([workspaceId, type, status])
   @@index([workspaceId, status, expiresAt])
-  @@index([supersedesApprovalId])
 }
 
 /// The Growth OS cost ledger (v9.1 §6 `CostEntry`).

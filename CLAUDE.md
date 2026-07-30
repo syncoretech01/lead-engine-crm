@@ -4,7 +4,8 @@
 architectural debt. Rule 1 below prevents silent production data loss. Read it before writing a
 single line.
 
-**Current phase: CRM-0 complete.** Next: CRM-1 (the spine). See "Phase status" at the bottom.
+**Current phase: CRM-1 (the spine), in closure.** CRM-0 is complete. See "Phase status" below and
+`docs/GROWTH_OS_IMPLEMENTATION_TRACKER.md` for the authoritative wave status.
 
 ---
 
@@ -266,12 +267,15 @@ extended with `stageRunId`, the stage state machine
 (`PENDING → AWAITING_APPROVAL → APPROVED → RUNNING → COMPLETED | FAILED | PARKED | CANCELLED`),
 Approval Inbox UI + revision flow, the chat APIs, IA change.
 
-Wave 1 Steps 1.2 and 1.3 are implemented: the production worker drains leased/retryable
-`NotifyOutbox` rows, and both dashboard/chat final decisions use one serializable, row-locked
-application service. A valid final `NICHE_TEST` atomically approves its brief, creates one `DRAFT`
-Campaign, records `RESEARCH/COMPLETED` plus `HUB_SEARCH/PENDING`, links the Approval, and enqueues one
-deterministic final notification. No provider or paid work starts. The authoritative current status
-and next step are in `docs/GROWTH_OS_IMPLEMENTATION_TRACKER.md`.
+Wave 1 Steps 1.2, 1.3, and 1.3A are implemented. Initial actionable approvals, revision chains and
+replacement approvals, and final decisions enqueue deterministic `NotifyOutbox` rows in the same
+authoritative transaction as their state change; no approval route delivers to the Bot inline. The
+production worker drains those rows with leases and bounded retries. Dashboard/chat decisions use
+one serializable, row-locked application service. A valid final `NICHE_TEST` atomically approves its
+brief, creates one `DRAFT` Campaign, records `RESEARCH/COMPLETED` plus `HUB_SEARCH/PENDING`, links the
+Approval, and enqueues one final notification. Machine routes require the bearer plus an authorized
+workspace membership for the asserted actor. No provider or paid work starts. The authoritative
+current status and next step are in `docs/GROWTH_OS_IMPLEMENTATION_TRACKER.md`.
 
 **CRM-1 takes its `Approval` shapes from `@syncore/contracts@0.2.1`, not from v9.1 §6 prose**
 (errata #5 — the contracts package wins). Concretely, and this changes the schema:

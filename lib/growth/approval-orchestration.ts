@@ -1,8 +1,10 @@
-import { createHash } from "node:crypto";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { ApprovalPayload, NicheBriefDocument } from "@syncore/contracts";
 import { approvalHashMatches, hashApprovalPayload } from "@/lib/growth/approval-hash";
-import { enqueueNotifyOnce } from "@/lib/growth/notify-outbox";
+import {
+  enqueueAwaitingSecondApproverNotification,
+  enqueueFinalApprovalDecisionNotification
+} from "@/lib/growth/approval-notifications";
 import {
   type ApprovalRecordRow,
   type DecideApprovalInput,
@@ -15,6 +17,10 @@ import {
   growthPrisma
 } from "@/lib/growth/repositories/client";
 import { markNicheBriefApproved } from "@/lib/growth/repositories/niche-brief-repository";
+import {
+  DEFAULT_GROWTH_TRANSACTION_ATTEMPTS,
+  runSerializableGrowthTransaction
+} from "@/lib/growth/transaction";
 
 /** Integrity/policy failures are conflicts with authoritative persisted state. */
 export const APPROVAL_APPLICATION_ERROR_CODES = [
@@ -82,40 +88,6 @@ type NicheApprovalContext = {
     completedAt: Date | null;
   };
 };
-
-const MAX_TRANSACTION_ATTEMPTS = 3;
-
-function eventIdFor(kind: string, approvalId: string): string {
-  const digest = createHash("sha256").update(`${kind}:${approvalId}`, "utf8").digest("hex");
-  return `evt_${digest}`;
-}
-
-function isTransactionConflict(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; meta?: { code?: unknown } };
-  return candidate.code === "P2034" || candidate.code === "40001" || candidate.meta?.code === "40001";
-}
-
-async function runSerializableWithRetry<T>(
-  db: GrowthPrismaClient,
-  attempts: number,
-  operation: (tx: GrowthPrismaClient) => Promise<T>
-): Promise<T> {
-  if (!("$transaction" in db)) return operation(db);
-
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await (db as PrismaClient).$transaction((tx) => operation(tx), {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
-      });
-    } catch (error) {
-      lastError = error;
-      if (!isTransactionConflict(error) || attempt === attempts) throw error;
-    }
-  }
-  throw lastError;
-}
 
 /** Serialize all decisions for one authoritative approval row. */
 async function lockApproval(
@@ -264,65 +236,6 @@ async function loadNicheApprovalContext(
   return { payload: parsed, brief: briefById, researchRun: runById };
 }
 
-async function enqueueAwaitingSecondApprover(
-  tx: GrowthPrismaClient,
-  approval: ApprovalRecordRow,
-  now: Date
-) {
-  await enqueueNotifyOnce(
-    {
-      kind: "APPROVAL_REQUESTED",
-      workspaceId: approval.workspaceId,
-      approvalId: approval.id,
-      eventId: eventIdFor("approval-awaiting-second", approval.id),
-      occurredAt: now.toISOString(),
-      payload: {
-        approvalType: approval.type,
-        status: approval.status,
-        awaitingSecondApprover: true,
-        firstApprovedBy: approval.firstApprovedBy,
-        payloadSha256: approval.payloadSha256
-      }
-    },
-    tx
-  );
-}
-
-async function enqueueFinalDecision(
-  tx: GrowthPrismaClient,
-  approval: ApprovalRecordRow,
-  now: Date,
-  context?: NicheApprovalContext,
-  campaignId?: string
-) {
-  await enqueueNotifyOnce(
-    {
-      kind: "APPROVAL_DECIDED",
-      workspaceId: approval.workspaceId,
-      approvalId: approval.id,
-      campaignId,
-      eventId: eventIdFor("approval-decided", approval.id),
-      occurredAt: (approval.decidedAt ?? now).toISOString(),
-      payload: {
-        approvalType: approval.type,
-        status: approval.status,
-        decidedBy: approval.decidedBy,
-        decidedAt: approval.decidedAt?.toISOString(),
-        payloadSha256: approval.payloadSha256,
-        ...(context
-          ? {
-              nicheRequestId: context.payload.nicheRequestId,
-              researchRunId: context.researchRun.id,
-              nicheBriefId: context.brief.id,
-              campaignId
-            }
-          : {})
-      }
-    },
-    tx
-  );
-}
-
 /**
  * Decide an approval and atomically apply the final NICHE_TEST side effects.
  * Both dashboard and chat surfaces call this single orchestration boundary.
@@ -333,9 +246,12 @@ export async function decideApprovalWithSideEffects(
 ): Promise<ApprovalDecisionApplicationResult> {
   const db = options.client ?? (await growthPrisma());
   const now = options.now ?? new Date();
-  const attempts = Math.max(1, options.maxTransactionAttempts ?? MAX_TRANSACTION_ATTEMPTS);
+  const attempts = Math.max(
+    1,
+    options.maxTransactionAttempts ?? DEFAULT_GROWTH_TRANSACTION_ATTEMPTS
+  );
 
-  return runSerializableWithRetry(db, attempts, async (tx) => {
+  return runSerializableGrowthTransaction(db, async (tx) => {
     if (!(await lockApproval(tx, input))) return { outcome: "not_found" };
 
     const authoritative = await loadApproval(tx, input);
@@ -365,7 +281,7 @@ export async function decideApprovalWithSideEffects(
     if (decision.outcome === "not_found") return decision;
 
     if (decision.outcome === "awaiting_second_approver") {
-      await enqueueAwaitingSecondApprover(tx, decision.approval, now);
+      await enqueueAwaitingSecondApproverNotification(tx, decision.approval, now);
       await options.beforeCommit?.({ approvalId: decision.approval.id, outcome: decision.outcome });
       return decision;
     }
@@ -376,7 +292,7 @@ export async function decideApprovalWithSideEffects(
 
     if (approval.status !== "approved" || approval.type !== "NICHE_TEST") {
       if (approval.status === "approved" || approval.status === "declined") {
-        await enqueueFinalDecision(tx, approval, now);
+        await enqueueFinalApprovalDecisionNotification(tx, approval, now);
       }
       await options.beforeCommit?.({ approvalId: approval.id, outcome: decision.outcome });
       return decision;
@@ -418,7 +334,12 @@ export async function decideApprovalWithSideEffects(
       }
     })) as ApprovalRecordRow;
 
-    await enqueueFinalDecision(tx, appliedApproval, now, context, campaign.id);
+    await enqueueFinalApprovalDecisionNotification(tx, appliedApproval, now, {
+      campaignId: campaign.id,
+      nicheRequestId: context.payload.nicheRequestId,
+      researchRunId: context.researchRun.id,
+      nicheBriefId: context.brief.id
+    });
     await options.beforeCommit?.({
       approvalId: appliedApproval.id,
       outcome: decision.outcome,
@@ -431,5 +352,5 @@ export async function decideApprovalWithSideEffects(
       campaignId: campaign.id,
       sideEffectsApplied: approval.sideEffectsAppliedAt === null
     };
-  });
+  }, attempts);
 }

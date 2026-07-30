@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   CHAT_ACTOR_HEADER,
   CHAT_WORKSPACE_HEADER,
-  authenticateChatRequest
+  authenticateChatRequest,
+  authorizeChatApprovalActor
 } from "@/lib/growth/chat-auth";
 
 const TOKEN = "chat-token-abcdefghijklmnop";
@@ -18,6 +19,33 @@ const valid = (extra: Record<string, string> = {}) =>
 
 beforeEach(() => {
   process.env.SYNCORE_CHAT_API_TOKEN = TOKEN;
+});
+
+describe("chat approval workspace authorization", () => {
+  const authorize = (role: string | null) =>
+    authorizeChatApprovalActor(
+      { ok: true, actorId: "usr_operator", workspaceId: "ws_1" },
+      {
+        workspaceMember: {
+          findUnique: async () => (role ? { role } : null)
+        }
+      } as never
+    );
+
+  it.each(["ADMIN", "MANAGER"])("accepts a workspace %s with approval permission", async (role) => {
+    await expect(authorize(role)).resolves.toMatchObject({
+      ok: true,
+      actorId: "usr_operator",
+      workspaceId: "ws_1"
+    });
+  });
+
+  it.each([null, "SDR", "VIEWER", "DATA_OPERATOR", "COMPLIANCE_ADMIN"])(
+    "rejects missing or unauthorized workspace role %s",
+    async (role) => {
+      await expect(authorize(role)).resolves.toMatchObject({ ok: false, status: 403 });
+    }
+  );
 });
 
 afterEach(() => {
