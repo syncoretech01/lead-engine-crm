@@ -21,10 +21,18 @@ Scope, per the repo plan:
    financial events into it while it remains projection-owned. The stores have distinct ownership
    and semantics. Only `CostEntry` contributes to Growth financial totals, and linked provider
    evidence must never be counted as another charge. The public reporting surface must expose one
-   authoritative Growth financial view rather than treat the current raw union as final. Step 1.4B
-   implementation is `NOT STARTED`; this accepted documentation neither approves a final schema nor
-   authorizes any paid stage. `GROWTH_OS_ERRATA.md` entry 6 supersedes the earlier direct-write and
-   one-physical-table instruction.
+   authoritative Growth financial view rather than treat the old raw union as final. Wave 1 Step
+   1.4B implements the additive repository foundation: immutable estimate/authorization/actual/
+   adjustment/reversal events, with signed adjustments restricted to `ACTUAL` targets and
+   estimate/authorization correction performed by reversal plus replacement; stable command and
+   source identities, transaction-time tenant validation, CostEntry-only totals, explicit
+   non-provider services, optional operational evidence
+   identity, read-only inventory, and stable composite pagination. Historical fields remain nullable
+   and unattributed. Provider operational references are not foreign keys because projection cleanup
+   still owns those rows; the repository validates them before append. `CampaignStageRun` cost fields
+   remain caches. The full budget gate, dispatch reconciliation, paid providers, staging/production
+   inventory, and live deployment remain outside this foundation, and no paid stage is authorized.
+   `GROWTH_OS_ERRATA.md` entry 6 supersedes the earlier direct-write and one-physical-table instruction.
 
 5. Read models: server-side pagination, tight select, workspaceId in every where. No take:500/take:1500 caps — the baseline documents the existing anti-pattern; do not replicate it in anything new.
 

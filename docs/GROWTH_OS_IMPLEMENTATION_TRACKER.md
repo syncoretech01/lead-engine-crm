@@ -6,11 +6,11 @@ and the exact next implementation slice. It is not a replacement for the product
 
 **Last repository review:** 2026-07-30
 
-**Implementation baseline:** GitHub `main` at `e0080cef0fad709f8296fefb80a92e7a502c02eb`
-(PR #174, proposed ADR-001 cost-ledger architecture)
+**Implementation baseline:** GitHub `main` at `4713b9c40f2ad5d5e9a99885e5447a32f879244e`
+(merged PR #175, accepted ADR-001 cost-ledger architecture)
 
-**Review branch before this tracker commit:** `growth-os/w1-cost-ledger-acceptance` at
-`e0080cef0fad709f8296fefb80a92e7a502c02eb`
+**Review branch before this tracker commit:** `growth-os/w1-cost-ledger-foundation` at
+`4713b9c40f2ad5d5e9a99885e5447a32f879244e`
 
 **Current Growth phase:** **CRM-1 — IN PROGRESS**
 
@@ -442,8 +442,9 @@ Binding ownership rules:
   economics.
 - A linked provider-usage row is supporting evidence, not an additional financial charge; the
   evidence and financial event must never be counted twice.
-- Growth financial events are append-only. Corrections require explicit adjustment or reversal
-  events rather than destructive updates or deletion.
+- Growth financial events are append-only. An adjustment is a signed correction to an `ACTUAL`;
+  estimate/authorization correction requires reversal plus replacement. Corrections never use
+  destructive updates or deletion.
 - Historical campaign, stage, approval, authorization, and financial-action attribution must not be
   guessed without authoritative evidence.
 - Existing legacy and native rows remain preserved.
@@ -488,15 +489,196 @@ Acceptance does not approve a final schema or paid execution. The exact next ste
 Step 1.4B — implement the additive `CostEntry` financial-ledger foundation**. Step 1.4B was not
 started in this branch; do not begin CRM-2 or Growth Bot work as part of this acceptance.
 
+### Wave 1, Step 1.4B — additive CostEntry financial-ledger foundation — 2026-07-30
+
+**Implementation status: COMPLETE**
+
+ADR-001 Option C and `GROWTH_OS_ERRATA.md` entry 6 remain binding. This step establishes the safe
+repository foundation only: it does not dispatch providers, authorize paid work, implement the full
+campaign budget gate, update `CampaignStageRun` cost caches, or create spend exceptions.
+
+Environment inventory actually performed:
+
+- **Local/integration:** PostgreSQL 16.14 (`postgres:16`, isolated port 55434), inventory tool
+  version 1, read-only `REPEATABLE READ` transaction. After the normal seed, `CostEntry` contained
+  0 rows and `ProviderUsageLedger` contained 12 USD operational rows in `workspace-syncore`: three
+  `syncore_local_demo/seeded_lead_job_cost`, four local company-enrichment, and five local
+  contact-enrichment rows. Nine enrichment rows had no provider job/run reference, matching the
+  legacy operational shape. No duplicate, orphan, cross-workspace, metadata-size, or structural
+  hazard was reported; `safeToProceed` was `true`.
+- **Pre-migration fixture:** one representative historical `CostEntry` and one
+  `ProviderUsageLedger` row were inventoried read-only before the foundation migration and again
+  afterward. Both remained; the historical financial kind, currency, and command identity remained
+  null rather than being guessed.
+- **Staging:** NOT STARTED — no staging credential or environment was available.
+- **Production:** NOT STARTED — no production credential was available. Read-only inventory is a
+  deployment gate; no production data was queried or changed.
+
+Schema and migration:
+
+- Migration: `prisma/migrations/20260730190000_growth_os_cost_entry_foundation/migration.sql`.
+- Enums: `FinancialEventKind` = `ESTIMATE`, `AUTHORIZATION`, `ACTUAL`, `ADJUSTMENT`, `REVERSAL`;
+  `FinancialReconciliationStatus` = `NOT_APPLICABLE`, `PENDING`, `RECONCILED`, `DISPUTED`.
+- Existing provider and unit columns were safely relaxed to nullable so non-provider or non-unit
+  costs do not require fictional values. No existing column or row was dropped, renamed, copied,
+  reclassified, or backfilled.
+- Nullable historical-compatible fields add Approval, ResearchRun, provider job/run/evidence,
+  adjustment/reversal, service, cost-action, command, source event/line, content hash, occurrence,
+  currency, amount, reconciliation, and authorization identities. The repository requires every
+  mandatory field for all new events.
+- Workspace command identity is unique. Source system/event/kind is unique both with and without a
+  partial-actual source line. Provider evidence may link to one financial event. One target may be
+  reversed once. Indexes cover workspace/Campaign/stage occurrence order, cost action, source,
+  Approval, ResearchRun, provider job/run, and evidence lookup.
+- Additive `NOT VALID` checks enforce complete new-event identity, normalized currency, amount
+  semantics, safe metadata size, stage/Campaign pairing, provider-run/job pairing, evidence only on
+  actuals, correction targets, and authorization identity without scanning or rewriting history.
+- Native Campaign, stage, Approval, and Research tenant relationships have database-enforced
+  composite constraints for new writes. Provider job, run, and evidence IDs intentionally are not
+  foreign keys: all three remain projection-owned, so an FK would mutate immutable financial facts
+  or block legacy cleanup. The repository validates their existence, workspace, provider, parent
+  job, and evidence chain inside the serializable append transaction.
+- `ProviderUsageLedger` received no column, ownership, writer, AppState mapping, cleanup, or
+  lifecycle change. Projection cleanup was proven able to remove evidence while leaving native
+  `CostEntry` facts intact.
+
+Append-only repository:
+
+- `lib/growth/repositories/financial-ledger-repository.ts` exposes `recordEstimate()`,
+  `recordAuthorization()`, `recordActual()`, `recordAdjustment()`, `recordReversal()`, retrieval by
+  event/action, and authoritative action/Campaign/stage totals. It exposes no generic update or
+  delete operation.
+- New event IDs are stable hashes of workspace command identity. A canonical safe-content hash
+  excludes transport command identity so an identical source retry under a new transport key still
+  returns the original event. Reusing either command or source identity with conflicting financial
+  content throws `FinancialReplayConflictError`.
+- Writes run in serializable bounded transactions with existing `P2034`/`40001` retry behavior or
+  enlist in a caller's Prisma transaction. Database uniqueness resolves concurrent winners. Injected
+  inner and outer failures leave no partial event.
+- Metadata is scalar, size-bounded audit/correlation data; secret, token, credential, payload/body,
+  and personal-contact keys are rejected. Exactly one real provider or explicit non-provider
+  service is required; no Contracts provider enum was invented.
+- Normal estimate, authorization, actual, and reversal amounts are non-negative integer minor
+  units. An adjustment is a non-zero signed correction to an `ACTUAL` only; estimates,
+  authorizations, other adjustments, reversals, and historical rows are rejected as adjustment
+  targets. Correcting an estimate or authorization requires reversal of the immutable original and
+  a new replacement event. A reversal points to one immutable non-reversal target and negates that
+  target's exact bucket and signed effect.
+
+Target-safety correction on PR #176 (2026-07-30):
+
+- Review found that the initial Step 1.4B repository allowed adjustments to any non-reversal native
+  event, while every adjustment was aggregated as actual spend. It also projected every reversal as
+  `-abs(target.amountCents)`, which gave estimate/authorization reversals non-zero compatibility
+  spend and gave reversal of a negative adjustment the wrong compatibility sign.
+- `recordAdjustment()` now validates inside the serializable transaction that the authoritative
+  target is an `ACTUAL`. PostgreSQL cannot express another row's `eventKind` in an ordinary check
+  constraint, so this remains a transaction-time repository invariant with real PostgreSQL tests;
+  no fragile trigger or new migration was added.
+- A shared target-aware calculation now sets `totalCents` and read-model `financialEffectCents` to
+  zero for estimates/authorizations and their reversals, to the signed amount for actuals and
+  adjustments, and to `-target.amountCents` for reversal of an actual or adjustment. Reversing a
+  negative adjustment therefore produces a positive compatibility effect.
+- `totalCents` remains a non-authoritative compatibility projection. Authoritative totals continue
+  to calculate from event kind, amount, and immutable reversal target identity. The finalized
+  target-aware compatibility value is part of the canonical content hash used for replay conflict
+  detection.
+- Focused validation passed: 6/6 financial-foundation unit tests and 14/14 real PostgreSQL ledger
+  integration tests, including rejected target kinds, every reversal bucket/sign, direct stored
+  compatibility assertions, compatibility-sum equality, read-model effects, replay, and concurrent
+  one-reversal enforcement. Complete regression and CI evidence is recorded below.
+
+Provider evidence and financial reads:
+
+- An `ACTUAL` may carry the stable ID of same-workspace projected operational evidence. The
+  repository never creates, updates, or deletes that evidence. A unique evidence identity prevents
+  a second financial actual from claiming it. Evidence disappearance under legacy projection does
+  not delete or mutate the financial event.
+- `lib/growth/read-models/cost-ledger.ts` now labels rows `growth_financial` or
+  `legacy_operational_evidence`. Evidence has `isAuthoritativeFinancial=false`, no financial effect,
+  and remains visible only as operational history—even when linked.
+- Cost-action, Campaign, and stage totals use `CostEntry` financial events only. Actuals and signed
+  ACTUAL-only adjustments affect spend; a reversal negates its target's exact bucket and signed
+  effect. Mixed currency raises
+  `MixedFinancialCurrencyError`. A scope containing pre-foundation rows raises
+  `HistoricalFinancialEventError` until inventory/reconciliation gives them authoritative semantics.
+- Workspace compatibility pagination uses opaque `(createdAt, sourceGeneration, id)` ordering.
+  Equal-timestamp forward pages were proven to contain no skip or duplicate. Old raw ISO timestamp
+  cursors are intentionally rejected; no public versioned cursor contract previously existed.
+- `CampaignStageRun.estimatedCostCents`, `approvedCostCents`, and `actualCostCents` remain
+  reconstructible/materialized control caches and were not updated in this foundation. `CostEntry`
+  is authoritative.
+
+Rollout and rollback:
+
+- `docs/GROWTH_COST_LEDGER_RUNBOOK.md` documents repeatable local/staging/production inventory,
+  non-zero hazard behavior, backup, migration/application order, post-deployment reconciliation,
+  paid-execution gates, and rollback.
+- Application rollback deploys the prior release but leaves additive schema and financial facts in
+  place. Recovery uses a forward fix, adjustment/reversal, or an explicitly reconciled point-in-time
+  restore—never a copy into `ProviderUsageLedger`, destructive rewrite, or guessed attribution.
+
+Files changed for Step 1.4B:
+
+- schema/migration: `prisma/schema.prisma`,
+  `prisma/migrations/20260730190000_growth_os_cost_entry_foundation/migration.sql`;
+- runtime: `lib/growth/repositories/financial-ledger-repository.ts`,
+  `lib/growth/read-models/cost-ledger.ts`;
+- tooling/config: `scripts/inventory-growth-cost-ledger.ts`,
+  `scripts/test-growth-cost-ledger-migration.ts`, `package.json`, `.github/workflows/ci.yml`;
+- tests: `tests/integration/growth-financial-ledger.test.ts`,
+  `tests/unit/growth-financial-ledger-foundation.test.ts`;
+- documentation: this tracker, `docs/GROWTH_COST_LEDGER_RUNBOOK.md`, ADR-001, `CLAUDE.md`, and
+  `docs/CRM-1-BRIEF.md`.
+
+Validation evidence:
+
+- Exact local commands: `npx prisma format`, `npx prisma validate`, `npx prisma generate`,
+  `npm run test:ledger:migration`, `npm run test`, `npm run test:integration`,
+  `npm run check:projection-invariant`, `npm run lint`, `npm run typecheck`, `npm run build`, and
+  `npx playwright test --grep "Growth OS"` with the documented isolated database and deterministic
+  non-production auth/chat/notify environment.
+- Prisma format/validate/generate: passed against Prisma 6.19.3.
+- Migration: all 20 migrations passed on an empty PostgreSQL 16 database; the foundation migration
+  also passed after the first 19 migrations with representative rows, preserving both rows and
+  null historical compatibility.
+- Unit: 104 files / 639 tests passed, including 6 focused financial-foundation tests.
+- PostgreSQL integration: 11 files / 76 tests passed, including 14 financial-foundation tests for
+  event semantics, ACTUAL-only adjustment targets, target-aware reversal buckets and signed effects,
+  direct `totalCents` compatibility values, compatibility-sum equality, read-model effects, partial
+  actuals, replay/conflict, concurrent reversal protection, serializable retry, inner/outer rollback,
+  tenant links, evidence, projection cleanup, currencies, and pagination.
+- Projection invariant: passed for all 22 guarded native models; the real cleanup test also passed.
+- Lint and TypeScript: passed.
+- Production build: passed under Next.js 16.2.7.
+- Blocking Growth OS Playwright: 6/6 passed against the isolated PostgreSQL database and seeded
+  Prisma application. One intermediate local invocation omitted a fixed test auth secret and all
+  six requests redirected to login; no code changed, and the clean invocation with the same
+  deterministic non-production auth environment now pinned in CI passed 6/6.
+- Staging/production migration, inventory, reconciliation, and deployment: NOT STARTED.
+
+Known limitations and deferred work:
+
+- No staging/production row evidence exists yet; unknown historical rows are why fields remain
+  nullable and tenant constraints are initially `NOT VALID`.
+- Direct use of the generated Prisma delegate could still issue an update/delete; production Growth
+  code exposes only the append-only repository, and static/integration tests enforce that boundary.
+- Reservation/release, refund/credit/tax semantics, authorization-to-dispatch wiring, cache replay,
+  full budget gates, overrun parking/`SPEND_EXCEPTION`, and paid provider integrations are deferred.
+- Live provider evidence/callback reconciliation and live deployment remain unverified.
+
+**Next exact step: Growth Bot Wave 1, B0.1 — correctness and contract hardening.** Do not begin
+Growth Bot work, CRM-2, paid execution, or the deferred budget gate automatically from this branch.
+
 ## Current executive snapshot
 
 | Area | Status | Current fact |
 |---|---|---|
 | CRM-0 guardrails | COMPLETE | Projection invariant, CI isolation, contracts checkout, and the baseline are present and verified. |
-| CRM-1 spine | IN PROGRESS | Wave 1 Steps 1.2, 1.3, and 1.3A completed leased delivery plus atomic/idempotent creation, revision/replacement, final decision, NICHE_TEST Campaign, and outbox orchestration. Step 1.4A and its human acceptance established the binding Option C cost architecture; Step 1.4B implementation, real-Bot acceptance, and deployment evidence remain. |
+| CRM-1 spine | IN PROGRESS | Wave 1 Steps 1.2, 1.3, 1.3A, and 1.4B now cover leased delivery, atomic approval/Campaign/outbox orchestration, and the append-only Option C financial foundation. Real-Bot acceptance and staging/production deployment evidence remain. |
 | CRM-2 through CRM-8 | NOT STARTED | Some CRM-2 domain primitives landed as CRM-1 prerequisites, but none of the later phase acceptance paths is connected. |
 | Contracts consumption | COMPLETE | Version 0.2.1 is installed, locked, pinned in CI/on-host deployment, and directly consumer-tested. |
-| Cost-ledger architecture decision | COMPLETE | ADR-001 is `ACCEPTED`; Option C and erratum entry 6 are binding. Step 1.4B implementation is `NOT STARTED`. |
+| Cost-ledger foundation | COMPLETE | ADR-001 Option C is accepted; additive immutable events, idempotent repository, tenant checks, evidence boundary, CostEntry-only totals, stable pagination, read-only inventory, PostgreSQL migration/concurrency/rollback tests, and rollout documentation are implemented. Staging/production inventory and deployment remain NOT STARTED. |
 | GitHub `main` CI at the implementation baseline | COMPLETE | Run `30565339971` passed for exact baseline SHA `e0080ce`; another duplicate run was still in progress when reviewed. |
 | Latest CRM-1 production deployment | IMPLEMENTED — NOT VERIFIED | Deployment scripts exist and AWS production is documented, but no evidence shows the Wave 1 Steps 1.2 through 1.3A commits and migrations are live. |
 
@@ -634,7 +816,8 @@ The Growth spine was added by migrations
 `20260728180000_growth_os_notify_outbox`, and
 `20260729200000_growth_os_notify_delivery_leases`, then extended by
 `20260729214000_growth_os_niche_approval_side_effects` and
-`20260730120000_growth_os_approval_notification_lifecycle`.
+`20260730120000_growth_os_approval_notification_lifecycle`, followed by
+`20260730190000_growth_os_cost_entry_foundation`.
 
 | Model or schema change | Status | Current responsibility and implementation |
 |---|---|---|
@@ -646,10 +829,10 @@ The Growth spine was added by migrations
 | `Campaign` | IN PROGRESS | Universal parent with approved-brief guard, Hub/policy pointers, budget configuration, kill config, automation level, and status. Repository creation and paged listing exist; user creation and lifecycle orchestration do not. |
 | `CampaignStageRun` | IN PROGRESS | The NICHE_TEST orchestrator creates historical `RESEARCH/COMPLETED` and next-step `HUB_SEARCH/PENDING` rows with unique orchestration keys. Later phase execution/lifecycle orchestration remains absent. |
 | `Approval` | IN PROGRESS | Immutable payload/hash plus T2 and revision history. Stable creation/successor keys, requested/revised/final events, revision reason, NICHE_TEST application, locking, retry, replay, and machine workspace authorization are verified; later approval-type side effects and the live Bot round trip remain incomplete. |
-| `CostEntry` | IN PROGRESS | Native Growth cost generation with campaign/stage attribution. Read and aggregate functions exist; no production code currently creates a `CostEntry`. |
+| `CostEntry` | COMPLETE | Additive immutable financial-event foundation with command/source replay, currency, native tenant attribution, provider/service identity, adjustments/reversals, operational-evidence identity, append-only repository, authoritative totals, inventory, and real PostgreSQL coverage. No paid producer is connected. |
 | `NotifyOutbox` | COMPLETE | Durable exact-body delivery with event identity, target references, attempts, scheduled retry, owner/token/expiry lease, terminal dead-letter time, structured attempt logs, health aggregates, and production background-worker drain. Real PostgreSQL proves concurrency and recovery. |
 
-The nine Growth-related enums added by CRM-1 are:
+The eleven Growth-related enums added by CRM-1 are:
 
 - `NicheRequestSourceChannel`: `telegram`, `slack`, `dashboard`;
 - `NicheRequestStatus`: `draft`, `confirmed`, `researching`, `briefed`, `cancelled`;
@@ -660,7 +843,9 @@ The nine Growth-related enums added by CRM-1 are:
 - `StageType`: the 18 Growth pipeline stages;
 - `StageRunStatus`: `PENDING`, `AWAITING_APPROVAL`, `APPROVED`, `RUNNING`, `COMPLETED`,
   `FAILED`, `PARKED`, `CANCELLED`;
-- `CampaignStatus`: `DRAFT`, `ACTIVE`, `PAUSED`, `COMPLETED`, `CANCELLED`.
+- `CampaignStatus`: `DRAFT`, `ACTIVE`, `PAUSED`, `COMPLETED`, `CANCELLED`;
+- `FinancialEventKind`: `ESTIMATE`, `AUTHORIZATION`, `ACTUAL`, `ADJUSTMENT`, `REVERSAL`;
+- `FinancialReconciliationStatus`: `NOT_APPLICABLE`, `PENDING`, `RECONCILED`, `DISPUTED`.
 
 ## 5. Approval creation, decision, revision, and side effects
 
@@ -828,7 +1013,7 @@ paged.
 | Later automatic stage orchestration | NOT STARTED | No scheduler advances HUB_SEARCH or creates later paid/external stage runs. |
 | Approval-to-stage transition | IN PROGRESS | NICHE_TEST initializes the safe timeline; later approval types do not yet advance stage runs. |
 | Provider job-to-stage integration | NOT STARTED | Legacy provider runs are not attached to Growth stage runs. |
-| Budget preflight and actual reconciliation | NOT STARTED | Cost aggregate helpers exist but are unused. |
+| Budget preflight and actual reconciliation | NOT STARTED | Authoritative tested CostEntry totals exist, but no dispatch gate, reservation/release, or overrun orchestration consumes them. |
 | Campaign kill rules and circuit breakers | NOT STARTED | Configuration is stored only. |
 
 `createStageRun` accepts a workspace and campaign ID but does not first verify that the campaign
@@ -849,30 +1034,34 @@ Step 1.4A documented the evidence and recommended Option C in
 provider evidence and `CostEntry` as the native financial control ledger behind one authoritative
 public spend view. The Syncore Tech project owner accepted that recommendation on 2026-07-30.
 ADR-001 is **ACCEPTED**, and `GROWTH_OS_ERRATA.md` entry 6 makes the ownership and
-no-double-counting rules binding. Product implementation remains `NOT STARTED`.
+no-double-counting rules binding. Step 1.4B now implements the additive repository foundation;
+paid execution and the full budget/reconciliation workflow remain not started.
 
-CRM-1 therefore implemented a migration seam:
+CRM-1 therefore implements an explicit ownership seam:
 
 - `ProviderUsageLedger` remains the legacy, blob-projected generation.
-- `CostEntry` is the native Growth generation and includes campaign and stage-run attribution.
-- `listCostEntries` unions both generations into one logical read model.
+- `CostEntry` is the authoritative native financial event store with immutable action identity,
+  currency, attribution, corrections, and idempotent append behavior.
+- `listCostEntries` presents native finance and legacy evidence with distinct source/authority labels.
 - Campaign/stage filters exclude legacy rows because those rows have no campaign or stage IDs.
-- `campaignSpendCents` and `stageRunSpendCents` aggregate only native `CostEntry` rows.
+- Action/Campaign/stage totals calculate actuals, signed adjustments, and target-aware reversals from
+  native `CostEntry` only and reject mixed currency.
 
 | Ledger behavior | Status | Current fact |
 |---|---|---|
-| Logical union read model | IMPLEMENTED — NOT VERIFIED | Code merges both generations into one time-ordered page, but no direct test exercises the union. |
-| Campaign and stage spend aggregates | IMPLEMENTED — NOT VERIFIED | Database aggregate functions exist for native rows, but no direct test or caller exercises them. |
-| Growth cost writer | NOT STARTED | No `costEntry.create`, `createMany`, or `upsert` call exists in application code. |
+| Workspace history read model | COMPLETE | Native finance and legacy operational evidence are distinctly labelled; a stable composite cursor is proven across equal timestamps. |
+| Action, Campaign, and stage financial totals | COMPLETE | Real PostgreSQL proves actual, adjustment, reversal, no-double-counting, cache independence, and mixed-currency rejection. |
+| Append-only Growth financial repository | COMPLETE | Estimate, authorization, actual, adjustment, and reversal operations use stable IDs, serializable replay, conflict detection, tenant validation, and no update/delete API. |
 | Budget-gate consumption | NOT STARTED | Aggregate helpers have no callers. |
 | Legacy campaign attribution | NOT STARTED | Historical rows lack campaign/stage identity; guessing attribution is intentionally rejected. |
 | Architecture decision and acceptance | COMPLETE | ADR-001 Option C is accepted and binding erratum entry 6 is recorded. |
-| Target architecture implementation | NOT STARTED | No schema, writer, budget, reconciliation, or final public-read implementation has begun. |
+| Foundation schema/read/repository implementation | COMPLETE | Migration, inventory, append-only repository, evidence boundary, authoritative totals, pagination, rollback runbook, and PostgreSQL proof exist. |
+| Staging/production inventory and deployment | NOT STARTED | No credentials or environment evidence was available; read-only inventory is a deployment gate. |
 | Legacy ledger ownership peel | NOT STARTED | Separately deferred; accepted Option C does not require it before the pilot. |
 
-This is physically two tables but intentionally one logical ledger during migration. The native
-table must not be replaced by direct native writes to `ProviderUsageLedger` while that table remains
-in projection ownership.
+This is physically two stores with distinct semantics: one authoritative financial ledger plus one
+operational-evidence store. The public financial model is CostEntry-only. Native writes must never
+target `ProviderUsageLedger` while that table remains in projection ownership.
 
 ## 9. Test, build, and CI evidence
 
@@ -1103,15 +1292,14 @@ reference and was also preserved outside this commit.
 
 ## 13. Exact next Growth OS step
 
-**Next exact step: Wave 1, Step 1.4B — implement the additive `CostEntry` financial-ledger
-foundation. Do not start CRM-2 APIs or Growth Bot work first.**
+**Next exact step: Growth Bot Wave 1, B0.1 — correctness and contract hardening. Do not start CRM-2,
+paid provider execution, the deferred budget gate, or Growth Bot work from this CRM branch.**
 
-ADR-001 Option C is accepted and binding erratum entry 6 is recorded. Step 1.4B must begin with
-staging/production row inventory and a separately reviewed additive design, then implement the
-native append-only financial foundation, evidence linkage/no-double-counting constraints, stable
-read semantics, rollout, rollback, and real-PostgreSQL verification. Acceptance does not approve a
-final Prisma schema or enable paid execution. Steps 1.3, 1.3A, and 1.4A changed no cost-ledger
-runtime behavior, and Step 1.4B was not started in the acceptance branch.
+ADR-001 Option C, binding erratum entry 6, and the Step 1.4B additive foundation are complete.
+Staging and production read-only inventory and deployment remain gates for CRM rollout, but they do
+not change the next cross-repository implementation step. The financial foundation authorizes no
+paid action; dispatch, reservation/release, reconciliation-to-authorization, cost-cache replay,
+overrun parking, and `SPEND_EXCEPTION` orchestration remain separately scoped.
 
 ### Historical closure ordering retained from the initial tracker
 

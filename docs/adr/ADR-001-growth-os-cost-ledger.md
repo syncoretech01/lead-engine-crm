@@ -522,6 +522,42 @@ The accepted decision intentionally preserves data and defers destructive consol
 two physical stores for a long time, but it avoids pretending that mutable provider telemetry and
 immutable financial control are the same object.
 
+## Wave 1 Step 1.4B implementation record
+
+The accepted ownership model is implemented as an additive repository foundation in migration
+`20260730190000_growth_os_cost_entry_foundation`:
+
+- `FinancialEventKind` uses `ESTIMATE`, `AUTHORIZATION`, `ACTUAL`, `ADJUSTMENT`, and `REVERSAL`.
+- `FinancialReconciliationStatus` uses `NOT_APPLICABLE`, `PENDING`, `RECONCILED`, and `DISPUTED`.
+- `CostEntry` adds nullable historical-compatible command/source identities, normalized currency,
+  event amount and occurrence time, Campaign/stage/Approval/Research attribution, typed provider or
+  non-provider service identity, authorization identity, correction targets, and optional provider
+  job/run/evidence identities.
+- New repository writes require the complete foundation fields, safe metadata, one provider or
+  service identity, and workspace-consistent links. They are append-only and serializable;
+  identical command/source replay returns the existing stable event while conflicting reuse fails.
+- Database uniqueness covers workspace command identity, source event and optional source line,
+  evidence identity, and one reversal per target. Native relations use additive tenant constraints.
+- Provider job/run/evidence IDs intentionally remain non-FK operational references. Those records
+  are still AppState-projected and cleanup-owned; an FK would either mutate an immutable financial
+  event or block the authoritative projection transaction. Repository validation enforces the
+  workspace/provider/job chain at append time, and the stable ID remains audit history if evidence
+  is later projected away.
+- Authoritative action, Campaign, and stage totals read only native financial events. Adjustments are
+  signed corrections to `ACTUAL` events only; estimate/authorization correction uses reversal plus
+  a replacement immutable event. Reversals negate the target's exact bucket and signed effect, and
+  mixed-currency aggregation is rejected. The retained `totalCents` compatibility value and logical
+  read-model effect are target-aware actual-spend projections, while authoritative calculations use
+  event kind, amount, and target identity. The workspace compatibility view labels provider rows
+  `legacy_operational_evidence` and gives them no financial effect.
+- The compatibility cursor is now a stable `(createdAt, sourceGeneration, id)` total order.
+- `CampaignStageRun` cost columns remain reconstructible caches. Step 1.4B does not update them or
+  enable dispatch, paid work, the full budget gate, or `SPEND_EXCEPTION` orchestration.
+
+Historical rows are not backfilled. The read-only inventory and rollout/rollback procedure are in
+`docs/GROWTH_COST_LEDGER_RUNBOOK.md`. Staging and production inventory remain deployment gates.
+The accepted decision is unchanged by these implementation details.
+
 ## Acceptance
 
 - **Status:** ACCEPTED
@@ -539,9 +575,8 @@ immutable financial control are the same object.
 - **Immutability rule:** financial events are append-only. Corrections use explicit adjustment or
   reversal events rather than destructive update or deletion, and historical attribution is never
   guessed without authoritative evidence.
-- **Implementation boundary:** acceptance binds the ownership model but does not authorize a final
-  Prisma schema, migration, runtime change, cost writer, budget gate, paid execution, or deployment.
-  The exact additive design requires environment row inventory and a separate approved
-  implementation step.
-- **Next exact step:** Wave 1, Step 1.4B — implement the additive `CostEntry` financial-ledger
-  foundation.
+- **Implementation boundary:** acceptance bound the ownership model but did not by itself authorize
+  schema, migration, runtime, budget-gate, paid-execution, or deployment work. The separately
+  approved Step 1.4B implementation record above supplies the additive foundation only; it still
+  does not authorize paid execution or the deferred budget/reconciliation work.
+- **Next exact step after Step 1.4B:** Growth Bot Wave 1, B0.1 — correctness and contract hardening.

@@ -62,8 +62,10 @@ Adding a future Growth OS model to the guard is **one line** in `GUARDED_MODELS`
    Prisma-native financial source of truth. `ProviderUsageLedger` remains projection-owned
    operational provider evidence; native Growth financial code must never write into it. Only
    `CostEntry` counts toward Growth spend, budgets, reconciliation, overruns, and unit economics.
-   Linked provider evidence is never a second charge. Financial events are append-only;
-   corrections use explicit adjustment or reversal events.
+   Linked provider evidence is never a second charge. Financial events are append-only. An
+   adjustment is a signed correction to an `ACTUAL` only; correct an estimate or authorization by
+   reversing the immutable original and appending a replacement event. Reversals negate the
+   target's exact bucket and signed effect.
 4. **Every paid call passes the budget gate first**, and reconciles actual-vs-approved after
    (CRM-4). Overrun beyond `overrunTolerancePct` → auto-park + `SPEND_EXCEPTION`.
 5. **Approvals are immutable.** Create + decide + **revise** only. An edit supersedes the original
@@ -89,9 +91,11 @@ Adding a future Growth OS model to the guard is **one line** in `GUARDED_MODELS`
 > "One ledger" means one authoritative public Growth financial view, not one physical table.
 > Historical provider rows keep their known evidence only; never guess campaign, stage, approval,
 > authorization, or financial-action attribution. The blob ownership peel remains separately
-> deferred and is not required before the pilot. The next exact implementation step is Wave 1,
-> Step 1.4B. Do not change schema, writers, budget behavior, reconciliation, or paid execution
-> outside that separately approved scope.
+> deferred and is not required before the pilot. Wave 1 Step 1.4B now provides the additive,
+> append-only `CostEntry` event schema/repository, read-only inventory, CostEntry-only totals, and
+> stable compatibility pagination. It does **not** enable paid execution, the full budget gate,
+> cache mutation, or spend-exception orchestration. Operational provider identities are validated
+> transactionally but are not foreign keys because their rows remain projection cleanup-owned.
 
 ---
 
@@ -291,6 +295,21 @@ brief, creates one `DRAFT` Campaign, records `RESEARCH/COMPLETED` plus `HUB_SEAR
 Approval, and enqueues one final notification. Machine routes require the bearer plus an authorized
 workspace membership for the asserted actor. No provider or paid work starts. The authoritative
 current status and next step are in `docs/GROWTH_OS_IMPLEMENTATION_TRACKER.md`.
+
+Wave 1 Step 1.4B implements the accepted ADR-001 financial foundation. `CostEntry` now represents
+immutable `ESTIMATE`, `AUTHORIZATION`, `ACTUAL`, `ADJUSTMENT`, and `REVERSAL` events with stable
+command/source identities, normalized currency, tenant-checked attribution, explicit provider or
+non-provider service identity, optional operational evidence identity, and serializable replay.
+Adjustments target `ACTUAL` events only; estimate/authorization correction uses reversal plus a new
+replacement event. Reversals negate the target's exact bucket and signed effect, including the
+retained `totalCents` actual-spend compatibility projection.
+Campaign/stage/action totals use these native events only and reject mixed currencies; the
+workspace history view labels projected rows as non-financial evidence and uses a stable composite
+cursor. Historical rows stay nullable/unattributed. `CampaignStageRun` cost fields remain caches.
+Use `docs/GROWTH_COST_LEDGER_RUNBOOK.md` before deployment. Staging/production inventory, the full
+budget gate, reconciliation-to-dispatch, paid integrations, and live deployment remain unverified
+or deferred. The next exact cross-repository step is Growth Bot Wave 1, B0.1; do not begin it from
+this CRM scope automatically.
 
 **CRM-1 takes its `Approval` shapes from `@syncore/contracts@0.2.1`, not from v9.1 §6 prose**
 (errata #5 — the contracts package wins). Concretely, and this changes the schema:

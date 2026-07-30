@@ -2177,7 +2177,9 @@ model ResearchRun {
   workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   nicheRequest      NicheRequest      @relation(fields: [nicheRequestId], references: [id], onDelete: Cascade)
   nicheBrief        NicheBrief?
+  costEntries       CostEntry[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, nicheRequestId])
   /// The Agent's claim query: oldest queued run first.
@@ -2238,6 +2240,7 @@ model Campaign {
   approvals             Approval[]         @relation("CampaignApprovals")
   costEntries           CostEntry[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, nicheBriefId])
 }
@@ -2276,6 +2279,8 @@ model CampaignStageRun {
   approvals          Approval[]
   costEntries        CostEntry[]
 
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, campaignId, id])
   @@index([workspaceId, campaignId, createdAt])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, stageType, status])
@@ -2332,7 +2337,9 @@ model Approval {
   stageRun             CampaignStageRun? @relation(fields: [stageRunId], references: [id], onDelete: SetNull)
   supersedes           Approval?         @relation("ApprovalRevision", fields: [supersedesApprovalId], references: [id])
   supersededBy         Approval?         @relation("ApprovalRevision")
+  costEntries          CostEntry[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, campaignId, createdAt])
   @@index([workspaceId, stageRunId])
@@ -2340,25 +2347,25 @@ model Approval {
   @@index([workspaceId, status, expiresAt])
 }
 
-/// The Growth OS cost ledger (v9.1 §6 `CostEntry`).
-///
-/// ⚠️ Why this is a separate table rather than columns on `ProviderUsageLedger`,
-/// which golden rule 3 would otherwise require:
-///
-/// `providerUsageLedger` is blob-projected — written at `money.ts:139` via
-/// `state.providerUsageLedger`, listed in `upsertOrder`
-/// (`persistence-projection.ts:198`), projected at `:466`. A natively-written
-/// row in that table is absent from the blob, so the `deleteMany` at `:1599`
-/// deletes it on the next sync. Golden rule 1 and golden rule 3 cannot both be
-/// satisfied while the ledger lives in the blob, and peeling it is anti-scope
-/// for the pilot.
-///
-/// Resolution: this table is the native generation of the ONE logical ledger.
-/// `lib/growth/read-models/cost-ledger.ts` unions it with the legacy blob rows
-/// so callers still see a single ledger. This is not a second ledger — it is the
-/// same ledger mid-migration. Do NOT add a third, and do NOT write Growth OS
-/// cost rows into `providerUsageLedger`: the projection check cannot catch that
-/// (it guards the name `CostEntry`, not `providerUsageLedger`).
+/// ADR-001 Option C: immutable financial-control events in the authoritative
+/// Growth OS ledger. Operational provider evidence remains separately projected.
+/// Nullable foundation fields preserve rows created before Wave 1 Step 1.4B;
+/// the repository requires them for every new financial event.
+enum FinancialEventKind {
+  ESTIMATE
+  AUTHORIZATION
+  ACTUAL
+  ADJUSTMENT
+  REVERSAL
+}
+
+enum FinancialReconciliationStatus {
+  NOT_APPLICABLE
+  PENDING
+  RECONCILED
+  DISPUTED
+}
+
 /// Outbound `/notify` deliveries to the chat bot (v9.1 §9.4, §19).
 ///
 /// The bot is a remote control, not a system of record: "a missed notify is
@@ -2409,26 +2416,73 @@ model NotifyOutbox {
 }
 
 model CostEntry {
-  id            String            @id @default(cuid())
-  workspaceId   String
-  campaignId    String?
-  stageRunId    String?
-  provider      String
-  action        String
-  units         Int               @default(0)
-  unit          String
-  unitCostCents Int               @default(0)
-  totalCents    Int               @default(0)
-  status        String
-  referenceType String?
-  referenceId   String?
-  metadata      Json              @default("{}")
-  createdAt     DateTime          @default(now())
-  workspace     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  campaign      Campaign?         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  stageRun      CampaignStageRun? @relation(fields: [stageRunId], references: [id], onDelete: SetNull)
+  id                    String                         @id @default(cuid())
+  workspaceId           String
+  campaignId            String?
+  stageRunId            String?
+  approvalId            String?
+  researchRunId         String?
+  providerJobId         String?
+  providerJobRunId      String?
+  providerUsageLedgerId String?                        @unique
+  adjustsCostEntryId    String?
+  reversesCostEntryId   String?                        @unique
+  /// Provider identity is optional so a non-provider service is never fictionalized.
+  provider              String?
+  service               String?
+  action                String
+  /// Stable grouping for estimate, authorization, actual, adjustment, and reversal events.
+  costActionKey         String?
+  /// Workspace-scoped command identity. Required by the repository for every new event.
+  idempotencyKey        String?
+  sourceSystem          String?
+  sourceEventId         String?
+  /// Stable provider/source sequence for partial actuals.
+  sourceLineId          String?
+  contentSha256         String?
+  eventKind             FinancialEventKind?
+  occurredAt            DateTime?
+  currency              String?
+  /// Authoritative event amount in integer minor units. Adjustments may be signed;
+  /// reversals store a non-negative amount and subtract it during reconciliation.
+  amountCents           Int?
+  units                 Int                            @default(0)
+  unit                  String?
+  unitCostCents         Int                            @default(0)
+  /// Compatibility projection for pre-foundation readers; authoritative totals use eventKind + amountCents.
+  totalCents            Int                            @default(0)
+  status                String
+  reconciliationStatus  FinancialReconciliationStatus?
+  authorizationSource   String?
+  authorizationId       String?
+  referenceType         String?
+  referenceId           String?
+  metadata              Json                           @default("{}")
+  createdAt             DateTime                       @default(now())
+  workspace             Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign              Campaign?                      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stageRun              CampaignStageRun?              @relation(fields: [stageRunId], references: [id], onDelete: SetNull)
+  approval              Approval?                      @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  researchRun           ResearchRun?                   @relation(fields: [researchRunId], references: [id], onDelete: Restrict)
+  adjustsCostEntry      CostEntry?                     @relation("CostEntryAdjustments", fields: [adjustsCostEntryId], references: [id], onDelete: Restrict)
+  adjustments           CostEntry[]                    @relation("CostEntryAdjustments")
+  reversesCostEntry     CostEntry?                     @relation("CostEntryReversal", fields: [reversesCostEntryId], references: [id], onDelete: Restrict)
+  reversal              CostEntry?                     @relation("CostEntryReversal")
 
+  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, sourceSystem, sourceEventId, eventKind, sourceLineId], map: "CostEntry_source_identity_key")
+  @@index([workspaceId, occurredAt, id])
+  @@index([workspaceId, campaignId, occurredAt, id])
+  @@index([workspaceId, stageRunId, occurredAt, id])
+  @@index([workspaceId, costActionKey, occurredAt])
+  @@index([workspaceId, sourceSystem, sourceEventId])
+  @@index([workspaceId, approvalId])
+  @@index([workspaceId, researchRunId])
+  @@index([workspaceId, providerJobId])
+  @@index([workspaceId, providerJobRunId])
+  @@index([workspaceId, providerUsageLedgerId], map: "CostEntry_workspace_evidence_idx")
+  @@index([workspaceId, provider, action, createdAt])
   @@index([workspaceId, campaignId, createdAt])
   @@index([workspaceId, stageRunId])
-  @@index([workspaceId, provider, action, createdAt])
 }
