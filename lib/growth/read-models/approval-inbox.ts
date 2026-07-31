@@ -172,13 +172,47 @@ export async function getApproval(
       decidedAt: true,
       firstApprovedBy: true,
       firstApprovedAt: true,
-      supersedesApprovalId: true,
+      revisionReason: true,
       createdAt: true,
-      supersededBy: { select: { id: true, createdAt: true }, orderBy: { createdAt: "asc" } }
+      workspace: { select: { approvalThresholdT2Cents: true } },
+      supersedes: { select: { id: true, workspaceId: true } },
+      supersededBy: { select: { id: true, workspaceId: true, createdAt: true } }
     }
   });
   if (!row) return null;
-  return { ...row, ...describe(row.payloadJson) };
+
+  const described = describe(row.payloadJson);
+  const threshold = row.workspace.approvalThresholdT2Cents;
+  const needsTwo =
+    threshold !== null &&
+    described.estimatedCostCents !== null &&
+    described.estimatedCostCents >= threshold;
+  const supersededBy =
+    row.supersededBy?.workspaceId === input.workspaceId
+      ? { id: row.supersededBy.id, createdAt: row.supersededBy.createdAt }
+      : null;
+
+  return {
+    id: row.id,
+    type: row.type,
+    status: row.status,
+    ...described,
+    payloadJson: row.payloadJson,
+    payloadSha256: row.payloadSha256,
+    campaignId: row.campaignId,
+    stageRunId: row.stageRunId,
+    requestedBy: row.requestedBy,
+    decidedBy: row.decidedBy,
+    decidedAt: row.decidedAt,
+    firstApprovedBy: row.firstApprovedBy,
+    firstApprovedAt: row.firstApprovedAt,
+    revisionReason: row.revisionReason,
+    supersedesApprovalId:
+      row.supersedes?.workspaceId === input.workspaceId ? row.supersedes.id : null,
+    supersededBy,
+    createdAt: row.createdAt,
+    awaitingSecondApprover: needsTwo && row.status === "pending"
+  };
 }
 
 /**
