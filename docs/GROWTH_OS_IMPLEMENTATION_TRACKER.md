@@ -4,13 +4,13 @@ This is the authoritative living implementation tracker for Growth OS work in th
 It records what the repository actually does, what has been verified, what remains disconnected,
 and the exact next implementation slice. It is not a replacement for the product plan.
 
-**Last repository review:** 2026-07-30
+**Last repository review:** 2026-07-31
 
-**Implementation baseline:** GitHub `main` at `4713b9c40f2ad5d5e9a99885e5447a32f879244e`
-(merged PR #175, accepted ADR-001 cost-ledger architecture)
+**Acceptance baseline before this tracker commit:** local `main` at
+`aea56ea376235524c1e11a02f9b5f054b50ecaac`; `origin/main` at
+`6db42b4` (merged PR #176)
 
-**Review branch before this tracker commit:** `growth-os/w1-cost-ledger-foundation` at
-`4713b9c40f2ad5d5e9a99885e5447a32f879244e`
+**Review branch before this tracker commit:** `main`
 
 **Current Growth phase:** **CRM-1 — IN PROGRESS**
 
@@ -670,12 +670,62 @@ Known limitations and deferred work:
 **Next exact step: Growth Bot Wave 1, B0.1 — correctness and contract hardening.** Do not begin
 Growth Bot work, CRM-2, paid execution, or the deferred budget gate automatically from this branch.
 
+### Wave 1 — local CRM ↔ Growth Bot joint acceptance closure — 2026-07-31
+
+**Status: COMPLETE**
+
+This status is scoped to the completed local joint acceptance only. It does not claim staging or
+production deployment, migration, credential, or delivery verification.
+
+Verified local joint-acceptance evidence:
+
+- CRM `APPROVAL_REQUESTED` notifications delivered through the real local NotifyOutbox worker to
+  the real local Growth Bot, and the Bot rendered actionable Slack approval cards successfully.
+- Slack approval decisions reached the CRM with the correct actor identity. CRM dashboard decisions
+  reconciled back to Slack against the same authoritative Approval record.
+- A revision left the original approval payload and hash immutable, marked that original
+  `superseded`, and created one linked pending successor carrying the replacement payload and a fresh
+  SHA-256 hash.
+- Replaying Bot-to-CRM actions created no duplicate Campaign, CampaignStageRun, or NotifyOutbox side
+  effects.
+- Final `NICHE_TEST` approval created exactly one `DRAFT` Campaign. Its complete initial stage set
+  was exactly `RESEARCH = COMPLETED` and `HUB_SEARCH = PENDING`; no paid or external work began.
+- With the Bot offline, the CRM decision still persisted independently and its durable notification
+  advanced through retry to dead-letter state. After Bot restart, an operator requeued that
+  dead-lettered notification; it then delivered and Slack reconciled correctly. This proves durable
+  recovery, not automated dead-letter replay.
+- T2 required two distinct humans: `user-nora` recorded the first approval and `user-mina` recorded
+  the final approval. No Campaign existed after the first approval. Exactly one Campaign and the two
+  initial stages existed after the second approval.
+- Slack's **Open in CRM** link now resolves to the authenticated, workspace-scoped
+  `/approvals/[id]` route. Missing and cross-workspace IDs render `notFound()` without exposing an
+  Approval, and terminal approvals render read-only. Pending approvals reuse the existing
+  Approve/Decline/Edit component and therefore add no new mutation path. Automated browser coverage
+  exercises pending, approved, superseded-successor, missing, and cross-workspace detail behavior.
+
+Implementation commits used by this acceptance:
+
+- Growth Bot actor-header fix: `65abd55`;
+- CRM approval detail-route fix: `aea56ea376235524c1e11a02f9b5f054b50ecaac`.
+
+Remaining limitations and gates:
+
+- This is local integration evidence only. Staging and production verification remain
+  **IMPLEMENTED — NOT VERIFIED**.
+- The Slack credential exposed during acceptance must be rotated before any production use.
+- Dead-letter recovery required an operator requeue. Automated dead-letter replay is not
+  implemented or claimed.
+- The temporary T2 acceptance fixture inherited unrelated sample payload details. Those values were
+  fixture-only data, not a production research result; the temporary fixture script was removed
+  after acceptance.
+- Growth Bot B2 remains **NOT STARTED**. This closure does not change its status or begin B2 work.
+
 ## Current executive snapshot
 
 | Area | Status | Current fact |
 |---|---|---|
 | CRM-0 guardrails | COMPLETE | Projection invariant, CI isolation, contracts checkout, and the baseline are present and verified. |
-| CRM-1 spine | IN PROGRESS | Wave 1 Steps 1.2, 1.3, 1.3A, and 1.4B now cover leased delivery, atomic approval/Campaign/outbox orchestration, and the append-only Option C financial foundation. Real-Bot acceptance and staging/production deployment evidence remain. |
+| CRM-1 spine | IN PROGRESS | Wave 1 Steps 1.2, 1.3, 1.3A, and 1.4B cover leased delivery, atomic approval/Campaign/outbox orchestration, and the Option C financial foundation. Local joint CRM-to-real-Bot acceptance is COMPLETE; staging/production deployment evidence remains. |
 | CRM-2 through CRM-8 | NOT STARTED | Some CRM-2 domain primitives landed as CRM-1 prerequisites, but none of the later phase acceptance paths is connected. |
 | Contracts consumption | COMPLETE | Version 0.2.1 is installed, locked, pinned in CI/on-host deployment, and directly consumer-tested. |
 | Cost-ledger foundation | COMPLETE | ADR-001 Option C is accepted; additive immutable events, idempotent repository, tenant checks, evidence boundary, CostEntry-only totals, stable pagination, read-only inventory, PostgreSQL migration/concurrency/rollback tests, and rollout documentation are implemented. Staging/production inventory and deployment remain NOT STARTED. |
@@ -742,7 +792,7 @@ legacy sequences; their navigation is deliberately labeled **Outreach (legacy se
 | Phase | Status | Implemented evidence | Required before phase completion |
 |---|---|---|---|
 | CRM-0 — guardrails | COMPLETE | Root Growth rules; measured baseline; contracts sibling checkout; projection checker in its own CI job; meta-test proving the checker fails when violated; CI on every push and PR. | Keep the guarded-model list and tracker current as models are added. |
-| CRM-1 — Growth spine | IN PROGRESS | Eight native Growth models, nine enums, five migrations, immutable/T2 approvals, transactional initial/revision/final notification enqueue, one locked and retryable decision service shared by dashboard/chat, exactly-once NICHE_TEST brief/Campaign/initial-stage application, leased delivery worker, PostgreSQL concurrency/rollback/projection tests, and blocking seeded-approval Playwright coverage. | Run the joint same-record real-Bot round trip and record staging/production migration evidence. |
+| CRM-1 — Growth spine | IN PROGRESS | Eight native Growth models, nine enums, five migrations, immutable/T2 approvals, transactional initial/revision/final notification enqueue, one locked and retryable decision service shared by dashboard/chat, exactly-once NICHE_TEST brief/Campaign/initial-stage application, leased delivery worker, PostgreSQL concurrency/rollback/projection tests, blocking seeded-approval Playwright coverage, and COMPLETE local same-record CRM-to-real-Bot acceptance. | Record staging/production migration, deployment, credential-rotation, and delivery evidence. |
 | CRM-2 — research loop | NOT STARTED | CRM-1 created `ResearchRun`, its repository, and the guarded `NicheBrief` constructor as prerequisites. | Add authenticated claim-next and heartbeat APIs, signed research progress/completion webhook, automatic brief/approval creation, approval-to-campaign orchestration, and the voice/text-to-approved-campaign cross-repository test. |
 | CRM-3 — Hub integration and verification control | NOT STARTED | Lead Hub launch placeholder only. | Add `HubSync`, golden intake, Hub identifiers, Hub search/golden contracts, Hub-executed MV authorization/results, `VerificationStatus` vocabulary correction, suppression reconciliation, and stage/cost integration. |
 | CRM-4 — acquisition and enrichment waterfall | NOT STARTED | Legacy provider adapters and workers exist, but they are not Growth campaign stages. | Add `ProviderRunProposal`, Hub overlap preflight, approval options, shared budget gate, stage-bound provider execution, provider-result push to Hub, actual-cost reconciliation, and overrun parking. |
@@ -911,7 +961,8 @@ state or successor without changing it.
 | Apply approved `NICHE_TEST` to `NicheBrief` | COMPLETE | Contracts/hash/chain validation precedes the decision; final approval marks the current workspace-scoped brief once in the same transaction. |
 | Create campaign after approved niche test | COMPLETE | Unique origin Approval plus row lock/serializable retry create one DRAFT Campaign, `RESEARCH/COMPLETED`, `HUB_SEARCH/PENDING`, and one final outbox event. |
 | Other approval-specific side effects | NOT STARTED | No provider, budget, launch, scale, suppression, reply, or breaker application service exists. |
-| Joint dashboard/bot final-state round trip | IMPLEMENTED — NOT VERIFIED | Contracts feedback is resolved in v0.2.1 and CRM delivery is implemented; the real Bot and same-record final-state round trip have not been run. |
+| Local joint dashboard/Bot final-state round trip | COMPLETE | The real local Bot and Slack completed requested, decision, dashboard reconciliation, revision, replay, offline/dead-letter recovery, T2, and final NICHE_TEST Campaign flows against the same CRM records. |
+| Staging/production dashboard/Bot round trip | IMPLEMENTED — NOT VERIFIED | No staging or production deployment and same-record round trip has been recorded. |
 
 NICHE_TEST decision side effects now execute through one idempotent application service used by
 both dashboard actions and chat routes. Later approval types must extend that boundary rather than
@@ -947,7 +998,8 @@ the only send target, and production requires HTTPS.
 | Background-worker wiring | COMPLETE | The production `worker:background`/systemd path preserves all existing lanes and drains NotifyOutbox each tick; unit regression coverage proves each call. |
 | Claim and crash recovery | COMPLETE | Atomic one-row claim, owner/token settlement, active-lease exclusion, stale-lease recovery, and process-restart simulation pass against PostgreSQL. |
 | Terminal visibility | COMPLETE | Dead-letter timestamps, safe structured attempt events, tick summary, and `/api/health` aggregates exist and are tested. |
-| Live CRM-to-bot delivery | IMPLEMENTED — NOT VERIFIED | Production code/config exists, but no deployment record or joint real-Bot request is evidence yet. |
+| Local CRM-to-real-Bot delivery | COMPLETE | The real local Bot accepted CRM notifications, rendered Slack cards, returned actor-scoped decisions, deduplicated replay, and reconciled dashboard and recovered dead-letter outcomes. |
+| Staging/production CRM-to-Bot delivery | IMPLEMENTED — NOT VERIFIED | Production-capable code/config exists, but no staging or production deployment and delivery record exists. |
 
 Known delivery risks:
 
@@ -961,8 +1013,10 @@ Known delivery risks:
   The default 60-second lease exceeds the 15-second request timeout, but no finite lease removes
   this distributed-systems edge case.
 - Terminal failures are visible in logs and health, but no external alert rule or admin retry UI is
-  configured in this repository.
-- Production configuration and a real CRM-to-Bot delivery have not been observed.
+  configured in this repository. Local acceptance recovery required an operator requeue; automated
+  dead-letter replay is not claimed.
+- Real local CRM-to-Bot delivery has been observed. Staging and production configuration and
+  delivery have not.
 
 ## 7. Campaign and CampaignStageRun status
 
@@ -1131,10 +1185,17 @@ Verified:
 - Growth pages render under Playwright; unauthenticated/cross-workspace machine requests have no
   side effects; and a seeded authorized decision route creates one Campaign, the two safe stage
   rows, and one final outbox event under blocking Playwright.
+- Local joint acceptance with the real Growth Bot and Slack proves requested-card delivery,
+  actor-correct Bot decisions, dashboard reconciliation, immutable revision/successor behavior,
+  replay deduplication, independent CRM decisions while the Bot is offline, operator-requeued
+  dead-letter recovery, distinct-human T2 enforcement, exactly one final Campaign, and the exact
+  safe initial stage set.
+- The Slack `/approvals/[id]` deep link resolves through the authenticated active workspace;
+  terminal records are read-only, and automated browser coverage proves missing/cross-workspace
+  records render not found.
 
 Not verified:
 
-- a real API-to-bot approval round trip;
 - side effects for the ten approval types after `NICHE_TEST`;
 - staging or production rollout of the CRM-1 migrations and code.
 
@@ -1144,6 +1205,7 @@ Not verified:
 |---|---|---|
 | Local build/toolchain | COMPLETE | Sibling contracts checkout is exactly v0.2.1; lint, typecheck, 633 unit tests, invariant, Prisma checks, and production build pass. |
 | Local running app with PostgreSQL | COMPLETE | All 19 migrations applied to isolated PostgreSQL 16; 62 integration tests and all 6 blocking Growth OS Next.js/Playwright tests pass. |
+| Local CRM ↔ real Growth Bot and Slack | COMPLETE | Joint acceptance completed requested-card delivery, Bot and dashboard decisions, revision, replay, offline/dead-letter recovery by operator requeue, T2, final Campaign/stages, and authenticated deep-link checks. |
 | Staging procedure | IMPLEMENTED — NOT VERIFIED | Database cutover documentation describes staging migration/seed/write checks. No staging environment, URL, deployment workflow, or current CRM-1 staging result is recorded in the repository. |
 | AWS infrastructure code | IMPLEMENTED — NOT VERIFIED | Terraform, Caddy configuration, systemd units, migration, deploy, redeploy, health, and rollback scripts exist; they were inspected but not applied during this review. |
 | AWS production infrastructure claim | IMPLEMENTED — NOT VERIFIED | `docs/AWS_MIGRATION.md` says the EC2/RDS migration completed 2026-07-10, but this review did not query AWS or the production health endpoint. |
@@ -1189,7 +1251,7 @@ repositories.
 |---|---|---|
 | `syncore-contracts` | COMPLETE | Sibling checkout at `579a12853641b75b453325f6f08af7bb6521af9b`, exact tag/version v0.2.1. Lockfile, CI, consumer test, and on-host version guard agree. CRM consumes approval, request, research, stage, notify, primitive, and webhook shapes. |
 | Contracts CRM-1 patch | COMPLETE | v0.2.1 corrected/conformance-tested the fixture hash and documented the CRM feedback; the CRM deleted its local temporary hash authority. |
-| `syncore-growth-bot` | BLOCKED | Slack is the pilot surface; Telegram remains an adapter. CRM has routes and outbound envelope code, but no joint same-record round trip is recorded. |
+| `syncore-growth-bot` | IN PROGRESS | Slack is the pilot surface; Telegram remains an adapter. Local same-record joint acceptance is COMPLETE, including actor identity, reconciliation, replay, offline recovery, T2, and deep links. Staging/production verification and the Bot roadmap after B0.1 remain outstanding; B2 is NOT STARTED. |
 | `syncore-research-console` | NOT STARTED | CRM-2 requires the `/agent` poller, progress/heartbeat, and validated Template B completion contract. |
 | `syncore-lead-hub` | NOT STARTED | CRM-3 requires golden search/export/sync, MV authorization/result, suppression reconciliation, and provider-result imports. Current CRM page is only a launch placeholder. |
 | `syncore-email-verifier` | NOT STARTED | CRM must not call it directly. The Hub owns its bridge and status mapping. CRM-3 must consume the corrected shared `VerificationStatus`. |
@@ -1204,9 +1266,10 @@ with the CI `contracts-ref` update. Local redeclarations are prohibited.
 
 ### Growth-critical risks
 
-1. **CRM-1 acceptance is not fully cross-repository.** Local HTTP/PostgreSQL/Playwright proves the
-   complete CRM-side initial, revision, and final notification lifecycle plus final NICHE_TEST
-   application, but the same-record real-Bot round trip remains unverified.
+1. **CRM-1 joint acceptance evidence is local only.** The same-record CRM/Growth Bot/Slack round
+   trip is COMPLETE locally, including offline recovery, replay, T2, and final NICHE_TEST effects,
+   but staging and production deployment and delivery remain unverified. The exposed Slack
+   credential must be rotated before production use.
 2. **Contracts v0.2.1 does not carry a typed user/channel recipient.** The CRM routes by the
    authoritative envelope workspace and supplies display metadata; the Bot must resolve configured
    approval recipients within that workspace.
@@ -1295,6 +1358,9 @@ reference and was also preserved outside this commit.
 **Next exact step: Growth Bot Wave 1, B0.1 — correctness and contract hardening. Do not start CRM-2,
 paid provider execution, the deferred budget gate, or Growth Bot work from this CRM branch.**
 
+Growth Bot B2 remains **NOT STARTED**. The completed local joint acceptance did not begin or change
+B2.
+
 ADR-001 Option C, binding erratum entry 6, and the Step 1.4B additive foundation are complete.
 Staging and production read-only inventory and deployment remain gates for CRM rollout, but they do
 not change the next cross-repository implementation step. The financial foundation authorizes no
@@ -1327,12 +1393,16 @@ The slice must be implemented in this order:
 7. Document and provision the four Growth environment variables, then record staging and production
    migration/deployment evidence here.
 
-CRM-1 becomes **COMPLETE** only when this acceptance statement is true:
+Local CRM-1 joint acceptance becomes **COMPLETE** only when this acceptance statement is true:
 
 > A researched brief creates one immutable approval and a durable approval-request notification;
 > the operator can approve, decline, or revise it from dashboard or bot; both surfaces show the same
 > final state; a final approval applies its business side effect exactly once; the bot may be down
 > without blocking the decision; and queued notifications are later delivered by the worker.
+
+That local acceptance statement was satisfied on 2026-07-31. The overall CRM-1 phase remains
+**IN PROGRESS** until staging and production migration, deployment, credential rotation, and
+same-record delivery evidence are recorded.
 
 After that, the exact CRM-2 entry point is `GET /api/research-runs/next`, followed by heartbeat and
 the signed Research Console completion webhook.
