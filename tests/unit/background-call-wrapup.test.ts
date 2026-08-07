@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   backgroundCallWrapupError,
+  backgroundCallWrapupToastOptions,
   launchBackgroundCallWrapup
 } from "@/components/crm/cockpit/focus/background-call-wrapup";
 
@@ -64,5 +65,18 @@ describe("background call wrap-up", () => {
 
   it("normalizes unknown errors", () => {
     expect(backgroundCallWrapupError(null)).toBe("Could not save the wrap-up.");
+  });
+
+  it("keeps transient save feedback away from the wrap-up controls", () => {
+    expect(backgroundCallWrapupToastOptions.started).toEqual({
+      position: "top-right",
+      closeButton: true,
+      duration: 1_500
+    });
+    expect(backgroundCallWrapupToastOptions.success.duration).toBe(1_500);
+    expect(backgroundCallWrapupToastOptions.failure).toMatchObject({
+      position: "top-right",
+      closeButton: true
+    });
   });
 });

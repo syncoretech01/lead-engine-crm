@@ -23,6 +23,7 @@ import { useCall } from "@/components/call/call-context";
 import { enqueueCallPersistence } from "@/components/call/call-persistence-queue";
 import { CoPill } from "@/components/crm/cockpit/co-table";
 import {
+  backgroundCallWrapupToastOptions,
   backgroundCallWrapupError,
   launchBackgroundCallWrapup
 } from "@/components/crm/cockpit/focus/background-call-wrapup";
@@ -605,9 +606,9 @@ function Wrapup({
     return launchBackgroundCallWrapup({
       request: () => enqueueCallPersistence(() => saveCallWrapupAction(input)),
       onStarted: () => {
-        toast.loading(`Saving wrap-up for ${lead.name} in the background…`, {
+        toast.info(`Saving wrap-up for ${lead.name} in the background…`, {
           id: toastId,
-          duration: Infinity
+          ...backgroundCallWrapupToastOptions.started
         });
         if (advanceImmediately) {
           onDismiss();
@@ -616,13 +617,16 @@ function Wrapup({
       },
       onSuccess: () => {
         onComplete(lead.id, summary);
-        toast.success(`Wrap-up saved for ${lead.name}.`, { id: toastId });
+        toast.success(`Wrap-up saved for ${lead.name}.`, {
+          id: toastId,
+          ...backgroundCallWrapupToastOptions.success
+        });
       },
       onFailure: (error) => {
         toast.error(`Wrap-up for ${lead.name} was not saved.`, {
           id: toastId,
           description: error,
-          duration: Infinity,
+          ...backgroundCallWrapupToastOptions.failure,
           action: {
             label: "Retry",
             onClick: () => {

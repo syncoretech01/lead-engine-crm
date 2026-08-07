@@ -2,6 +2,27 @@ export type BackgroundCallWrapupResult =
   | { ok: true }
   | { ok: false; error: string };
 
+// Call wrap-up controls live at the bottom-right of the cockpit. Keep transient
+// persistence feedback away from them and never use Sonner's `loading` type:
+// loading toasts cannot be closed and do not auto-dismiss.
+export const backgroundCallWrapupToastOptions = {
+  started: {
+    position: "top-right" as const,
+    closeButton: true,
+    duration: 1_500
+  },
+  success: {
+    position: "top-right" as const,
+    closeButton: true,
+    duration: 1_500
+  },
+  failure: {
+    position: "top-right" as const,
+    closeButton: true,
+    duration: Infinity
+  }
+};
+
 type LaunchBackgroundCallWrapupOptions = {
   request: () => Promise<BackgroundCallWrapupResult>;
   onStarted: () => void;
