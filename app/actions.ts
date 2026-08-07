@@ -1262,6 +1262,24 @@ export type CallWrapupResult =
   | { ok: true; message: string; created: string[] }
   | { ok: false; error: string };
 
+// Production snapshots are large enough that an RDS JSONB update can occasionally
+// exceed Prisma's 30-second default. These writes run in the browser's serialized
+// call queue, so a larger budget improves durability without blocking navigation.
+const CALL_PERSISTENCE_TRANSACTION_TIMEOUT_MS = 120_000;
+
+function callWrapupErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "Could not save the wrap-up.";
+  if (
+    message.includes("P2028") ||
+    message.includes("Transaction already closed") ||
+    message.includes("Transaction not found") ||
+    message.includes("expired transaction")
+  ) {
+    return "The wrap-up save timed out. It is safe to retry; duplicate records will not be created.";
+  }
+  return message;
+}
+
 /**
  * Unified SDR call wrap-up (SDR Cockpit). Composes the existing building blocks in
  * ONE snapshot transaction (atomic — never a half-saved wrap-up): recordFirstTouch
@@ -1501,7 +1519,10 @@ export async function saveCallWrapupAction(input: {
           newValue: { requestId: requestId ?? null, outcome: input.outcome, leadStatus: assignment.status, created }
         });
       },
-      { normalizedTables: callWrapupWriteTables }
+      {
+        normalizedTables: callWrapupWriteTables,
+        transactionTimeoutMs: CALL_PERSISTENCE_TRANSACTION_TIMEOUT_MS
+      }
     );
 
     // revalidateSdrPages already includes the CRM routes. Passing the detail
@@ -1512,7 +1533,7 @@ export async function saveCallWrapupAction(input: {
     ]);
     return { ok: true, message: "Call wrap-up saved.", created };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Could not save the wrap-up." };
+    return { ok: false, error: callWrapupErrorMessage(error) };
   }
 }
 
@@ -2462,7 +2483,10 @@ export async function placeCallAction(
       });
       return call.id;
     },
-    { normalizedTables: outreachTrackedCallWriteTables }
+    {
+      normalizedTables: outreachTrackedCallWriteTables,
+      transactionTimeoutMs: CALL_PERSISTENCE_TRANSACTION_TIMEOUT_MS
+    }
   );
 
   revalidateOutreachPages([`/crm/contacts/${contactId}`, "/crm/calls", "/crm/my-contacts", "/sdr/queue"]);
@@ -2551,7 +2575,10 @@ export async function logSoftphoneCallAction(
       });
       return call.id;
     },
-    { normalizedTables: outreachTrackedCallWriteTables }
+    {
+      normalizedTables: outreachTrackedCallWriteTables,
+      transactionTimeoutMs: CALL_PERSISTENCE_TRANSACTION_TIMEOUT_MS
+    }
   );
 
   revalidateOutreachPages([`/crm/contacts/${contactId}`, "/crm/calls", "/crm/my-contacts", "/sdr/queue"]);

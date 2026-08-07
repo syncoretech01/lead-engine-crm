@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { createNoteAction, logSoftphoneCallAction, placeCallAction } from "@/app/actions";
+import { enqueueCallPersistence } from "@/components/call/call-persistence-queue";
 import { searchCrmRecordsAction } from "@/app/crm/search-actions";
 import {
   useCall,
@@ -551,7 +552,7 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
             form.set("recordingStartError", recordingStartErrorRef.current);
           }
         }
-        await logSoftphoneCallAction(form);
+        await enqueueCallPersistence(() => logSoftphoneCallAction(form));
       } catch {
         // Logging is best-effort; never block the call UI on it.
       }

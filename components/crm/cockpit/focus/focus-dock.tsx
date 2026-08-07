@@ -20,6 +20,7 @@ import {
 
 import { saveCallWrapupAction } from "@/app/actions";
 import { useCall } from "@/components/call/call-context";
+import { enqueueCallPersistence } from "@/components/call/call-persistence-queue";
 import { CoPill } from "@/components/crm/cockpit/co-table";
 import {
   backgroundCallWrapupError,
@@ -602,7 +603,7 @@ function Wrapup({
     advanceImmediately: boolean
   ): boolean {
     return launchBackgroundCallWrapup({
-      request: () => saveCallWrapupAction(input),
+      request: () => enqueueCallPersistence(() => saveCallWrapupAction(input)),
       onStarted: () => {
         toast.loading(`Saving wrap-up for ${lead.name} in the background…`, {
           id: toastId,

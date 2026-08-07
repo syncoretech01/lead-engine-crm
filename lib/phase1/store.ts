@@ -57,7 +57,17 @@ type UpdateStateOptions = {
   normalizedTables?: ProjectionTableName[];
   /** Persist only the JSON snapshot; skip the normalized projection sync. */
   skipNormalizedProjection?: boolean;
+  /** Override Prisma's interactive transaction budget for known heavy writes. */
+  transactionTimeoutMs?: number;
 };
+
+const DEFAULT_STATE_TRANSACTION_TIMEOUT_MS = 30_000;
+const MAX_STATE_TRANSACTION_TIMEOUT_MS = 180_000;
+
+function stateTransactionTimeoutMs(value: number | undefined) {
+  if (!Number.isFinite(value)) return DEFAULT_STATE_TRANSACTION_TIMEOUT_MS;
+  return Math.min(MAX_STATE_TRANSACTION_TIMEOUT_MS, Math.max(1_000, Math.round(value as number)));
+}
 
 export const sessionCookieNames = {
   userId: legacyDemoSessionCookieNames.userId,
@@ -142,7 +152,7 @@ export async function updateState<T>(
           );
           return result;
         },
-        { maxWait: 10_000, timeout: 30_000 }
+        { maxWait: 10_000, timeout: stateTransactionTimeoutMs(options.transactionTimeoutMs) }
       )
     );
   }, { driver, tables: normalizedTablesLabel(options.normalizedTables) });
@@ -177,7 +187,7 @@ export async function updateAuthState<T>(
           );
           return result;
         },
-        { maxWait: 10_000, timeout: 30_000 }
+        { maxWait: 10_000, timeout: stateTransactionTimeoutMs(options.transactionTimeoutMs) }
       )
     );
   }, { driver, tables: normalizedTablesLabel(options.normalizedTables) });
