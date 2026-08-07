@@ -100,6 +100,7 @@ import {
 } from "@/lib/phase1/outreach-send";
 import {
   aiWriteTables,
+  callWrapupWriteTables,
   complianceWriteTables,
   crmWriteTables,
   exportRuleWriteTables,
@@ -1484,11 +1485,12 @@ export async function saveCallWrapupAction(input: {
           newValue: { outcome: input.outcome, leadStatus: assignment.status, created }
         });
       },
-      { normalizedTables: [...new Set([...sdrWriteTables, ...crmWriteTables, ...outreachTrackedCallWriteTables])] }
+      { normalizedTables: callWrapupWriteTables }
     );
 
-    revalidateSdrPages();
-    revalidateCrmPages([
+    // revalidateSdrPages already includes the CRM routes. Passing the detail
+    // paths here avoids invalidating the entire CRM route set a second time.
+    revalidateSdrPages([
       `/crm/contacts/${input.contactId}`,
       input.companyId ? `/crm/accounts/${input.companyId}` : ""
     ]);

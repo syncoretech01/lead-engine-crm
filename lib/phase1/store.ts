@@ -793,10 +793,10 @@ function normalizedSyncOptions(options: UpdateStateOptions): SyncNormalizedProje
   return options.normalizedTables?.length ? { tables: options.normalizedTables } : {};
 }
 
-// Fast write path (now the default): scoped writes upsert only the rows that
-// actually changed (baseline captured pre-mutation) instead of re-upserting every
-// row of the scoped tables. Diff has run in prod since the Neon-egress fix and is
-// proven equivalent to full (see projection-diff-equivalence.test.ts); set
+// Fast write path (now the default): scoped writes delete only removed IDs and
+// upsert only rows that actually changed (baseline captured pre-mutation), instead
+// of scanning/re-upserting every row in the scoped tables. Diff is proven
+// equivalent to full (see projection-diff-equivalence.test.ts); set
 // SYNCORE_PROJECTION_MODE=full only to fall back to the slower, fully self-healing
 // sync. Only applies to scoped (normalizedTables) writes.
 function projectionDiffEnabled() {

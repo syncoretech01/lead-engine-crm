@@ -97,6 +97,22 @@ export const sdrWriteTables = [
   "auditLogs"
 ] satisfies ProjectionTableName[];
 
+// The Focus cockpit's hot path. A wrap-up changes only these projected domains;
+// notes are Prisma-native and are flushed separately by writeStateToPrisma.
+// Keeping this list narrow avoids diffing unrelated CRM/SDR configuration rows
+// while the SDR is waiting to advance to the next lead.
+export const callWrapupWriteTables = [
+  "contacts",
+  "opportunities",
+  "activities",
+  "tasks",
+  "sdrAssignments",
+  "followUpReminders",
+  "trackedCalls",
+  "sdrCallingSessions",
+  "auditLogs"
+] satisfies ProjectionTableName[];
+
 export const sdrDailyReportWriteTables = [
   "sdrDailyReports"
 ] satisfies ProjectionTableName[];

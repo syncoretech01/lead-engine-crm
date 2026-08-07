@@ -93,7 +93,8 @@ export type ProjectionRow = {
 export type NormalizedPersistenceProjection = Record<ProjectionTableName, ProjectionRow[]>;
 
 // Stable per-row string of a previous projection, by table then row id. Used by
-// the diff write path to skip upserting rows that did not change.
+// the diff write path to skip unchanged upserts and delete only rows that were
+// actually removed by the mutation.
 export type ProjectionRowStrings = Map<ProjectionTableName, Map<string, string>>;
 
 export type SyncNormalizedProjectionOptions = {
@@ -102,10 +103,10 @@ export type SyncNormalizedProjectionOptions = {
   skip?: boolean;
   /**
    * Per-row stable strings captured BEFORE the mutation. When provided, only
-   * rows whose stable string changed (or are new) are upserted — turning the
-   * per-action write cost from O(all rows) into O(changed rows). Must be
-   * captured pre-mutation (see captureProjectionRowStrings) so in-place mutation
-   * of shared references cannot corrupt the baseline.
+   * removed row IDs are deleted and only changed/new rows are upserted — turning
+   * the per-action database write cost from O(all rows) into O(changed rows).
+   * Must be captured pre-mutation (see captureProjectionRowStrings) so in-place
+   * mutation of shared references cannot corrupt the baseline.
    */
   previousRowStrings?: ProjectionRowStrings;
 };
@@ -1583,9 +1584,34 @@ export async function syncNormalizedProjectionToPrisma(
   const skippedTables: ProjectionTableName[] = [];
   const selectedRows = selectedUpsertOrder.reduce((total, spec) => total + projection[spec.table].length, 0);
 
+  let deletedRows = 0;
   await timeAsync("projection.sync.deleteMany", async () => {
+    const previousRowStrings = options.previousRowStrings;
     for (const spec of [...selectedUpsertOrder].reverse()) {
       if (!spec.workspaceScoped) continue;
+
+      // A scoped diff already has the exact pre-mutation row set. Delete only
+      // IDs that disappeared instead of scanning each table with `NOT IN (...)`
+      // on every small mutation. IDs are global primary keys, so the targeted
+      // delete remains tenant-safe without a broad workspace scan.
+      const previousForTable = previousRowStrings?.get(spec.table);
+      if (previousForTable) {
+        const currentIds = new Set(projection[spec.table].map((row) => row.id));
+        const removedIds = [...previousForTable.keys()].filter((id) => !currentIds.has(id));
+        if (removedIds.length === 0) continue;
+
+        const delegate = client[spec.delegate];
+        if (!delegate?.deleteMany) {
+          skippedTables.push(spec.table);
+          continue;
+        }
+        await delegate.deleteMany({ where: { id: { in: removedIds } } });
+        deletedRows += removedIds.length;
+        continue;
+      }
+
+      // Full projection remains the self-healing fallback: remove any database
+      // row not represented by the authoritative snapshot.
       const delegate = client[spec.delegate];
       if (!delegate?.deleteMany) {
         skippedTables.push(spec.table);
@@ -1602,7 +1628,8 @@ export async function syncNormalizedProjectionToPrisma(
   }, {
     selectedTables: selectedUpsertOrder.length,
     workspaceCount: workspaceIds.length,
-    requestedTables: projectionTablesLabel(options.tables)
+    requestedTables: projectionTablesLabel(options.tables),
+    diff: options.previousRowStrings ? "on" : "off"
   });
 
   let upsertedRows = 0;
@@ -1647,6 +1674,7 @@ export async function syncNormalizedProjectionToPrisma(
   totalTimer.end({
     selectedTables: selectedUpsertOrder.length,
     selectedRows,
+    deletedRows,
     upsertedRows,
     diff: options.previousRowStrings ? "on" : "off",
     skippedTables: result.skippedTables.length

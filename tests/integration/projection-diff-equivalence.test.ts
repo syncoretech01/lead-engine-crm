@@ -5,8 +5,9 @@ import { afterAll, describe, expect, it } from "vitest";
  *
  * `diff` mode upserts only the rows a scoped write changed, instead of re-upserting
  * every row of the scoped tables. It is now the default, so this proves it produces
- * an identical projection to `full` for the same mutation — covering both an ADD
- * (new audit rows) and a MODIFY (a changed contact field, which diff must NOT skip).
+ * an identical projection to `full` for the same mutation — covering an ADD
+ * (new audit rows), REMOVE (one of those rows), and MODIFY (a changed contact
+ * field, which diff must NOT skip).
  *
  * Only runs when SYNCORE_RUN_DB_INTEGRATION=1 (CI `integration` job / local
  * docker-compose.dev.yml); otherwise skipped so the unit lane needs no DB.
@@ -49,6 +50,15 @@ describe.skipIf(!enabled)("projection diff mode equals full mode", () => {
       { normalizedTables: ["auditLogs"] }
     );
 
+    // REMOVE — diff mode must target the one disappeared ID rather than run the
+    // full table-wide stale-row scan.
+    await updateAuthState(
+      (state) => {
+        state.auditLogs = state.auditLogs.filter((entry) => entry.objectId !== "equiv-1");
+      },
+      { normalizedTables: ["auditLogs"] }
+    );
+
     // MODIFY — bump a contact's score via a scoped contacts write. This is the
     // changed-row upsert path that diff mode must detect and not skip.
     await updateAuthState(
@@ -73,7 +83,7 @@ describe.skipIf(!enabled)("projection diff mode equals full mode", () => {
     const diff = await applyAndSnapshot("diff");
 
     expect(diff).toEqual(full);
-    expect(diff.auditObjectIds).toEqual(["equiv-1", "equiv-2"]);
+    expect(diff.auditObjectIds).toEqual(["equiv-2"]);
     expect(diff.targetScore).toBe(99);
   });
 });

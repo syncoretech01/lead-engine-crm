@@ -337,11 +337,14 @@ describe("normalized persistence projection", () => {
     );
     state.contacts[0].consentSource = "Changed for diff test";
 
+    const deletes: unknown[] = [];
     const upserts: Array<{ delegate: string; id: string }> = [];
     const client = new Proxy({}, {
       get(_target, property) {
         return {
-          deleteMany: async () => {},
+          deleteMany: async (args: unknown) => {
+            deletes.push(args);
+          },
           upsert: async (args: { where: { id: string } }) => {
             upserts.push({ delegate: String(property), id: args.where.id });
           }
@@ -355,8 +358,43 @@ describe("normalized persistence projection", () => {
     });
 
     // Only the mutated contact is upserted; the other (unchanged) contacts are skipped.
+    expect(deletes).toEqual([]);
     expect(upserts).toHaveLength(1);
     expect(upserts[0].id).toBe(state.contacts[0].id);
+  });
+
+  it("diff write path deletes only row IDs removed by the mutation", async () => {
+    const state = createSeedState();
+    expect(state.contacts.length).toBeGreaterThan(1);
+    const previousRowStrings = captureProjectionRowStrings(
+      createNormalizedPersistenceProjection(state),
+      ["contacts"]
+    );
+    const removed = state.contacts.pop();
+    if (!removed) throw new Error("seed state has no contact to remove");
+
+    const deletes: unknown[] = [];
+    let upserts = 0;
+    const client = new Proxy({}, {
+      get() {
+        return {
+          deleteMany: async (args: unknown) => {
+            deletes.push(args);
+          },
+          upsert: async () => {
+            upserts += 1;
+          }
+        };
+      }
+    });
+
+    await syncNormalizedProjectionToPrisma(state, client, {
+      tables: ["contacts"],
+      previousRowStrings
+    });
+
+    expect(deletes).toEqual([{ where: { id: { in: [removed.id] } } }]);
+    expect(upserts).toBe(0);
   });
 
   it("diff write path upserts nothing when no scoped rows changed", async () => {
@@ -366,11 +404,14 @@ describe("normalized persistence projection", () => {
       ["contacts", "auditLogs"]
     );
 
+    let deletes = 0;
     let upserts = 0;
     const client = new Proxy({}, {
       get() {
         return {
-          deleteMany: async () => {},
+          deleteMany: async () => {
+            deletes += 1;
+          },
           upsert: async () => {
             upserts += 1;
           }
@@ -383,6 +424,7 @@ describe("normalized persistence projection", () => {
       previousRowStrings
     });
 
+    expect(deletes).toBe(0);
     expect(upserts).toBe(0);
   });
 });

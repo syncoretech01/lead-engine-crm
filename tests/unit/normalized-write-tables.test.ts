@@ -3,6 +3,7 @@ import { createNormalizedPersistenceProjection } from "@/lib/phase1/persistence-
 import {
   aiWriteTables,
   authWriteTables,
+  callWrapupWriteTables,
   complianceWriteTables,
   crmWriteTables,
   enrichmentWriteTables,
@@ -25,6 +26,7 @@ import { createSeedState } from "@/lib/phase1/seed";
 const scopedWriteTableGroups = {
   aiWriteTables,
   authWriteTables,
+  callWrapupWriteTables,
   complianceWriteTables,
   crmWriteTables,
   enrichmentWriteTables,
@@ -95,6 +97,17 @@ describe("normalized write table scopes", () => {
       "followUpReminders",
       "reassignmentRules"
     ]));
+    expect(callWrapupWriteTables).toEqual([
+      "contacts",
+      "opportunities",
+      "activities",
+      "tasks",
+      "sdrAssignments",
+      "followUpReminders",
+      "trackedCalls",
+      "sdrCallingSessions",
+      "auditLogs"
+    ]);
     expect(complianceWriteTables).toEqual(expect.arrayContaining([
       "suppressionRecords",
       "dataSubjectRequests",

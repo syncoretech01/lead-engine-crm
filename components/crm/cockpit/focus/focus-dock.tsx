@@ -637,7 +637,14 @@ function Wrapup({
     });
     toast.success("Wrap-up saved.");
     if (advance) {
-      setSaved(result.created);
+      if (hasNext) {
+        // The toast is sufficient confirmation while dialing. Move immediately
+        // instead of holding the SDR on a 1.6-second success interstitial.
+        onDismiss();
+        onAdvance();
+      } else {
+        setSaved(result.created);
+      }
     } else {
       onDismiss();
     }
