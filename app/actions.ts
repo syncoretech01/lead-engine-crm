@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { asActionResult, type ActionResult } from "@/lib/action-result";
 import { assertPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
+import { findCallWrapupReceipt } from "@/lib/phase1/call-wrapup-idempotency";
 import {
   completeDataSubjectRequest,
   consentStatuses,
@@ -1270,6 +1271,8 @@ export type CallWrapupResult =
  * here. Returns the list of what was created for the success checklist.
  */
 export async function saveCallWrapupAction(input: {
+  /** Client-generated idempotency key so a background retry cannot duplicate side-effects. */
+  requestId?: string;
   assignmentId: string;
   contactId: string;
   companyId: string;
@@ -1295,6 +1298,7 @@ export async function saveCallWrapupAction(input: {
   talkTimeSeconds?: number;
 }): Promise<CallWrapupResult> {
   const created: string[] = [];
+  const requestId = input.requestId?.trim().slice(0, 200);
   try {
     await updateState(
       (state, session) => {
@@ -1312,6 +1316,18 @@ export async function saveCallWrapupAction(input: {
         }
         if (input.companyId && input.companyId !== targetAssignment.companyId) {
           throw new Error("Call wrap-up account does not match the assignment.");
+        }
+
+        const priorCreated = requestId
+          ? findCallWrapupReceipt(state.auditLogs, {
+              workspaceId: session.workspace.id,
+              assignmentId: targetAssignment.id,
+              requestId
+            })
+          : undefined;
+        if (priorCreated) {
+          created.push(...priorCreated);
+          return;
         }
         const followUpDueAt = dateTimeValue(input.followUpDueAt ?? null, session.user.timezone);
 
@@ -1482,7 +1498,7 @@ export async function saveCallWrapupAction(input: {
           objectType: "sdr_assignment",
           objectId: assignment.id,
           action: "call_wrapup_saved",
-          newValue: { outcome: input.outcome, leadStatus: assignment.status, created }
+          newValue: { requestId: requestId ?? null, outcome: input.outcome, leadStatus: assignment.status, created }
         });
       },
       { normalizedTables: callWrapupWriteTables }

@@ -21,11 +21,16 @@ import {
 import { saveCallWrapupAction } from "@/app/actions";
 import { useCall } from "@/components/call/call-context";
 import { CoPill } from "@/components/crm/cockpit/co-table";
+import {
+  backgroundCallWrapupError,
+  launchBackgroundCallWrapup
+} from "@/components/crm/cockpit/focus/background-call-wrapup";
 import { QuickActions } from "@/components/crm/cockpit/quick-actions";
 import { leadBlockReason, type FocusLead } from "@/components/crm/cockpit/focus/focus-types";
 import type { WrapupSummary } from "@/components/crm/cockpit/focus/use-focus-session";
 
 const DIAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
+type CallWrapupInput = Parameters<typeof saveCallWrapupAction>[0];
 
 // Disposition → default lead status + side-effects (README §70). The SDR can
 // override the status in the wrap-up; these are the honest defaults.
@@ -577,6 +582,7 @@ function Wrapup({
   const [meetingAt, setMeetingAt] = React.useState("");
   const [pending, setPending] = React.useState(false);
   const [saved, setSaved] = React.useState<string[] | null>(null);
+  const pendingRef = React.useRef(false);
 
   // Selecting an outcome pulls the honest default status + side-effects.
   function pickOutcome(next: string) {
@@ -589,8 +595,47 @@ function Wrapup({
     if (nextDef.meeting) setFollowUp("custom");
   }
 
+  function queueBackgroundSave(
+    input: CallWrapupInput,
+    summary: WrapupSummary,
+    toastId: string,
+    advanceImmediately: boolean
+  ): boolean {
+    return launchBackgroundCallWrapup({
+      request: () => saveCallWrapupAction(input),
+      onStarted: () => {
+        toast.loading(`Saving wrap-up for ${lead.name} in the background…`, {
+          id: toastId,
+          duration: Infinity
+        });
+        if (advanceImmediately) {
+          onDismiss();
+          onAdvance();
+        }
+      },
+      onSuccess: () => {
+        onComplete(lead.id, summary);
+        toast.success(`Wrap-up saved for ${lead.name}.`, { id: toastId });
+      },
+      onFailure: (error) => {
+        toast.error(`Wrap-up for ${lead.name} was not saved.`, {
+          id: toastId,
+          description: error,
+          duration: Infinity,
+          action: {
+            label: "Retry",
+            onClick: () => {
+              queueBackgroundSave(input, summary, toastId, false);
+            }
+          }
+        });
+      }
+    });
+  }
+
   async function save(advance: boolean) {
-    if (pending) return;
+    if (pendingRef.current) return;
+    pendingRef.current = true;
     setPending(true);
     const followUpDueAt =
       def.meeting && meetingAt
@@ -598,7 +643,16 @@ function Wrapup({
         : presetToIso(followUp, customFollowUp);
     const countsAsConnected = connected ||
       ["Connected", "Hang Up", "Not interested", "Follow-up required", "Qualified", "Meeting booked", "Do not contact"].includes(outcome);
-    const result = await saveCallWrapupAction({
+    const summary: WrapupSummary = {
+      outcome,
+      connected: countsAsConnected,
+      followUp: Boolean(followUpDueAt),
+      suppressed: status === "Suppressed" || outcome === "Do not contact",
+      opp: Boolean(oppOpen && oppName.trim()),
+      talkTimeSeconds: call.seconds
+    };
+    const input: CallWrapupInput = {
+      requestId: globalThis.crypto?.randomUUID?.() ?? `wrapup-${lead.assignmentId}-${Date.now()}`,
       assignmentId: lead.assignmentId,
       contactId: lead.id,
       companyId: lead.companyId,
@@ -621,30 +675,37 @@ function Wrapup({
       callingSessionStartedAt: callingSession?.startedAt,
       connected: countsAsConnected,
       talkTimeSeconds: call.seconds
-    });
+    };
+
+    if (advance && hasNext) {
+      const toastId = `call-wrapup-${input.requestId}`;
+      const launched = queueBackgroundSave(input, summary, toastId, true);
+      if (!launched) {
+        pendingRef.current = false;
+        setPending(false);
+      }
+      return;
+    }
+
+    let result: Awaited<ReturnType<typeof saveCallWrapupAction>>;
+    try {
+      result = await saveCallWrapupAction(input);
+    } catch (error) {
+      pendingRef.current = false;
+      setPending(false);
+      toast.error(backgroundCallWrapupError(error));
+      return;
+    }
+    pendingRef.current = false;
     setPending(false);
     if (!result.ok) {
       toast.error(result.error);
       return;
     }
-    onComplete(lead.id, {
-      outcome,
-      connected: countsAsConnected,
-      followUp: Boolean(followUpDueAt),
-      suppressed: status === "Suppressed" || outcome === "Do not contact",
-      opp: Boolean(oppOpen && oppName.trim()),
-      talkTimeSeconds: call.seconds
-    });
+    onComplete(lead.id, summary);
     toast.success("Wrap-up saved.");
     if (advance) {
-      if (hasNext) {
-        // The toast is sufficient confirmation while dialing. Move immediately
-        // instead of holding the SDR on a 1.6-second success interstitial.
-        onDismiss();
-        onAdvance();
-      } else {
-        setSaved(result.created);
-      }
+      setSaved(result.created);
     } else {
       onDismiss();
     }
