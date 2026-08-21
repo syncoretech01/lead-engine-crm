@@ -6,7 +6,11 @@ import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 // (freight brokers get MC#/USDOT/Authority/Bond, etc.). Keyed by account id.
 export type KeyAccountField = { label: string; value: string };
 
-const MAX_FIELDS = 6;
+// Sized to the widest field set a workspace actually defines. The VA
+// no-website import carries 10 account attributes (DBA, mailing address, zip,
+// licence start, category, ethnicity, NIGP codes, and three verification
+// columns); at 6 the card silently dropped the last four.
+const MAX_FIELDS = 12;
 
 export async function readKeyAccountFields(
   workspaceId: string,
