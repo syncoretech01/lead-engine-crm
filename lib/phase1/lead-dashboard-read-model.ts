@@ -35,6 +35,7 @@ import type {
   EnrichmentResult,
   ExportRecord,
   ExportRule,
+  FollowUpOrigin,
   FollowUpReminder,
   JobIdempotencyRecord,
   JobLog,
@@ -461,6 +462,7 @@ async function readFastLeadDashboardStateUncached(
         channel: true,
         dueAt: true,
         status: true,
+        origin: true,
         createdAt: true,
         completedAt: true,
         snoozedUntil: true
@@ -1170,6 +1172,7 @@ function followUpReminderFromPrisma(row: {
   channel: string;
   dueAt: Date;
   status: string;
+  origin: string | null;
   createdAt: Date;
   completedAt: Date | null;
   snoozedUntil: Date | null;
@@ -1185,10 +1188,17 @@ function followUpReminderFromPrisma(row: {
     channel: outreachChannelValue(row.channel),
     dueAt: iso(row.dueAt),
     status: reminderStatusValue(row.status),
+    origin: followUpOriginValue(row.origin),
     createdAt: iso(row.createdAt),
     completedAt: optionalIso(row.completedAt),
     snoozedUntil: optionalIso(row.snoozedUntil)
   };
+}
+
+// Legacy rows carry NULL and anything unrecognised is treated the same way:
+// unknown, never coerced into "sdr" or "system".
+function followUpOriginValue(value: string | null): FollowUpOrigin | undefined {
+  return value === "sdr" || value === "system" ? value : undefined;
 }
 
 function profileSources(value: unknown) {

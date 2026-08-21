@@ -946,6 +946,22 @@ export type SdrAssignment = {
   updatedAt: string;
 };
 
+/**
+ * Who put this follow-up on the calendar.
+ *
+ * `sdr`    — the SDR explicitly chose a due date in the touch form or the call
+ *            wrap-up. This is real committed work.
+ * `system` — everything the platform invents on its own: the first-touch SLA
+ *            reminder created at assignment, the bulk-assign/seed reminders, and
+ *            a touch where the SDR left the follow-up field blank and
+ *            `defaultFollowUpDueAt` picked a date for them.
+ *
+ * `undefined` means the row predates this field and is genuinely unclassifiable —
+ * nothing in the old data records who chose the date. Never guess: treat unknown
+ * as unknown rather than backfilling it into either bucket.
+ */
+export type FollowUpOrigin = "sdr" | "system";
+
 export type FollowUpReminder = {
   id: string;
   workspaceId: string;
@@ -957,6 +973,8 @@ export type FollowUpReminder = {
   channel: OutreachChannel;
   dueAt: string;
   status: ReminderStatus;
+  /** Undefined on rows created before the field existed. */
+  origin?: FollowUpOrigin;
   createdAt: string;
   completedAt?: string;
   snoozedUntil?: string;
