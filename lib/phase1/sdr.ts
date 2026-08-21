@@ -12,6 +12,7 @@ import type {
   AppState,
   AssignmentMethod,
   CrmTask,
+  FollowUpOrigin,
   FollowUpReminder,
   LeadStatus,
   OutreachChannel,
@@ -196,6 +197,8 @@ export function assignWorkspaceLeads(
         channel: recommendedChannel(contact.grade, contact.phone),
         dueAt: reminderDueAt,
         status: reminderStatusForDueAt(reminderDueAt, assignedAt),
+        // Routing invented this date, not an SDR.
+        origin: "system",
         createdAt: assignedAt
       });
     }
@@ -394,6 +397,11 @@ export function recordFirstTouch(
     (item) => item.id === assignment.contactId && item.workspaceId === assignment.workspaceId
   );
   const firstTouch = !assignment.firstTouchedAt;
+  // Captured BEFORE the default is merged in below: a follow-up only counts as
+  // SDR-scheduled when the touch form / call wrap-up actually supplied a date.
+  // Leaving the field blank still creates a reminder, but that one is the
+  // platform's own idea and must not read as committed SDR work.
+  const sdrScheduledFollowUp = Boolean(input.followUpDueAt);
   assignment.firstTouchedAt = assignment.firstTouchedAt ?? now;
   assignment.lastTouchAt = now;
   assignment.touchCount += 1;
@@ -423,6 +431,7 @@ export function recordFirstTouch(
       title: `${firstTouch ? "Follow up" : "Next step"} with ${contact?.name ?? "contact"}`,
       channel: nextChannel(input.channel, input.outcome),
       dueAt: assignment.followUpDueAt,
+      origin: sdrScheduledFollowUp ? "sdr" : "system",
       createdAt: now
     });
     createFollowUpTask(state, reminder, input.actorUserId);
@@ -689,6 +698,8 @@ export function assignContactToSdr(
       channel: recommendedChannel(contact.grade, contact.phone),
       dueAt: assignment.firstTouchDueAt,
       status: reminderStatusForDueAt(assignment.firstTouchDueAt, assignedAt),
+      // The assignment SLA clock, not a follow-up the SDR scheduled.
+      origin: "system",
       createdAt: assignedAt
     });
   }
@@ -763,6 +774,8 @@ export function resetSdrAssignmentToFresh(
       channel: recommendedChannel(contact.grade, contact.phone),
       dueAt: assignment.firstTouchDueAt,
       status: reminderStatusForDueAt(assignment.firstTouchDueAt, now),
+      // The assignment SLA clock, not a follow-up the SDR scheduled.
+      origin: "system",
       createdAt: now
     });
   }
@@ -998,6 +1011,7 @@ export function followUpSourceRowsSnapshot(
         channel: reminder.channel,
         dueAt: reminder.dueAt,
         status: reminder.status,
+        origin: reminder.origin,
         createdAt: reminder.createdAt,
         contactName: displayContactName(contact),
         contactTitle: contact?.title ?? "",
@@ -1396,6 +1410,7 @@ function createFollowUpReminder(
     title: string;
     channel: OutreachChannel;
     dueAt: string;
+    origin: FollowUpOrigin;
     createdAt: string;
   }
 ) {
@@ -1410,6 +1425,7 @@ function createFollowUpReminder(
     channel: input.channel,
     dueAt: input.dueAt,
     status: reminderStatusForDueAt(input.dueAt, input.createdAt),
+    origin: input.origin,
     createdAt: input.createdAt
   };
 

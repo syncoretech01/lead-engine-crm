@@ -1005,6 +1005,7 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
         channel: reminder.channel,
         dueAt: reminder.dueAt,
         status: reminder.status,
+        origin: reminder.origin,
         createdAt: reminder.createdAt,
         completedAt: reminder.completedAt,
         snoozedUntil: reminder.snoozedUntil

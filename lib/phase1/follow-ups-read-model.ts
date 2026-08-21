@@ -1,7 +1,6 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
-import { isSdrScheduledFollowUp } from "@/lib/phase1/sdr-calendar";
-import type { Session } from "@/lib/phase1/types";
+import type { FollowUpOrigin, Session } from "@/lib/phase1/types";
 
 /**
  * One open follow-up, flattened with just enough contact/account context to be
@@ -18,6 +17,7 @@ export type FollowUpSourceRow = {
   channel: string;
   dueAt: string;
   status: string;
+  origin?: FollowUpOrigin;
   createdAt: string;
   contactName: string;
   contactTitle: string;
@@ -65,6 +65,12 @@ export type FollowUpsReadModel = {
   totalFollowUps: number;
   /** True when the bounded fetch hit its cap, so the page can say so out loud. */
   truncated: boolean;
+  /**
+   * Open follow-ups from before `origin` existed. They cannot be attributed to
+   * an SDR or to the system, so they are excluded from `rows` and surfaced as a
+   * count instead — an unexplained gap would read as data loss.
+   */
+  unclassifiedLegacy: number;
   /** SDR/Manager roster for the owner filter (empty for an SDR's own view). */
   roster: Array<{ id: string; name: string }>;
 };
@@ -77,8 +83,18 @@ export const FOLLOW_UP_FETCH_LIMIT = 2_000;
 
 /**
  * Collapses open follow-ups into one row per contact, ordered by the soonest
- * thing due. System "First touch ..." reminders are created by *assignment*, not
- * by an SDR, so they are excluded — this page is the SDR's own scheduled work.
+ * thing due.
+ *
+ * Only `origin === "sdr"` survives — a follow-up the SDR explicitly scheduled in
+ * the touch form or call wrap-up. Everything the platform invents is dropped:
+ * first-touch SLA reminders, bulk-assign reminders, and touches where the SDR
+ * left the date blank and `defaultFollowUpDueAt` chose one for them. Title text
+ * is deliberately NOT consulted — "Follow up with ..." is used by both the
+ * SDR-scheduled and the auto-defaulted path, so it cannot tell them apart.
+ *
+ * Legacy rows (`origin` undefined) are excluded too. Nothing in the old data
+ * records who chose the date, and guessing would put invented follow-ups back on
+ * a page whose whole purpose is to exclude them.
  */
 export function groupFollowUpsByContact(rows: FollowUpSourceRow[]): FollowUpContactRow[] {
   const byContact = new Map<string, FollowUpContactRow>();
@@ -86,7 +102,7 @@ export function groupFollowUpsByContact(rows: FollowUpSourceRow[]): FollowUpCont
   for (const row of rows) {
     if (!row.contactId) continue;
     if (row.status === "Completed") continue;
-    if (!isSdrScheduledFollowUp(row)) continue;
+    if (row.origin !== "sdr") continue;
 
     const existing = byContact.get(row.contactId);
     if (!existing) {
@@ -162,12 +178,15 @@ export async function readFastFollowUpsModel(
   // SDRs are always locked to their own id; any ?sdr= param is ignored for them.
   const ownerId = isSdr ? session.user.id : opts?.sdrId;
 
-  const [reminders, members] = await Promise.all([
+  const [reminders, members, unclassifiedLegacy] = await Promise.all([
     prisma.followUpReminder.findMany({
       where: {
         workspaceId,
         status: { not: "Completed" },
         contactId: { not: null },
+        // SDR-scheduled only. Pushed into the query rather than filtered in
+        // memory so the row cap is spent on rows that can actually be shown.
+        origin: "sdr",
         ...(ownerId ? { ownerUserId: ownerId } : {})
       },
       include: {
@@ -184,7 +203,16 @@ export async function readFastFollowUpsModel(
           where: { workspaceId, role: { in: ["SDR", "MANAGER"] } },
           include: { user: true },
           orderBy: [{ role: "asc" }, { id: "asc" }]
-        })
+        }),
+    prisma.followUpReminder.count({
+      where: {
+        workspaceId,
+        status: { not: "Completed" },
+        contactId: { not: null },
+        origin: null,
+        ...(ownerId ? { ownerUserId: ownerId } : {})
+      }
+    })
   ]);
 
   const sourceRows = reminders.map((reminder) => {
@@ -203,6 +231,7 @@ export async function readFastFollowUpsModel(
       channel: reminder.channel,
       dueAt: reminder.dueAt.toISOString(),
       status: reminder.status,
+      origin: reminder.origin === "sdr" || reminder.origin === "system" ? reminder.origin : undefined,
       createdAt: reminder.createdAt.toISOString(),
       contactName: displayContactName({
         name: leadContact?.fullName ?? crmContact?.fullName,
@@ -226,6 +255,7 @@ export async function readFastFollowUpsModel(
     rows,
     totalFollowUps: rows.reduce((total, row) => total + row.openFollowUps, 0),
     truncated: reminders.length >= FOLLOW_UP_FETCH_LIMIT,
+    unclassifiedLegacy,
     roster: members.map((member) => ({ id: member.user.id, name: member.user.name }))
   };
 }

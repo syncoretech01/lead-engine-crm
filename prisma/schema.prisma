@@ -1333,6 +1333,11 @@ model FollowUpReminder {
   channel      String
   dueAt        DateTime
   status       String
+  // "sdr" when the SDR explicitly picked a due date in the touch form / call
+  // wrap-up; "system" for first-touch SLA, bulk-assign and blank-date defaults.
+  // NULL on rows created before this field existed — those are unclassifiable,
+  // so they are never counted as SDR-scheduled work.
+  origin       String?
   createdAt    DateTime      @default(now())
   completedAt  DateTime?
   snoozedUntil DateTime?
@@ -1344,6 +1349,7 @@ model FollowUpReminder {
 
   @@index([workspaceId, ownerUserId, dueAt])
   @@index([workspaceId, status])
+  @@index([workspaceId, origin, status])
 }
 
 model ReassignmentRule {

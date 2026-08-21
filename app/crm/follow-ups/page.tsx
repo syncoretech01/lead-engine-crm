@@ -37,12 +37,14 @@ export default async function FollowUpsPage({
   let rows: FollowUpContactRow[];
   let roster: Array<{ id: string; name: string }>;
   let truncated = false;
+  let unclassifiedLegacy = 0;
 
   const fastModel = await readFastFollowUpsModel(session, workspaceId, { sdrId: selectedSdrId });
   if (fastModel) {
     rows = fastModel.rows;
     roster = fastModel.roster;
     truncated = fastModel.truncated;
+    unclassifiedLegacy = fastModel.unclassifiedLegacy;
   } else {
     const {
       state,
@@ -52,7 +54,9 @@ export default async function FollowUpsPage({
     session = fallbackSession;
     workspaceId = fallbackWorkspaceId;
     const ownerId = session.role === "SDR" ? session.user.id : selectedSdrId;
-    rows = groupFollowUpsByContact(followUpSourceRowsSnapshot(state, workspaceId, ownerId));
+    const sourceRows = followUpSourceRowsSnapshot(state, workspaceId, ownerId);
+    rows = groupFollowUpsByContact(sourceRows);
+    unclassifiedLegacy = sourceRows.filter((row) => row.contactId && !row.origin).length;
     roster =
       session.role === "SDR"
         ? []
@@ -79,8 +83,8 @@ export default async function FollowUpsPage({
             <h1 className="mt-0.5 text-[22px] font-extrabold text-co-ink">Follow-ups</h1>
             <p className="mt-0.5 max-w-[660px] text-[12.5px] text-co-text-3">
               {isSdr
-                ? "Only the contacts you have scheduled a follow-up for, soonest first. Complete one here and it clears from your day."
-                : "Only the contacts an SDR has scheduled a follow-up for, soonest first. Filter by SDR to see one rep's committed work."}
+                ? "Only the contacts you set a follow-up date for in a touch or call wrap-up, soonest first. Reminders the system creates on its own are not shown."
+                : "Only the contacts an SDR set a follow-up date for in a touch or call wrap-up, soonest first. Reminders the system creates on its own are not shown."}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -112,8 +116,8 @@ export default async function FollowUpsPage({
             <div className="min-w-0">
               <h2 className="text-[13px] font-extrabold text-co-ink">Scheduled follow-ups</h2>
               <p className="mt-0.5 text-[11.5px] text-co-text-3">
-                One row per contact showing the soonest open follow-up. System first-touch reminders are not
-                shown — those live on My Day.
+                One row per contact showing the soonest open follow-up. First-touch SLA reminders and
+                auto-defaulted dates are excluded — those live on My Day and the calendar.
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -151,6 +155,14 @@ export default async function FollowUpsPage({
           {truncated ? (
             <p className="border-b border-co-border bg-co-sunken px-4 py-2 text-[11.5px] font-bold text-co-text-3">
               Showing the soonest 2,000 open follow-ups — narrow by SDR to see the rest.
+            </p>
+          ) : null}
+          {unclassifiedLegacy > 0 ? (
+            <p className="border-b border-co-border bg-co-sunken px-4 py-2 text-[11.5px] text-co-text-3">
+              <span className="font-bold">{formatNumber(unclassifiedLegacy)} older follow-ups are not shown.</span>{" "}
+              They predate the field that records who scheduled a follow-up, so there is no way to tell an SDR&apos;s
+              date from an auto-generated one. They stay on My Day and the calendar. New follow-ups are classified
+              from now on.
             </p>
           ) : null}
           <FollowUpsTable
