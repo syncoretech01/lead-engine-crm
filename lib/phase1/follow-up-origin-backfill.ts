@@ -32,6 +32,26 @@ export const WRAPUP_FOLLOW_UP_RECEIPT = "Follow-up reminder + task";
  */
 export const AUDIT_MATCH_WINDOW_MS = 2_000;
 
+/**
+ * Call outcomes whose wrap-up carries a follow-up date the SDR chose on purpose.
+ *
+ * Needed because the wrap-up dock used to leave the follow-up preset STICKY:
+ * `pickOutcome` set the new outcome's default but never cleared the old one, so
+ * selecting "Follow-up required" (default: tomorrow) and then switching to
+ * "No answer" saved a follow-up the SDR had walked away from. The receipt says a
+ * date was submitted; it cannot say the SDR still meant it.
+ *
+ * These two outcomes are immune to that: "Follow-up required" IS the SDR asking
+ * for a follow-up, and "Meeting booked" takes its date from the meeting field.
+ * For every other outcome a historical date is unattributable — the same
+ * unknown-stays-unknown rule applied to borrowed receipts.
+ *
+ * Historical only. The dock now clears the preset on every outcome change, so
+ * reminders written after that fix carry a trustworthy origin from `recordTouch`
+ * and never reach this classifier.
+ */
+export const DELIBERATE_FOLLOW_UP_OUTCOMES = new Set(["Follow-up required", "Meeting booked"]);
+
 export type BackfillVerdict = {
   origin?: FollowUpOrigin;
   /** Why this row was classified the way it was — printed by the script. */
@@ -41,10 +61,19 @@ export type BackfillVerdict = {
     | "wrapup-receipt-system"
     | "first-touch-no-touch-audit"
     | "no-evidence"
-    | "conflicting-receipts";
+    | "conflicting-receipts"
+    | "sticky-preset-unattributable";
 };
 
 type WrapupAudit = Pick<AuditLog, "objectType" | "objectId" | "action" | "newValue" | "createdAt">;
+
+/** The call outcome the SDR picked in the wrap-up ("No answer", "Voicemail", ...). */
+function wrapupOutcome(audit: WrapupAudit): string | undefined {
+  const value = audit.newValue;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const outcome = (value as { outcome?: unknown }).outcome;
+  return typeof outcome === "string" ? outcome : undefined;
+}
 
 function wrapupSetAFollowUp(audit: WrapupAudit): boolean | undefined {
   const value = audit.newValue;
@@ -81,7 +110,13 @@ export function classifyLegacyFollowUpOrigin(
     const verdicts = new Set(tied.map((entry) => wrapupSetAFollowUp(entry.audit)));
     if (verdicts.size === 1) {
       const [verdict] = [...verdicts];
-      if (verdict === true) return { origin: "sdr", reason: "wrapup-receipt-sdr" };
+      if (verdict === true) {
+        // A date was submitted — but the sticky preset means that is only
+        // evidence of intent for outcomes that imply a follow-up themselves.
+        return DELIBERATE_FOLLOW_UP_OUTCOMES.has(wrapupOutcome(tied[0].audit) ?? "")
+          ? { origin: "sdr", reason: "wrapup-receipt-sdr" }
+          : { reason: "sticky-preset-unattributable" };
+      }
       if (verdict === false) return { origin: "system", reason: "wrapup-receipt-system" };
     } else if (verdicts.size > 1) {
       return { reason: "conflicting-receipts" };
@@ -144,7 +179,8 @@ export function backfillFollowUpOrigins(
     "wrapup-receipt-system": 0,
     "first-touch-no-touch-audit": 0,
     "no-evidence": 0,
-    "conflicting-receipts": 0
+    "conflicting-receipts": 0,
+    "sticky-preset-unattributable": 0
   };
 
   for (const reminder of reminders) {

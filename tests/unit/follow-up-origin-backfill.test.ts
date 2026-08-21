@@ -12,6 +12,7 @@ function wrapupAudit(overrides: {
   objectId: string;
   createdAt: string;
   created: string[];
+  outcome?: string;
 }): AuditLog {
   return {
     id: `audit-${overrides.objectId}-${overrides.createdAt}`,
@@ -22,7 +23,9 @@ function wrapupAudit(overrides: {
     action: "call_wrapup_saved",
     newValue: {
       requestId: "req-1",
-      outcome: "Connected",
+      // The outcome that means the SDR asked for a follow-up. Overridden where a
+      // test needs an outcome that carries no follow-up default of its own.
+      outcome: overrides.outcome ?? "Follow-up required",
       leadStatus: "Contacted",
       created: overrides.created
     },
@@ -54,6 +57,42 @@ describe("follow-up origin backfill", () => {
   it("reads the wrap-up receipt as recorded fact when the SDR set a date", () => {
     const audits = indexWrapupAudits([
       wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-22T12:00:01.000Z", created: WITH_FOLLOW_UP })
+    ]);
+
+    expect(classifyLegacyFollowUpOrigin(reminder(), audits)).toEqual({
+      origin: "sdr",
+      reason: "wrapup-receipt-sdr"
+    });
+  });
+
+  // Regression, reported from the live page: CHUANXIU was wrapped up as
+  // "No answer" yet carried a follow-up. The dock's preset was sticky —
+  // pickOutcome set the new outcome's default but never cleared the old one —
+  // so a date chosen under "Follow-up required" survived the switch. The
+  // receipt proves a date was SUBMITTED, not that the SDR still wanted it.
+  it("will not attribute a date submitted under an outcome that implies no follow-up", () => {
+    const audits = indexWrapupAudits([
+      wrapupAudit({
+        objectId: "assign-1",
+        createdAt: "2026-08-22T12:00:01.000Z",
+        created: WITH_FOLLOW_UP,
+        outcome: "No answer"
+      })
+    ]);
+
+    expect(classifyLegacyFollowUpOrigin(reminder(), audits)).toEqual({
+      reason: "sticky-preset-unattributable"
+    });
+  });
+
+  it("still attributes a date submitted under Meeting booked", () => {
+    const audits = indexWrapupAudits([
+      wrapupAudit({
+        objectId: "assign-1",
+        createdAt: "2026-08-22T12:00:01.000Z",
+        created: WITH_FOLLOW_UP,
+        outcome: "Meeting booked"
+      })
     ]);
 
     expect(classifyLegacyFollowUpOrigin(reminder(), audits)).toEqual({

@@ -592,7 +592,12 @@ function Wrapup({
     const nextDef = OUTCOMES.find((item) => item.id === next);
     if (!nextDef) return;
     setStatus(nextDef.status);
-    if (nextDef.followUp) setFollowUp(nextDef.followUp);
+    // Reset to the NEW outcome's default, don't just overwrite when it has one.
+    // Leaving the old preset in place made the follow-up sticky: picking
+    // "Follow-up required" (default: tomorrow) and then switching to, say,
+    // "No answer" kept tomorrow selected, so saving scheduled a follow-up the
+    // SDR had already moved away from. Each outcome now owns what it implies.
+    setFollowUp(nextDef.followUp ?? "none");
     if (nextDef.opp) setOppOpen(true);
     if (nextDef.meeting) setFollowUp("custom");
   }
