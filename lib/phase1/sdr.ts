@@ -6,6 +6,7 @@ import {
   buildSdrDailyCallPlan,
   SDR_DAILY_CALL_TARGET
 } from "@/lib/phase1/sdr-call-cycle";
+import type { FollowUpSourceRow } from "@/lib/phase1/follow-ups-read-model";
 import { assertWorkspaceMember, requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import type {
   AppState,
@@ -958,6 +959,58 @@ export function reminderViews(state: AppState, workspaceId: string) {
       };
     })
     .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
+}
+
+/**
+ * File-store backing for the Follow-ups directory: every open follow-up in the
+ * workspace (optionally one owner's), flattened into the same source rows the
+ * prisma fast path builds so both drivers share `groupFollowUpsByContact`.
+ */
+export function followUpSourceRowsSnapshot(
+  state: AppState,
+  workspaceId: string,
+  ownerUserId?: string
+): FollowUpSourceRow[] {
+  refreshSlaStatuses(state, workspaceId);
+  return state.followUpReminders
+    .filter(
+      (reminder) =>
+        reminder.workspaceId === workspaceId &&
+        reminder.status !== "Completed" &&
+        Boolean(reminder.contactId) &&
+        (!ownerUserId || reminder.ownerUserId === ownerUserId)
+    )
+    .map((reminder) => {
+      const contact = state.contacts.find(
+        (item) => item.id === reminder.contactId && item.workspaceId === workspaceId
+      );
+      const company = state.companies.find(
+        (item) => item.id === reminder.companyId && item.workspaceId === workspaceId
+      );
+
+      return {
+        id: reminder.id,
+        contactId: reminder.contactId,
+        companyId: reminder.companyId,
+        ownerUserId: reminder.ownerUserId,
+        ownerName: userNameForId(state, reminder.ownerUserId),
+        title: reminder.title,
+        channel: reminder.channel,
+        dueAt: reminder.dueAt,
+        status: reminder.status,
+        createdAt: reminder.createdAt,
+        contactName: displayContactName(contact),
+        contactTitle: contact?.title ?? "",
+        email: contact?.email ?? "",
+        phone: contact?.phone ?? "",
+        grade: contact?.grade ?? "D",
+        priority: contact?.priority ?? "P4",
+        leadStatus: contact?.status ?? "New",
+        doNotContact: contact?.doNotContact ?? false,
+        isSuppressed: contact?.isSuppressed ?? false,
+        companyName: company?.name ?? "Unknown account"
+      } satisfies FollowUpSourceRow;
+    });
 }
 
 export function sdrWorkloads(state: AppState, workspaceId: string) {

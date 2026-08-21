@@ -155,6 +155,7 @@ export const navGroups: NavGroup[] = [
     canAccess: canUseCrmWorkspace,
     items: [
       { href: "/crm/contacts", label: "Contacts", icon: Users, permission: "view_records" },
+      { href: "/crm/follow-ups", label: "Follow-ups", icon: CalendarClock, permission: "manage_sdr" },
       { href: "/crm/accounts", label: "Accounts", icon: Building2, permission: "view_records" },
       {
         href: "/crm/opportunities",

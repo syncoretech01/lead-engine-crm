@@ -82,7 +82,7 @@ echo "OK: healthy on new bundle."
 # a session. Two passes per route make the warming visible (pass 1 compiles, pass 2 is fast).
 echo "=== WARM-UP (best-effort) ==="
 WARM_BASE="http://127.0.0.1:3000"
-for path in / /login /crm /crm/contacts /crm/accounts /crm/opportunities /crm/calls /crm/my-contacts; do
+for path in / /login /crm /crm/contacts /crm/follow-ups /crm/accounts /crm/opportunities /crm/calls /crm/my-contacts; do
   for pass in 1 2; do
     out=$(curl -s -o /dev/null -w "%{http_code} %{time_total}s" --max-time 15 "${WARM_BASE}${path}" 2>/dev/null || echo "000 -")
     printf 'warm %-24s pass%s -> %s\n' "$path" "$pass" "$out"
