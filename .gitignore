@@ -21,3 +21,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .DS_Store
+
+# Lead spreadsheets dropped in for import. Real contact PII — never commit.
+*.xlsx
+*.xls

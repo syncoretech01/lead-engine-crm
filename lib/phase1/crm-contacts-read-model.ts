@@ -39,6 +39,10 @@ export type CrmContactsReadModel = {
 // Keep this aligned with the assigned-contacts read model so a normal SDR book
 // (including Sam's 791-contact import) is not silently truncated at 500 rows.
 // True server-side pagination should replace this bounded fetch as books grow.
+//
+// NOTE: with the newest-first ordering below, this cap now drops the OLDEST
+// contacts rather than the lowest-scoring ones. Acme sits at ~1.8k of 2k — the
+// next sizeable import is what forces real pagination.
 export const CRM_CONTACT_DIRECTORY_LIMIT = 2_000;
 
 export async function readFastCrmContactsModel(
@@ -59,7 +63,10 @@ export async function readFastCrmContactsModel(
     prisma.contact.findMany({
       where: contactWhere,
       include: { company: true },
-      orderBy: [{ score: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
+      // Newest first. Score-first buried a freshly imported list at the bottom
+      // whenever it graded below the existing book, which is exactly when an SDR
+      // most needs to find it. Score is still a sortable column in the table.
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       take: CRM_CONTACT_DIRECTORY_LIMIT
     }),
     prisma.task.findMany({
