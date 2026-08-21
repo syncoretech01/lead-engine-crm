@@ -17,11 +17,12 @@ export const dynamic = "force-dynamic";
 type CounterTone = "blue" | "teal" | "amber";
 
 /**
- * Follow-ups: the contacts an SDR has actually scheduled work against. Only
- * contacts with at least one open follow-up appear — the system "First touch …"
- * reminders that assignment creates are excluded, so this is scheduled work, not
- * the SLA clock (that lives on My Day). SDRs see their own; a Manager/Admin sees
- * the whole workspace and can narrow to one SDR.
+ * Follow-ups: the contacts an SDR actually committed to. A contact appears only
+ * when it has an open follow-up whose `origin` is "sdr" — a date the SDR chose in
+ * a touch or a call wrap-up. Everything the platform schedules for itself (the
+ * first-touch SLA clock, bulk-assign reminders, auto-defaulted dates) belongs to
+ * My Day and the calendar, not here. SDRs see their own; a Manager/Admin sees the
+ * whole workspace and can narrow to one SDR.
  */
 export default async function FollowUpsPage({
   searchParams
@@ -37,14 +38,12 @@ export default async function FollowUpsPage({
   let rows: FollowUpContactRow[];
   let roster: Array<{ id: string; name: string }>;
   let truncated = false;
-  let unclassifiedLegacy = 0;
 
   const fastModel = await readFastFollowUpsModel(session, workspaceId, { sdrId: selectedSdrId });
   if (fastModel) {
     rows = fastModel.rows;
     roster = fastModel.roster;
     truncated = fastModel.truncated;
-    unclassifiedLegacy = fastModel.unclassifiedLegacy;
   } else {
     const {
       state,
@@ -54,9 +53,7 @@ export default async function FollowUpsPage({
     session = fallbackSession;
     workspaceId = fallbackWorkspaceId;
     const ownerId = session.role === "SDR" ? session.user.id : selectedSdrId;
-    const sourceRows = followUpSourceRowsSnapshot(state, workspaceId, ownerId);
-    rows = groupFollowUpsByContact(sourceRows);
-    unclassifiedLegacy = sourceRows.filter((row) => row.contactId && !row.origin).length;
+    rows = groupFollowUpsByContact(followUpSourceRowsSnapshot(state, workspaceId, ownerId));
     roster =
       session.role === "SDR"
         ? []
@@ -155,14 +152,6 @@ export default async function FollowUpsPage({
           {truncated ? (
             <p className="border-b border-co-border bg-co-sunken px-4 py-2 text-[11.5px] font-bold text-co-text-3">
               Showing the soonest 2,000 open follow-ups — narrow by SDR to see the rest.
-            </p>
-          ) : null}
-          {unclassifiedLegacy > 0 ? (
-            <p className="border-b border-co-border bg-co-sunken px-4 py-2 text-[11.5px] text-co-text-3">
-              <span className="font-bold">{formatNumber(unclassifiedLegacy)} older follow-ups are not shown.</span>{" "}
-              They predate the field that records who scheduled a follow-up, so there is no way to tell an SDR&apos;s
-              date from an auto-generated one. They stay on My Day and the calendar. New follow-ups are classified
-              from now on.
             </p>
           ) : null}
           <FollowUpsTable

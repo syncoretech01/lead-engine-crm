@@ -65,12 +65,6 @@ export type FollowUpsReadModel = {
   totalFollowUps: number;
   /** True when the bounded fetch hit its cap, so the page can say so out loud. */
   truncated: boolean;
-  /**
-   * Open follow-ups from before `origin` existed. They cannot be attributed to
-   * an SDR or to the system, so they are excluded from `rows` and surfaced as a
-   * count instead — an unexplained gap would read as data loss.
-   */
-  unclassifiedLegacy: number;
   /** SDR/Manager roster for the owner filter (empty for an SDR's own view). */
   roster: Array<{ id: string; name: string }>;
 };
@@ -178,7 +172,7 @@ export async function readFastFollowUpsModel(
   // SDRs are always locked to their own id; any ?sdr= param is ignored for them.
   const ownerId = isSdr ? session.user.id : opts?.sdrId;
 
-  const [reminders, members, unclassifiedLegacy] = await Promise.all([
+  const [reminders, members] = await Promise.all([
     prisma.followUpReminder.findMany({
       where: {
         workspaceId,
@@ -203,16 +197,7 @@ export async function readFastFollowUpsModel(
           where: { workspaceId, role: { in: ["SDR", "MANAGER"] } },
           include: { user: true },
           orderBy: [{ role: "asc" }, { id: "asc" }]
-        }),
-    prisma.followUpReminder.count({
-      where: {
-        workspaceId,
-        status: { not: "Completed" },
-        contactId: { not: null },
-        origin: null,
-        ...(ownerId ? { ownerUserId: ownerId } : {})
-      }
-    })
+        })
   ]);
 
   const sourceRows = reminders.map((reminder) => {
@@ -255,7 +240,6 @@ export async function readFastFollowUpsModel(
     rows,
     totalFollowUps: rows.reduce((total, row) => total + row.openFollowUps, 0),
     truncated: reminders.length >= FOLLOW_UP_FETCH_LIMIT,
-    unclassifiedLegacy,
     roster: members.map((member) => ({ id: member.user.id, name: member.user.name }))
   };
 }
