@@ -15,9 +15,22 @@ import type { AuditLog, FollowUpOrigin, FollowUpReminder } from "@/lib/phase1/ty
  */
 export const WRAPUP_FOLLOW_UP_RECEIPT = "Follow-up reminder + task";
 
-/** The audit row and the reminder are written in the same request, so they share
- *  an instant to within milliseconds. One minute is a generous safety margin. */
-export const AUDIT_MATCH_WINDOW_MS = 60_000;
+/**
+ * The audit row and its reminder are written in the same request, so they share
+ * an instant to within milliseconds — measured across the whole prod history,
+ * 715 of 717 touch-created reminders sit within 100ms of their receipt.
+ *
+ * This window must stay TIGHT. A loose one lets a reminder with no receipt of
+ * its own borrow a neighbour's: a second touch that creates no audit (the
+ * direct-email / direct-SMS paths call `recordFirstTouch` without one) lands
+ * seconds after a real wrap-up and inherits its verdict. That is not
+ * hypothetical — at 60s exactly two rows borrowed, at 38.6s and 50.4s, and one
+ * of them was wrongly published as SDR-scheduled.
+ *
+ * 2s keeps a ~20x margin over the real pairings and a ~19x margin under the
+ * closest observed borrower.
+ */
+export const AUDIT_MATCH_WINDOW_MS = 2_000;
 
 export type BackfillVerdict = {
   origin?: FollowUpOrigin;
@@ -108,9 +121,21 @@ export type BackfillSummary = Record<BackfillVerdict["reason"], number> & {
  */
 export function backfillFollowUpOrigins(
   reminders: FollowUpReminder[],
-  auditLogs: readonly AuditLog[]
+  auditLogs: readonly AuditLog[],
+  options?: {
+    /**
+     * Re-evaluate rows created before this instant even if they already carry an
+     * origin, so a correction to the matching rules can undo an earlier verdict.
+     * Only safe for rows that predate live origin-writing — anything the app
+     * itself tagged is authoritative and must never be recomputed.
+     */
+    reclassifyCreatedBefore?: string;
+  }
 ): BackfillSummary {
   const index = indexWrapupAudits(auditLogs);
+  const reclassifyBefore = options?.reclassifyCreatedBefore
+    ? Date.parse(options.reclassifyCreatedBefore)
+    : undefined;
   const summary: BackfillSummary = {
     scanned: 0,
     updated: 0,
@@ -124,9 +149,18 @@ export function backfillFollowUpOrigins(
 
   for (const reminder of reminders) {
     summary.scanned += 1;
-    const verdict = classifyLegacyFollowUpOrigin(reminder, index);
+    const eligibleForReclassify =
+      reclassifyBefore !== undefined && Date.parse(reminder.createdAt) < reclassifyBefore;
+    const previous = reminder.origin;
+    const verdict = classifyLegacyFollowUpOrigin(
+      eligibleForReclassify ? { ...reminder, origin: undefined } : reminder,
+      index
+    );
     summary[verdict.reason] += 1;
-    if (verdict.reason === "already-classified" || !verdict.origin) continue;
+    if (verdict.reason === "already-classified") continue;
+    // On a reclassify pass an origin that no longer holds up is CLEARED, not
+    // left behind — a stale verdict is exactly what this pass exists to undo.
+    if (eligibleForReclassify ? verdict.origin === previous : !verdict.origin) continue;
     reminder.origin = verdict.origin;
     summary.updated += 1;
   }
