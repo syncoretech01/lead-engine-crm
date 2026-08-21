@@ -428,3 +428,29 @@ describe("normalized persistence projection", () => {
     expect(upserts).toBe(0);
   });
 });
+
+describe("follow-up reminder origin projection", () => {
+  // Prisma treats `undefined` in an update as "leave this column alone", so a
+  // mapping of `origin: reminder.origin` could set a verdict but never clear
+  // one — the table kept a value the snapshot had already dropped. It must
+  // project an explicit null so a corrected classification actually lands.
+  it("projects a cleared origin as null rather than undefined", () => {
+    const state = createSeedState();
+    const reminder = state.followUpReminders[0];
+    if (!reminder) throw new Error("Expected a seeded follow-up reminder.");
+
+    reminder.origin = "sdr";
+    const set = createNormalizedPersistenceProjection(state).followUpReminders.find(
+      (row) => row.id === reminder.id
+    );
+    expect(set?.origin).toBe("sdr");
+
+    reminder.origin = undefined;
+    const cleared = createNormalizedPersistenceProjection(state).followUpReminders.find(
+      (row) => row.id === reminder.id
+    );
+    expect(cleared).toHaveProperty("origin");
+    expect(cleared?.origin).toBeNull();
+    expect(cleared?.origin).not.toBeUndefined();
+  });
+});

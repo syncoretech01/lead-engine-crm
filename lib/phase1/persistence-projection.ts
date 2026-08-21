@@ -1005,7 +1005,12 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
         channel: reminder.channel,
         dueAt: reminder.dueAt,
         status: reminder.status,
-        origin: reminder.origin,
+        // `?? null`, NOT bare `reminder.origin`. Prisma reads `undefined` in an
+        // update as "leave this column alone", so an origin CLEARED in the
+        // snapshot would never reach the table — the row would keep a verdict
+        // the blob no longer holds. Setting propagated; clearing silently did
+        // not, and a corrected classification is exactly a clear.
+        origin: reminder.origin ?? null,
         createdAt: reminder.createdAt,
         completedAt: reminder.completedAt,
         snoozedUntil: reminder.snoozedUntil
