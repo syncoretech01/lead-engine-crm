@@ -14,13 +14,26 @@ import { backfillFollowUpOrigins } from "@/lib/phase1/follow-up-origin-backfill"
  *
  * DRY RUN by default — prints the exact verdict counts and writes nothing.
  *
- *   BACKFILL_APPLY=1   actually write
+ *   BACKFILL_APPLY=1                 actually write
+ *   BACKFILL_RECLASSIFY_BEFORE=<iso> re-evaluate rows created before this instant
+ *                                    even if they already carry an origin, and
+ *                                    CLEAR one that no longer holds up. Use after
+ *                                    correcting the matching rules. Must be at or
+ *                                    before the deploy that started writing origin
+ *                                    live, so app-written verdicts are never touched.
  */
 async function main() {
   if (resolveStorageDriver() !== "prisma") {
     throw new Error("backfill-follow-up-origin requires SYNCORE_STORAGE_DRIVER=prisma and a DATABASE_URL.");
   }
   const apply = process.env.BACKFILL_APPLY === "1";
+  const reclassifyCreatedBefore = process.env.BACKFILL_RECLASSIFY_BEFORE;
+  if (reclassifyCreatedBefore && Number.isNaN(Date.parse(reclassifyCreatedBefore))) {
+    throw new Error(`BACKFILL_RECLASSIFY_BEFORE is not a valid ISO instant: ${reclassifyCreatedBefore}`);
+  }
+  if (reclassifyCreatedBefore) {
+    console.log(`reclassifying rows created before ${reclassifyCreatedBefore}`);
+  }
 
   const state = await readState();
   const before = countByOrigin(state.followUpReminders);
@@ -28,7 +41,9 @@ async function main() {
   console.log(`audit logs: ${state.auditLogs.length}`);
   console.log(`before: ${JSON.stringify(before)}`);
 
-  const summary = backfillFollowUpOrigins(state.followUpReminders, state.auditLogs);
+  const summary = backfillFollowUpOrigins(state.followUpReminders, state.auditLogs, {
+    reclassifyCreatedBefore
+  });
   const after = countByOrigin(state.followUpReminders);
 
   console.log("verdicts:");

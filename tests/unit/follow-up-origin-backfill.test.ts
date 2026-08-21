@@ -73,6 +73,69 @@ describe("follow-up origin backfill", () => {
     });
   });
 
+  // Regression: a second touch that writes no audit of its own (the direct-email
+  // and direct-SMS paths call recordFirstTouch without one) lands seconds after a
+  // real wrap-up on the SAME assignment. With a loose window it inherited that
+  // wrap-up's verdict and was published as SDR-scheduled. Two prod rows did this,
+  // at 38.6s and 50.4s; every genuine pairing is inside 100ms.
+  it("does not let a reminder borrow a neighbouring wrap-up's receipt", () => {
+    const audits = indexWrapupAudits([
+      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-05T17:40:37.308Z", created: WITH_FOLLOW_UP })
+    ]);
+    const secondTouch = reminder({
+      title: "Next step with Lachunda Hunter",
+      createdAt: "2026-08-05T17:41:27.731Z"
+    });
+
+    expect(classifyLegacyFollowUpOrigin(secondTouch, audits).reason).toBe("no-evidence");
+    expect(classifyLegacyFollowUpOrigin(secondTouch, audits).origin).toBeUndefined();
+  });
+
+  it("still pairs a reminder with the receipt written milliseconds later", () => {
+    const audits = indexWrapupAudits([
+      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-05T17:40:37.308Z", created: WITH_FOLLOW_UP })
+    ]);
+    const sameRequest = reminder({ createdAt: "2026-08-05T17:40:37.306Z" });
+
+    expect(classifyLegacyFollowUpOrigin(sameRequest, audits)).toEqual({
+      origin: "sdr",
+      reason: "wrapup-receipt-sdr"
+    });
+  });
+
+  it("clears a verdict that no longer holds up on a reclassify pass", () => {
+    const rows = [
+      reminder({
+        id: "r-borrowed",
+        title: "Next step with Lachunda Hunter",
+        createdAt: "2026-08-05T17:41:27.731Z",
+        origin: "sdr"
+      })
+    ];
+    const auditLogs = [
+      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-05T17:40:37.308Z", created: WITH_FOLLOW_UP })
+    ];
+
+    // Without the flag the stale verdict survives, because the row looks classified.
+    backfillFollowUpOrigins(rows, auditLogs);
+    expect(rows[0].origin).toBe("sdr");
+
+    const summary = backfillFollowUpOrigins(rows, auditLogs, {
+      reclassifyCreatedBefore: "2026-08-21T00:00:00.000Z"
+    });
+    expect(rows[0].origin).toBeUndefined();
+    expect(summary).toMatchObject({ updated: 1, "no-evidence": 1 });
+  });
+
+  it("leaves rows created after the reclassify cutoff alone", () => {
+    const rows = [
+      reminder({ id: "r-live", createdAt: "2026-09-01T10:00:00.000Z", origin: "sdr" })
+    ];
+
+    backfillFollowUpOrigins(rows, [], { reclassifyCreatedBefore: "2026-08-21T00:00:00.000Z" });
+    expect(rows[0].origin).toBe("sdr");
+  });
+
   it("ignores a receipt from a different assignment or outside the window", () => {
     const audits = indexWrapupAudits([
       wrapupAudit({ objectId: "assign-OTHER", createdAt: "2026-08-22T12:00:01.000Z", created: WITH_FOLLOW_UP }),
@@ -85,8 +148,8 @@ describe("follow-up origin backfill", () => {
 
   it("prefers the nearest receipt when several land in the window", () => {
     const audits = indexWrapupAudits([
-      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-22T12:00:30.000Z", created: LEAD_STATUS_ONLY }),
-      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-22T12:00:02.000Z", created: WITH_FOLLOW_UP })
+      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-22T12:00:01.500Z", created: LEAD_STATUS_ONLY }),
+      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-22T12:00:00.050Z", created: WITH_FOLLOW_UP })
     ]);
 
     expect(classifyLegacyFollowUpOrigin(reminder(), audits)).toEqual({
@@ -97,8 +160,8 @@ describe("follow-up origin backfill", () => {
 
   it("refuses to classify when equally-near receipts disagree", () => {
     const audits = indexWrapupAudits([
-      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-22T12:00:05.000Z", created: WITH_FOLLOW_UP }),
-      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-22T11:59:55.000Z", created: LEAD_STATUS_ONLY })
+      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-22T12:00:00.500Z", created: WITH_FOLLOW_UP }),
+      wrapupAudit({ objectId: "assign-1", createdAt: "2026-08-22T11:59:59.500Z", created: LEAD_STATUS_ONLY })
     ]);
 
     expect(classifyLegacyFollowUpOrigin(reminder(), audits)).toEqual({ reason: "conflicting-receipts" });
