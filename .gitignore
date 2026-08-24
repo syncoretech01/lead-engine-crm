@@ -25,3 +25,6 @@ pnpm-debug.log*
 # Lead spreadsheets dropped in for import. Real contact PII — never commit.
 *.xlsx
 *.xls
+
+# Lead CSVs dropped in for import. Real business contact data — never commit.
+docs/*.csv
