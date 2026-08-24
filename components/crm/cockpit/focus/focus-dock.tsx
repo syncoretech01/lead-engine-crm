@@ -29,7 +29,7 @@ import {
 } from "@/components/crm/cockpit/focus/background-call-wrapup";
 import { QuickActions } from "@/components/crm/cockpit/quick-actions";
 import { leadBlockReason, type FocusLead } from "@/components/crm/cockpit/focus/focus-types";
-import { focusWrapupShortcut } from "@/lib/focus-keyboard-shortcuts";
+import { focusWrapupOutcomeKey, focusWrapupShortcut } from "@/lib/focus-keyboard-shortcuts";
 import type { WrapupSummary } from "@/components/crm/cockpit/focus/use-focus-session";
 
 const DIAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
@@ -723,8 +723,8 @@ function Wrapup({
   }
 
   // Wrap-up shortcuts (the footer hint): ⌘/Ctrl+Enter or bare S = Save & next
-  // lead, bare V = Voicemail — the outcome most cold calls land on. Refs keep the
-  // listener from going stale without rebinding it every render.
+  // lead, plus one bare key per outcome in FOCUS_WRAPUP_OUTCOME_KEYS. Refs keep
+  // the listener from going stale without rebinding it every render.
   const saveRef = React.useRef(save);
   const pickOutcomeRef = React.useRef(pickOutcome);
   const savedRef = React.useRef(saved);
@@ -748,7 +748,7 @@ function Wrapup({
       const shortcut = focusWrapupShortcut(event, { editing });
       if (!shortcut) return;
       event.preventDefault();
-      if (shortcut === "voicemail") pickOutcomeRef.current("Voicemail");
+      if (shortcut.kind === "outcome") pickOutcomeRef.current(shortcut.outcome);
       else void saveRef.current(true);
     };
     window.addEventListener("keydown", onKey);
@@ -804,18 +804,21 @@ function Wrapup({
       {/* Outcome */}
       <div className="mt-3 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Outcome</div>
       <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-        {OUTCOMES.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => pickOutcome(item.id)}
-            aria-keyshortcuts={item.id === "Voicemail" ? "V" : undefined}
-            className={chip(outcome === item.id)}
-          >
-            {item.id}
-            {item.id === "Voicemail" ? <Keycap active={outcome === item.id}>V</Keycap> : null}
-          </button>
-        ))}
+        {OUTCOMES.map((item) => {
+          const shortcutKey = focusWrapupOutcomeKey(item.id);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => pickOutcome(item.id)}
+              aria-keyshortcuts={shortcutKey ?? undefined}
+              className={chip(outcome === item.id)}
+            >
+              {item.id}
+              {shortcutKey ? <Keycap active={outcome === item.id}>{shortcutKey}</Keycap> : null}
+            </button>
+          );
+        })}
       </div>
 
       {/* Notes */}
@@ -986,7 +989,7 @@ function Wrapup({
           >
             Queue
           </a>
-          <span className="ml-auto text-[10.5px] text-co-muted-2">V voicemail · S or ⌘↵ save &amp; next</span>
+          <span className="ml-auto text-[10.5px] text-co-muted-2">V voicemail · H hang up · S or ⌘↵ save &amp; next</span>
         </div>
       </div>
     </div>
