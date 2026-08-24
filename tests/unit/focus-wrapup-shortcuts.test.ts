@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { focusWrapupShortcut } from "@/lib/focus-keyboard-shortcuts";
+import {
+  FOCUS_WRAPUP_OUTCOME_KEYS,
+  focusWrapupOutcomeKey,
+  focusWrapupShortcut
+} from "@/lib/focus-keyboard-shortcuts";
 
 type Event = Parameters<typeof focusWrapupShortcut>[0];
 
@@ -18,41 +22,73 @@ function key(overrides: Partial<Event> & { key: string }): Event {
 
 describe("Focus call wrap-up shortcuts", () => {
   it("maps bare V to the voicemail outcome", () => {
-    expect(focusWrapupShortcut(key({ key: "v" }), { editing: false })).toBe("voicemail");
-    expect(focusWrapupShortcut(key({ key: "V" }), { editing: false })).toBe("voicemail");
+    expect(focusWrapupShortcut(key({ key: "v" }), { editing: false })).toEqual({
+      kind: "outcome",
+      outcome: "Voicemail"
+    });
+    expect(focusWrapupShortcut(key({ key: "V" }), { editing: false })).toEqual({
+      kind: "outcome",
+      outcome: "Voicemail"
+    });
+  });
+
+  it("maps bare H to the hang up outcome", () => {
+    expect(focusWrapupShortcut(key({ key: "h" }), { editing: false })).toEqual({
+      kind: "outcome",
+      outcome: "Hang Up"
+    });
   });
 
   it("maps bare S to save & next lead", () => {
-    expect(focusWrapupShortcut(key({ key: "s" }), { editing: false })).toBe("save-and-next");
+    expect(focusWrapupShortcut(key({ key: "s" }), { editing: false })).toEqual({ kind: "save-and-next" });
   });
 
   it("keeps ⌘/Ctrl+Enter saving while the SDR is typing the note", () => {
-    expect(focusWrapupShortcut(key({ key: "Enter", metaKey: true }), { editing: true })).toBe("save-and-next");
-    expect(focusWrapupShortcut(key({ key: "Enter", ctrlKey: true }), { editing: true })).toBe("save-and-next");
+    expect(focusWrapupShortcut(key({ key: "Enter", metaKey: true }), { editing: true })).toEqual({
+      kind: "save-and-next"
+    });
+    expect(focusWrapupShortcut(key({ key: "Enter", ctrlKey: true }), { editing: true })).toEqual({
+      kind: "save-and-next"
+    });
   });
 
-  // The failure this guards: typing "voicemail, will retry" into the note must
-  // not silently change the outcome or save the wrap-up mid-sentence.
+  // The failure this guards: typing "hung up, will retry" into the note must not
+  // silently change the outcome or save the wrap-up mid-sentence.
   it("ignores the bare keys while a field has focus", () => {
     expect(focusWrapupShortcut(key({ key: "v" }), { editing: true })).toBeNull();
+    expect(focusWrapupShortcut(key({ key: "h" }), { editing: true })).toBeNull();
     expect(focusWrapupShortcut(key({ key: "s" }), { editing: true })).toBeNull();
   });
 
   it("leaves browser and OS shortcuts alone", () => {
     expect(focusWrapupShortcut(key({ key: "s", metaKey: true }), { editing: false })).toBeNull();
     expect(focusWrapupShortcut(key({ key: "v", ctrlKey: true }), { editing: false })).toBeNull();
+    expect(focusWrapupShortcut(key({ key: "h", ctrlKey: true }), { editing: false })).toBeNull();
     expect(focusWrapupShortcut(key({ key: "s", altKey: true }), { editing: false })).toBeNull();
     expect(focusWrapupShortcut(key({ key: "Enter", metaKey: true, shiftKey: true }), { editing: false })).toBeNull();
   });
 
   it("ignores handled and IME-composing keypresses", () => {
     expect(focusWrapupShortcut(key({ key: "v", defaultPrevented: true }), { editing: false })).toBeNull();
-    expect(focusWrapupShortcut(key({ key: "s", isComposing: true }), { editing: false })).toBeNull();
+    expect(focusWrapupShortcut(key({ key: "h", isComposing: true }), { editing: false })).toBeNull();
     expect(focusWrapupShortcut(key({ key: "Enter", metaKey: true, isComposing: true }), { editing: true })).toBeNull();
   });
 
   it("means nothing for every other key", () => {
     expect(focusWrapupShortcut(key({ key: "Enter" }), { editing: false })).toBeNull();
     expect(focusWrapupShortcut(key({ key: "c" }), { editing: false })).toBeNull();
+  });
+
+  // The dock draws its keycaps from the same table it dispatches on, so a key
+  // bound to an outcome that no longer exists would show a cap that does nothing.
+  it("round-trips every bound key back to its keycap", () => {
+    for (const [boundKey, outcome] of Object.entries(FOCUS_WRAPUP_OUTCOME_KEYS)) {
+      expect(focusWrapupOutcomeKey(outcome)).toBe(boundKey.toUpperCase());
+    }
+    expect(focusWrapupOutcomeKey("Connected")).toBeNull();
+  });
+
+  it("never binds a key that save & next already owns", () => {
+    expect(Object.keys(FOCUS_WRAPUP_OUTCOME_KEYS)).not.toContain("s");
   });
 });
