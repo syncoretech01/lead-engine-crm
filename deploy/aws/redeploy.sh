@@ -15,11 +15,20 @@
 #
 # DB migrations: deploy-app.sh does NOT run them. If a PR includes a new migration,
 # set MIGRATE=1 (expand-then-migrate: additive columns, old bundle tolerates them).
+#
+# Memory: the build needs roughly a gigabyte on a 2 GB box, so this refuses to start
+# one when there is nothing to give (see MEMORY PRECHECK below). Override the two
+# thresholds with MIN_AVAIL_MB / FLOOR_AVAIL_MB.
 set -uxo pipefail
 
 APP_DIR="/opt/syncore/app"
 HEALTH_URL="${HEALTH_URL:-https://app.syncoretech.com/api/health}"
 MIGRATE="${MIGRATE:-0}"
+# Below MIN: reclaim before building. Below FLOOR even after reclaiming: refuse.
+MIN_AVAIL_MB="${MIN_AVAIL_MB:-600}"
+FLOOR_AVAIL_MB="${FLOOR_AVAIL_MB:-300}"
+
+avail_mb() { free -m | awk '/^Mem:/ {print $7}'; }
 
 echo "=== PULL ==="
 sudo -u syncore git -C "$APP_DIR" pull --ff-only > /tmp/pull.log 2>&1
@@ -27,6 +36,47 @@ PULL_RC=$?
 tr -cd '[:print:]\n' < /tmp/pull.log; echo
 if [ "$PULL_RC" -ne 0 ]; then echo "ABORT: pull failed; nothing changed."; exit 1; fi
 echo "HEAD=$(sudo -u syncore git -C "$APP_DIR" log --oneline -1 2>&1 | tr -cd '[:print:]\n')"
+
+echo "=== MEMORY PRECHECK ==="
+# Why this exists: on 2026-08-21 a redeploy started with ~74 MB available and
+# thrashed the box into swap-death. SSM went ConnectionLost while EC2 still
+# reported status-ok, and only a reboot recovered it — ~40 minutes of downtime,
+# far worse than the deploy it was trying to perform. Nothing in the script
+# noticed; it just started a build there was no room for.
+#
+# Two reclaims, cheapest first, then a refusal:
+#
+#  1. Stop the worker (~600 MB). deploy-app.sh stops it as its first act anyway,
+#     so doing it here costs nothing and means we measure the memory the build
+#     will actually have rather than a number about to change by half a gig.
+#  2. Restart the web server. It grows with the state blob — ~800 MB observed
+#     after a bulk import, against ~70 MB fresh. This spends the same ~2 s gap
+#     the GO LIVE restart at the end already spends, just earlier, and Caddy
+#     retries over it identically. Skipped entirely when memory is fine.
+#
+# Refusing is the point: a failed build is safe (the old bundle is never
+# swapped), but a wedged box is not, and only a reboot clears it.
+echo "available_before=$(avail_mb)M worker=$(systemctl is-active syncore-worker)"
+systemctl stop syncore-worker 2>/dev/null || true
+echo "available_after_worker_stop=$(avail_mb)M"
+
+if [ "$(avail_mb)" -lt "$MIN_AVAIL_MB" ]; then
+  echo "Below ${MIN_AVAIL_MB}M — restarting syncore-web to reclaim it (~2s, Caddy retries)."
+  systemctl restart syncore-web
+  sleep 5
+  echo "available_after_web_restart=$(avail_mb)M web=$(systemctl is-active syncore-web)"
+fi
+
+AVAIL=$(avail_mb)
+if [ "$AVAIL" -lt "$FLOOR_AVAIL_MB" ]; then
+  echo "ABORT: ${AVAIL}M available after reclaiming, under the ${FLOOR_AVAIL_MB}M floor."
+  echo "       Building here risks wedging the box (2026-08-21). The old bundle is"
+  echo "       still live and untouched. Investigate what is holding memory, or"
+  echo "       re-run with FLOOR_AVAIL_MB lower if you know it is safe."
+  systemctl start syncore-worker 2>/dev/null || true
+  exit 1
+fi
+echo "OK: ${AVAIL}M available (floor ${FLOOR_AVAIL_MB}M)."
 
 if [ "$MIGRATE" = "1" ]; then
   echo "=== MIGRATE (expand-then-migrate; additive — old live bundle tolerates it) ==="
