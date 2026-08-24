@@ -5,6 +5,7 @@ import {
   Clock,
   GitBranch,
   ListChecks,
+  PhoneCall,
   RefreshCw,
   ShieldCheck,
   Users
@@ -39,6 +40,12 @@ import {
 } from "@/lib/phase1/sdr";
 import { readFastSdrManagerModel } from "@/lib/phase1/sdr-manager-read-model";
 import {
+  countLiveSdrSessions,
+  liveSdrSessionsFromState,
+  readFastLiveSdrSessions
+} from "@/lib/phase1/sdr-live-sessions-read-model";
+import { LiveSessionsPanel } from "@/components/sdr/live-sessions-panel";
+import {
   latestSdrDailyReports,
   readFastSdrDailyReports,
   sdrDailyReportsFromState
@@ -53,9 +60,10 @@ export const dynamic = "force-dynamic";
 
 export default async function SdrManagerPage() {
   const sessionContext = await getWorkspaceSessionContext("manage_sdr_team");
-  const [fastModel, fastDailyReports] = await Promise.all([
+  const [fastModel, fastDailyReports, fastLiveSessions] = await Promise.all([
     readFastSdrManagerModel(sessionContext.session, sessionContext.workspaceId),
-    readFastSdrDailyReports(sessionContext.session, sessionContext.workspaceId)
+    readFastSdrDailyReports(sessionContext.session, sessionContext.workspaceId),
+    readFastLiveSdrSessions(sessionContext.workspaceId)
   ]);
   let state = fastModel?.state;
   let workspaceId = sessionContext.workspaceId;
@@ -77,6 +85,9 @@ export default async function SdrManagerPage() {
   if (!state || !snapshot || !users || !teams || !dailyReports) {
     throw new Error("Unable to load SDR manager dashboard.");
   }
+
+  const liveSessions = fastLiveSessions ?? liveSdrSessionsFromState(state, workspaceId);
+  const liveSessionCount = countLiveSdrSessions(liveSessions.rows, Date.parse(liveSessions.generatedAt));
 
   const activeTeams = teams.filter((team) => team.active);
   const hasManualAssignments = snapshot.assignments.length > 0;
@@ -126,36 +137,53 @@ export default async function SdrManagerPage() {
     }
   ];
 
+  // Widths are explicit because five lanes share the twelve-column row.
   const lanes = [
+    {
+      label: "Live now",
+      value: liveSessionCount,
+      note: liveSessionCount ? "Calling sessions open" : "No session open",
+      icon: PhoneCall,
+      tone: liveSessionCount ? "success" as const : "info" as const,
+      w: 4
+    },
     {
       label: "Active teams",
       value: activeTeams.length,
       note: `${formatNumber(users.length)} reps covered`,
       icon: GitBranch,
-      tone: "info" as const
+      tone: "info" as const,
+      w: 2
     },
     {
       label: "Risk watch",
       value: riskCount,
       note: "Heavy P1 or overdue load",
       icon: AlertTriangle,
-      tone: riskCount ? "warning" as const : "success" as const
+      tone: riskCount ? "warning" as const : "success" as const,
+      w: 2
     },
     {
       label: "Recommendations",
       value: snapshot.recommendations.length,
       note: "Ready for review",
       icon: RefreshCw,
-      tone: snapshot.recommendations.length ? "warning" as const : "success" as const
+      tone: snapshot.recommendations.length ? "warning" as const : "success" as const,
+      w: 2
     },
     {
       label: "Rules live",
       value: snapshot.rules.length,
       note: "Rebalancing guardrails",
       icon: ShieldCheck,
-      tone: "success" as const
+      tone: "success" as const,
+      w: 2
     }
   ];
+  const laneOffsets = lanes.reduce<number[]>((acc, lane, index) => {
+    acc.push(index === 0 ? 0 : acc[index - 1] + lanes[index - 1].w);
+    return acc;
+  }, []);
 
   const canCustomize = canCustomizeTiles(sessionContext.session);
   const savedLayout = await readUserTileLayout(sessionContext.session.user.id, "sdr-manager");
@@ -198,7 +226,7 @@ export default async function SdrManagerPage() {
           </TileItem>
         ))}
         {lanes.map((lane, index) => (
-          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={index * 3} y={2} w={3} h={2} minW={2}>
+          <TileItem key={`lane-${index}`} id={`lane-${index}`} x={laneOffsets[index]} y={2} w={lane.w} h={2} minW={2}>
             <div className="bg-card flex h-full items-center gap-3 rounded-xl border p-4 shadow-sm">
               <ToneIcon icon={lane.icon} tone={lane.tone} />
               <div className="min-w-0">
@@ -211,7 +239,11 @@ export default async function SdrManagerPage() {
           </TileItem>
         ))}
 
-        <TileItem id="end-of-day-reports" x={0} y={4} w={12} h={9} minW={7} minH={5}>
+        <TileItem id="live-sessions" x={0} y={4} w={12} h={7} minW={6} minH={4}>
+          <LiveSessionsPanel initial={liveSessions} />
+        </TileItem>
+
+        <TileItem id="end-of-day-reports" x={0} y={11} w={12} h={9} minW={7} minH={5}>
         <Panel
           title="End-of-day SDR reports"
           subtitle="Saved automatically after the daily window closes at 4:00 AM Pakistan Standard Time (Asia/Karachi)."
@@ -282,7 +314,7 @@ export default async function SdrManagerPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="team-workload" x={0} y={13} w={7} h={8} minW={4} minH={4}>
+        <TileItem id="team-workload" x={0} y={20} w={7} h={8} minW={4} minH={4}>
         <Panel
           title="Team workload"
           subtitle="Active load, P1 pressure, meetings, and SLA adherence by rep."
@@ -346,7 +378,7 @@ export default async function SdrManagerPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="routing-coverage" x={7} y={13} w={5} h={8} minW={3} minH={4}>
+        <TileItem id="routing-coverage" x={7} y={20} w={5} h={8} minW={3} minH={4}>
         <Panel
           title="Routing coverage"
           subtitle="Territory and industry pods used by the assignment engine."
@@ -382,7 +414,7 @@ export default async function SdrManagerPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="reassignment-recommendations" x={0} y={21} w={12} h={7} minW={6} minH={3}>
+        <TileItem id="reassignment-recommendations" x={0} y={28} w={12} h={7} minW={6} minH={3}>
         <Panel
           title="Reassignment recommendations"
           subtitle="Overdue SLA and P1 load-balance recommendations generated from current assignments."
@@ -449,7 +481,7 @@ export default async function SdrManagerPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="manual-reassignment" x={0} y={28} w={7} h={9} minW={4} minH={4}>
+        <TileItem id="manual-reassignment" x={0} y={35} w={7} h={9} minW={4} minH={4}>
         <Panel
           title="Manual reassignment"
           subtitle="Move any active assignment to another SDR with a manager reason."
@@ -545,7 +577,7 @@ export default async function SdrManagerPage() {
         </Panel>
         </TileItem>
 
-        <TileItem id="reassignment-rules" x={7} y={28} w={5} h={9} minW={3} minH={4}>
+        <TileItem id="reassignment-rules" x={7} y={35} w={5} h={9} minW={3} minH={4}>
         <Panel
           title="Reassignment rules"
           subtitle="Rules define when manager recommendations should move work."

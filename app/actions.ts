@@ -92,6 +92,12 @@ import {
   ensureSdrCallingSession,
   recordSdrCallingSessionWrapup
 } from "@/lib/phase1/sdr-calling-session";
+import {
+  liveSdrSessionsFromState,
+  readFastLiveSdrSessions,
+  scopeLiveSdrSessions,
+  type LiveSdrSessionsModel
+} from "@/lib/phase1/sdr-live-sessions-read-model";
 import { ringCentralRingOut } from "@/lib/providers/adapters/ringcentral-ringout";
 import { ringCentralSmsLiveBlockReason } from "@/lib/providers/adapters/ringcentral-sms";
 import {
@@ -1561,6 +1567,26 @@ export async function ensureSdrCallingSessionAction(input: {
     return { ok: true, report };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Could not start the calling session." };
+  }
+}
+
+/**
+ * Polled by the manager dashboard's "Live now" panel. Read-only, Prisma-direct
+ * and permission-gated: it must stay cheap enough to call every 30 seconds, so
+ * it never touches the blob when the Prisma read model is available.
+ */
+export async function readLiveSdrSessionsAction(): Promise<
+  { ok: true; model: LiveSdrSessionsModel } | { ok: false; error: string }
+> {
+  try {
+    const session = await getSession();
+    assertPermission(session, "manage_sdr");
+    const workspaceId = session.workspace.id;
+    const fast = await readFastLiveSdrSessions(workspaceId);
+    const model = fast ?? liveSdrSessionsFromState(await readState(), workspaceId);
+    return { ok: true, model: scopeLiveSdrSessions(model, session) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Could not read live calling sessions." };
   }
 }
 

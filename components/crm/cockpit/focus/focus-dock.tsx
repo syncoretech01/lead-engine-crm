@@ -29,6 +29,7 @@ import {
 } from "@/components/crm/cockpit/focus/background-call-wrapup";
 import { QuickActions } from "@/components/crm/cockpit/quick-actions";
 import { leadBlockReason, type FocusLead } from "@/components/crm/cockpit/focus/focus-types";
+import { focusWrapupShortcut } from "@/lib/focus-keyboard-shortcuts";
 import type { WrapupSummary } from "@/components/crm/cockpit/focus/use-focus-session";
 
 const DIAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
@@ -721,18 +722,34 @@ function Wrapup({
     }
   }
 
-  // ⌘/Ctrl+Enter = Save & next lead (the footer hint). Uses a ref so the listener
-  // never goes stale without rebinding every render.
+  // Wrap-up shortcuts (the footer hint): ⌘/Ctrl+Enter or bare S = Save & next
+  // lead, bare V = Voicemail — the outcome most cold calls land on. Refs keep the
+  // listener from going stale without rebinding it every render.
   const saveRef = React.useRef(save);
+  const pickOutcomeRef = React.useRef(pickOutcome);
+  const savedRef = React.useRef(saved);
   React.useEffect(() => {
     saveRef.current = save;
+    pickOutcomeRef.current = pickOutcome;
+    savedRef.current = saved;
   });
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault();
-        void saveRef.current(true);
-      }
+      // Once saved, the success screen has replaced the form and owns its own keys.
+      if (savedRef.current) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const editing =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        Boolean(target?.isContentEditable) ||
+        window.getSelection()?.isCollapsed === false;
+      const shortcut = focusWrapupShortcut(event, { editing });
+      if (!shortcut) return;
+      event.preventDefault();
+      if (shortcut === "voicemail") pickOutcomeRef.current("Voicemail");
+      else void saveRef.current(true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -788,8 +805,15 @@ function Wrapup({
       <div className="mt-3 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-co-muted">Outcome</div>
       <div className="mt-1.5 grid grid-cols-2 gap-1.5">
         {OUTCOMES.map((item) => (
-          <button key={item.id} type="button" onClick={() => pickOutcome(item.id)} className={chip(outcome === item.id)}>
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => pickOutcome(item.id)}
+            aria-keyshortcuts={item.id === "Voicemail" ? "V" : undefined}
+            className={chip(outcome === item.id)}
+          >
             {item.id}
+            {item.id === "Voicemail" ? <Keycap active={outcome === item.id}>V</Keycap> : null}
           </button>
         ))}
       </div>
@@ -928,10 +952,12 @@ function Wrapup({
             type="button"
             disabled={pending}
             onClick={() => save(true)}
+            aria-keyshortcuts="S Meta+Enter Control+Enter"
             className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-co-blue text-[13px] font-bold text-white transition-colors hover:bg-co-blue-hover disabled:bg-co-disabled-bg disabled:text-co-muted-2"
           >
             {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
             Save &amp; next lead
+            <Keycap active>S</Keycap>
           </button>
           <button
             type="button"
@@ -960,10 +986,23 @@ function Wrapup({
           >
             Queue
           </a>
-          <span className="ml-auto text-[10.5px] text-co-muted-2">⌘↵ save &amp; next</span>
+          <span className="ml-auto text-[10.5px] text-co-muted-2">V voicemail · S or ⌘↵ save &amp; next</span>
         </div>
       </div>
     </div>
+  );
+}
+
+function Keycap({ children, active }: { children: React.ReactNode; active: boolean }) {
+  return (
+    <kbd
+      aria-hidden="true"
+      className={`ml-1 rounded border px-1 font-sans text-[9.5px] font-bold leading-[15px] ${
+        active ? "border-white/40 text-white/80" : "border-co-control text-co-muted-2"
+      }`}
+    >
+      {children}
+    </kbd>
   );
 }
 
