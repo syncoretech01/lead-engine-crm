@@ -54,7 +54,14 @@ import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function OutreachCampaignsPage() {
+export default async function OutreachCampaignsPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ sendError?: string }>;
+}) {
+  // A refused send (cold-send guards, rules 8/13) lands back here with the exact
+  // remediation in ?sendError — prod redacts thrown server-action messages.
+  const sendError = (await searchParams)?.sendError ?? "";
   const sessionContext = await getWorkspaceSessionContext("manage_outreach");
   const fastModel = await readFastOutreachDashboardModel(sessionContext.session, sessionContext.workspaceId);
   let state = fastModel?.state;
@@ -153,6 +160,14 @@ export default async function OutreachCampaignsPage() {
 
   return (
     <>
+      {sendError ? (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+        >
+          <strong>Send refused:</strong> {sendError}
+        </div>
+      ) : null}
       <PageHeader
         kicker="CRM outreach"
         title="Outreach campaigns"

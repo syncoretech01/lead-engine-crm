@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { assertPermission } from "@/lib/phase1/auth";
+import { enrichmentWriteTables } from "@/lib/phase1/normalized-write-tables";
 import { resolveLiveProviderCredential } from "@/lib/phase1/provider-live-execution";
 import { appendAudit, getSession, readState, updateState } from "@/lib/phase1/store";
 import { createWaterfallExecutor } from "@/lib/phase1/waterfall-provider-executor";
@@ -66,7 +67,12 @@ export async function enrichContactsWithWaterfall(input: { templateId: string; c
     results.push({ contactId: lead.contactId, result });
   }
 
-  // Phase C — persist.
+  // Phase C — persist. Money has already been spent in Phase B, so this write must
+  // not be fragile: scope it to the enrichment tables (diff mode then upserts only
+  // the changed rows instead of running a FULL 70-table sync that has been observed
+  // blowing past the default 30s transaction cap in prod — a timeout here rolls
+  // back paid results while the provider charges stand) and give it a generous
+  // explicit budget for the fallback full-scan case.
   return updateState((freshState, freshSession) => {
     assertPermission(freshSession, "manage_waterfalls");
     const applied = applyWaterfallResults(freshState, freshSession.workspace.id, results);
@@ -77,7 +83,7 @@ export async function enrichContactsWithWaterfall(input: { templateId: string; c
       newValue: { template: template.name, ...applied }
     });
     return applied;
-  });
+  }, { normalizedTables: enrichmentWriteTables, transactionTimeoutMs: 120_000 });
 }
 
 export async function runWaterfallEnrichmentAction(formData: FormData) {
