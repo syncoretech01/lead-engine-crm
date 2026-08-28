@@ -78,7 +78,7 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
 
     const form = event.currentTarget;
     let response: Response;
-    let payload: { error?: string } & Record<string, unknown>;
+    let payload: ImportResult & { error?: string };
     try {
       response = await fetch("/api/import/csv", {
         method: "POST",
