@@ -1369,6 +1369,12 @@ export const SoftphoneEngine = React.forwardRef<SoftphoneEngineHandle, Softphone
       } else if (recording) {
         void session.stopRecording().catch(() => {});
         setRecording(false);
+        // A later RE-grant must be able to start again. Without this reset,
+        // startSessionRecording's already-started guard swallows the restart and
+        // the rest of the call is silently unrecorded while consent reads
+        // Granted — losing exactly the evidence the consent field protects.
+        recordingStartedRef.current = false;
+        recordingStartErrorRef.current = undefined;
       }
     },
     [recording, startSessionRecording]

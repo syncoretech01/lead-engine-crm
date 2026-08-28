@@ -1,5 +1,6 @@
 import { resolveLiveProviderCredential } from "@/lib/phase1/provider-live-execution";
 import { outreachBatchSize, outreachFrom, outreachMailingAddress, outreachReplyTo } from "@/lib/phase1/outreach-config";
+import { assertNoLinksInColdTouchOne, coldSendMailboxBlockReason } from "@/lib/phase1/outreach-validation";
 import { createEmailEvent, refreshCampaignMetrics } from "@/lib/phase1/outreach";
 import { startPerformanceTimer, timeAsync } from "@/lib/phase1/performance";
 import { buildOneClickUnsubscribeUrl, buildUnsubscribeUrl } from "@/lib/phase1/unsubscribe-token";
@@ -165,6 +166,23 @@ export function buildCampaignSendBatch(
   const sequenceBundle = firstEmailStep(state, campaign);
   const from = outreachFrom();
   const replyTo = outreachReplyTo();
+  // Past this point the batch WILL be handed to live SES (a live credential just
+  // resolved above), so the cold-send rules are enforced here, fail-closed:
+  // rule 13 (never from syncoretech.com; From must be deliberately configured)
+  // and rule 8 (no link in cold touch 1 — the operator's template, not the
+  // renderer-appended unsubscribe URL). Simulated sends never reach this code.
+  const mailboxBlock = coldSendMailboxBlockReason({
+    fromEnv: process.env.SYNCORE_OUTREACH_FROM,
+    from,
+    replyTo
+  });
+  if (mailboxBlock) {
+    throw new Error(mailboxBlock);
+  }
+  assertNoLinksInColdTouchOne(
+    sequenceBundle.step?.subject ?? "",
+    sequenceBundle.step?.bodyTemplate ?? ""
+  );
   const physicalAddress = outreachMailingAddress();
   const recipients = unsent.slice(0, Math.max(0, opts.batchSize)).map((contact) => {
     const unsubscribeUrl = buildUnsubscribeUrl(workspaceId, contact.id);

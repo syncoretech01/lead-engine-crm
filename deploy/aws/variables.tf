@@ -77,3 +77,9 @@ variable "ses_topic_arns" {
   default     = ""
   description = "Comma-separated ARNs of the SES->SNS topic(s) the bounce/complaint webhook trusts (SYNCORE_SES_TOPIC_ARNS). Leave empty until SES->SNS is wired: empty means the param is not written, so the webhook FAILS CLOSED in prod (rejects all topics). Set it when you create the topic."
 }
+
+variable "alert_email" {
+  type        = string
+  default     = ""
+  description = "Email address for CloudWatch alarm notifications (monitoring.tf). Empty = no alerting resources are created. After the first apply with this set, confirm the SNS subscription from the inbox."
+}

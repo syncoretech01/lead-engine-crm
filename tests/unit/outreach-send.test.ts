@@ -24,8 +24,8 @@ beforeEach(() => {
   process.env.SYNCORE_UNSUBSCRIBE_SECRET = "test-secret";
   process.env.SYNCORE_ENABLE_LIVE_PROVIDERS = "true";
   process.env.SYNCORE_MAILING_ADDRESS = "Syncore Tech, 1500 N Grant St, Denver, CO 80203, USA";
-  process.env.SYNCORE_OUTREACH_FROM = "Bobby Jones <bobby@syncoretech.com>";
-  process.env.SYNCORE_OUTREACH_REPLY_TO = "replies@syncoretech.com";
+  process.env.SYNCORE_OUTREACH_FROM = "Bobby Jones <bobby@syncore-reach.com>";
+  process.env.SYNCORE_OUTREACH_REPLY_TO = "replies@syncore-reach.com";
   process.env.AWS_SES_REGION = "us-east-1";
   process.env.AWS_ACCESS_KEY_ID = "AKIATEST";
   process.env.AWS_SECRET_ACCESS_KEY = "secret";
@@ -84,8 +84,8 @@ describe("outreach send planning", () => {
     expect(batch.recipients).toHaveLength(1);
     expect(batch.recipients[0]).toMatchObject({
       contactId: "contact-b",
-      from: "Bobby Jones <bobby@syncoretech.com>",
-      replyTo: "replies@syncoretech.com"
+      from: "Bobby Jones <bobby@syncore-reach.com>",
+      replyTo: "replies@syncore-reach.com"
     });
     expect(batch.recipients[0].headers["List-Unsubscribe"]).toMatch(
       /https:\/\/app\.syncore\.test\/api\/unsubscribe\?c=contact-b&s=[A-Za-z0-9_-]{24}/
@@ -101,6 +101,22 @@ describe("outreach send planning", () => {
     expect(batch.recipients[0].html).not.toContain('<a href="<a href=');
     expect(batch.recipients[0].html).not.toContain("Unsubscribe: https://app.syncore.test/unsubscribe/contact-b?s=");
     expect(batch.recipients[0].text).toContain("Syncore Tech, 1500 N Grant St, Denver, CO 80203, USA");
+  });
+
+  it("refuses a live batch from the primary domain and when From is unconfigured (rule 13)", () => {
+    const state = outreachState({ liveSes: true });
+    process.env.SYNCORE_OUTREACH_FROM = "Bobby Jones <bobby@syncoretech.com>";
+    expect(() => buildCampaignSendBatch(state, "workspace-syncore", "campaign-a", { batchSize: 1 })).toThrow(/syncoretech.com/);
+
+    delete process.env.SYNCORE_OUTREACH_FROM;
+    expect(() => buildCampaignSendBatch(state, "workspace-syncore", "campaign-a", { batchSize: 1 })).toThrow(/SYNCORE_OUTREACH_FROM is not set/);
+  });
+
+  it("refuses a live batch whose touch-1 template carries a link (rule 8)", () => {
+    const state = outreachState({ liveSes: true });
+    const step = state.sequenceSteps.find((item) => item.sequenceId === state.campaignSequences[0].id);
+    if (step) step.bodyTemplate = "Hi {{first_name}}, see https://example.com/deck";
+    expect(() => buildCampaignSendBatch(state, "workspace-syncore", "campaign-a", { batchSize: 1 })).toThrow(/rule 8/);
   });
 
   it("records partial sends as active without completing the campaign", () => {
@@ -128,7 +144,7 @@ describe("outreach send planning", () => {
       eventType: "Sent",
       provider: "Amazon SES",
       messageId: "ses-message-1",
-      senderEmail: "bobby@syncoretech.com"
+      senderEmail: "bobby@syncore-reach.com"
     });
   });
 });
