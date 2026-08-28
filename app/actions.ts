@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { asActionResult, type ActionResult } from "@/lib/action-result";
 import { assertPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
-import { findCallWrapupReceipt } from "@/lib/phase1/call-wrapup-idempotency";
+import { findCallWrapupReceipt, findPlacedCallReceipt } from "@/lib/phase1/call-wrapup-idempotency";
 import {
   completeDataSubjectRequest,
   consentStatuses,
@@ -2132,6 +2132,20 @@ export async function sendDirectEmailAction(formData: FormData) {
   const session = await getSession(state);
   assertPermission(session, "send_direct_outreach");
   assertAssignedContactForOutreach(state, session, contactId);
+
+  // Idempotency: a committed dial left an audit receipt carrying this requestId in
+  // the same transaction as its TrackedCall. Replaying the request must return that
+  // call rather than ring the lead a second time.
+  const placedReceipt = findPlacedCallReceipt(state.auditLogs, {
+    workspaceId: session.workspace.id,
+    requestId
+  });
+  if (placedReceipt) {
+    return {
+      callId: placedReceipt.callId,
+      liveState: (placedReceipt.liveState ?? "completed") as TrackedCallLiveState
+    };
+  }
   const plan = buildDirectEmailSendPlan(state, {
     workspaceId: session.workspace.id,
     actor: session.user,
@@ -2497,7 +2511,9 @@ export async function placeCallAction(
     callSummary = "Simulated call — live calling is disabled in this environment.";
   }
 
-  const callId = await updateState(
+  let callId: string;
+  try {
+    callId = await updateState(
     (state, session) => {
       assertPermission(session, "send_direct_outreach");
       const call = createTrackedCall(state, {
@@ -2526,7 +2542,24 @@ export async function placeCallAction(
       normalizedTables: outreachTrackedCallWriteTables,
       transactionTimeoutMs: CALL_PERSISTENCE_TRANSACTION_TIMEOUT_MS
     }
-  );
+    );
+  } catch (persistError) {
+    // The RingOut already went out — the lead's phone is ringing. Reporting a
+    // plain failure here invites the SDR to redial into a live call, so say what
+    // actually happened and let them log it manually.
+    if (providerCallId) {
+      const detail = persistError instanceof Error ? persistError.message : String(persistError);
+      console.error("[placeCall] RingOut placed but not recorded:", detail);
+      return {
+        callId: "",
+        liveState,
+        error:
+          "The call was placed and should be ringing, but it could not be saved to the call log. " +
+          "Do not redial — log the outcome manually once the call ends."
+      };
+    }
+    throw persistError;
+  }
 
   revalidateOutreachPages([`/crm/contacts/${contactId}`, "/crm/calls", "/crm/my-contacts", "/sdr/queue"]);
   return { callId, liveState, error: placeError };
@@ -3650,14 +3683,18 @@ function smsEventStatusValue(value: FormDataEntryValue | null): SmsEventStatus {
   return smsEventStatuses.includes(status) ? status : "Sent";
 }
 
+// Missing or unrecognised call outcomes fall back to the NEUTRAL member, never the
+// most favourable one. A stale form, a UI bug, or a hand-crafted request used to
+// record "Connected"/"Interested" — silently inflating the connect and interest
+// rates managers steer by, in the one place the data cannot be sanity-checked later.
 function trackedCallStatusValue(value: FormDataEntryValue | null): TrackedCallStatus {
-  const status = stringValue(value, "Connected") as TrackedCallStatus;
-  return trackedCallStatuses.includes(status) ? status : "Connected";
+  const status = stringValue(value, "Dialed") as TrackedCallStatus;
+  return trackedCallStatuses.includes(status) ? status : "Dialed";
 }
 
 function callDispositionValue(value: FormDataEntryValue | null): CallDisposition {
-  const disposition = stringValue(value, "Interested") as CallDisposition;
-  return callDispositions.includes(disposition) ? disposition : "Interested";
+  const disposition = stringValue(value, "No answer") as CallDisposition;
+  return callDispositions.includes(disposition) ? disposition : "No answer";
 }
 
 function recordingConsentValue(value: FormDataEntryValue | null): RecordingConsentStatus {

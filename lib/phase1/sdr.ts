@@ -1330,7 +1330,13 @@ function defaultFollowUpDueAt(now: string, outcome: SdrLeadStatus) {
   return offsetDate(now, 2, 10);
 }
 
-function calculateSlaStatus(assignment: SdrAssignment, now: string): SlaStatus {
+/**
+ * SLA state from the assignment row plus the clock — pure, so read models compute
+ * it live instead of trusting the stored column. The column is only refreshed by
+ * writes (refreshSlaStatuses), so on a read-only day a lapsed due date would keep
+ * reporting "On track" while the same row's timer label said "overdue".
+ */
+export function calculateSlaStatus(assignment: SdrAssignment, now: string): SlaStatus {
   if (assignment.callCycleCompletedAt) return "No SLA";
   if (assignment.status === "Suppressed" || assignment.status === "Unsubscribed") return "Paused";
   if (!activeAssignmentStatuses.has(assignment.status)) return "No SLA";
@@ -1378,7 +1384,8 @@ function completeAssignmentReminders(state: AppState, assignment: SdrAssignment,
   }
 }
 
-function reminderStatusForDueAt(dueAt: string, now: string): ReminderStatus {
+/** Same read-time rule for reminders: past due is Overdue regardless of the column. */
+export function reminderStatusForDueAt(dueAt: string, now: string): ReminderStatus {
   return Date.parse(dueAt) < Date.parse(now) ? "Overdue" : "Open";
 }
 

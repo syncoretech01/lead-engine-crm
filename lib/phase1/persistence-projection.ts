@@ -1239,7 +1239,7 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       accountId: hasCompany(state, call.companyId) ? call.companyId : undefined,
       leadContactId: call.contactId,
       companyId: call.companyId,
-      sdrUserId: call.sdrUserId,
+      sdrUserId: hasUser(state, call.sdrUserId) ? call.sdrUserId : undefined,
       phoneNumber: call.phoneNumber,
       direction: call.direction,
       callStatus: call.callStatus,
@@ -1259,7 +1259,9 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       liveState: call.liveState ?? null,
       createdAt: call.createdAt
     }))),
-    sdrCallingSessions: sortRows(state.sdrCallingSessions.map((session) => ({
+    sdrCallingSessions: sortRows(state.sdrCallingSessions
+      .filter((session) => hasUser(state, session.sdrUserId))
+      .map((session) => ({
       id: session.id,
       workspaceId: session.workspaceId,
       sdrUserId: session.sdrUserId,
@@ -1278,7 +1280,9 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       createdAt: session.createdAt,
       updatedAt: session.updatedAt
     }))),
-    sdrDailyReports: sortRows(state.sdrDailyReports.map((report) => ({
+    sdrDailyReports: sortRows(state.sdrDailyReports
+      .filter((report) => hasUser(state, report.sdrUserId))
+      .map((report) => ({
       id: report.id,
       workspaceId: report.workspaceId,
       sdrUserId: report.sdrUserId,
@@ -1522,7 +1526,7 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
     auditLogs: sortRows(state.auditLogs.map((log) => ({
       id: log.id,
       workspaceId: log.workspaceId,
-      actorUserId: log.actorUserId,
+      actorUserId: hasUser(state, log.actorUserId) ? log.actorUserId : undefined,
       objectType: log.objectType,
       objectId: log.objectId,
       action: log.action,
@@ -1738,6 +1742,14 @@ function suppressionTypeValue(type: SuppressionRecord["type"]) {
 
 function hasCompany(state: AppState, companyId: string) {
   return state.companies.some((company) => company.id === companyId);
+}
+
+// A removed workspace member leaves their id behind on event rows. Every FK to
+// User must be guarded the way opportunities/activities/tasks already are:
+// nullable columns go undefined, required ones drop the row (the DB cascade has
+// already deleted it). Without this a full-mode sync throws P2003 mid-transaction.
+function hasUser(state: AppState, userId: string | undefined | null) {
+  return Boolean(userId && state.users.some((user) => user.id === userId));
 }
 
 function hasCrmContact(state: AppState, contactId: string) {

@@ -72,7 +72,10 @@ export async function readAssignedContactsModel(
       : Promise.resolve(0)
   ]);
 
-  const allRows = assignments.map(mapSdrAssignmentRow);
+  // One clock for the whole read so every row agrees (and so .map does not hand
+  // the mapper an array index as its "now").
+  const nowIso = new Date().toISOString();
+  const allRows = assignments.map((assignment) => mapSdrAssignmentRow(assignment, nowIso));
   const callPlan = opts?.callPlan && ownerId
     ? buildSdrDailyCallPlan(allRows, ownerId, completedCallsToday)
     : undefined;

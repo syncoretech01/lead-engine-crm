@@ -3,6 +3,7 @@ import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { activityTypeValue } from "@/lib/phase1/fast-read-utils";
+import { calculateSlaStatus, reminderStatusForDueAt } from "@/lib/phase1/sdr";
 import {
   buildSdrDailyCallPlan,
   SDR_DAILY_CALL_TARGET,
@@ -168,7 +169,10 @@ type SdrActivityRowPayload = Prisma.ActivityGetPayload<{ include: typeof sdrActi
 
 // Flattens one prisma SdrAssignment (with sdrAssignmentRowInclude) into the
 // merged read row consumed by the SDR queue and the assigned-contacts directory.
-export function mapSdrAssignmentRow(assignment: SdrAssignmentRowPayload): SdrQueueAssignmentReadRow {
+export function mapSdrAssignmentRow(
+  assignment: SdrAssignmentRowPayload,
+  now = new Date().toISOString()
+): SdrQueueAssignmentReadRow {
   const crmContact = assignment.contact;
   const leadContact = crmContact?.contact;
   const account = assignment.account ?? crmContact?.account;
@@ -195,7 +199,19 @@ export function mapSdrAssignmentRow(assignment: SdrAssignmentRowPayload): SdrQue
     status: sdrLeadStatusValue(assignment.status),
     reassignmentReason: assignment.reassignmentReason ?? undefined,
     previousOwnerId: assignment.previousOwnerId ?? undefined,
-    slaStatus: slaStatusValue(assignment.slaStatus),
+    // Computed live, not read from the column: the stored value only advances on a
+    // write, so an assignment that lapsed since the last write would still claim
+    // "On track" here while its own dueLabel below says overdue.
+    slaStatus: calculateSlaStatus(
+      {
+        status: sdrLeadStatusValue(assignment.status),
+        firstTouchedAt: assignment.firstTouchedAt?.toISOString(),
+        firstTouchDueAt: assignment.firstTouchDueAt?.toISOString(),
+        followUpDueAt: assignment.followUpDueAt?.toISOString(),
+        callCycleCompletedAt: assignment.callCycleCompletedAt?.toISOString()
+      } as Parameters<typeof calculateSlaStatus>[0],
+      now
+    ),
     firstTouchedAt: assignment.firstTouchedAt?.toISOString(),
     lastTouchAt: assignment.lastTouchAt?.toISOString(),
     touchCount: assignment.touchCount,
@@ -327,7 +343,9 @@ export async function readFastSdrQueueModel(
       : Promise.resolve(0)
   ]);
 
-  const allAssignmentRows = assignments.map(mapSdrAssignmentRow);
+  // One clock for the whole read, so every row in a response agrees.
+  const nowIso = new Date().toISOString();
+  const allAssignmentRows = assignments.map((assignment) => mapSdrAssignmentRow(assignment, nowIso));
   const ownerPlan = ownerUserId
     ? buildSdrDailyCallPlan(allAssignmentRows, ownerUserId, completedCallsToday)
     : undefined;
@@ -345,7 +363,11 @@ export async function readFastSdrQueueModel(
     title: reminder.title,
     channel: reminder.channel,
     dueAt: reminder.dueAt.toISOString(),
-    status: reminder.status,
+    // Live for the same reason; a completed reminder keeps its terminal status.
+    status:
+      reminder.status === "Completed"
+        ? reminder.status
+        : reminderStatusForDueAt((reminder.snoozedUntil ?? reminder.dueAt).toISOString(), nowIso),
     createdAt: reminder.createdAt.toISOString(),
     completedAt: reminder.completedAt?.toISOString(),
     snoozedUntil: reminder.snoozedUntil?.toISOString(),

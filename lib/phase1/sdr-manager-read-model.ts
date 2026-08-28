@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { calculateSlaStatus } from "@/lib/phase1/sdr";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type {
   AppState,
@@ -157,6 +158,8 @@ export async function readFastSdrManagerModel(
   ]);
 
   const users = uniqueUsers(memberRows.map(({ user }) => userFromPrisma(user)));
+  // One clock for the whole read, so the dashboard metrics and the rows agree.
+  const nowIso = new Date().toISOString();
   const managerAssignments = assignments.map((assignment) => {
     const crmContact = assignment.contact;
     const leadContact = crmContact?.contact;
@@ -180,7 +183,19 @@ export async function readFastSdrManagerModel(
       status: sdrLeadStatusValue(assignment.status),
       reassignmentReason: assignment.reassignmentReason ?? undefined,
       previousOwnerId: assignment.previousOwnerId ?? undefined,
-      slaStatus: slaStatusValue(assignment.slaStatus),
+      // Computed live rather than read from the column, which only advances on a
+      // write — otherwise overdue/slaAdherence below silently under-report on any
+      // day nobody triggers a refreshing action.
+      slaStatus: calculateSlaStatus(
+        {
+          status: sdrLeadStatusValue(assignment.status),
+          firstTouchedAt: optionalIso(assignment.firstTouchedAt),
+          firstTouchDueAt: optionalIso(assignment.firstTouchDueAt),
+          followUpDueAt: optionalIso(assignment.followUpDueAt),
+          callCycleCompletedAt: optionalIso(assignment.callCycleCompletedAt)
+        } as Parameters<typeof calculateSlaStatus>[0],
+        nowIso
+      ),
       firstTouchedAt: optionalIso(assignment.firstTouchedAt),
       lastTouchAt: optionalIso(assignment.lastTouchAt),
       touchCount: assignment.touchCount,
