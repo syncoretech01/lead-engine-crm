@@ -17,7 +17,11 @@ async function main() {
       where: { id: "syncore-primary-state" },
       update: {
         version: state.version,
-        state: state as never
+        state: state as never,
+        // Every unconditional snapshot write bumps writeSeq so a concurrent CAS
+        // writer whose baseline predates the seed conflicts instead of silently
+        // committing pre-seed state over it (mirrors store.ts writeStateToPrisma).
+        writeSeq: { increment: 1 }
       },
       create: {
         id: "syncore-primary-state",

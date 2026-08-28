@@ -247,12 +247,15 @@ export default async function AccessPage({ searchParams }: AccessPageProps) {
                           autoComplete="off"
                           placeholder="New password (10+)"
                           aria-label={`New password for ${member.user?.name ?? "user"}`}
-                          disabled={member.userId === session.user.id || member.account?.status !== "Active"}
+                          // Invited stays enabled: setting a password is the recovery
+                          // route for backfilled locked accounts (it activates the seat).
+                          // Disabled stays blocked — reactivation must be deliberate.
+                          disabled={member.userId === session.user.id || member.account?.status === "Disabled"}
                         />
                         <button
                           className="button subtle"
                           type="submit"
-                          disabled={member.userId === session.user.id || member.account?.status !== "Active"}
+                          disabled={member.userId === session.user.id || member.account?.status === "Disabled"}
                         >
                           <KeyRound size={16} aria-hidden="true" />
                           Reset password
