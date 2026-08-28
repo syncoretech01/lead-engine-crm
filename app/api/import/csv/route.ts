@@ -20,11 +20,25 @@ import type { CsvImportMapping, CsvImportResult, LeadJob, RawLead } from "@/lib/
 const MAX_CSV_BYTES = 25 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  // Auth and permission BEFORE touching the body. request.formData() buffers the
-  // entire upload in memory and parseCsv doubles it — that work must never be
-  // reachable pre-auth (the proxy only checks that a session cookie exists, not
-  // that it is valid).
-  const session = await getSession();
+  // Auth and permission BEFORE touching the body: request.formData() buffers the
+  // entire upload in memory and parseCsv doubles it, and the proxy only checks
+  // that a session cookie EXISTS. (Session resolution itself can still read the
+  // app state for a forged-but-present cookie — that cost is shared with every
+  // page load; the upload buffering is what must stay behind auth.)
+  let session;
+  try {
+    session = await getSession();
+  } catch (error) {
+    // getSession redirect()s to /login for pages; for a fetch() caller that 307
+    // re-posts the multipart body at /login and hands the form a non-JSON
+    // response. Translate ONLY the auth redirect into the JSON 401 this API
+    // speaks (matching proxy.ts); anything else (e.g. DB down) must propagate.
+    const digest = (error as { digest?: string } | null)?.digest;
+    if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+    throw error;
+  }
   if (!hasPermission(session, "import_csv")) {
     return NextResponse.json({ error: "You do not have permission to import CSVs." }, { status: 403 });
   }
