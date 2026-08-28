@@ -89,4 +89,51 @@ describe.skipIf(!enabled)("AppState write-seq CAS (concurrency)", () => {
     expect(after.auditLogs.length).toBe(before + burst);
     expect(await prisma.auditLog.count({ where: { action: "cas_burst" } })).toBe(burst);
   });
+
+  // The ops-script path: readState → mutate in memory (for minutes, in real use) →
+  // writeState. Before the CAS this silently overwrote whatever committed in
+  // between; now it must refuse, loudly, and the interleaved write must survive.
+  it("writeState of a previously-read state refuses to clobber a concurrent commit", async () => {
+    const { resetStore, readState, writeState, updateAuthState, appendAudit } = await import("@/lib/phase1/store");
+    const { getDemoSession } = await import("@/lib/phase1/auth");
+
+    await resetStore();
+    const stale = await readState(); // the "script" reads…
+    const session = getDemoSession(stale);
+
+    // …and while it mutates in memory, a user action commits.
+    await updateAuthState(
+      (state) => appendAudit(state, session, { objectType: "test", objectId: "interleaved-user-action", action: "cas_interleave" }),
+      { normalizedTables: ["auditLogs"] }
+    );
+
+    await expect(writeState(stale)).rejects.toThrow(/changed while this script was running/);
+
+    const after = await readState();
+    expect(after.auditLogs.some((entry) => entry.objectId === "interleaved-user-action")).toBe(true);
+  });
+
+  it("a clean writeState commits via CAS and advances writeSeq once", async () => {
+    const { resetStore, readState, writeState } = await import("@/lib/phase1/store");
+
+    await resetStore();
+    const seq0 = await readWriteSeq();
+    const current = await readState();
+    await writeState(current);
+    expect(await readWriteSeq()).toBe(seq0 + 1);
+  });
+
+  // Provisioning-style writes hand writeState a state that was never read, so there
+  // is nothing to compare against — but the write must still bump writeSeq so any
+  // concurrent CAS writer whose baseline predates it conflicts instead of silently
+  // reverting the whole write.
+  it("a writeState of never-read state still advances writeSeq", async () => {
+    const { resetStore, writeState } = await import("@/lib/phase1/store");
+    const { createSeedState } = await import("@/lib/phase1/seed");
+
+    await resetStore();
+    const seq0 = await readWriteSeq();
+    await writeState(createSeedState());
+    expect(await readWriteSeq()).toBe(seq0 + 1);
+  });
 });

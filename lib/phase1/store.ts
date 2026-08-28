@@ -74,20 +74,48 @@ export const sessionCookieNames = {
   workspaceId: legacyDemoSessionCookieNames.workspaceId
 } as const;
 
+// writeSeq observed when a state object was handed out by readState, so a later
+// writeState of THAT object can compare-and-set instead of clobbering whatever
+// committed in between. Keyed weakly on the state object itself: ops scripts do
+// readState → mutate for minutes → writeState, and threading a sequence number
+// through every script signature is exactly the kind of change that would be
+// skipped under pressure.
+const observedWriteSeqs = new WeakMap<AppState, number>();
+
 export async function readState(): Promise<AppState> {
   // resolveStorageDriver() validates the env (throws on the removed "file" driver)
   // and is the metadata label; prisma is now the only storage backend.
   const driver = resolveStorageDriver();
   return timeAsync("state.read", async () => {
-    return (await readStateFromPrisma(await getPrismaClient())).state;
+    const { state, writeSeq } = await readStateFromPrisma(await getPrismaClient());
+    observedWriteSeqs.set(state, writeSeq);
+    return state;
   }, { driver });
 }
 
 export async function writeState(state: AppState) {
   const driver = resolveStorageDriver();
+  // States born from readState carry their writeSeq and get the CAS; a state built
+  // from scratch (provisioning) has nothing to compare against and writes
+  // unconditionally — that branch still bumps writeSeq so concurrent updateState
+  // transactions detect the interleave and retry on fresh state.
+  const casWriteSeq = observedWriteSeqs.get(state);
   await timeAsync("state.write", async () => {
-    await writeStateToPrisma(state, await getPrismaClient());
-  }, { driver, ...stateCountMetadata(state) });
+    try {
+      await writeStateToPrisma(state, await getPrismaClient(), {}, casWriteSeq);
+    } catch (error) {
+      if (error instanceof WriteConflictError) {
+        // Bulk callers mutate in memory for minutes; a transparent retry would
+        // need the whole mutation replayed, so fail loud with the operator move.
+        throw new Error(
+          "The app state changed while this script was running (another write committed " +
+            "after readState). Nothing was written — re-run the script so it works from " +
+            "the current state."
+        );
+      }
+      throw error;
+    }
+  }, { driver, cas: casWriteSeq !== undefined, ...stateCountMetadata(state) });
 }
 
 /**
@@ -516,12 +544,17 @@ async function readStateFromPrisma(client: PrismaStoreClient): Promise<{ state: 
   // natively-accepted invite, and reproject (which also readState()s) stays correct.
   // A schema migration or version bump still re-projects.
   await mergePrismaIdentityRows(client, state);
+  let writeSeq = snapshot.writeSeq;
   if (changed || snapshot.version !== state.version) {
     // A schema migration or version bump can touch any table — re-project all.
     await writeStateToPrisma(state, client);
+    // That self-heal bumped writeSeq; report the bumped value so a caller's own
+    // CAS (updateState's final write, or a script's writeState) compares against
+    // the row as it now stands rather than conflicting with our own write.
+    writeSeq += 1;
   }
 
-  return { state, writeSeq: snapshot.writeSeq };
+  return { state, writeSeq };
 }
 
 async function mergePrismaIdentityRows(client: PrismaStoreClient, state: AppState) {
@@ -750,14 +783,17 @@ async function writeStateToPrisma(
   state.notes = [];
 
   if (casWriteSeq === undefined) {
-    // Unconditional write: first-boot seed, the read-path self-heal, and the
-    // non-transactional bulk writeState. Not the concurrent-mutation path, so they
-    // don't take part in the compare-and-set (writeSeq is left untouched here).
+    // Unconditional write: first-boot seed, the read-path self-heal, and a
+    // writeState of freshly-built (never-read) state. These don't compare — but
+    // they DO increment writeSeq, so any concurrent CAS writer whose baseline
+    // predates this write conflicts and retries on fresh state instead of
+    // silently reverting it.
     await timeAsync("state.prisma.snapshotUpsert", () => client.appStateSnapshot.upsert({
       where: { id: stateSnapshotId },
       update: {
         version: state.version,
-        state: state as unknown as Prisma.InputJsonValue
+        state: state as unknown as Prisma.InputJsonValue,
+        writeSeq: { increment: 1 }
       },
       create: {
         id: stateSnapshotId,

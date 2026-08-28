@@ -173,6 +173,7 @@ import {
 import { ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { resetUserTileLayout, saveUserTileLayout } from "@/lib/phase1/tile-layouts";
 import { createSeedState } from "@/lib/phase1/seed";
+import { dataResetAllowed } from "@/lib/phase1/data-reset-gate";
 import { appendAudit, getSession, getWorkspaceSessionContext, readState, updateState } from "@/lib/phase1/store";
 import { requireWorkspaceScopedRecord } from "@/lib/phase1/tenant-isolation";
 import { runWorkspaceVerification } from "@/lib/phase1/verification";
@@ -3315,6 +3316,12 @@ export async function disableProviderConnectionAction(formData: FormData) {
 }
 
 export async function resetPhase1DataAction() {
+  if (!dataResetAllowed()) {
+    throw new Error(
+      "Data reset is disabled in production — it would replace every real record with demo data. " +
+        "Set SYNCORE_ALLOW_DATA_RESET=true deliberately if you truly mean to."
+    );
+  }
   await updateState((state, session) => {
     assertPermission(session, "manage_workspace");
     Object.assign(state, createSeedState());

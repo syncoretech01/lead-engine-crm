@@ -51,7 +51,18 @@ export async function readFocusContext(
       select: { contactId: true, name: true, stage: true, amountCents: true, expectedCloseDate: true }
     }),
     prisma.task.findMany({
-      where: { workspaceId, contactId: { in: ids }, status: "open" },
+      // The app writes "Open"/"Overdue" (crm.ts taskStatuses) and Prisma string
+      // equality is case-sensitive — a bare lowercase match returns zero rows.
+      // Match like the CRM overview does: case-insensitive, and overdue counts
+      // as open work for the dossier.
+      where: {
+        workspaceId,
+        contactId: { in: ids },
+        OR: [
+          { status: { equals: "open", mode: "insensitive" } },
+          { status: { equals: "overdue", mode: "insensitive" } }
+        ]
+      },
       orderBy: [{ dueAt: "asc" }, { id: "asc" }],
       select: { contactId: true, title: true, dueAt: true }
     })

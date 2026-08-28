@@ -57,7 +57,18 @@ export function ensureAuthDefaults(state: AppState, now = new Date().toISOString
 
   for (const user of state.users) {
     if (state.authAccounts.some((account) => account.userId === user.id)) continue;
-    state.authAccounts.push(createSeedAuthAccounts([user], now)[0]);
+    // A user with no auth account here was created outside the invite flow — a bulk
+    // import or an ops script. Backfill a LOCKED placeholder: status Invited plus an
+    // unguessable throwaway hash, never an Active login with the well-known seeded
+    // password (login rejects non-Active accounts, so the seat stays unusable until
+    // an admin sets a real password at /access, which activates it). Seeded Active
+    // accounts belong to createSeedState/seed.ts only.
+    state.authAccounts.push({
+      ...createSeedAuthAccounts([user], now)[0],
+      status: "Invited",
+      emailVerifiedAt: undefined,
+      passwordHash: hashPassword(randomToken(), `backfill-${user.id}`)
+    });
   }
 }
 
@@ -457,6 +468,10 @@ export function adminResetUserPassword(
   account.passwordUpdatedAt = now;
   account.failedLoginCount = 0;
   account.lockedUntil = undefined;
+  // An admin deliberately setting a password IS the activation of this seat —
+  // mirrors invite acceptance, and is the recovery path for the locked "Invited"
+  // placeholders ensureAuthDefaults backfills for script-created users.
+  account.status = "Active";
   account.updatedAt = now;
   // Force the target to re-authenticate everywhere with the new password.
   for (const active of state.authSessions.filter((record) => record.userId === input.userId && !record.revokedAt)) {

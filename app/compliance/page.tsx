@@ -1,5 +1,6 @@
 import { AlertTriangle, BarChart3, Database, KeyRound, ShieldCheck, Trash2 } from "lucide-react";
 import { addSuppressionAction, deleteSuppressionAction, resetPhase1DataAction } from "@/app/actions";
+import { dataResetAllowed } from "@/lib/phase1/data-reset-gate";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { rolePermissions } from "@/lib/phase1/auth";
@@ -54,12 +55,14 @@ export default async function CompliancePage() {
               <BarChart3 size={17} aria-hidden="true" />
               Retention workflows
             </a>
-            <form action={resetPhase1DataAction}>
-              <button className="button danger" type="submit">
-                <Trash2 size={17} aria-hidden="true" />
-                Reset local data
-              </button>
-            </form>
+            {dataResetAllowed() ? (
+              <form action={resetPhase1DataAction}>
+                <button className="button danger" type="submit">
+                  <Trash2 size={17} aria-hidden="true" />
+                  Reset local data
+                </button>
+              </form>
+            ) : null}
           </>
         }
       />
