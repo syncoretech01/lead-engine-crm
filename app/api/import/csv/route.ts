@@ -10,15 +10,39 @@ import {
   reserveJobIdempotency
 } from "@/lib/phase1/jobs";
 import { leadGenerationWriteTables } from "@/lib/phase1/normalized-write-tables";
-import { appendAudit, updateState } from "@/lib/phase1/store";
+import { hasPermission } from "@/lib/phase1/auth";
+import { appendAudit, getSession, updateState } from "@/lib/phase1/store";
 import type { CsvImportMapping, CsvImportResult, LeadJob, RawLead } from "@/lib/phase1/types";
 
+// Generous for a lead CSV (the 431-row imports run ~56KB); the point is that an
+// unauthenticated multi-hundred-MB body can no longer be buffered into a 1.8GB
+// box's memory before anyone checks who is asking.
+const MAX_CSV_BYTES = 25 * 1024 * 1024;
+
 export async function POST(request: Request) {
+  // Auth and permission BEFORE touching the body. request.formData() buffers the
+  // entire upload in memory and parseCsv doubles it — that work must never be
+  // reachable pre-auth (the proxy only checks that a session cookie exists, not
+  // that it is valid).
+  const session = await getSession();
+  if (!hasPermission(session, "import_csv")) {
+    return NextResponse.json({ error: "You do not have permission to import CSVs." }, { status: 403 });
+  }
+
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_CSV_BYTES) {
+    return NextResponse.json({ error: "CSV upload is too large (25MB max)." }, { status: 413 });
+  }
+
   const formData = await request.formData();
   const file = formData.get("file");
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "CSV file is required." }, { status: 400 });
+  }
+  // Belt to the Content-Length braces: a chunked request carries no length header.
+  if (file.size > MAX_CSV_BYTES) {
+    return NextResponse.json({ error: "CSV upload is too large (25MB max)." }, { status: 413 });
   }
 
   const csvText = await file.text();
