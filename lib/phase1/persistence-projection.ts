@@ -554,7 +554,7 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
         ? `Budget ${job.budgetStatus}; cap ${job.budgetCapCents ?? 0} cents`
         : undefined,
       errorSummary: job.errorSummary,
-      createdById: job.createdById,
+      createdById: hasUser(state, job.createdById) ? job.createdById : undefined,
       startedAt: job.startedAt,
       completedAt: job.completedAt,
       createdAt: job.createdAt,
@@ -1105,7 +1105,7 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       campaignType: campaign.campaignType,
       targetSegment: campaign.targetSegment,
       sourceJobIds: campaign.sourceJobIds,
-      ownerUserId: campaign.ownerUserId,
+      ownerUserId: hasUser(state, campaign.ownerUserId) ? campaign.ownerUserId : undefined,
       sendingDomain: campaign.sendingDomain,
       mailboxGroup: campaign.mailboxGroup,
       status: campaign.status,
@@ -1134,7 +1134,7 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       stopOnReply: sequence.stopOnReply,
       stopOnBounce: sequence.stopOnBounce,
       stopOnUnsubscribe: sequence.stopOnUnsubscribe,
-      createdById: sequence.createdById,
+      createdById: hasUser(state, sequence.createdById) ? sequence.createdById : undefined,
       status: sequence.status,
       createdAt: sequence.createdAt,
       updatedAt: sequence.updatedAt
@@ -1354,7 +1354,7 @@ export function createNormalizedPersistenceProjection(state: AppState): Normaliz
       dueAt: request.dueAt,
       verifiedAt: request.verifiedAt,
       completedAt: request.completedAt,
-      handledById: request.handledById,
+      handledById: hasUser(state, request.handledById) ? request.handledById : undefined,
       notes: request.notes,
       evidence: request.evidence
     }))),
@@ -1748,6 +1748,11 @@ function hasCompany(state: AppState, companyId: string) {
 // User must be guarded the way opportunities/activities/tasks already are:
 // nullable columns go undefined, required ones drop the row (the DB cascade has
 // already deleted it). Without this a full-mode sync throws P2003 mid-transaction.
+//
+// undefined (not null) is deliberate and matches the existing guards: these
+// relations are optional, so Prisma's default SetNull already cleared the column
+// when the user row went away. Omitting the key leaves that NULL alone; the guard
+// exists to stop the dangling id being written BACK on a create/upsert.
 function hasUser(state: AppState, userId: string | undefined | null) {
   return Boolean(userId && state.users.some((user) => user.id === userId));
 }

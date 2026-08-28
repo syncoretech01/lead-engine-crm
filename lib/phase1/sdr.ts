@@ -1335,8 +1335,17 @@ function defaultFollowUpDueAt(now: string, outcome: SdrLeadStatus) {
  * it live instead of trusting the stored column. The column is only refreshed by
  * writes (refreshSlaStatuses), so on a read-only day a lapsed due date would keep
  * reporting "On track" while the same row's timer label said "overdue".
+ *
+ * The parameter is narrowed to exactly the fields consulted so read models can pass
+ * a projected row without casting. Widening it later is a compile error at every
+ * call site — which is the point: a silently-undefined field would change verdicts.
  */
-export function calculateSlaStatus(assignment: SdrAssignment, now: string): SlaStatus {
+export type SlaAssignmentFields = Pick<
+  SdrAssignment,
+  "status" | "firstTouchedAt" | "firstTouchDueAt" | "followUpDueAt" | "callCycleCompletedAt"
+>;
+
+export function calculateSlaStatus(assignment: SlaAssignmentFields, now: string): SlaStatus {
   if (assignment.callCycleCompletedAt) return "No SLA";
   if (assignment.status === "Suppressed" || assignment.status === "Unsubscribed") return "Paused";
   if (!activeAssignmentStatuses.has(assignment.status)) return "No SLA";

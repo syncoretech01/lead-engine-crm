@@ -3,6 +3,7 @@ import { resolveSequenceComplianceStatus, suppressContact } from "@/lib/phase1/c
 import { isOpenOpportunityStage, userNameForId } from "@/lib/phase1/crm";
 import { centsToDollars, workspaceCostMetrics } from "@/lib/phase1/money";
 import { campaignViews, refreshCampaignMetrics } from "@/lib/phase1/outreach";
+import { calculateSlaStatus } from "@/lib/phase1/sdr";
 import type {
   AppState,
   ComplianceChecklistItem,
@@ -590,6 +591,8 @@ function sdrPerformanceRows(
   emailEvents: AppState["emailEvents"],
   smsEvents: AppState["smsEvents"]
 ) {
+  // One clock for every rep in the table.
+  const now = new Date().toISOString();
   const sdrIds = Array.from(new Set(assignments.map((assignment) => assignment.assignedSdrId)));
 
   return sdrIds.map((userId) => {
@@ -602,7 +605,11 @@ function sdrPerformanceRows(
     ]);
     const meetings = ownedAssignments.filter((assignment) => assignment.status === "Meeting Booked").length;
     const touched = ownedAssignments.filter((assignment) => assignment.firstTouchedAt || assignment.touchCount > 0).length;
-    const onTrack = ownedAssignments.filter((assignment) => assignment.slaStatus === "On track" || assignment.slaStatus === "Due soon").length;
+    // Computed live, matching the SDR queue and manager dashboard. Reading the
+    // stored column here made /reports disagree with them on any day nobody
+    // triggered an SDR write — two different overdue counts for the same team.
+    const slaNow = ownedAssignments.map((assignment) => calculateSlaStatus(assignment, now));
+    const onTrack = slaNow.filter((status) => status === "On track" || status === "Due soon").length;
 
     return {
       userId,
@@ -616,7 +623,7 @@ function sdrPerformanceRows(
       wonRevenue: ownedOpportunities
         .filter((opportunity) => opportunity.stage === "Closed won")
         .reduce((total, opportunity) => total + opportunity.amount, 0),
-      overdue: ownedAssignments.filter((assignment) => assignment.slaStatus === "Overdue").length,
+      overdue: slaNow.filter((status) => status === "Overdue").length,
       slaRate: percent(onTrack, ownedAssignments.length)
     };
   }).sort((a, b) => b.assigned - a.assigned);

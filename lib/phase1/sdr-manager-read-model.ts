@@ -19,7 +19,6 @@ import {
   priorityValue,
   reminderStatusValue,
   sdrLeadStatusValue,
-  slaStatusValue,
   uniqueUsers,
   userFromPrisma,
   workspaceMemberFromPrisma
@@ -193,7 +192,7 @@ export async function readFastSdrManagerModel(
           firstTouchDueAt: optionalIso(assignment.firstTouchDueAt),
           followUpDueAt: optionalIso(assignment.followUpDueAt),
           callCycleCompletedAt: optionalIso(assignment.callCycleCompletedAt)
-        } as Parameters<typeof calculateSlaStatus>[0],
+      },
         nowIso
       ),
       firstTouchedAt: optionalIso(assignment.firstTouchedAt),

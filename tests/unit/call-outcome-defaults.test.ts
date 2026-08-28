@@ -5,12 +5,15 @@ import { callDispositionValue, trackedCallStatusValue } from "@/lib/phase1/fast-
 /**
  * Call outcomes must degrade to the NEUTRAL member, never the most favourable one.
  *
- * The write path in app/actions.ts used to coerce a missing or unrecognised value
- * to "Connected"/"Interested", so a stale form or a hand-crafted request recorded
- * the best possible outcome — inflating the connect and interest rates managers
- * steer by, in the one place the data cannot be sanity-checked later. The read
- * path here already used the neutral members; both sides now agree, and these
- * assertions keep the contract from drifting back.
+ * The write path in app/actions.ts used to keep its OWN copy of these coercers,
+ * defaulting to "Connected"/"Interested" — so a stale form or a hand-crafted
+ * request recorded the best possible outcome, inflating the connect and interest
+ * rates managers steer by, in the one place the data cannot be sanity-checked
+ * later. The read path here already used the neutral members, so the duplicate was
+ * deleted: app/actions.ts now delegates to these functions (aliased as
+ * sharedTrackedCallStatusValue / sharedCallDispositionValue). One implementation
+ * means these assertions genuinely cover both directions and the two sides cannot
+ * drift apart again.
  */
 describe("call outcome defaults are neutral", () => {
   it("falls back to Dialed, never Connected, for the call status", () => {

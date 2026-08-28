@@ -209,7 +209,7 @@ export function mapSdrAssignmentRow(
         firstTouchDueAt: assignment.firstTouchDueAt?.toISOString(),
         followUpDueAt: assignment.followUpDueAt?.toISOString(),
         callCycleCompletedAt: assignment.callCycleCompletedAt?.toISOString()
-      } as Parameters<typeof calculateSlaStatus>[0],
+      },
       now
     ),
     firstTouchedAt: assignment.firstTouchedAt?.toISOString(),
@@ -239,7 +239,7 @@ export function mapSdrAssignmentRow(
     ownerName: assignment.assignedSdr?.name ?? "Unassigned",
     teamName: assignment.assignedTeam?.name ?? "No team",
     dueAt: dueAt?.toISOString(),
-    dueLabel: timerLabel(dueAt?.toISOString()),
+    dueLabel: timerLabel(dueAt?.toISOString(), Date.parse(now)),
     reminderTitle: activeReminder?.title,
     reminderStatus: activeReminder?.status,
     emailEligible: Boolean(
@@ -377,7 +377,7 @@ export async function readFastSdrQueueModel(
     }),
     companyName: reminder.account?.name ?? reminder.contact?.account?.name ?? "Unknown account",
     ownerName: reminder.owner?.name ?? "Unassigned",
-    dueLabel: timerLabel(reminder.dueAt.toISOString())
+    dueLabel: timerLabel(reminder.dueAt.toISOString(), Date.parse(nowIso))
   } satisfies SdrQueueReminderReadRow));
   const dueToday = reminderRows.filter((reminder) => isUtcToday(reminder.dueAt)).length;
   const overdue = assignmentRows.filter((assignment) => assignment.slaStatus === "Overdue").length +
@@ -526,9 +526,11 @@ async function readRecentActivityRows({
   return activityRows.map(mapSdrActivityRow);
 }
 
-function timerLabel(value?: string) {
+// Takes the caller's clock so a row's label and its computed slaStatus are read
+// from the same instant rather than two Date.now() calls a few statements apart.
+function timerLabel(value?: string, now = Date.now()) {
   if (!value) return "No SLA";
-  const diffMs = Date.parse(value) - Date.now();
+  const diffMs = Date.parse(value) - now;
   const absHours = Math.max(1, Math.round(Math.abs(diffMs) / (60 * 60 * 1000)));
   if (diffMs < 0) return `${absHours}h overdue`;
   if (absHours < 24) return `${absHours}h left`;
@@ -560,7 +562,3 @@ function sdrLeadStatusValue(value: string): SdrLeadStatus {
   return statuses.includes(value as SdrLeadStatus) ? value as SdrLeadStatus : "Assigned";
 }
 
-function slaStatusValue(value: string): SlaStatus {
-  const statuses: SlaStatus[] = ["On track", "Due soon", "Overdue", "No SLA", "Paused"];
-  return statuses.includes(value as SlaStatus) ? value as SlaStatus : "No SLA";
-}

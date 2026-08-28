@@ -11,7 +11,7 @@ import type { AppState } from "@/lib/phase1/types";
  * Unguarded, a full-mode projection sync threw P2003 mid-transaction and failed
  * the whole write; in diff mode it failed silently instead.
  */
-function stateWithDepartedUserRefs(): { state: AppState; departedId: string } {
+function stateWithDepartedUserRefs(): { state: AppState; departedId: string; liveId: string } {
   const state = createSeedState();
   const departedId = "user-departed-sdr";
   const now = new Date().toISOString();
@@ -31,7 +31,7 @@ function stateWithDepartedUserRefs(): { state: AppState; departedId: string } {
     durationSeconds: 60,
     recordingConsent: "Granted",
     createdAt: now
-  } as AppState["trackedCalls"][number]);
+  } as unknown as AppState["trackedCalls"][number]);
 
   state.auditLogs.unshift({
     id: "audit-departed",
@@ -41,7 +41,7 @@ function stateWithDepartedUserRefs(): { state: AppState; departedId: string } {
     objectId: "call-departed",
     action: "created",
     createdAt: now
-  } as AppState["auditLogs"][number]);
+  } as unknown as AppState["auditLogs"][number]);
 
   state.sdrCallingSessions.unshift({
     id: "session-departed",
@@ -60,7 +60,7 @@ function stateWithDepartedUserRefs(): { state: AppState; departedId: string } {
     completedContactIds: [],
     createdAt: now,
     updatedAt: now
-  } as AppState["sdrCallingSessions"][number]);
+  } as unknown as AppState["sdrCallingSessions"][number]);
 
   state.sdrDailyReports.unshift({
     id: "report-departed",
@@ -72,9 +72,28 @@ function stateWithDepartedUserRefs(): { state: AppState; departedId: string } {
     timezone: "Asia/Karachi",
     createdAt: now,
     updatedAt: now
-  } as AppState["sdrDailyReports"][number]);
+  } as unknown as AppState["sdrDailyReports"][number]);
 
-  return { state, departedId };
+  // Live-user twins of each row: without these the "untouched" assertions below
+  // would pass vacuously against empty arrays (the seed ships none of these).
+  const liveId = state.users[0].id;
+  state.trackedCalls.unshift({
+    ...state.trackedCalls[0],
+    id: "call-live",
+    sdrUserId: liveId
+  } as unknown as AppState["trackedCalls"][number]);
+  state.sdrCallingSessions.unshift({
+    ...state.sdrCallingSessions[0],
+    id: "session-live",
+    sdrUserId: liveId
+  } as unknown as AppState["sdrCallingSessions"][number]);
+  state.sdrDailyReports.unshift({
+    ...state.sdrDailyReports[0],
+    id: "report-live",
+    sdrUserId: liveId
+  } as unknown as AppState["sdrDailyReports"][number]);
+
+  return { state, departedId, liveId };
 }
 
 describe("projection guards references to a removed user", () => {
@@ -95,16 +114,15 @@ describe("projection guards references to a removed user", () => {
   });
 
   it("leaves rows belonging to existing users untouched", () => {
-    const { state } = stateWithDepartedUserRefs();
-    const liveUserId = state.users[0].id;
-    const call = state.trackedCalls.find((row) => row.sdrUserId === liveUserId);
+    const { state, liveId } = stateWithDepartedUserRefs();
     const projection = createNormalizedPersistenceProjection(state);
 
-    if (call) {
-      expect(projection.trackedCalls.find((row) => row.id === call.id)?.sdrUserId).toBe(liveUserId);
-    }
-    expect(projection.sdrCallingSessions.length).toBe(
-      state.sdrCallingSessions.filter((row) => state.users.some((user) => user.id === row.sdrUserId)).length
-    );
+    // The guard must be surgical: same tables, same shapes, only the dangling
+    // references are affected.
+    expect(projection.trackedCalls.find((row) => row.id === "call-live")?.sdrUserId).toBe(liveId);
+    expect(projection.sdrCallingSessions.find((row) => row.id === "session-live")?.sdrUserId).toBe(liveId);
+    expect(projection.sdrDailyReports.find((row) => row.id === "report-live")?.sdrUserId).toBe(liveId);
+    expect(projection.sdrCallingSessions).toHaveLength(1);
+    expect(projection.sdrDailyReports).toHaveLength(1);
   });
 });
