@@ -5,7 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { asActionResult, type ActionResult } from "@/lib/action-result";
 import { assertPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
-import { findCallWrapupReceipt } from "@/lib/phase1/call-wrapup-idempotency";
+import { findCallWrapupReceipt, findPlacedCallReceipt } from "@/lib/phase1/call-wrapup-idempotency";
+import {
+  callDispositionValue as sharedCallDispositionValue,
+  trackedCallStatusValue as sharedTrackedCallStatusValue
+} from "@/lib/phase1/fast-read-utils";
 import {
   completeDataSubjectRequest,
   consentStatuses,
@@ -125,7 +129,6 @@ import {
 } from "@/lib/phase1/normalized-write-tables";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import {
-  callDispositions,
   campaignStatuses,
   campaignTypes,
   createCampaign,
@@ -139,7 +142,6 @@ import {
   outreachProviderStatuses,
   simulateCampaignSend,
   smsEventStatuses,
-  trackedCallStatuses
 } from "@/lib/phase1/outreach";
 import {
   complianceChecklistStatuses,
@@ -2447,6 +2449,25 @@ export async function placeCallAction(
   assertPermission(session, "send_direct_outreach");
   assertAssignedContactForOutreach(state, session, contactId);
 
+  // Idempotency: a committed dial left an audit receipt carrying this requestId in
+  // the same transaction as its TrackedCall. Replaying that exact request returns
+  // the original call rather than ringing the lead a second time. (The clients mint
+  // a fresh requestId per click, so this covers a replayed payload — a programmatic
+  // retry — not a human clicking Call twice, which is a deliberate second dial.)
+  const placedReceipt = findPlacedCallReceipt(state.auditLogs, {
+    workspaceId: session.workspace.id,
+    requestId
+  });
+  if (placedReceipt) {
+    // Carry the original failure reason through: replaying a failed dial must not
+    // downgrade a specific provider error into a bare "Call failed." in the dialer.
+    return {
+      callId: placedReceipt.callId,
+      liveState: (placedReceipt.liveState ?? "completed") as TrackedCallLiveState,
+      error: placedReceipt.error
+    };
+  }
+
   const contact = state.contacts.find(
     (item) => item.id === contactId && item.workspaceId === session.workspace.id
   );
@@ -2497,7 +2518,9 @@ export async function placeCallAction(
     callSummary = "Simulated call — live calling is disabled in this environment.";
   }
 
-  const callId = await updateState(
+  let callId: string;
+  try {
+    callId = await updateState(
     (state, session) => {
       assertPermission(session, "send_direct_outreach");
       const call = createTrackedCall(state, {
@@ -2518,7 +2541,7 @@ export async function placeCallAction(
         objectType: "tracked_call",
         objectId: call.id,
         action: placeError ? "call_failed" : "call_placed",
-        newValue: { providerCallId, liveState, toNumber, requestId }
+        newValue: { providerCallId, liveState, toNumber, requestId, error: placeError }
       });
       return call.id;
     },
@@ -2526,7 +2549,27 @@ export async function placeCallAction(
       normalizedTables: outreachTrackedCallWriteTables,
       transactionTimeoutMs: CALL_PERSISTENCE_TRANSACTION_TIMEOUT_MS
     }
-  );
+    );
+  } catch (persistError) {
+    // The RingOut already went out — the lead's phone is ringing. Reporting a
+    // plain failure here invites the SDR to redial into a live call, so say what
+    // actually happened and let them log it manually.
+    // "ringing" is set on every path where a dial actually went out — and never on
+    // the simulated or RingOut-failed paths. providerCallId is the wrong predicate:
+    // result.ringOutId can be empty on an otherwise successful RingOut.
+    if (liveState === "ringing") {
+      const detail = persistError instanceof Error ? persistError.message : String(persistError);
+      console.error("[placeCall] RingOut placed but not recorded:", detail);
+      return {
+        callId: "",
+        liveState,
+        error:
+          "The call was placed and should be ringing, but it could not be saved to the call log. " +
+          "Do not redial — log the outcome manually once the call ends."
+      };
+    }
+    throw persistError;
+  }
 
   revalidateOutreachPages([`/crm/contacts/${contactId}`, "/crm/calls", "/crm/my-contacts", "/sdr/queue"]);
   return { callId, liveState, error: placeError };
@@ -3500,9 +3543,13 @@ function taskPriorityValue(value: FormDataEntryValue | null): CrmTask["priority"
   return taskPriorities.includes(priority) ? priority : "Normal";
 }
 
+// Neutral default, same rule as the tracked-call coercers below: a missing or
+// unrecognised outcome must not record the best possible result. This one keeps a
+// local implementation because its union differs from the tracked-call dispositions
+// (crm.ts callOutcomes), so there is no shared coercer to delegate to.
 function callOutcomeValue(value: FormDataEntryValue | null): CallLog["outcome"] {
-  const outcome = stringValue(value, "Connected") as CallLog["outcome"];
-  return callOutcomes.includes(outcome) ? outcome : "Connected";
+  const outcome = stringValue(value, "No answer") as CallLog["outcome"];
+  return callOutcomes.includes(outcome) ? outcome : "No answer";
 }
 
 function callingSessionIdValue(value: string): string {
@@ -3650,14 +3697,17 @@ function smsEventStatusValue(value: FormDataEntryValue | null): SmsEventStatus {
   return smsEventStatuses.includes(status) ? status : "Sent";
 }
 
+// Missing or unrecognised call outcomes fall back to the NEUTRAL member, never the
+// most favourable one: recording "Connected"/"Interested" by default silently
+// inflates the connect and interest rates managers steer by, in the one place the
+// data cannot be sanity-checked later. These delegate to the shared read-path
+// coercers (fast-read-utils) so write and read cannot drift apart.
 function trackedCallStatusValue(value: FormDataEntryValue | null): TrackedCallStatus {
-  const status = stringValue(value, "Connected") as TrackedCallStatus;
-  return trackedCallStatuses.includes(status) ? status : "Connected";
+  return sharedTrackedCallStatusValue(stringValue(value));
 }
 
 function callDispositionValue(value: FormDataEntryValue | null): CallDisposition {
-  const disposition = stringValue(value, "Interested") as CallDisposition;
-  return callDispositions.includes(disposition) ? disposition : "Interested";
+  return sharedCallDispositionValue(stringValue(value));
 }
 
 function recordingConsentValue(value: FormDataEntryValue | null): RecordingConsentStatus {

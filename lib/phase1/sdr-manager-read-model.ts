@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { calculateSlaStatus, reminderStatusForDueAt } from "@/lib/phase1/sdr";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type {
   AppState,
@@ -18,7 +19,6 @@ import {
   priorityValue,
   reminderStatusValue,
   sdrLeadStatusValue,
-  slaStatusValue,
   uniqueUsers,
   userFromPrisma,
   workspaceMemberFromPrisma
@@ -157,6 +157,8 @@ export async function readFastSdrManagerModel(
   ]);
 
   const users = uniqueUsers(memberRows.map(({ user }) => userFromPrisma(user)));
+  // One clock for the whole read, so the dashboard metrics and the rows agree.
+  const nowIso = new Date().toISOString();
   const managerAssignments = assignments.map((assignment) => {
     const crmContact = assignment.contact;
     const leadContact = crmContact?.contact;
@@ -180,7 +182,19 @@ export async function readFastSdrManagerModel(
       status: sdrLeadStatusValue(assignment.status),
       reassignmentReason: assignment.reassignmentReason ?? undefined,
       previousOwnerId: assignment.previousOwnerId ?? undefined,
-      slaStatus: slaStatusValue(assignment.slaStatus),
+      // Computed live rather than read from the column, which only advances on a
+      // write — otherwise overdue/slaAdherence below silently under-report on any
+      // day nobody triggers a refreshing action.
+      slaStatus: calculateSlaStatus(
+        {
+          status: sdrLeadStatusValue(assignment.status),
+          firstTouchedAt: optionalIso(assignment.firstTouchedAt),
+          firstTouchDueAt: optionalIso(assignment.firstTouchDueAt),
+          followUpDueAt: optionalIso(assignment.followUpDueAt),
+          callCycleCompletedAt: optionalIso(assignment.callCycleCompletedAt)
+      },
+        nowIso
+      ),
       firstTouchedAt: optionalIso(assignment.firstTouchedAt),
       lastTouchAt: optionalIso(assignment.lastTouchAt),
       touchCount: assignment.touchCount,
@@ -206,7 +220,7 @@ export async function readFastSdrManagerModel(
       ownerName: assignment.assignedSdr?.name ?? "Unassigned",
       teamName: assignment.assignedTeam?.name ?? "No team",
       dueAt: optionalIso(dueAt),
-      dueLabel: timerLabel(optionalIso(dueAt)),
+      dueLabel: timerLabel(optionalIso(dueAt), Date.parse(nowIso)),
       reminderTitle: activeReminder?.title,
       reminderStatus: activeReminder?.status
     } satisfies FastManagerAssignmentView;
@@ -268,7 +282,12 @@ export async function readFastSdrManagerModel(
         ? reminder.channel
         : "Email",
       dueAt: reminder.dueAt.toISOString(),
-      status: reminderStatusValue(reminder.status),
+      // Live, like the queue read model — otherwise the same reminder reads Overdue
+      // on /sdr/queue and Open here on any day nobody triggers a refreshing write.
+      status:
+        reminder.status === "Completed"
+          ? reminderStatusValue(reminder.status)
+          : reminderStatusForDueAt((reminder.snoozedUntil ?? reminder.dueAt).toISOString(), nowIso),
       createdAt: reminder.createdAt.toISOString(),
       completedAt: optionalIso(reminder.completedAt),
       snoozedUntil: optionalIso(reminder.snoozedUntil)
@@ -364,9 +383,11 @@ function reassignmentRecommendations(
   return recommendations.slice(0, 12);
 }
 
-function timerLabel(value?: string) {
+// Takes the caller's clock so a row's label and its computed slaStatus are read
+// from the same instant (mirrors the queue read model).
+function timerLabel(value?: string, now = Date.now()) {
   if (!value) return "No SLA";
-  const diffMs = Date.parse(value) - Date.now();
+  const diffMs = Date.parse(value) - now;
   const absHours = Math.max(1, Math.round(Math.abs(diffMs) / (60 * 60 * 1000)));
   if (diffMs < 0) return `${absHours}h overdue`;
   if (absHours < 24) return `${absHours}h left`;
