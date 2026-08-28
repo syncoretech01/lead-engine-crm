@@ -117,10 +117,13 @@ describe.skipIf(!enabled)("AppState write-seq CAS (concurrency)", () => {
     const { resetStore, readState, writeState } = await import("@/lib/phase1/store");
 
     await resetStore();
-    const seq0 = await readWriteSeq();
     const current = await readState();
+    // Baseline AFTER the read: the first read of freshly-reset state can legally
+    // self-heal (migrateState adds defaults), which itself bumps writeSeq — and
+    // the CAS compares against the post-heal seq the read reported.
+    const seqAfterRead = await readWriteSeq();
     await writeState(current);
-    expect(await readWriteSeq()).toBe(seq0 + 1);
+    expect(await readWriteSeq()).toBe(seqAfterRead + 1);
   });
 
   // Provisioning-style writes hand writeState a state that was never read, so there
