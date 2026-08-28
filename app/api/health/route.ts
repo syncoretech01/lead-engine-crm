@@ -36,11 +36,15 @@ export async function GET() {
       { status: 200, headers: { "cache-control": "no-store" } }
     );
   } catch (error) {
+    console.error("[health] database check failed:", error instanceof Error ? error.message : error);
     return Response.json(
       {
         status: "error",
         db: "down",
-        message: error instanceof Error ? error.message : "unknown error"
+        // Deliberately generic: Prisma connection errors embed the database
+        // host, and this endpoint is public so an uptime monitor can read it.
+        // The real error goes to the server log.
+        message: "database unavailable"
       },
       { status: 503, headers: { "cache-control": "no-store" } }
     );

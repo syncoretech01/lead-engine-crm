@@ -257,6 +257,7 @@ export function acceptUserInvite(
   state: AppState,
   input: { token: string; name: string; password: string; now?: string }
 ): AuthLoginResult {
+  assertPasswordPolicy(input.password);
   ensureAuthDefaults(state);
   const now = input.now ?? new Date().toISOString();
   const invite = state.userInvites.find((record) => record.tokenHash === hashToken(input.token));
@@ -332,6 +333,19 @@ export function acceptUserInvite(
 
 export const MAX_SIGNATURE_LENGTH = 2000;
 export const MIN_PASSWORD_LENGTH = 10;
+
+/**
+ * The single server-side password policy. The admin-reset and change-own-password
+ * paths checked the length inline; invite acceptance and token reset relied on the
+ * form's minLength attribute alone, so a direct POST (curl, or a browser with the
+ * attribute stripped) could set a one-character password on a production account.
+ * Every path that sets a password calls this.
+ */
+export function assertPasswordPolicy(password: string) {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+}
 
 export function isValidTimezone(tz: string): boolean {
   if (!tz) return false;

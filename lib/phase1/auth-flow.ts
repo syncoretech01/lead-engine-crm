@@ -158,6 +158,12 @@ export function safeNextPath(value: string) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
     return "/";
   }
+  // Browsers normalise backslashes to forward slashes in a Location, so
+  // "/\evil.com" and "/\\evil.com" are protocol-relative URLs that leave the
+  // site after a successful login. Nothing in this app routes on a backslash.
+  if (value.includes("\\")) {
+    return "/";
+  }
 
   const pathname = value.split(/[?#]/)[0] ?? "";
   if (pathname === "/auth" || pathname.startsWith("/api/") || isPublicAuthPath(pathname)) {

@@ -109,6 +109,36 @@ export function authenticateChatRequest(headers: Headers): ChatAuthResult {
 }
 
 /**
+ * Bind the bot-reported actor to a workspace taken from the REQUEST BODY.
+ *
+ * The chat bearer is a single shared secret, so it says "a bot is calling", not
+ * "this actor may write here". Without this check a leaked bearer — or a bot bug —
+ * could create records in any workspace, including the stale legacy one, attributed
+ * to an arbitrary actor id. Membership in any role is enough to raise a request;
+ * deciding one is the stricter gate below.
+ */
+export async function authorizeChatWorkspaceActor(
+  input: { actorId: string; workspaceId: string },
+  client?: GrowthPrismaClient
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const db = client ?? (await growthPrisma());
+  const membership = await db.workspaceMember.findUnique({
+    where: {
+      workspaceId_userId: { workspaceId: input.workspaceId, userId: input.actorId }
+    },
+    select: { role: true }
+  });
+  if (!membership) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Actor is not a member of the requested workspace."
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Bind the bot-reported actor to the requested workspace before an approval
  * route reaches any mutator. ADMIN and MANAGER are the Prisma roles carrying
  * the dashboard's `manage_outreach` permission; accepting a valid global bearer

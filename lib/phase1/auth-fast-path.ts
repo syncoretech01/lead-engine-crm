@@ -24,6 +24,7 @@ import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import {
   MAX_SIGNATURE_LENGTH,
   MIN_PASSWORD_LENGTH,
+  assertPasswordPolicy,
   isValidTimezone,
   type AuthLoginResult,
   type AuthTokenResult
@@ -135,6 +136,7 @@ export async function acceptInvitePrismaFast(input: AcceptInviteInput): Promise<
     return undefined;
   }
 
+  assertPasswordPolicy(input.password);
   const { prisma } = await import("@/lib/prisma");
   const now = new Date();
   const tokenHash = hashToken(input.token);
@@ -369,6 +371,7 @@ export async function resetPasswordWithTokenPrismaFast(input: PasswordResetInput
     return undefined;
   }
 
+  assertPasswordPolicy(input.password);
   const { prisma } = await import("@/lib/prisma");
   const now = new Date();
   const genericMessage = "Reset link is invalid or expired.";
