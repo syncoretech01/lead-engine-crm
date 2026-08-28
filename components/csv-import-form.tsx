@@ -76,12 +76,22 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
     setError("");
     setResult(null);
 
-    const response = await fetch("/api/import/csv", {
-      method: "POST",
-      body: new FormData(event.currentTarget)
-    });
-
-    const payload = await response.json();
+    const form = event.currentTarget;
+    let response: Response;
+    let payload: ImportResult & { error?: string };
+    try {
+      response = await fetch("/api/import/csv", {
+        method: "POST",
+        body: new FormData(form)
+      });
+      payload = await response.json();
+    } catch {
+      // Network failure or a non-JSON response (e.g. an auth redirect) — without
+      // this the submit button stayed on "Uploading" forever.
+      setLoading(false);
+      setError("The import request failed. Check your session and try again.");
+      return;
+    }
     setLoading(false);
 
     if (!response.ok) {
@@ -90,7 +100,7 @@ export function CsvImportForm({ profiles }: CsvImportFormProps) {
     }
 
     setResult(payload);
-    event.currentTarget.reset();
+    form.reset();
     setCustomColumns([]);
     router.refresh();
   }

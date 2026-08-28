@@ -20,6 +20,16 @@ resource "aws_instance" "app" {
   user_data                   = file("${path.module}/user-data.sh")
   user_data_replace_on_change = false
 
+  # The AMI comes from an SSM parameter AWS republishes every few weeks. Without
+  # this, ANY future apply — however unrelated — plans to destroy and recreate
+  # the only production instance (losing the git checkout, the syncore-contracts
+  # sibling build, swap, and Caddy's TLS state until a manual re-bootstrap).
+  # OS refreshes should be a deliberate act: remove this line for one apply, or
+  # taint the instance, when an AMI upgrade is actually intended.
+  lifecycle {
+    ignore_changes = [ami]
+  }
+
   # Ensure SSM params + RDS exist before the instance boots and reads them.
   depends_on = [
     aws_db_instance.main,

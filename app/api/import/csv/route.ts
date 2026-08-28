@@ -10,15 +10,53 @@ import {
   reserveJobIdempotency
 } from "@/lib/phase1/jobs";
 import { leadGenerationWriteTables } from "@/lib/phase1/normalized-write-tables";
-import { appendAudit, updateState } from "@/lib/phase1/store";
+import { hasPermission } from "@/lib/phase1/auth";
+import { appendAudit, getSession, updateState } from "@/lib/phase1/store";
 import type { CsvImportMapping, CsvImportResult, LeadJob, RawLead } from "@/lib/phase1/types";
 
+// Generous for a lead CSV (the 431-row imports run ~56KB); the point is that an
+// unauthenticated multi-hundred-MB body can no longer be buffered into a 1.8GB
+// box's memory before anyone checks who is asking.
+const MAX_CSV_BYTES = 25 * 1024 * 1024;
+
 export async function POST(request: Request) {
+  // Auth and permission BEFORE touching the body: request.formData() buffers the
+  // entire upload in memory and parseCsv doubles it, and the proxy only checks
+  // that a session cookie EXISTS. (Session resolution itself can still read the
+  // app state for a forged-but-present cookie — that cost is shared with every
+  // page load; the upload buffering is what must stay behind auth.)
+  let session;
+  try {
+    session = await getSession();
+  } catch (error) {
+    // getSession redirect()s to /login for pages; for a fetch() caller that 307
+    // re-posts the multipart body at /login and hands the form a non-JSON
+    // response. Translate ONLY the auth redirect into the JSON 401 this API
+    // speaks (matching proxy.ts); anything else (e.g. DB down) must propagate.
+    const digest = (error as { digest?: string } | null)?.digest;
+    if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+    throw error;
+  }
+  if (!hasPermission(session, "import_csv")) {
+    return NextResponse.json({ error: "You do not have permission to import CSVs." }, { status: 403 });
+  }
+
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_CSV_BYTES) {
+    return NextResponse.json({ error: "CSV upload is too large (25MB max)." }, { status: 413 });
+  }
+
   const formData = await request.formData();
   const file = formData.get("file");
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "CSV file is required." }, { status: 400 });
+  }
+  // Belt to the Content-Length braces: a chunked request carries no length header.
+  if (file.size > MAX_CSV_BYTES) {
+    return NextResponse.json({ error: "CSV upload is too large (25MB max)." }, { status: 413 });
   }
 
   const csvText = await file.text();

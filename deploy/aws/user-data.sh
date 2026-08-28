@@ -3,6 +3,10 @@
 # Installs Node 22 + Caddy + a swapfile, and writes /etc/syncore/{web,worker}.env
 # from SSM Parameter Store. App build/deploy is a separate step (deploy-app.sh).
 set -euxo pipefail
+# Root-only log: xtrace traces every command into it, and this script handles
+# decrypted SSM secrets. World-readable would hand the DB password to any local
+# user (including the internet-facing caddy user).
+install -m 600 /dev/null /var/log/syncore-user-data.log
 exec > >(tee /var/log/syncore-user-data.log) 2>&1
 
 SSM_PREFIX="/syncore/prod" # MUST match var.ssm_prefix in Terraform.
@@ -47,6 +51,11 @@ write_env() {
       echo "${name##*/}=${value}"
     done
 }
+# xtrace OFF while decrypted secrets flow: with -x on, every echoed NAME=VALUE
+# line lands in the boot log — plaintext credentials in a log file, strictly
+# weaker than the 640 env files this block is carefully writing. Same pattern
+# redeploy.sh uses around DBURL.
+set +x
 umask 077
 write_env > /etc/syncore/web.env
 cp /etc/syncore/web.env /etc/syncore/worker.env
@@ -55,6 +64,7 @@ grep -q '^NODE_ENV=' /etc/syncore/web.env || echo 'NODE_ENV=production' >> /etc/
 grep -q '^NODE_ENV=' /etc/syncore/worker.env || echo 'NODE_ENV=production' >> /etc/syncore/worker.env
 chown root:syncore /etc/syncore/web.env /etc/syncore/worker.env
 chmod 640 /etc/syncore/web.env /etc/syncore/worker.env
+set -x
 
 # --- Caddyfile (reverse proxy + automatic TLS) ---
 APP_URL="$(aws ssm get-parameter --region "$REGION" --name "$SSM_PREFIX/SYNCORE_APP_URL" --query 'Parameter.Value' --output text)"
