@@ -52,7 +52,7 @@ type PlacedCallReceiptLookup = {
 export function findPlacedCallReceipt(
   auditLogs: readonly AuditLog[],
   input: PlacedCallReceiptLookup
-): { callId: string; liveState?: string } | undefined {
+): { callId: string; liveState?: string; error?: string } | undefined {
   const receipt = auditLogs.find((entry) => {
     if (
       entry.workspaceId !== input.workspaceId ||
@@ -68,6 +68,10 @@ export function findPlacedCallReceipt(
   });
 
   if (!receipt) return undefined;
-  const liveState = (receipt.newValue as { liveState?: unknown }).liveState;
-  return { callId: receipt.objectId, liveState: typeof liveState === "string" ? liveState : undefined };
+  const payload = receipt.newValue as { liveState?: unknown; error?: unknown };
+  return {
+    callId: receipt.objectId,
+    liveState: typeof payload.liveState === "string" ? payload.liveState : undefined,
+    error: typeof payload.error === "string" ? payload.error : undefined
+  };
 }

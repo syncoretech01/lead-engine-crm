@@ -93,6 +93,28 @@ function stateWithDepartedUserRefs(): { state: AppState; departedId: string; liv
     sdrUserId: liveId
   } as unknown as AppState["sdrDailyReports"][number]);
 
+  // The other four User FKs the sweep guards, so reverting any one of them fails.
+  state.leadJobs.unshift({
+    ...state.leadJobs[0],
+    id: "job-departed",
+    createdById: departedId
+  } as unknown as AppState["leadJobs"][number]);
+  state.outreachCampaigns.unshift({
+    ...state.outreachCampaigns[0],
+    id: "campaign-departed",
+    ownerUserId: departedId
+  } as unknown as AppState["outreachCampaigns"][number]);
+  state.campaignSequences.unshift({
+    ...state.campaignSequences[0],
+    id: "sequence-departed",
+    createdById: departedId
+  } as unknown as AppState["campaignSequences"][number]);
+  state.dataSubjectRequests.unshift({
+    ...state.dataSubjectRequests[0],
+    id: "dsr-departed",
+    handledById: departedId
+  } as unknown as AppState["dataSubjectRequests"][number]);
+
   return { state, departedId, liveId };
 }
 
@@ -101,8 +123,23 @@ describe("projection guards references to a removed user", () => {
     const { state } = stateWithDepartedUserRefs();
     const projection = createNormalizedPersistenceProjection(state);
 
-    expect(projection.trackedCalls.find((row) => row.id === "call-departed")?.sdrUserId).toBeUndefined();
-    expect(projection.auditLogs.find((row) => row.id === "audit-departed")?.actorUserId).toBeUndefined();
+    // Each row must still BE in the projection with only its dangling FK cleared —
+    // asserting on find(...)?.field alone would pass just as well if the row had
+    // vanished, which is the opposite of what these guards should do.
+    const cleared = [
+      [projection.trackedCalls, "call-departed", "sdrUserId"],
+      [projection.auditLogs, "audit-departed", "actorUserId"],
+      [projection.leadJobs, "job-departed", "createdById"],
+      [projection.outreachCampaigns, "campaign-departed", "ownerUserId"],
+      [projection.campaignSequences, "sequence-departed", "createdById"],
+      [projection.dataSubjectRequests, "dsr-departed", "handledById"]
+    ] as const;
+
+    for (const [rows, id, field] of cleared) {
+      const row = (rows as ReadonlyArray<Record<string, unknown>>).find((item) => item.id === id);
+      expect(row, id + " should still be projected").toBeDefined();
+      expect(row?.[field], id + "." + field + " should be cleared").toBeUndefined();
+    }
   });
 
   it("drops rows whose user FK is required and can no longer resolve", () => {

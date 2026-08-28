@@ -129,7 +129,6 @@ import {
 } from "@/lib/phase1/normalized-write-tables";
 import { readFastLeadDashboardState } from "@/lib/phase1/lead-dashboard-read-model";
 import {
-  callDispositions,
   campaignStatuses,
   campaignTypes,
   createCampaign,
@@ -143,7 +142,6 @@ import {
   outreachProviderStatuses,
   simulateCampaignSend,
   smsEventStatuses,
-  trackedCallStatuses
 } from "@/lib/phase1/outreach";
 import {
   complianceChecklistStatuses,
@@ -2136,7 +2134,6 @@ export async function sendDirectEmailAction(formData: FormData) {
   const session = await getSession(state);
   assertPermission(session, "send_direct_outreach");
   assertAssignedContactForOutreach(state, session, contactId);
-
   const plan = buildDirectEmailSendPlan(state, {
     workspaceId: session.workspace.id,
     actor: session.user,
@@ -2452,17 +2449,22 @@ export async function placeCallAction(
   assertPermission(session, "send_direct_outreach");
   assertAssignedContactForOutreach(state, session, contactId);
 
-// Idempotency: a committed dial left an audit receipt carrying this requestId in
-  // the same transaction as its TrackedCall. Replaying the request must return that
-  // call rather than ring the lead a second time.
+  // Idempotency: a committed dial left an audit receipt carrying this requestId in
+  // the same transaction as its TrackedCall. Replaying that exact request returns
+  // the original call rather than ringing the lead a second time. (The clients mint
+  // a fresh requestId per click, so this covers a replayed payload — a programmatic
+  // retry — not a human clicking Call twice, which is a deliberate second dial.)
   const placedReceipt = findPlacedCallReceipt(state.auditLogs, {
     workspaceId: session.workspace.id,
     requestId
   });
   if (placedReceipt) {
+    // Carry the original failure reason through: replaying a failed dial must not
+    // downgrade a specific provider error into a bare "Call failed." in the dialer.
     return {
       callId: placedReceipt.callId,
-      liveState: (placedReceipt.liveState ?? "completed") as TrackedCallLiveState
+      liveState: (placedReceipt.liveState ?? "completed") as TrackedCallLiveState,
+      error: placedReceipt.error
     };
   }
 
@@ -2539,7 +2541,7 @@ export async function placeCallAction(
         objectType: "tracked_call",
         objectId: call.id,
         action: placeError ? "call_failed" : "call_placed",
-        newValue: { providerCallId, liveState, toNumber, requestId }
+        newValue: { providerCallId, liveState, toNumber, requestId, error: placeError }
       });
       return call.id;
     },
@@ -3541,9 +3543,13 @@ function taskPriorityValue(value: FormDataEntryValue | null): CrmTask["priority"
   return taskPriorities.includes(priority) ? priority : "Normal";
 }
 
+// Neutral default, same rule as the tracked-call coercers below: a missing or
+// unrecognised outcome must not record the best possible result. This one keeps a
+// local implementation because its union differs from the tracked-call dispositions
+// (crm.ts callOutcomes), so there is no shared coercer to delegate to.
 function callOutcomeValue(value: FormDataEntryValue | null): CallLog["outcome"] {
-  const outcome = stringValue(value, "Connected") as CallLog["outcome"];
-  return callOutcomes.includes(outcome) ? outcome : "Connected";
+  const outcome = stringValue(value, "No answer") as CallLog["outcome"];
+  return callOutcomes.includes(outcome) ? outcome : "No answer";
 }
 
 function callingSessionIdValue(value: string): string {

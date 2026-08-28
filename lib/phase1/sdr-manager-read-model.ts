@@ -1,5 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
-import { calculateSlaStatus } from "@/lib/phase1/sdr";
+import { calculateSlaStatus, reminderStatusForDueAt } from "@/lib/phase1/sdr";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type {
   AppState,
@@ -220,7 +220,7 @@ export async function readFastSdrManagerModel(
       ownerName: assignment.assignedSdr?.name ?? "Unassigned",
       teamName: assignment.assignedTeam?.name ?? "No team",
       dueAt: optionalIso(dueAt),
-      dueLabel: timerLabel(optionalIso(dueAt)),
+      dueLabel: timerLabel(optionalIso(dueAt), Date.parse(nowIso)),
       reminderTitle: activeReminder?.title,
       reminderStatus: activeReminder?.status
     } satisfies FastManagerAssignmentView;
@@ -282,7 +282,12 @@ export async function readFastSdrManagerModel(
         ? reminder.channel
         : "Email",
       dueAt: reminder.dueAt.toISOString(),
-      status: reminderStatusValue(reminder.status),
+      // Live, like the queue read model — otherwise the same reminder reads Overdue
+      // on /sdr/queue and Open here on any day nobody triggers a refreshing write.
+      status:
+        reminder.status === "Completed"
+          ? reminderStatusValue(reminder.status)
+          : reminderStatusForDueAt((reminder.snoozedUntil ?? reminder.dueAt).toISOString(), nowIso),
       createdAt: reminder.createdAt.toISOString(),
       completedAt: optionalIso(reminder.completedAt),
       snoozedUntil: optionalIso(reminder.snoozedUntil)
@@ -378,9 +383,11 @@ function reassignmentRecommendations(
   return recommendations.slice(0, 12);
 }
 
-function timerLabel(value?: string) {
+// Takes the caller's clock so a row's label and its computed slaStatus are read
+// from the same instant (mirrors the queue read model).
+function timerLabel(value?: string, now = Date.now()) {
   if (!value) return "No SLA";
-  const diffMs = Date.parse(value) - Date.now();
+  const diffMs = Date.parse(value) - now;
   const absHours = Math.max(1, Math.round(Math.abs(diffMs) / (60 * 60 * 1000)));
   if (diffMs < 0) return `${absHours}h overdue`;
   if (absHours < 24) return `${absHours}h left`;

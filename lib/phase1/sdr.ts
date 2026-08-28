@@ -897,6 +897,8 @@ export function createReassignmentRule(input: {
 }
 
 export function assignmentViews(state: AppState, workspaceId: string) {
+  // One clock for the whole view list, so the urgency sort is stable across rows.
+  const viewsNow = new Date().toISOString();
   return state.sdrAssignments
     .filter((assignment) => assignment.workspaceId === workspaceId)
     .map((assignment) => {
@@ -917,6 +919,9 @@ export function assignmentViews(state: AppState, workspaceId: string) {
 
       return {
         ...assignment,
+        // Live, like every other SLA surface — the spread would otherwise carry the
+        // stored column into the urgency sort below and into /build-list workloads.
+        slaStatus: calculateSlaStatus(assignment, viewsNow),
         contactName: displayContactName(contact),
         title: contact?.title ?? "",
         email: contact?.email ?? "",
@@ -934,7 +939,10 @@ export function assignmentViews(state: AppState, workspaceId: string) {
         notes: contact?.notes ?? "",
         teamName: state.sdrTeams.find((team) => team.id === assignment.assignedTeamId)?.name ?? "No team",
         dueAt: assignment.firstTouchedAt ? assignment.followUpDueAt : assignment.firstTouchDueAt,
-        dueLabel: timerLabel(assignment.firstTouchedAt ? assignment.followUpDueAt : assignment.firstTouchDueAt),
+        dueLabel: timerLabel(
+          assignment.firstTouchedAt ? assignment.followUpDueAt : assignment.firstTouchDueAt,
+          Date.parse(viewsNow)
+        ),
         reminderTitle: reminder?.title,
         reminderStatus: reminder?.status
       };
@@ -1029,13 +1037,16 @@ export function followUpSourceRowsSnapshot(
 
 export function sdrWorkloads(state: AppState, workspaceId: string) {
   const users = sdrUsers(state, workspaceId);
+  // One clock, and computed live so /build-list agrees with the queue, the manager
+  // dashboard and /reports rather than reporting a stale overdue count.
+  const now = new Date().toISOString();
   const assignments = state.sdrAssignments.filter((assignment) => assignment.workspaceId === workspaceId);
 
   return users.map((user) => {
     const owned = assignments.filter((assignment) => assignment.assignedSdrId === user.id);
     const current = owned.filter((assignment) => !assignment.callCycleCompletedAt);
     const active = current.filter((assignment) => activeAssignmentStatuses.has(assignment.status));
-    const overdue = active.filter((assignment) => assignment.slaStatus === "Overdue");
+    const overdue = active.filter((assignment) => calculateSlaStatus(assignment, now) === "Overdue");
     const touched = active.filter((assignment) => assignment.touchCount > 0);
 
     return {
@@ -1492,9 +1503,11 @@ function offsetDate(value: string, days: number, hour: number) {
 }
 
 
-function timerLabel(value?: string) {
+// Takes the caller's clock so a row's label and its computed slaStatus come from
+// one instant (mirrors the queue and manager read models).
+function timerLabel(value?: string, now = Date.now()) {
   if (!value) return "No SLA";
-  const diffMs = Date.parse(value) - Date.now();
+  const diffMs = Date.parse(value) - now;
   const absHours = Math.max(1, Math.round(Math.abs(diffMs) / (60 * 60 * 1000)));
   if (diffMs < 0) return `${absHours}h overdue`;
   if (absHours < 24) return `${absHours}h left`;
