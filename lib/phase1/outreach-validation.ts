@@ -47,7 +47,7 @@ export function coldSendMailboxBlockReason(input: {
   return null;
 }
 
-// http(s) URLs, protocol-relative, and www. forms. Deliberately NOT matching
+// http(s) URLs and www. forms. Deliberately NOT matching protocol-relative or
 // naked domains ("syncore.com") — too false-positive-prone against ordinary
 // prose, and spam filters key on resolvable anchors/URLs, which these catch.
 const LINK_PATTERN = /(https?:\/\/[^\s<>")]+|\bwww\.[a-z0-9-]+\.[a-z]{2,}[^\s<>")]*)/gi;

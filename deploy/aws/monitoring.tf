@@ -34,6 +34,9 @@ resource "aws_cloudwatch_metric_alarm" "ec2_status" {
   evaluation_periods  = 2
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
+  # A wedged/stopped instance publishes nothing at all — missing data must alarm,
+  # not sit in INSUFFICIENT_DATA while the box is down.
+  treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.alerts[0].arn]
   ok_actions          = [aws_sns_topic.alerts[0].arn]
 }

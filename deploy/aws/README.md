@@ -50,8 +50,9 @@ put SYNCORE_BOT_NOTIFY_RETRY_MAX_MS   '3600000'
 put SYNCORE_BOT_NOTIFY_BATCH_SIZE     '25'
 put SYNCORE_HUB_URL                   'https://lead-hub.example.com'
 put SYNCORE_MAILING_ADDRESS           'Syncore Tech, 1500 N Grant St, Denver, CO 80203, USA'
-put SYNCORE_OUTREACH_FROM             'Bobby Jones <bobby@syncoretech.com>'
-put SYNCORE_OUTREACH_REPLY_TO         'replies@syncoretech.com'
+# Lookalike domain ONLY — live cold sends from syncoretech.com are refused (rule 13).
+put SYNCORE_OUTREACH_FROM             'Bobby Jones <bobby@your-lookalike-domain.com>'
+put SYNCORE_OUTREACH_REPLY_TO         'replies@your-lookalike-domain.com'
 put SYNCORE_OUTREACH_BATCH_SIZE       '50'
 # Provider keys (only the ones you use live):
 put APOLLO_API_KEY   'REPLACE'

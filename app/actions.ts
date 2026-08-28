@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { asActionResult, type ActionResult } from "@/lib/action-result";
 import { assertPermission, restrictsToOwnedRecords } from "@/lib/phase1/auth";
 import { findCallWrapupReceipt } from "@/lib/phase1/call-wrapup-idempotency";
@@ -1968,10 +1969,21 @@ export async function sendCampaignAction(formData: FormData) {
   const state = await readState();
   const session = await getSession(state);
   assertPermission(session, "manage_outreach");
+  let batch: ReturnType<typeof buildCampaignSendBatch>;
+  try {
+    batch = buildCampaignSendBatch(state, session.workspace.id, campaignId, { batchSize: outreachBatchSize() });
+  } catch (error) {
+    // The cold-send guards (rules 8/13) throw here with the exact remediation
+    // ("use a lookalike domain", "remove: <link>"). Production Next.js redacts a
+    // thrown server-action message to a generic digest, so carry it to the page
+    // as a query param instead — nothing has been sent or written at this point.
+    const message = error instanceof Error ? error.message : "The campaign send was refused.";
+    redirect(`/outreach/campaigns?sendError=${encodeURIComponent(message)}`);
+  }
   const plan = {
     workspaceId: session.workspace.id,
     actorUserId: session.user.id,
-    ...buildCampaignSendBatch(state, session.workspace.id, campaignId, { batchSize: outreachBatchSize() })
+    ...batch
   };
 
   if (!plan.credentialOk) {
