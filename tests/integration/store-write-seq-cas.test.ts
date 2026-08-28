@@ -126,6 +126,18 @@ describe.skipIf(!enabled)("AppState write-seq CAS (concurrency)", () => {
     expect(await readWriteSeq()).toBe(seqAfterRead + 1);
   });
 
+  // Checkpoint pattern: a script that writes the same state object twice must not
+  // false-conflict against its own first write (the WeakMap seq refreshes on a
+  // successful CAS commit).
+  it("a script can write the same state object twice without conflicting with itself", async () => {
+    const { resetStore, readState, writeState } = await import("@/lib/phase1/store");
+
+    await resetStore();
+    const current = await readState();
+    await writeState(current);
+    await expect(writeState(current)).resolves.toBeUndefined();
+  });
+
   // Provisioning-style writes hand writeState a state that was never read, so there
   // is nothing to compare against — but the write must still bump writeSeq so any
   // concurrent CAS writer whose baseline predates it conflicts instead of silently

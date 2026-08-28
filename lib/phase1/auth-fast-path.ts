@@ -541,12 +541,13 @@ export async function adminResetPasswordPrismaFast(input: {
         passwordUpdatedAt: now,
         failedLoginCount: 0,
         lockedUntil: null,
-        // Admin-set password activates the seat (mirrors invite acceptance and the
-        // blob path in auth-service.ts — keep the two in step). This is also the
-        // recovery route for the locked "Invited" placeholders ensureAuthDefaults
-        // backfills for script-created users. The token-based self-serve reset
-        // deliberately does NOT do this — it requires an Active account.
-        status: "Active",
+        // Admin-set password activates an INVITED seat (mirrors invite acceptance
+        // and the blob path in auth-service.ts — keep the two in step). This is the
+        // recovery route for the locked placeholders ensureAuthDefaults backfills
+        // for script-created users. A Disabled seat stays Disabled — offboarding
+        // must not be undone by a password rotation — and the token-based
+        // self-serve reset deliberately requires an Active account.
+        ...(account.status === "Invited" ? { status: "Active" } : {}),
         updatedAt: now
       }
     });

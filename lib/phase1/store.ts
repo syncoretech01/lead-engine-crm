@@ -103,6 +103,12 @@ export async function writeState(state: AppState) {
   await timeAsync("state.write", async () => {
     try {
       await writeStateToPrisma(state, await getPrismaClient(), {}, casWriteSeq);
+      // The CAS bumped the row to casWriteSeq+1; remember that for this object so
+      // a checkpoint-style script that writes the same state twice CASes on the
+      // seq it actually holds instead of false-conflicting against its own write.
+      if (casWriteSeq !== undefined) {
+        observedWriteSeqs.set(state, casWriteSeq + 1);
+      }
     } catch (error) {
       if (error instanceof WriteConflictError) {
         // Bulk callers mutate in memory for minutes; a transparent retry would

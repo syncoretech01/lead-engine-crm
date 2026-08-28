@@ -468,10 +468,14 @@ export function adminResetUserPassword(
   account.passwordUpdatedAt = now;
   account.failedLoginCount = 0;
   account.lockedUntil = undefined;
-  // An admin deliberately setting a password IS the activation of this seat —
-  // mirrors invite acceptance, and is the recovery path for the locked "Invited"
-  // placeholders ensureAuthDefaults backfills for script-created users.
-  account.status = "Active";
+  // An admin deliberately setting a password activates an Invited seat — mirrors
+  // invite acceptance, and is the recovery path for the locked placeholders
+  // ensureAuthDefaults backfills for script-created users. A Disabled seat stays
+  // Disabled: offboarding must not be undone as a side effect of a password
+  // rotation.
+  if (account.status === "Invited") {
+    account.status = "Active";
+  }
   account.updatedAt = now;
   // Force the target to re-authenticate everywhere with the new password.
   for (const active of state.authSessions.filter((record) => record.userId === input.userId && !record.revokedAt)) {

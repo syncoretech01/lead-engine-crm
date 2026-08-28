@@ -71,4 +71,18 @@ describe("auth account backfill lockout", () => {
     const login = loginWithPassword(state, { email: user.email, password: "Fresh!Password9" });
     expect(login.session.user.id).toBe(user.id);
   });
+
+  // Offboarding must not be undone by a password rotation: only Invited seats are
+  // activated by an admin reset; Disabled stays Disabled.
+  it("admin password reset does NOT reactivate a Disabled seat", () => {
+    const { state, user } = stateWithScriptCreatedUser();
+    ensureAuthDefaults(state);
+    const session = getDemoSession(state);
+    const account = state.authAccounts.find((item) => item.userId === user.id);
+    if (account) account.status = "Disabled";
+
+    adminResetUserPassword(state, session, { userId: user.id, newPassword: "Fresh!Password9" });
+    expect(account?.status).toBe("Disabled");
+    expect(() => loginWithPassword(state, { email: user.email, password: "Fresh!Password9" })).toThrow();
+  });
 });
