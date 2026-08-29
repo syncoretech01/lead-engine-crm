@@ -1,3 +1,19 @@
-# Shell scripts must stay LF so they run on Linux (EC2 boot user-data, systemd,
-# deploy scripts). CRLF would break the shebang (/bin/bash^M: bad interpreter).
+# The index is LF for every text file, regardless of a contributor's core.autocrlf.
+# Without this the invariant held only by convention: one clone with autocrlf=false
+# on Windows commits CRLF, and the whole file reads as changed in every later diff.
+# `text=auto` normalises on commit and still checks out platform-native, so nobody's
+# working tree changes.
+* text=auto
+
+# Shell scripts must be LF in the WORKING TREE too, so they run on Linux (EC2 boot
+# user-data, systemd units, deploy scripts). CRLF breaks the shebang
+# (/bin/bash^M: bad interpreter).
 *.sh text eol=lf
+
+# Never touched: line-ending conversion corrupts them.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.xlsx binary

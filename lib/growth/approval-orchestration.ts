@@ -264,21 +264,26 @@ export async function decideApprovalWithSideEffects(
       (authoritative.status === "pending" || authoritative.status === "approved");
 
     if (shouldValidateNiche) {
-      if (
-        authoritative.status === "pending" &&
-        authoritative.expiresAt !== null &&
-        authoritative.expiresAt <= now
-      ) {
-        throw new ApprovalApplicationError(
-          "APPROVAL_EXPIRED",
-          `Approval ${authoritative.id} expired before this decision.`
-        );
-      }
+      // Expiry is NOT checked here any more. It lived in this NICHE_TEST-only
+      // branch — the one approval type that gates no paid call — and threw an
+      // ApprovalApplicationError, while every other type went unchecked. It is
+      // now enforced once, in decideApproval at the repository (rule 5), and
+      // reported as an `expired` outcome. Keeping a copy here would give the same
+      // condition two shapes: a thrown APPROVAL_EXPIRED for NICHE_TEST and a 409
+      // outcome for everything else. Loading the niche context below is a read,
+      // and decideApproval refuses the write moments later in the same
+      // transaction, so nothing is applied on an expired approval either way.
       nicheContext = await loadNicheApprovalContext(tx, authoritative);
     }
 
     const decision = await decideApproval({ ...input, now }, tx);
     if (decision.outcome === "not_found") return decision;
+
+    // Nothing was decided, so nothing may be applied. The if-chain below would
+    // already fall through to a plain return (the row is still `pending`, so the
+    // niche branch cannot be entered), but leaving that implicit means one future
+    // reordering silently applies side effects to an expired approval.
+    if (decision.outcome === "expired") return decision;
 
     if (decision.outcome === "awaiting_second_approver") {
       await enqueueAwaitingSecondApproverNotification(tx, decision.approval, now);

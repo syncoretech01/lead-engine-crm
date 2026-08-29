@@ -118,6 +118,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         { status: 202 }
       );
 
+    case "expired":
+      return NextResponse.json(
+        {
+          error: "Approval is expired and cannot be approved.",
+          approvalId: result.approval.id,
+          status: result.approval.status
+        },
+        { status: 409 }
+      );
+
     case "already_final":
     case "decided":
       return NextResponse.json(

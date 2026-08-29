@@ -38,8 +38,9 @@ guard are **mitigations, not fixes**. The `deleteMany` is still reached.
 - **Never** write it via `updateState`.
 - Reference blob entities by ID only.
 
-**CI enforces this.** `npm run check:projection-invariant` fails the build if any of the 21
-guarded models appears in `persistence-projection.ts`. It runs as its own GitHub Actions job so a
+**CI enforces this.** `npm run check:projection-invariant` fails the build if any of the 22
+guarded models (`GUARDED_MODELS` in `scripts/check-projection-invariant.mjs` is the list, and
+the source of truth for this count) appears in `persistence-projection.ts`. It runs as its own GitHub Actions job so a
 lint or typecheck failure can never mask its verdict, and `tests/unit/projection-invariant.test.ts`
 proves the checker is still armed (a no-op'd matcher reports success and exits 0 — that is the
 failure mode being defended against).

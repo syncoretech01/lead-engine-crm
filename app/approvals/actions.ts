@@ -56,6 +56,16 @@ export async function decideApprovalAction(
         error: "This approval needs a second, distinct approver — you have already approved it."
       };
 
+    case "expired":
+      return {
+        ok: false,
+        error:
+          "This approval has expired — the estimate it was raised on is stale, so it " +
+          "can no longer be approved. Decline it and raise a new one with current " +
+          "numbers: editing is refused past expiry too, and a revision would inherit " +
+          "the same deadline."
+      };
+
     case "awaiting_second_approver":
       revalidatePath("/approvals");
       return { ok: true, status: result.approval.status, awaitingSecondApprover: true };
