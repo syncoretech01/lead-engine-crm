@@ -111,8 +111,15 @@ test.describe("Growth OS — Approval Inbox", () => {
     // the empty one. This asserts the page renders rather than 500s — the
     // decide/revise behaviour is covered by the unit and integration lanes,
     // where it can be driven deterministically.
-    const empty = page.getByTestId("approvals-empty");
-    const list = page.getByTestId("approvals-list");
+    // Scope to <main>: with App Router streaming, `domcontentloaded` can fire
+    // while a copy of the panel still sits outside the main region, and Playwright's
+    // strict mode fails an ambiguous match immediately rather than waiting for it to
+    // settle. That made this blocking check flaky — it failed on the pull_request run
+    // and passed on the push run of the SAME commit. The page renders each testid
+    // once, so anchoring to the region the user actually sees is the honest locator.
+    const main = page.getByRole("main");
+    const empty = main.getByTestId("approvals-empty");
+    const list = main.getByTestId("approvals-list");
     await expect(empty.or(list)).toBeVisible();
   });
 

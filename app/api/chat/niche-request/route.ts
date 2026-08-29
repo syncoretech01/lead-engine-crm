@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { NicheRequestCreate } from "@syncore/contracts";
-import { authenticateChatRequest } from "@/lib/growth/chat-auth";
+import { authenticateChatRequest, authorizeChatWorkspaceActor } from "@/lib/growth/chat-auth";
 import { createNicheRequest } from "@/lib/growth/repositories/niche-request-repository";
 import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
 
@@ -51,6 +51,14 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+
+  // The workspace comes from the body, so the actor must be shown to belong to it
+  // before anything is written — the shared bearer alone does not scope tenancy.
+  const scoped = await authorizeChatWorkspaceActor({
+    actorId: auth.actorId,
+    workspaceId: parsed.data.workspaceId
+  });
+  if (!scoped.ok) return NextResponse.json({ error: scoped.error }, { status: scoped.status });
 
   try {
     const created = await createNicheRequest({

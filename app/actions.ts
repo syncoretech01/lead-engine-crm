@@ -2697,7 +2697,9 @@ export async function updateOutreachProviderStatusAction(formData: FormData) {
 
 export async function generateReportSnapshotsAction() {
   await updateState((state, session) => {
-    assertPermission(session, "view_reports");
+    // A write, so it takes the write permission /reports itself requires —
+    // view_reports is held by Viewer, whose whole definition is read-only.
+    assertPermission(session, "manage_workspace");
     const result = generateReportSnapshots(state, session.workspace.id, session.user.id);
 
     appendAudit(state, session, {
