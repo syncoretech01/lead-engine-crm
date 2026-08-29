@@ -105,6 +105,8 @@ export type DecideOutcome =
   /** Replayed button tap, or someone decided on the other surface. */
   | { outcome: "already_final"; approval: ApprovalRecordRow }
   | { outcome: "same_approver_twice"; approval: ApprovalRecordRow }
+  /** Past expiresAt: the estimate it was raised on is stale, so it cannot be approved. */
+  | { outcome: "expired"; approval: ApprovalRecordRow }
   | { outcome: "not_found" };
 
 /** Payload fields the record mirrors into columns for indexing. */
@@ -226,6 +228,19 @@ export async function decideApproval(
         data: { status: "declined", decidedBy: input.actorId, decidedAt: input.now ?? new Date() }
       })) as ApprovalRecordRow;
       return { outcome: "decided", approval: declined };
+    }
+
+    // Expiry binds EVERY approval type, and it binds here at the repository so no
+    // caller can route around it (rule 5). An expiresAt is set precisely on the
+    // approvals that gate spend — PROVIDER_RUN, ENRICHMENT_RUN, PAID_VERIFICATION —
+    // where the whole point is that a stale cost estimate must not stay actionable;
+    // it was previously checked only on the NICHE_TEST path in the orchestrator,
+    // which is the one type that does NOT gate a paid call.
+    //
+    // Declining is deliberately still allowed above: expiry must not strand a row
+    // as permanently undecidable.
+    if (approval.expiresAt !== null && approval.expiresAt <= (input.now ?? new Date())) {
+      return { outcome: "expired", approval };
     }
 
     const workspace = await tx.workspace.findUnique({

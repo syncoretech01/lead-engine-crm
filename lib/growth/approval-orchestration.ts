@@ -264,6 +264,10 @@ export async function decideApprovalWithSideEffects(
       (authoritative.status === "pending" || authoritative.status === "approved");
 
     if (shouldValidateNiche) {
+      // Expiry itself is enforced in decideApproval, for every type and every
+      // caller (rule 5) — it used to live here, where it only ever covered
+      // NICHE_TEST, the one type that gates no paid call. Kept as a pre-check so
+      // an expired approval never loads its niche context or touches a brief.
       if (
         authoritative.status === "pending" &&
         authoritative.expiresAt !== null &&

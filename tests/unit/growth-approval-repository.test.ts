@@ -410,3 +410,80 @@ describe("reviseApproval", () => {
     expect(r1.created.supersedesApprovalId).toBe(v1.id);
   });
 });
+
+/**
+ * Expiry is the spend gate: an approval carries `expiresAt` precisely when
+ * actioning a stale cost estimate would spend real money (PROVIDER_RUN,
+ * ENRICHMENT_RUN, PAID_VERIFICATION under CRM-2/CRM-4). It used to be checked
+ * only in the orchestrator's NICHE_TEST branch — the one type that gates no paid
+ * call — so every other type was approvable indefinitely past its deadline.
+ * Enforced in the repository now, so no caller can route around it (rule 5).
+ */
+describe("decideApproval — expiry", () => {
+  const past = new Date(Date.now() - 60_000);
+  const future = new Date(Date.now() + 60 * 60_000);
+
+  async function seed(expiresAt: Date | undefined, key: string) {
+    const db = fakeDb({ t2: null });
+    const row = await createApproval(
+      { workspaceId: WS, payload: payloadCosting(100), requestedBy: "usr_1", idempotencyKey: key, expiresAt },
+      db as never
+    );
+    return { db, id: row.id };
+  }
+
+  it("refuses to approve past expiresAt, and does not decide the row", async () => {
+    const { db, id } = await seed(future, "expiry-1");
+    // Approve after the deadline passes — seeded in the future so creation is legal.
+    const result = await decideApproval(
+      { workspaceId: WS, approvalId: id, decision: "approve", actorId: "usr_2", now: new Date(future.getTime() + 1000) },
+      db as never
+    );
+    expect(result.outcome).toBe("expired");
+    expect(result.outcome === "expired" && result.approval.status).toBe("pending");
+    expect(result.outcome === "expired" && result.approval.decidedBy).toBeNull();
+  });
+
+  it("still allows declining an expired approval, so it cannot get stuck pending", async () => {
+    const { db, id } = await seed(future, "expiry-2");
+    const result = await decideApproval(
+      { workspaceId: WS, approvalId: id, decision: "decline", actorId: "usr_2", now: new Date(future.getTime() + 1000) },
+      db as never
+    );
+    expect(result.outcome === "decided" && result.approval.status).toBe("declined");
+  });
+
+  it("approves normally before the deadline and when no deadline is set", async () => {
+    const withDeadline = await seed(future, "expiry-3");
+    await expect(
+      decideApproval(
+        { workspaceId: WS, approvalId: withDeadline.id, decision: "approve", actorId: "usr_2" },
+        withDeadline.db as never
+      ).then((r) => r.outcome)
+    ).resolves.toBe("decided");
+
+    const noDeadline = await seed(undefined, "expiry-4");
+    await expect(
+      decideApproval(
+        { workspaceId: WS, approvalId: noDeadline.id, decision: "approve", actorId: "usr_2" },
+        noDeadline.db as never
+      ).then((r) => r.outcome)
+    ).resolves.toBe("decided");
+  });
+
+  it("refuses creation of an already-expired approval (unchanged)", async () => {
+    const db = fakeDb({ t2: null });
+    await expect(
+      createApproval(
+        {
+          workspaceId: WS,
+          payload: payloadCosting(100),
+          requestedBy: "usr_1",
+          idempotencyKey: "expiry-5",
+          expiresAt: past
+        },
+        db as never
+      )
+    ).rejects.toThrow(/already expired/);
+  });
+});

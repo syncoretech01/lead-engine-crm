@@ -1,4 +1,18 @@
-# Syncore Production Architecture
+# Syncore Production Architecture (SUPERSEDED — historical)
+
+> **Superseded 2026-08-29.** This was written 2026-06-16, before the AWS migration and
+> before CLAUDE.md became the contract. It still says the app is "a local MVP with
+> provider simulations", and it names components this repo does not use (Smartlead for
+> cold email, Twilio Lookup, Redis-backed workers, Kubernetes). Reading it as current
+> guidance has already cost re-litigation of settled decisions.
+>
+> **Authoritative instead:** [`CLAUDE.md`](../CLAUDE.md) for scope and the golden rules,
+> [`docs/AWS_MIGRATION.md`](./AWS_MIGRATION.md) for the deployed topology (one EC2 +
+> RDS behind Caddy), [`docs/BACKGROUND_JOBS.md`](./BACKGROUND_JOBS.md) for the worker,
+> and [`docs/PHASE_B_OUTREACH_SPEC.md`](./PHASE_B_OUTREACH_SPEC.md) for outbound
+> (Mailshake owns sequencing/sending — see the CLAUDE.md anti-scope list).
+>
+> Kept only as a record of what was decided in June 2026 and why.
 
 Last updated: 2026-06-16
 

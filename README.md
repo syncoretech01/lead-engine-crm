@@ -7,7 +7,7 @@ An MVP scaffold for the lead acquisition engine and Salesforce-style CRM describ
 - Next.js + TypeScript app shell
 - Locked production architecture decisions in `docs/PRODUCTION_ARCHITECTURE.md`
 - Operational command center
-- Configurable persistence with local file storage, Prisma/PostgreSQL state snapshots, and normalized-table projection sync
+- Prisma/PostgreSQL persistence: an AppState snapshot plus a normalized-table projection sync
 - Demo workspace, users, roles, RBAC checks, and audit logs
 - Search Profile CRUD and Lead Job creation
 - CSV upload with field mapping, raw staging, normalization, suppression checks, and dedupe
@@ -27,12 +27,20 @@ An MVP scaffold for the lead acquisition engine and Salesforce-style CRM describ
 
 ## Run locally
 
+Postgres is required — the file storage driver was removed with the blob migration,
+and `SYNCORE_STORAGE_DRIVER=file` now throws on startup rather than silently falling
+back. `docker-compose.dev.yml` provides the local database.
+
 ```bash
+docker compose -f docker-compose.dev.yml up -d
 npm install
+cp .env.example .env          # set DATABASE_URL to the compose database
+npm run db:bootstrap          # prisma generate + migrate deploy + seed
 npm run dev
 ```
 
-Without `SYNCORE_STORAGE_DRIVER=prisma`, the app uses local file storage in `.syncore-data/store.json`.
+Note that `next dev` is memory-hungry; if it thrashes, build once and run the
+production server instead (`npm run build && npm start`).
 
 ## Production persistence
 
@@ -58,15 +66,17 @@ npm run prisma:generate
 npm run prisma:migrate:deploy
 ```
 
-Production must use `SYNCORE_STORAGE_DRIVER="prisma"`. File storage is blocked in production unless `SYNCORE_ALLOW_FILE_STORAGE_IN_PRODUCTION=true` is explicitly set for an emergency/demo case. See `docs/PHASE_6_DATABASE_CUTOVER.md` for the staging, production, seed, and rollback process.
+`SYNCORE_STORAGE_DRIVER="prisma"` is the only accepted value — there is no file-storage fallback to disable. See `docs/PHASE_6_DATABASE_CUTOVER.md` for the staging, production, seed, and rollback process.
 
 ## Production architecture direction
 
-The selected production direction is documented in `docs/PRODUCTION_ARCHITECTURE.md`. In short: keep Next.js and Prisma/PostgreSQL, use RingCentral for telephony/SMS, Twilio Lookup for phone validation, Smartlead for cold outbound email, Amazon SES for transactional app email, S3-compatible object storage for recordings/exports/attachments, Redis-backed workers for async jobs, and defer OpenSearch/ClickHouse/Kafka/Kubernetes until measured scale requires them.
+Production runs on AWS: one EC2 instance behind Caddy plus RDS PostgreSQL (`docs/AWS_MIGRATION.md`, `deploy/aws/`). Telephony/SMS is RingCentral and transactional email is Amazon SES, both live. Cold outbound is owned by Mailshake, not this repo (`CLAUDE.md` anti-scope). Background jobs run in an in-process worker, not Redis (`docs/BACKGROUND_JOBS.md`).
+
+`docs/PRODUCTION_ARCHITECTURE.md` predates the AWS migration and names components this repo does not use; `CLAUDE.md` and `docs/AWS_MIGRATION.md` are authoritative where they disagree.
 
 ## Session and RBAC
 
-The app uses first-party production auth with hashed passwords, signed `syncore_auth_session` cookies, server-side session records, workspace membership, and role permissions. Seeded local users can sign in with `Syncore!2026`; the owner/developer account is `nora@syncore.tech`. Pages, API routes, server actions, navigation, export downloads, provider jobs, signed webhooks, and generated file paths are scoped to the authenticated workspace and role permissions. See `docs/PHASE_7_PRODUCTION_AUTH.md` and `docs/PHASE_8_TENANT_ISOLATION.md`.
+The app uses first-party production auth with hashed passwords, signed `syncore_auth_session` cookies, server-side session records, workspace membership, and role permissions. Seeded **local/CI** users sign in with `Syncore!2026`; the owner/developer account is `nora@syncore.tech`. That password only ever exists in `createSeedState`/`db:seed` — accounts created by an import or an ops script are backfilled locked (status `Invited`, unusable hash) and are activated by an admin setting a password at `/access`. Pages, API routes, server actions, navigation, export downloads, provider jobs, signed webhooks, and generated file paths are scoped to the authenticated workspace and role permissions. See `docs/PHASE_7_PRODUCTION_AUTH.md` and `docs/PHASE_8_TENANT_ISOLATION.md`.
 
 ## Async Job Observability
 

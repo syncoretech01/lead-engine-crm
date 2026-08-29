@@ -82,7 +82,7 @@
  * ADDING A FUTURE GROWTH OS MODEL
  * -------------------------------
  * One line in GUARDED_MODELS below. That array is the single source of truth;
- * surface forms are derived, never hand-written. tests/projection-invariant.test.ts
+ * surface forms are derived, never hand-written. tests/unit/projection-invariant.test.ts
  * asserts the list still contains every model from Plan v9.1 §6, so entries
  * cannot be silently dropped.
  *

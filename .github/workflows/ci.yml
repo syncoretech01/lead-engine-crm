@@ -241,15 +241,21 @@ jobs:
       # suite is unstable in CI (mobile responsive-overflow + SDR-scoped
       # routing); stabilising it is its own piece of work.
       #
-      # Growth OS specs are excluded here and run blocking in the step below.
+      # The lane is the `legacy` Playwright project == tests/e2e/legacy/. Nothing
+      # new belongs there.
       - name: Smoke tests (legacy, advisory)
         continue-on-error: true
         working-directory: lead-engine-crm
-        run: npx playwright test --grep-invert "Growth OS"
+        run: npx playwright test --project=legacy
 
-      # BLOCKING. Everything built from CRM-1 onward gets real enforcement:
-      # if this fails, the job fails. A test that cannot fail the build is
+      # BLOCKING. Everything built from CRM-1 onward gets real enforcement: if
+      # this fails, the job fails. A test that cannot fail the build is
       # documentation, not a test.
-      - name: Growth OS e2e (blocking)
+      #
+      # Selected by DIRECTORY (the `blocking` project == tests/e2e minus legacy/),
+      # not by a phrase in a describe title. Under the old `--grep "Growth OS"`
+      # split a new spec titled anything else silently became advisory; now a spec
+      # is blocking by default and going advisory takes a deliberate move.
+      - name: E2E (blocking)
         working-directory: lead-engine-crm
-        run: npx playwright test --grep "Growth OS"
+        run: npx playwright test --project=blocking
