@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { defaultWorkspacePath, postLoginWorkspacePath } from "@/lib/phase1/auth";
-import { isPublicAuthPath } from "@/lib/phase1/auth-routes";
+import { safeNextPath } from "@/lib/phase1/auth-flow";
 import {
   acceptInvitePrismaFast,
   addManagerTransferContactPrismaFast,
@@ -354,18 +354,6 @@ function roleValue(value: FormDataEntryValue | null): WorkspaceRole {
   return "Viewer";
 }
 
-function safeNextPath(value: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-
-  const pathname = value.split(/[?#]/)[0] ?? "";
-  if (pathname === "/auth" || pathname.startsWith("/api/") || isPublicAuthPath(pathname)) {
-    return "/";
-  }
-
-  return value;
-}
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";

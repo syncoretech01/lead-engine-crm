@@ -114,8 +114,11 @@ export function authenticateChatRequest(headers: Headers): ChatAuthResult {
  * The chat bearer is a single shared secret, so it says "a bot is calling", not
  * "this actor may write here". Without this check a leaked bearer — or a bot bug —
  * could create records in any workspace, including the stale legacy one, attributed
- * to an arbitrary actor id. Membership in any role is enough to raise a request;
- * deciding one is the stricter gate below.
+ * to an arbitrary actor id.
+ *
+ * Any role that can act may raise a request — deciding one is the stricter gate
+ * below — but VIEWER is excluded: that role is read-only by definition in the
+ * dashboard permission table, and a chat surface must not be the way around it.
  */
 export async function authorizeChatWorkspaceActor(
   input: { actorId: string; workspaceId: string },
@@ -133,6 +136,13 @@ export async function authorizeChatWorkspaceActor(
       ok: false,
       status: 403,
       error: "Actor is not a member of the requested workspace."
+    };
+  }
+  if (membership.role === "VIEWER") {
+    return {
+      ok: false,
+      status: 403,
+      error: "Actor has read-only access to this workspace."
     };
   }
   return { ok: true };

@@ -23,7 +23,6 @@ import {
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import {
   MAX_SIGNATURE_LENGTH,
-  MIN_PASSWORD_LENGTH,
   assertPasswordPolicy,
   isValidTimezone,
   type AuthLoginResult,
@@ -517,9 +516,7 @@ export async function adminResetPasswordPrismaFast(input: {
   if (input.userId === session.user.id) {
     throw new Error("Use your own Settings page to change your password.");
   }
-  if (input.newPassword.length < MIN_PASSWORD_LENGTH) {
-    throw new Error(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-  }
+  assertPasswordPolicy(input.newPassword);
   const now = new Date();
 
   return prisma.$transaction(async (tx) => {
@@ -944,9 +941,7 @@ export async function changeOwnPasswordPrismaFast(input: {
     if (!verifyPassword(input.currentPassword, account.passwordHash)) {
       throw new Error("Your current password is incorrect.");
     }
-    if (input.newPassword.length < MIN_PASSWORD_LENGTH) {
-      throw new Error(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-    }
+    assertPasswordPolicy(input.newPassword);
     if (verifyPassword(input.newPassword, account.passwordHash)) {
       throw new Error("New password must be different from your current password.");
     }

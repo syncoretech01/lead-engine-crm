@@ -3,7 +3,8 @@ import {
   CHAT_ACTOR_HEADER,
   CHAT_WORKSPACE_HEADER,
   authenticateChatRequest,
-  authorizeChatApprovalActor
+  authorizeChatApprovalActor,
+  authorizeChatWorkspaceActor
 } from "@/lib/growth/chat-auth";
 
 const TOKEN = "chat-token-abcdefghijklmnop";
@@ -129,5 +130,65 @@ describe("chat API bearer auth", () => {
     const result = authenticateChatRequest(headers({ authorization: "Bearer " }));
     expect(result.ok).toBe(false);
     expect(!result.ok && result.status).toBe(500);
+  });
+});
+
+/**
+ * The niche-request route takes its workspaceId from the request BODY, and the
+ * chat bearer is a single shared secret — it says "a bot is calling", not "this
+ * actor may write here". Without this binding a leaked bearer (or a bot bug)
+ * could create records in any workspace, including the stale legacy one,
+ * attributed to an arbitrary actor id.
+ */
+describe("chat workspace actor authorization", () => {
+  const authorize = (role: string | null) =>
+    authorizeChatWorkspaceActor(
+      { actorId: "usr_operator", workspaceId: "ws_1" },
+      {
+        workspaceMember: {
+          findUnique: async () => (role ? { role } : null)
+        }
+      } as never
+    );
+
+  it.each(["ADMIN", "MANAGER", "SDR", "DATA_OPERATOR", "COMPLIANCE_ADMIN"])(
+    "accepts a workspace member with role %s — raising a request is weaker than deciding one",
+    async (role) => {
+      await expect(authorize(role)).resolves.toEqual({ ok: true });
+    }
+  );
+
+  it("rejects an actor who is not a member of the requested workspace", async () => {
+    await expect(authorize(null)).resolves.toMatchObject({
+      ok: false,
+      status: 403,
+      error: expect.stringContaining("not a member")
+    });
+  });
+
+  it("rejects VIEWER — a chat surface must not route around a read-only role", async () => {
+    await expect(authorize("VIEWER")).resolves.toMatchObject({
+      ok: false,
+      status: 403,
+      error: expect.stringContaining("read-only")
+    });
+  });
+
+  it("scopes the lookup to the asserted actor and workspace, never a wildcard", async () => {
+    const seen: unknown[] = [];
+    await authorizeChatWorkspaceActor(
+      { actorId: "usr_operator", workspaceId: "ws_1" },
+      {
+        workspaceMember: {
+          findUnique: async (args: unknown) => {
+            seen.push(args);
+            return { role: "SDR" };
+          }
+        }
+      } as never
+    );
+    expect(seen).toEqual([
+      { where: { workspaceId_userId: { workspaceId: "ws_1", userId: "usr_operator" } }, select: { role: true } }
+    ]);
   });
 });

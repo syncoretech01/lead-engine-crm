@@ -154,23 +154,45 @@ export function stringValue(value: FormDataEntryValue | null, fallback = "") {
   return typeof value === "string" ? value.trim() || fallback : fallback;
 }
 
+// Any origin works; it exists only so the URL parser can tell us whether `value`
+// stays on it. Nothing is ever fetched from here.
+const SAME_ORIGIN_PROBE = "https://internal.invalid";
+
+/**
+ * The post-login destination, reduced to a path that provably cannot leave this
+ * site — used for `?next=`, which an attacker controls.
+ *
+ * Character blacklists do not work here. The redirect is built with
+ * `new URL(path, base)` (request-url.ts), and the WHATWG parser silently strips
+ * ASCII tab, LF and CR from its input BEFORE parsing — so "/\t/evil.test"
+ * collapses to "//evil.test" and resolves cross-origin even though it starts
+ * with a single "/" and contains no backslash. Backslashes are normalised to
+ * slashes for the same reason. Rather than enumerate those characters, resolve
+ * the value the way the redirect will and keep it only if it stayed put; then
+ * hand back the parser's own normalised path so the caller redirects to exactly
+ * what was validated.
+ */
 export function safeNextPath(value: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  // Browsers normalise backslashes to forward slashes in a Location, so
-  // "/\evil.com" and "/\\evil.com" are protocol-relative URLs that leave the
-  // site after a successful login. Nothing in this app routes on a backslash.
-  if (value.includes("\\")) {
+  if (!value || !value.startsWith("/")) {
     return "/";
   }
 
-  const pathname = value.split(/[?#]/)[0] ?? "";
+  let resolved: URL;
+  try {
+    resolved = new URL(value, SAME_ORIGIN_PROBE);
+  } catch {
+    return "/";
+  }
+  if (resolved.origin !== SAME_ORIGIN_PROBE) {
+    return "/";
+  }
+
+  const pathname = resolved.pathname;
   if (pathname === "/auth" || pathname.startsWith("/api/") || isPublicAuthPath(pathname)) {
     return "/";
   }
 
-  return value;
+  return `${pathname}${resolved.search}${resolved.hash}`;
 }
 
 export function errorMessage(error: unknown) {
