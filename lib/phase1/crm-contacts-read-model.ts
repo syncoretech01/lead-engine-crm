@@ -33,6 +33,14 @@ export type CrmContactsReadModel = {
   /** Every contact in scope (assigned or unassigned), not capped by the directory
    *  list limit — powers the "Total Contacts" tile. */
   totalContacts: number;
+  /**
+   * The directory fetch hit its bound, so `contacts` is a prefix of the book and
+   * the rest is unreachable in the table. Surfaced in the UI: the failure this
+   * exists to prevent is not the cap, it is the cap being SILENT — the ordering
+   * is newest-first, so what disappears is the established book an SDR is
+   * actively working, with nothing on screen to say so.
+   */
+  truncated: boolean;
 };
 
 // The records directory currently paginates, sorts, and searches client-side.
@@ -40,10 +48,20 @@ export type CrmContactsReadModel = {
 // (including Sam's 791-contact import) is not silently truncated at 500 rows.
 // True server-side pagination should replace this bounded fetch as books grow.
 //
-// NOTE: with the newest-first ordering below, this cap now drops the OLDEST
-// contacts rather than the lowest-scoring ones. Acme sits at ~1.8k of 2k — the
-// next sizeable import is what forces real pagination.
-export const CRM_CONTACT_DIRECTORY_LIMIT = 2_000;
+// NOTE: with the newest-first ordering below, this bound drops the OLDEST
+// contacts rather than the lowest-scoring ones — the established book an SDR is
+// actively working.
+//
+// Raised from 2,000 once the live workspace crossed it (2,116 contacts, so the
+// directory was already dropping ~116 with nothing on screen to say so). The
+// table filters, sorts and pages this set client-side and handles a few thousand
+// rows comfortably; 25,000 buys years at the current import cadence.
+//
+// This is a bound, not pagination. The real fix is server-side pagination, which
+// means making the shared DataTable (6 tables) controlled — its own piece of
+// work. Until then `truncated` is returned and RENDERED, so the condition can
+// never again be invisible.
+export const CRM_CONTACT_DIRECTORY_LIMIT = 25_000;
 
 export async function readFastCrmContactsModel(
   session: Session,
@@ -145,7 +163,11 @@ export async function readFastCrmContactsModel(
       };
     }),
     openTaskCount,
-    totalContacts
+    totalContacts,
+    // Compare against the fetch bound, not against totalContacts: an SDR-scoped
+    // session sees a filtered subset, so "fewer rows than the workspace total" is
+    // normal for them and is not truncation.
+    truncated: contacts.length >= CRM_CONTACT_DIRECTORY_LIMIT
   };
 }
 

@@ -14,9 +14,20 @@ import {
 export type AssignedContactsReadModel = {
   rows: SdrQueueAssignmentReadRow[];
   dailyCallPlan?: Omit<SdrDailyCallPlan<SdrQueueAssignmentReadRow>, "assignments">;
+  /**
+   * The fetch hit its bound, so `rows` is a prefix of the book. Returned so the
+   * caller can say so — a silently short book is how an SDR's older assignments
+   * went missing before.
+   */
+  truncated: boolean;
   /** SDR/Manager roster for the owner filter (empty for an SDR's own view). */
   roster: Array<{ id: string; name: string }>;
 };
+
+// Fetch bound for the assigned book. Raised with the contacts directory: the
+// cockpit table pages this set client-side, and the live workspace already holds
+// 2,116 assignments. `truncated` above is what makes the bound honest.
+export const ASSIGNED_CONTACTS_FETCH_LIMIT = 25_000;
 
 // Prisma-only fast path for the "my assigned contacts" directory: the current
 // SDR's assignments (or, for a Manager/Admin, all — optionally narrowed to one
@@ -51,7 +62,7 @@ export async function readAssignedContactsModel(
       // earlier assignments below a take:500 — the "Sam's leads invisible" bug). The
       // cockpit view paginates client-side. True server-side pagination (P1.11) is the
       // eventual fix once a workspace exceeds this bound.
-      take: 2000
+      take: ASSIGNED_CONTACTS_FETCH_LIMIT
     }),
     isSdr
       ? Promise.resolve([])
@@ -85,6 +96,7 @@ export async function readAssignedContactsModel(
 
   return {
     rows,
+    truncated: assignments.length >= ASSIGNED_CONTACTS_FETCH_LIMIT,
     roster: members.map((member) => ({ id: member.user.id, name: member.user.name })),
     dailyCallPlan: callPlan
       ? {

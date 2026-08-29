@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readFastCrmContactsModel } from "@/lib/phase1/crm-contacts-read-model";
+import {
+  CRM_CONTACT_DIRECTORY_LIMIT,
+  readFastCrmContactsModel
+} from "@/lib/phase1/crm-contacts-read-model";
 import type { Session } from "@/lib/phase1/types";
 
 const prismaMocks = vi.hoisted(() => ({
@@ -91,7 +94,9 @@ describe("fast CRM contacts read model", () => {
 
     expect(directoryQuery).toMatchObject({
       where: { workspaceId, id: { in: scopedContactIds } },
-      take: 2000
+      // Assert the constant, not a copy of its value: the bound moves when the
+      // book grows, and a hardcoded number here just breaks on every change.
+      take: CRM_CONTACT_DIRECTORY_LIMIT
     });
     expect(result?.contacts).toHaveLength(791);
     expect(result?.contacts.at(-1)?.id).toBe("contact-791");
