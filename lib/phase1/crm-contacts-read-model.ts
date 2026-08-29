@@ -73,7 +73,7 @@ export async function readFastCrmContactsModel(
     workspaceId,
     ...(scopedContactIds ? { id: { in: scopedContactIds } } : {})
   };
-  const [contacts, taskRows, opportunityRows, activityRows, openTaskCount, totalContacts] = await Promise.all([
+  const [fetchedContacts, taskRows, opportunityRows, activityRows, openTaskCount, totalContacts] = await Promise.all([
     prisma.contact.findMany({
       where: contactWhere,
       // Explicit select, not `include: { company: true }`: that pulled every
@@ -105,7 +105,11 @@ export async function readFastCrmContactsModel(
       // whenever it graded below the existing book, which is exactly when an SDR
       // most needs to find it. Score is still a sortable column in the table.
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      take: CRM_CONTACT_DIRECTORY_LIMIT
+      // One more than the bound, so "is there anything past the bound" is a fact
+      // rather than an inference. At exactly the limit `>=` claimed truncation
+      // when nothing was missing, and the banner read "Showing the 5,000 most
+      // recent contacts of 5,000."
+      take: CRM_CONTACT_DIRECTORY_LIMIT + 1
     }),
     prisma.task.findMany({
       where: {
@@ -140,6 +144,8 @@ export async function readFastCrmContactsModel(
     }),
     prisma.contact.count({ where: contactWhere })
   ]);
+  const truncated = fetchedContacts.length > CRM_CONTACT_DIRECTORY_LIMIT;
+  const contacts = truncated ? fetchedContacts.slice(0, CRM_CONTACT_DIRECTORY_LIMIT) : fetchedContacts;
   const taskCounts = countByContact(taskRows.map((row) => row.contactId));
   const opportunityCounts = countByContact(opportunityRows.map((row) => row.contactId));
   const latestActivity = new Map<string, { title: string; occurredAt: string }>();
@@ -184,10 +190,10 @@ export async function readFastCrmContactsModel(
     }),
     openTaskCount,
     totalContacts,
-    // Compare against the fetch bound, not against totalContacts: an SDR-scoped
-    // session sees a filtered subset, so "fewer rows than the workspace total" is
-    // normal for them and is not truncation.
-    truncated: contacts.length >= CRM_CONTACT_DIRECTORY_LIMIT
+    // Derived from the fetch, not from totalContacts: an SDR-scoped session sees
+    // a filtered subset, so "fewer rows than the workspace total" is normal for
+    // them and is not truncation.
+    truncated
   };
 }
 

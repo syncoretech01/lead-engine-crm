@@ -38,6 +38,12 @@ export default async function ContactsPage({
   let openTasks = 0;
   let totalContacts = 0;
   let truncated = false;
+  // Tracked apart from `truncated` because the two mean different things to the
+  // reader: the contact list being cut short hides whole rows, whereas the
+  // assignment fetch being cut short leaves the rows present but strips the
+  // assigned-ago / last-touch detail out of their peek. Saying "older contacts
+  // are not listed" for the second case would be wrong.
+  let assignmentsTruncated = false;
   let roster: SdrRosterEntry[] = [];
   // SDR-assignment fields (assigned-ago / last touch) keyed by contact id,
   // so the peek matches the My Contacts peek for contacts that are assigned.
@@ -51,6 +57,7 @@ export default async function ContactsPage({
     truncated = fastModel.truncated;
     roster = (await readWorkspaceSdrRoster(workspaceId)) ?? [];
     const assigned = await readAssignedContactsModel(session, workspaceId, {});
+    assignmentsTruncated = assigned?.truncated ?? false;
     for (const row of assigned?.rows ?? []) {
       assignments[row.contactId] = buildPeekAssignment(row);
     }
@@ -94,14 +101,25 @@ export default async function ContactsPage({
   return (
     <div className="cockpit min-h-full min-w-0 bg-co-page">
       <div className="mx-auto w-full min-w-0 max-w-[1280px] px-6 py-6">
-        {truncated ? (
+        {truncated || assignmentsTruncated ? (
           <div
             role="status"
             className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
           >
-            <strong>Showing the {formatNumber(contacts.length)} most recent contacts</strong> of{" "}
-            {formatNumber(totalContacts)}. Older contacts are not listed here — search and filters only
-            apply to the contacts shown. Narrow the list from a saved view, or open a contact directly.
+            {truncated ? (
+              <>
+                <strong>Showing the {formatNumber(contacts.length)} most recent contacts</strong> of{" "}
+                {formatNumber(totalContacts)}. Older contacts are not listed here — search and filters only
+                apply to the contacts shown. Narrow the list from a saved view, or open a contact directly.
+              </>
+            ) : null}
+            {assignmentsTruncated ? (
+              <>
+                {truncated ? " " : null}
+                Assignment details are also incomplete — the oldest assignments are not loaded, so some
+                contacts show no owner or last touch in their preview.
+              </>
+            ) : null}
           </div>
         ) : null}
         {/* Header */}

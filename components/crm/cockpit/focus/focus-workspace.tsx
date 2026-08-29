@@ -301,7 +301,7 @@ export function FocusWorkspace({
               role="status"
               className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
             >
-              Showing your most recent assignments only — older ones are not in this queue.
+              Most recent assignments only — older ones are not in this queue.
             </div>
           ) : null}
           {dailyCallPlan ? (

@@ -94,6 +94,12 @@ export type SdrQueueActivityReadRow = {
   occurredAt: string;
 };
 
+// The shared bound (see lib/phase1/directory-bounds.ts), re-exported so the
+// bound test can assert this model against it. Importing the constant without
+// re-exporting it left this call site provably unguarded: reverting it to its
+// old 2,000 kept the entire suite green.
+export const SDR_QUEUE_FETCH_LIMIT = DIRECTORY_FETCH_LIMIT;
+
 export type SdrQueueReadModel = {
   snapshot: {
     metrics: {
@@ -103,6 +109,14 @@ export type SdrQueueReadModel = {
       overdue: number;
     };
     queueViews: Array<{ name: string; purpose: string; count: number }>;
+    /**
+     * The assignment fetch hit its bound, so every count above is derived from a
+     * prefix of the book rather than the book. This is the surface where a
+     * silent cap does the most damage — Assigned / P1 / Overdue are the numbers
+     * a manager steers by, and a quietly under-counted Overdue reads as "we are
+     * on top of it".
+     */
+    truncated: boolean;
     assignments: SdrQueueAssignmentReadRow[];
     reminders: SdrQueueReminderReadRow[];
     recentActivity: SdrQueueActivityReadRow[];
@@ -125,27 +139,83 @@ const activeAssignmentStatuses = new Set([
   "Nurture"
 ]);
 
-// Shared prisma include for an SdrAssignment enriched with the contact (CRM +
+// Shared prisma selection for an SdrAssignment enriched with the contact (CRM +
 // lead), account, owner, team, and its next open reminder. Exported so the
 // assigned-contacts read model reuses the exact same join + row mapper.
-export const sdrAssignmentRowInclude = {
-  account: true,
+//
+// Every column below is read by mapSdrAssignmentRow; nothing else is fetched.
+//
+// This was `include: { account: true, contact: { include: { account: true,
+// contact: true } }, assignedSdr: true, assignedTeam: true }`, which pulls every
+// scalar on five tables — including the sourceLineage provenance JSON on the
+// lead Contact, and full User/Team rows for two names. It is the heaviest graph
+// in a /crm/contacts render and it is bounded by the directory limit, so the
+// select discipline matters more here than on the contacts query itself: on that
+// page its only consumer keeps two short strings per row.
+//
+// tsc is what holds this honest. Adding a field to the mapper without adding it
+// here fails typecheck at the read site — the unit tests do NOT catch it,
+// because the Prisma mocks return fully-populated rows regardless of the select.
+export const sdrAssignmentRowSelect = {
+  id: true,
+  workspaceId: true,
+  accountId: true,
+  contactId: true,
+  assignedSdrId: true,
+  assignedTeamId: true,
+  assignedById: true,
+  assignmentMethod: true,
+  assignmentReason: true,
+  assignedAt: true,
+  firstTouchDueAt: true,
+  followUpDueAt: true,
+  status: true,
+  reassignmentReason: true,
+  previousOwnerId: true,
+  firstTouchedAt: true,
+  lastTouchAt: true,
+  touchCount: true,
+  firstCallCompletedAt: true,
+  secondCallCompletedAt: true,
+  callCycleCompletedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  account: { select: { id: true, name: true, domain: true, industry: true, location: true } },
   contact: {
-    include: {
-      account: true,
-      contact: true
+    select: {
+      id: true,
+      fullName: true,
+      title: true,
+      email: true,
+      phone: true,
+      account: { select: { id: true, name: true, domain: true, industry: true, location: true } },
+      contact: {
+        select: {
+          fullName: true,
+          title: true,
+          email: true,
+          phone: true,
+          grade: true,
+          priority: true,
+          segment: true,
+          notes: true,
+          doNotContact: true,
+          isSuppressed: true
+        }
+      }
     }
   },
-  assignedSdr: true,
-  assignedTeam: true,
+  assignedSdr: { select: { name: true } },
+  assignedTeam: { select: { name: true } },
   reminders: {
     where: { status: { not: "Completed" } },
     orderBy: [{ dueAt: "asc" }, { id: "asc" }],
-    take: 1
+    take: 1,
+    select: { title: true, status: true }
   }
-} satisfies Prisma.SdrAssignmentInclude;
+} satisfies Prisma.SdrAssignmentSelect;
 
-type SdrAssignmentRowPayload = Prisma.SdrAssignmentGetPayload<{ include: typeof sdrAssignmentRowInclude }>;
+type SdrAssignmentRowPayload = Prisma.SdrAssignmentGetPayload<{ select: typeof sdrAssignmentRowSelect }>;
 
 const sdrActivityRowInclude = {
   account: {
@@ -168,7 +238,7 @@ const sdrActivityRowInclude = {
 
 type SdrActivityRowPayload = Prisma.ActivityGetPayload<{ include: typeof sdrActivityRowInclude }>;
 
-// Flattens one prisma SdrAssignment (with sdrAssignmentRowInclude) into the
+// Flattens one prisma SdrAssignment (with sdrAssignmentRowSelect) into the
 // merged read row consumed by the SDR queue and the assigned-contacts directory.
 export function mapSdrAssignmentRow(
   assignment: SdrAssignmentRowPayload,
@@ -306,13 +376,15 @@ export async function readFastSdrQueueModel(
   const [assignments, reminders, memberRows, completedCallsToday] = await Promise.all([
     prisma.sdrAssignment.findMany({
       where: assignmentWhere,
-      include: sdrAssignmentRowInclude,
+      select: sdrAssignmentRowSelect,
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       // Same table, same bound as the assigned book and the contacts directory.
       // It was left at a separate 2,000 while those moved, which would have made
       // /sdr/queue under-count Assigned/P1/Overdue against a cockpit showing the
       // full book — the headline metrics here are derived from this very array.
-      take: DIRECTORY_FETCH_LIMIT
+      // One past the bound, so `truncated` is a fact rather than an inference
+      // from a book that happens to land exactly on the limit.
+      take: SDR_QUEUE_FETCH_LIMIT + 1
     }),
     prisma.followUpReminder.findMany({
       where: reminderWhere,
@@ -350,7 +422,10 @@ export async function readFastSdrQueueModel(
 
   // One clock for the whole read, so every row in a response agrees.
   const nowIso = new Date().toISOString();
-  const allAssignmentRows = assignments.map((assignment) => mapSdrAssignmentRow(assignment, nowIso));
+  const truncated = assignments.length > SDR_QUEUE_FETCH_LIMIT;
+  const allAssignmentRows = (truncated ? assignments.slice(0, SDR_QUEUE_FETCH_LIMIT) : assignments).map(
+    (assignment) => mapSdrAssignmentRow(assignment, nowIso)
+  );
   const ownerPlan = ownerUserId
     ? buildSdrDailyCallPlan(allAssignmentRows, ownerUserId, completedCallsToday)
     : undefined;
@@ -445,6 +520,9 @@ export async function readFastSdrQueueModel(
           count: activeAssignments.filter((assignment) => assignment.status === "Nurture").length
         }
       ],
+      // On the fetch, not the filtered rows: this reports whether the database
+      // read was capped, not how many survived the active filter.
+      truncated,
       assignments: assignmentRows,
       reminders: reminderRows,
       recentActivity,

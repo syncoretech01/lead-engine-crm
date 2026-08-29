@@ -144,7 +144,20 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
-type ActionFn = { name: string; file: string; exported: boolean; body: string };
+type ActionFn = {
+  name: string;
+  file: string;
+  exported: boolean;
+  /**
+   * Whether this declaration is an async function in any of its forms. In a
+   * `"use server"` file that is what makes it a callable endpoint, and it is NOT
+   * the same question as "does the line start with `export async function`" —
+   * see the classifier note below.
+   */
+  isAsync: boolean;
+  line: number;
+  body: string;
+};
 
 /**
  * Every top-level function in a file, with its body.
@@ -159,29 +172,66 @@ type ActionFn = { name: string; file: string; exported: boolean; body: string };
 function topLevelFunctions(file: string): ActionFn[] {
   const absolute = path.resolve(__dirname, "../..", file);
   const lines = readFileSync(absolute, "utf8").split(/\r?\n/);
-  const starts: Array<{ name: string; exported: boolean; line: number }> = [];
+  const starts: Array<{ name: string; exported: boolean; isAsync: boolean; line: number }> = [];
   lines.forEach((line, index) => {
     // ANY top-level declaration ends the previous body, not just `function`.
     // Splitting on `function` alone let a body run into a following
     // `export const foo = async () => {}` and inherit that function's gate.
-    const match = line.match(
-      /^(export\s+)?(?:default\s+)?(?:async\s+)?(?:function|const|let|var|class)\s+(\w+)/
-    );
-    if (match) starts.push({ name: match[2], exported: Boolean(match[1]), line: index });
+    const match = line.match(/^(export\s+)?(?:default\s+)?(?:async\s+)?(function|const|let|var|class)\s+(\w+)/);
+    if (!match) return;
+    starts.push({
+      name: match[3],
+      exported: Boolean(match[1]),
+      // `async` sits before the keyword in `export async function foo`, but
+      // AFTER the `=` in `export const foo = async () => {}`. Testing only the
+      // first form is what made two thirds of the legal action syntaxes
+      // invisible to this sweep.
+      isAsync: /^(?:export\s+)?(?:default\s+)?async\s/.test(line) || /=\s*async\b/.test(line),
+      line: index
+    });
   });
   return starts.map((start, index) => ({
-    name: start.name,
+    ...start,
     file,
-    exported: start.exported,
     body: lines.slice(start.line, starts[index + 1]?.line ?? lines.length).join("\n")
   }));
 }
 
-const allActions = ACTION_FILES.flatMap(topLevelFunctions).filter(
-  // Server actions are the exported async functions; local helpers are not part
-  // of the reachable surface.
-  (fn) => fn.exported && /^export\s+async\s+function/.test(fn.body)
-);
+/**
+ * Exported lines this file's classifier does not understand.
+ *
+ * The sweep's whole value is that it cannot be quietly bypassed, so a form it
+ * has never seen must fail rather than be skipped: skipping is indistinguishable
+ * from "no such action exists", which is the failure mode one level up. Type-only
+ * exports are erased at compile time and expose nothing; a re-export alias is
+ * covered by whatever gates the function it aliases, but only if that function is
+ * declared in this same file where the sweep can actually see it.
+ */
+function unclassifiedExports(file: string): string[] {
+  const absolute = path.resolve(repoRoot, file);
+  const lines = readFileSync(absolute, "utf8").split(/\r?\n/);
+  const declared = new Map(topLevelFunctions(file).map((fn) => [fn.line, fn] as const));
+  const localNames = new Set(topLevelFunctions(file).map((fn) => fn.name));
+
+  return lines.flatMap((line, index) => {
+    if (!/^export\s/.test(line)) return [];
+    if (/^export\s+(?:type|interface)\s/.test(line)) return [];
+    if (declared.has(index)) return []; // a declaration the parser above understood
+    const alias = line.match(/^export\s*\{\s*(\w+)\s+as\s+\w+\s*\}/);
+    if (alias && localNames.has(alias[1])) return [];
+    return [`${file}:${index + 1} → ${line.trim()}`];
+  });
+}
+
+/**
+ * The callable surface: every exported async function, in any form.
+ *
+ * Was `/^export\s+async\s+function/`, which is only ONE of the three ways to
+ * declare a server action. Review demonstrated the hole by appending an ungated
+ * `export const dangerousArrowAction = async () => {…}` to app/actions.ts and
+ * watching this suite stay green.
+ */
+const allActions = ACTION_FILES.flatMap(topLevelFunctions).filter((fn) => fn.exported && fn.isAsync);
 
 /** Every exported function in the cross-module delegates: name → body. */
 const exportedDelegates: ActionFn[] = DELEGATE_MODULES.flatMap(topLevelFunctions).filter((fn) => fn.exported);
@@ -229,10 +279,24 @@ function isGated(source: string, file: string, depth = 2): boolean {
 
 describe("server action authorization sweep", () => {
   it("finds the action surface it is supposed to be guarding", () => {
-    // A refactor that moves actions out of these files must update ACTION_FILES,
-    // or this sweep silently guards a shrinking surface.
-    expect(allActions.length).toBeGreaterThan(100);
-    expect(allActions.filter((action) => action.file === "app/actions.ts").length).toBeGreaterThan(80);
+    // Tight floors, close to the real 136 / 93. Loose ones (>100 / >80) left
+    // enough slack to delete every action in app/auth/actions.ts and both
+    // waterfall services while still passing — a surface guard with 36 rows of
+    // give is not guarding the surface.
+    expect(allActions.length).toBeGreaterThanOrEqual(130);
+    expect(allActions.filter((action) => action.file === "app/actions.ts").length).toBeGreaterThanOrEqual(90);
+  });
+
+  it("understands every export in a use-server file", () => {
+    // An export form the classifier does not recognise is silently skipped, and
+    // a skipped action is indistinguishable from a gated one in the result. If
+    // this fails, teach the classifier the form — do not add it to the
+    // allowlist, which is for actions that ARE seen and ARE deliberately open.
+    const unknown = ACTION_FILES.flatMap(unclassifiedExports);
+    expect(
+      unknown,
+      "these exports are in a \"use server\" file but the sweep cannot classify them, so it is not checking them"
+    ).toEqual([]);
   });
 
   it("gates every exported action, or names it in the allowlist with a reason", () => {

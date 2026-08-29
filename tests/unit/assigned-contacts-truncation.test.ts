@@ -28,7 +28,7 @@ vi.mock("@/lib/prisma", () => ({
 // it keeps this file on the one thing it is asserting — whether a capped fetch
 // is reported as capped.
 vi.mock("@/lib/phase1/sdr-queue-read-model", () => ({
-  sdrAssignmentRowInclude: {},
+  sdrAssignmentRowSelect: {},
   mapSdrAssignmentRow: (assignment: { id: string }) => ({
     id: assignment.id,
     contactId: `contact-${assignment.id}`,
@@ -52,12 +52,26 @@ describe("assigned contacts truncation", () => {
     prismaMocks.trackedCallCount.mockResolvedValue(0);
   });
 
-  it("reports truncated when the fetch comes back at the bound", async () => {
-    prismaMocks.sdrAssignmentFindMany.mockResolvedValue(assignments(ASSIGNED_CONTACTS_FETCH_LIMIT));
+  it("reports truncated when the fetch finds more than the bound", async () => {
+    // The query asks for LIMIT + 1, so this is the shape of "there is more".
+    prismaMocks.sdrAssignmentFindMany.mockResolvedValue(assignments(ASSIGNED_CONTACTS_FETCH_LIMIT + 1));
 
     const model = await readAssignedContactsModel(session, "ws-1");
 
     expect(model?.truncated).toBe(true);
+    // The extra probe row must not reach the caller.
+    expect(model?.rows).toHaveLength(ASSIGNED_CONTACTS_FETCH_LIMIT);
+  });
+
+  it("does not cry truncation on a book that is exactly the bound", async () => {
+    // The case `>=` got wrong: every row fits, nothing is missing, and the UI
+    // would still have told the SDR their queue was cut short.
+    prismaMocks.sdrAssignmentFindMany.mockResolvedValue(assignments(ASSIGNED_CONTACTS_FETCH_LIMIT));
+
+    const model = await readAssignedContactsModel(session, "ws-1");
+
+    expect(model?.truncated).toBe(false);
+    expect(model?.rows).toHaveLength(ASSIGNED_CONTACTS_FETCH_LIMIT);
   });
 
   it("does not report truncated on a book that fits", async () => {
@@ -76,7 +90,7 @@ describe("assigned contacts truncation", () => {
 
     // Without a `take` the query is unbounded, which is the OOM this bound
     // exists to prevent — assert the argument actually reaches Prisma.
-    expect(prismaMocks.sdrAssignmentFindMany.mock.calls[0][0].take).toBe(ASSIGNED_CONTACTS_FETCH_LIMIT);
+    expect(prismaMocks.sdrAssignmentFindMany.mock.calls[0][0].take).toBe(ASSIGNED_CONTACTS_FETCH_LIMIT + 1);
   });
 
   /**
@@ -86,7 +100,7 @@ describe("assigned contacts truncation", () => {
    * would call that "not truncated" and hide exactly the case that matters.
    */
   it("stays true when the call-plan filter shrinks the rendered rows", async () => {
-    prismaMocks.sdrAssignmentFindMany.mockResolvedValue(assignments(ASSIGNED_CONTACTS_FETCH_LIMIT));
+    prismaMocks.sdrAssignmentFindMany.mockResolvedValue(assignments(ASSIGNED_CONTACTS_FETCH_LIMIT + 1));
 
     const model = await readAssignedContactsModel(session, "ws-1", { callPlan: true });
 

@@ -96,7 +96,8 @@ describe("fast CRM contacts read model", () => {
       where: { workspaceId, id: { in: scopedContactIds } },
       // Assert the constant, not a copy of its value: the bound moves when the
       // book grows, and a hardcoded number here just breaks on every change.
-      take: CRM_CONTACT_DIRECTORY_LIMIT
+      // The +1 is the probe row that turns "did we hit the bound" into a fact.
+      take: CRM_CONTACT_DIRECTORY_LIMIT + 1
     });
     expect(result?.contacts).toHaveLength(791);
     expect(result?.contacts.at(-1)?.id).toBe("contact-791");
@@ -146,10 +147,22 @@ describe("fast CRM contacts read model — truncation flag", () => {
     );
   }
 
-  it("flags truncation when the fetch comes back full", async () => {
-    mockDirectory(CRM_CONTACT_DIRECTORY_LIMIT, CRM_CONTACT_DIRECTORY_LIMIT + 500);
+  it("flags truncation when there is a row past the bound", async () => {
+    mockDirectory(CRM_CONTACT_DIRECTORY_LIMIT + 500, CRM_CONTACT_DIRECTORY_LIMIT + 500);
     const result = await readFastCrmContactsModel(session, workspaceId);
     expect(result?.truncated).toBe(true);
+    // The probe row the query fetches to detect this must not be rendered, or
+    // the table shows one more contact than the banner says it does.
+    expect(result?.contacts).toHaveLength(CRM_CONTACT_DIRECTORY_LIMIT);
+  });
+
+  it("does not flag a book that is exactly the bound", async () => {
+    // Nothing is missing here. The old `>=` comparison reported truncation and
+    // the banner read "Showing the 5,000 most recent contacts of 5,000."
+    mockDirectory(CRM_CONTACT_DIRECTORY_LIMIT, CRM_CONTACT_DIRECTORY_LIMIT);
+    const result = await readFastCrmContactsModel(session, workspaceId);
+    expect(result?.truncated).toBe(false);
+    expect(result?.contacts).toHaveLength(CRM_CONTACT_DIRECTORY_LIMIT);
   });
 
   it("does not flag truncation one row below the bound", async () => {

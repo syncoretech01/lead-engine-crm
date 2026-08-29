@@ -261,6 +261,17 @@ export default async function SdrQueuePage() {
         }
       />
 
+      {fastModel?.snapshot.truncated ? (
+        <div
+          role="status"
+          className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+        >
+          <strong>These counts are from the most recent assignments only.</strong> The book is larger than
+          this page loads, so Assigned, P1 and Overdue are undercounts — an undercounted Overdue reads as
+          being on top of the queue. Filter by owner to see a complete picture for one SDR.
+        </div>
+      ) : null}
+
       <TileGrid pageKey="sdr-queue" canCustomize={canCustomize} saved={savedLayout}>
         {metrics.map((metric, index) => (
           <TileItem key={`metric-${index}`} id={`metric-${index}`} x={index * 3} y={0} w={3} h={2} minW={2}>
