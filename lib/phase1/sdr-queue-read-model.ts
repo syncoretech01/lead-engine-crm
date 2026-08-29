@@ -423,9 +423,13 @@ export async function readFastSdrQueueModel(
   // One clock for the whole read, so every row in a response agrees.
   const nowIso = new Date().toISOString();
   const truncated = assignments.length > SDR_QUEUE_FETCH_LIMIT;
-  const allAssignmentRows = (truncated ? assignments.slice(0, SDR_QUEUE_FETCH_LIMIT) : assignments).map(
-    (assignment) => mapSdrAssignmentRow(assignment, nowIso)
-  );
+  // Hoisted, not inlined into the .map below: the probe row must be dropped for
+  // every consumer, and readRecentActivityRows further down derives its contact
+  // and account scope from this same array. Slicing only on the way into the
+  // mapper let the probe row widen that scope by one record, so the activity
+  // panel could surface an item for a contact the queue does not list.
+  const boundedAssignments = truncated ? assignments.slice(0, SDR_QUEUE_FETCH_LIMIT) : assignments;
+  const allAssignmentRows = boundedAssignments.map((assignment) => mapSdrAssignmentRow(assignment, nowIso));
   const ownerPlan = ownerUserId
     ? buildSdrDailyCallPlan(allAssignmentRows, ownerUserId, completedCallsToday)
     : undefined;
@@ -466,7 +470,7 @@ export async function readFastSdrQueueModel(
     prisma,
     workspaceId,
     ownerUserId,
-    assignments,
+    assignments: boundedAssignments,
     reminders
   });
 

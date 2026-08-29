@@ -144,17 +144,19 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
+type DeclKind = "yes" | "no" | "unknown";
+
 type ActionFn = {
   name: string;
   file: string;
   exported: boolean;
   /**
-   * Whether this declaration is an async function in any of its forms. In a
-   * `"use server"` file that is what makes it a callable endpoint, and it is NOT
-   * the same question as "does the line start with `export async function`" —
-   * see the classifier note below.
+   * Whether this declaration is an async function in any of its forms — in a
+   * `"use server"` file that is what makes it a callable endpoint. `unknown`
+   * means the classifier could not tell, which fails the suite rather than
+   * quietly excusing the declaration from the check.
    */
-  isAsync: boolean;
+  kind: DeclKind;
   line: number;
   body: string;
 };
@@ -169,10 +171,46 @@ type ActionFn = {
  * function fell inside its slice. A false "gated" is the dangerous direction for
  * this check, so the boundaries have to be right.
  */
+/**
+ * Is the declaration starting at `index` an async function, in any form?
+ *
+ * Three-valued on purpose. `export const x = async () => {}` can be wrapped so
+ * the `async` lands on the next line, and an initialiser can also be an
+ * expression whose asyncness is not visible at all (`= wrap(async () => {})`).
+ * Both of those are RECOGNISED as declarations, so neither is reported as
+ * unparseable — and if "not obviously async" silently meant "not an action",
+ * they would fall through the classifier and the unknown-form net at once,
+ * which is how the first version of this fix still let an ungated action
+ * through.
+ *
+ * So: `async` is yes, a plain arrow or `function` is no, and anything else an
+ * exported declaration might be is `unknown` — which fails the suite rather
+ * than being skipped. The look-ahead is capped so a malformed file cannot walk
+ * the whole source.
+ */
+function declaresAsync(lines: string[], index: number): "yes" | "no" | "unknown" {
+  const first = lines[index];
+  if (/^(?:export\s+)?(?:default\s+)?async\s/.test(first)) return "yes";
+  if (/^(?:export\s+)?(?:default\s+)?function\b/.test(first)) return "no";
+  if (!/^(?:export\s+)?(?:default\s+)?(?:const|let|var)\s/.test(first)) return "no";
+
+  let text = first;
+  for (let ahead = 1; ahead <= 3 && !/=>|\bfunction\b|\basync\b/.test(text); ahead += 1) {
+    text += ` ${lines[index + ahead] ?? ""}`;
+  }
+  if (!text.includes("=")) return "unknown";
+  const initialiser = text.slice(text.indexOf("=") + 1);
+  if (/^\s*async\b/.test(initialiser)) return "yes";
+  // A sync function, or a plain value: neither is a callable server action.
+  if (/^\s*(?:\(|function\b|[\w$]+\s*=>)/.test(initialiser)) return "no";
+  if (/^\s*(?:["'`]|\d|\{|\[|new\s|true\b|false\b|null\b)/.test(initialiser)) return "no";
+  return "unknown";
+}
+
 function topLevelFunctions(file: string): ActionFn[] {
   const absolute = path.resolve(__dirname, "../..", file);
   const lines = readFileSync(absolute, "utf8").split(/\r?\n/);
-  const starts: Array<{ name: string; exported: boolean; isAsync: boolean; line: number }> = [];
+  const starts: Array<{ name: string; exported: boolean; kind: DeclKind; line: number }> = [];
   lines.forEach((line, index) => {
     // ANY top-level declaration ends the previous body, not just `function`.
     // Splitting on `function` alone let a body run into a following
@@ -186,7 +224,12 @@ function topLevelFunctions(file: string): ActionFn[] {
       // AFTER the `=` in `export const foo = async () => {}`. Testing only the
       // first form is what made two thirds of the legal action syntaxes
       // invisible to this sweep.
-      isAsync: /^(?:export\s+)?(?:default\s+)?async\s/.test(line) || /=\s*async\b/.test(line),
+      //
+      // The initialiser can also be wrapped onto the next line, which is the
+      // form that slipped through the first fix: the declaration was RECOGNISED
+      // (so it was not reported as unclassifiable) but read as non-async (so it
+      // was not checked either) — skipped by both nets at once.
+      kind: declaresAsync(lines, index),
       line: index
     });
   });
@@ -216,7 +259,11 @@ function unclassifiedExports(file: string): string[] {
   return lines.flatMap((line, index) => {
     if (!/^export\s/.test(line)) return [];
     if (/^export\s+(?:type|interface)\s/.test(line)) return [];
-    if (declared.has(index)) return []; // a declaration the parser above understood
+    const declaration = declared.get(index);
+    // Recognised as a declaration AND classified: nothing to report. Recognised
+    // but unclassifiable falls through to the report below, so it cannot be
+    // silently skipped by both this net and the action filter.
+    if (declaration && !(declaration.exported && declaration.kind === "unknown")) return [];
     const alias = line.match(/^export\s*\{\s*(\w+)\s+as\s+\w+\s*\}/);
     if (alias && localNames.has(alias[1])) return [];
     return [`${file}:${index + 1} → ${line.trim()}`];
@@ -231,7 +278,7 @@ function unclassifiedExports(file: string): string[] {
  * `export const dangerousArrowAction = async () => {…}` to app/actions.ts and
  * watching this suite stay green.
  */
-const allActions = ACTION_FILES.flatMap(topLevelFunctions).filter((fn) => fn.exported && fn.isAsync);
+const allActions = ACTION_FILES.flatMap(topLevelFunctions).filter((fn) => fn.exported && fn.kind === "yes");
 
 /** Every exported function in the cross-module delegates: name → body. */
 const exportedDelegates: ActionFn[] = DELEGATE_MODULES.flatMap(topLevelFunctions).filter((fn) => fn.exported);

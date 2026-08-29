@@ -41,6 +41,12 @@ export async function readKeyAccountFields(
   const values = await prisma.customFieldValue.findMany({
     where: { workspaceId, objectId: { in: ids } },
     select: { objectId: true, customFieldId: true, value: true },
+    // Ordered because `take` without one is a nondeterministic LIMIT in
+    // Postgres. The uniqueness argument above says the bound should never bite,
+    // but CustomFieldValue.workspaceId and CustomField.workspaceId are separate
+    // columns with nothing tying them, so if it ever does the dropped rows would
+    // otherwise be arbitrary — a card that renders differently on each load.
+    orderBy: [{ objectId: "asc" }, { customFieldId: "asc" }],
     take: ids.length * fields.length
   });
 

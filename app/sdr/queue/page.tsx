@@ -268,7 +268,7 @@ export default async function SdrQueuePage() {
         >
           <strong>These counts are from the most recent assignments only.</strong> The book is larger than
           this page loads, so Assigned, P1 and Overdue are undercounts — an undercounted Overdue reads as
-          being on top of the queue. Filter by owner to see a complete picture for one SDR.
+          being on top of the queue. The manager dashboard breaks the same work down per SDR.
         </div>
       ) : null}
 

@@ -115,9 +115,9 @@ export default async function ContactsPage({
             ) : null}
             {assignmentsTruncated ? (
               <>
-                {truncated ? " " : null}
-                Assignment details are also incomplete — the oldest assignments are not loaded, so some
-                contacts show no owner or last touch in their preview.
+                {truncated ? " Assignment details are also incomplete" : "Assignment details are incomplete"} —
+                the oldest assignments are not loaded, so some contacts show no owner or last touch in their
+                preview.
               </>
             ) : null}
           </div>
