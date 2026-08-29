@@ -2,47 +2,46 @@ import { describe, expect, it } from "vitest";
 
 import { CRM_CONTACT_DIRECTORY_LIMIT } from "@/lib/phase1/crm-contacts-read-model";
 import { ASSIGNED_CONTACTS_FETCH_LIMIT } from "@/lib/phase1/assigned-contacts-read-model";
+import { DIRECTORY_FETCH_LIMIT } from "@/lib/phase1/directory-bounds";
 
 /**
- * The contacts directory and the assigned book fetch a bounded slice and let the
- * client table filter, sort and page it. The bound itself is survivable; the bug
- * is a bound that is SILENT.
+ * The bound itself — the behaviour of the `truncated` flag is asserted against
+ * the real read model in crm-contacts-read-model.test.ts, not re-implemented
+ * here. (An earlier version of this file defined its own `fetched >= bound`
+ * lambda and asserted against that, which meant reverting the read model to the
+ * buggy comparison left every test green.)
  *
- * Both lists are ordered newest-first, so what falls off the end is the oldest —
- * the established book an SDR is actively working. At 2,000 the live workspace
- * (2,116 contacts) was already dropping rows with nothing on screen to say so,
- * which is the same shape as the earlier "Sam's leads invisible" incident.
- *
- * These assertions pin the two properties that keep it honest: the bound clears
- * the real data by a wide margin, and `truncated` is derived from the BOUND
- * rather than from a comparison that an SDR-scoped view would trip.
+ * The three read models that list the same book page CLIENT-side, so each fetches
+ * a bounded slice and ships all of it. The bound is therefore a memory ceiling on
+ * a 1.8 GB box, and the risk runs in both directions: too low silently drops the
+ * oldest rows, too high OOMs the instance. These pin the invariants that keep it
+ * defensible.
  */
-describe("directory fetch bounds", () => {
-  it("clears the live workspace by a wide margin", () => {
-    const liveWorkspaceContacts = 2_116;
-    expect(CRM_CONTACT_DIRECTORY_LIMIT).toBeGreaterThan(liveWorkspaceContacts * 10);
-    expect(ASSIGNED_CONTACTS_FETCH_LIMIT).toBeGreaterThan(liveWorkspaceContacts * 10);
+describe("directory fetch bound", () => {
+  it("is one number shared by every model that lists the book", () => {
+    // Three surfaces render the same assignments and contacts. Separate bounds
+    // meant a contact visible in one and missing from another, and the SDR
+    // queue's headline metrics are derived from its own slice.
+    expect(CRM_CONTACT_DIRECTORY_LIMIT).toBe(DIRECTORY_FETCH_LIMIT);
+    expect(ASSIGNED_CONTACTS_FETCH_LIMIT).toBe(DIRECTORY_FETCH_LIMIT);
   });
 
-  it("keeps the two directories on the same bound", () => {
-    // They render the same book from different angles; different bounds would
-    // mean a contact visible in one and missing from the other.
-    expect(ASSIGNED_CONTACTS_FETCH_LIMIT).toBe(CRM_CONTACT_DIRECTORY_LIMIT);
+  it("clears the live workspace with headroom", () => {
+    // 2,116 contacts as of the tattoo import — the number that made the old
+    // 2,000 bound start dropping rows.
+    expect(DIRECTORY_FETCH_LIMIT).toBeGreaterThan(2_116 * 2);
   });
 
-  // Mirrors the read models' own expression. Comparing fetched-vs-total instead
-  // would report truncation for every SDR-scoped session, since an SDR
-  // legitimately sees a subset of the workspace.
-  const isTruncated = (fetched: number, bound: number) => fetched >= bound;
-
-  it("flags truncation only when the fetch actually hit the bound", () => {
-    expect(isTruncated(CRM_CONTACT_DIRECTORY_LIMIT, CRM_CONTACT_DIRECTORY_LIMIT)).toBe(true);
-    expect(isTruncated(CRM_CONTACT_DIRECTORY_LIMIT - 1, CRM_CONTACT_DIRECTORY_LIMIT)).toBe(false);
-    expect(isTruncated(0, CRM_CONTACT_DIRECTORY_LIMIT)).toBe(false);
-  });
-
-  it("does not flag an SDR-scoped view that legitimately sees fewer rows", () => {
-    // 36 assigned contacts out of a 2,116-contact workspace is not truncation.
-    expect(isTruncated(36, CRM_CONTACT_DIRECTORY_LIMIT)).toBe(false);
+  it("stays inside what the deployed box can hold", () => {
+    // Measured retained heap at 25,000 rows was ~592 MB across the contact and
+    // assignment object graphs, on an instance whose web process already sits
+    // near 800 MB of 1.8 GB after an import. Roughly 24 KB of retained heap per
+    // row across both models, so the bound has to stay well under the point
+    // where a single render exhausts the box. Raising it past this needs a
+    // smaller per-row payload or real server-side pagination, not a bigger
+    // number — hence a test, not just a comment.
+    const measuredRetainedBytesPerRow = 24_000;
+    const budgetBytes = 250 * 1024 * 1024;
+    expect(DIRECTORY_FETCH_LIMIT * measuredRetainedBytesPerRow).toBeLessThan(budgetBytes);
   });
 });

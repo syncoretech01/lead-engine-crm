@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { DIRECTORY_FETCH_LIMIT } from "@/lib/phase1/directory-bounds";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type { LeadGrade, LeadStatus, Priority, Session } from "@/lib/phase1/types";
 
@@ -52,16 +53,11 @@ export type CrmContactsReadModel = {
 // contacts rather than the lowest-scoring ones — the established book an SDR is
 // actively working.
 //
-// Raised from 2,000 once the live workspace crossed it (2,116 contacts, so the
-// directory was already dropping ~116 with nothing on screen to say so). The
-// table filters, sorts and pages this set client-side and handles a few thousand
-// rows comfortably; 25,000 buys years at the current import cadence.
-//
-// This is a bound, not pagination. The real fix is server-side pagination, which
-// means making the shared DataTable (6 tables) controlled — its own piece of
-// work. Until then `truncated` is returned and RENDERED, so the condition can
-// never again be invisible.
-export const CRM_CONTACT_DIRECTORY_LIMIT = 25_000;
+// The shared bound (see lib/phase1/directory-bounds.ts), re-exported under the
+// name callers already use. It moved from 2,000 once the live workspace crossed
+// it: 2,116 contacts meant the directory was already dropping the ~116 OLDEST
+// with nothing on screen to say so.
+export const CRM_CONTACT_DIRECTORY_LIMIT = DIRECTORY_FETCH_LIMIT;
 
 export async function readFastCrmContactsModel(
   session: Session,
@@ -80,7 +76,31 @@ export async function readFastCrmContactsModel(
   const [contacts, taskRows, opportunityRows, activityRows, openTaskCount, totalContacts] = await Promise.all([
     prisma.contact.findMany({
       where: contactWhere,
-      include: { company: true },
+      // Explicit select, not `include: { company: true }`: that pulled every
+      // scalar on both models, including the sourceLineage provenance JSON on
+      // each, which the mapper below never reads — roughly a fifth of the
+      // fetched bytes, parsed into objects and then discarded. Matches how
+      // crm-overview-read-model already queries the same two tables.
+      select: {
+        id: true,
+        fullName: true,
+        title: true,
+        email: true,
+        phone: true,
+        companyId: true,
+        grade: true,
+        score: true,
+        priority: true,
+        status: true,
+        segment: true,
+        owner: true,
+        verification: true,
+        enrichmentCoverage: true,
+        confidence: true,
+        isSuppressed: true,
+        notes: true,
+        company: { select: { name: true, rootDomain: true } }
+      },
       // Newest first. Score-first buried a freshly imported list at the bottom
       // whenever it graded below the existing book, which is exactly when an SDR
       // most needs to find it. Score is still a sortable column in the table.

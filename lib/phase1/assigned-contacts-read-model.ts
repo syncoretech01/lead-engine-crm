@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { DIRECTORY_FETCH_LIMIT } from "@/lib/phase1/directory-bounds";
 import {
   mapSdrAssignmentRow,
   sdrAssignmentRowInclude,
@@ -15,19 +16,23 @@ export type AssignedContactsReadModel = {
   rows: SdrQueueAssignmentReadRow[];
   dailyCallPlan?: Omit<SdrDailyCallPlan<SdrQueueAssignmentReadRow>, "assignments">;
   /**
-   * The fetch hit its bound, so `rows` is a prefix of the book. Returned so the
-   * caller can say so — a silently short book is how an SDR's older assignments
-   * went missing before.
+   * The fetch hit its bound, so `rows` is a prefix of the book — a silently
+   * short book is how an SDR's older assignments went missing before. Rendered
+   * as a notice in the /sdr/focus queue rail; asserted in
+   * tests/unit/directory-truncation.test.ts, because a flag nobody reads is
+   * indistinguishable from no flag at all.
+   *
+   * Computed BEFORE the daily-call-plan filter, so it reports whether the
+   * database fetch was capped, not how many rows survived the filter.
    */
   truncated: boolean;
   /** SDR/Manager roster for the owner filter (empty for an SDR's own view). */
   roster: Array<{ id: string; name: string }>;
 };
 
-// Fetch bound for the assigned book. Raised with the contacts directory: the
-// cockpit table pages this set client-side, and the live workspace already holds
-// 2,116 assignments. `truncated` above is what makes the bound honest.
-export const ASSIGNED_CONTACTS_FETCH_LIMIT = 25_000;
+// The shared bound (see lib/phase1/directory-bounds.ts). Re-exported under the
+// name callers already use.
+export const ASSIGNED_CONTACTS_FETCH_LIMIT = DIRECTORY_FETCH_LIMIT;
 
 // Prisma-only fast path for the "my assigned contacts" directory: the current
 // SDR's assignments (or, for a Manager/Admin, all — optionally narrowed to one

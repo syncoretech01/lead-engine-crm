@@ -76,7 +76,7 @@ describe("fast CRM contacts read model", () => {
     );
     prismaMocks.contactCount.mockResolvedValue(contactRows.length);
     prismaMocks.contactFindMany.mockImplementation(async (args) => {
-      if (args.include?.company) {
+      if (args.select?.company) {
         return contactRows.slice(0, args.take);
       }
       return [];
@@ -89,7 +89,7 @@ describe("fast CRM contacts read model", () => {
 
     const result = await readFastCrmContactsModel(session, workspaceId);
     const directoryQuery = prismaMocks.contactFindMany.mock.calls.find(
-      ([args]) => args.include?.company
+      ([args]) => args.select?.company
     )?.[0];
 
     expect(directoryQuery).toMatchObject({
@@ -101,5 +101,70 @@ describe("fast CRM contacts read model", () => {
     expect(result?.contacts).toHaveLength(791);
     expect(result?.contacts.at(-1)?.id).toBe("contact-791");
     expect(result?.totalContacts).toBe(791);
+  });
+});
+
+/**
+ * `truncated` asserted against the READ MODEL, not against a copy of its
+ * expression. A previous version of this coverage re-implemented
+ * `fetched >= bound` inside the test file, which meant reverting the read model
+ * to the buggy `contacts.length < totalContacts` — the very mistake the flag
+ * exists to avoid, since it fires for every SDR-scoped session — left the suite
+ * green.
+ */
+describe("fast CRM contacts read model — truncation flag", () => {
+  const workspaceId = "workspace-acme";
+  const session = { user: { id: "user-admin" }, permissions: ["view_all_records"] } as unknown as Session;
+
+  function contactRows(count: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      id: `contact-${index + 1}`,
+      fullName: `Contact ${index + 1}`,
+      title: null,
+      email: null,
+      phone: null,
+      companyId: null,
+      company: null,
+      grade: "A",
+      score: 10,
+      priority: "P3",
+      status: "Assigned",
+      segment: null,
+      owner: null,
+      verification: null,
+      enrichmentCoverage: null,
+      confidence: 50,
+      isSuppressed: false,
+      notes: null
+    }));
+  }
+
+  function mockDirectory(fetched: number, total: number) {
+    prismaMocks.contactCount.mockResolvedValue(total);
+    prismaMocks.contactFindMany.mockImplementation(async (args) =>
+      args.select?.company ? contactRows(Math.min(fetched, args.take)) : []
+    );
+  }
+
+  it("flags truncation when the fetch comes back full", async () => {
+    mockDirectory(CRM_CONTACT_DIRECTORY_LIMIT, CRM_CONTACT_DIRECTORY_LIMIT + 500);
+    const result = await readFastCrmContactsModel(session, workspaceId);
+    expect(result?.truncated).toBe(true);
+  });
+
+  it("does not flag truncation one row below the bound", async () => {
+    mockDirectory(CRM_CONTACT_DIRECTORY_LIMIT - 1, CRM_CONTACT_DIRECTORY_LIMIT - 1);
+    const result = await readFastCrmContactsModel(session, workspaceId);
+    expect(result?.truncated).toBe(false);
+  });
+
+  // The regression the flag must not have: a scoped session sees a subset of the
+  // workspace, which is normal and is NOT truncation.
+  it("does not flag a scoped view that legitimately returns fewer rows than the workspace holds", async () => {
+    mockDirectory(36, 2_116);
+    const result = await readFastCrmContactsModel(session, workspaceId);
+    expect(result?.contacts).toHaveLength(36);
+    expect(result?.totalContacts).toBe(2_116);
+    expect(result?.truncated).toBe(false);
   });
 });

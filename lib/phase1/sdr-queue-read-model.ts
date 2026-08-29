@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { DIRECTORY_FETCH_LIMIT } from "@/lib/phase1/directory-bounds";
 import { isUtcToday } from "@/lib/phase1/date-utils";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import { activityTypeValue } from "@/lib/phase1/fast-read-utils";
@@ -307,7 +308,11 @@ export async function readFastSdrQueueModel(
       where: assignmentWhere,
       include: sdrAssignmentRowInclude,
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      take: 2000
+      // Same table, same bound as the assigned book and the contacts directory.
+      // It was left at a separate 2,000 while those moved, which would have made
+      // /sdr/queue under-count Assigned/P1/Overdue against a cockpit showing the
+      // full book — the headline metrics here are derived from this very array.
+      take: DIRECTORY_FETCH_LIMIT
     }),
     prisma.followUpReminder.findMany({
       where: reminderWhere,

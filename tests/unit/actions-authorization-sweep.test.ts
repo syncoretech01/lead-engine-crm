@@ -1,6 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+
+const repoRoot = path.resolve(__dirname, "../..");
 
 /**
  * Every server action must be authorized — enforced structurally, not by review.
@@ -23,13 +25,39 @@ import { describe, expect, it } from "vitest";
  * decision somebody made on purpose, not an omission nobody noticed.
  */
 
-const ACTION_FILES = [
-  "app/actions.ts",
-  "app/auth/actions.ts",
-  "app/settings/actions.ts",
-  "app/approvals/actions.ts",
-  "app/enrichment/live-actions.ts"
-];
+/**
+ * Discovered, not listed.
+ *
+ * A hand-maintained list guards a surface that only ever shrinks: it catches a
+ * file being emptied, but a NEWLY created "use server" module is invisible to it
+ * forever — which is the exact failure this whole sweep exists to prevent, one
+ * level up. Every file carrying the directive exposes each of its exported async
+ * functions as a callable endpoint, so the directive is the definition of the
+ * surface and the sweep reads it directly.
+ */
+function serverActionFiles(): string[] {
+  const roots = ["app", "lib", "components"];
+  const found: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(full);
+      } else if (/\.tsx?$/.test(entry.name)) {
+        // The directive must be the first statement, so only the head matters.
+        const head = readFileSync(full, "utf8").slice(0, 200);
+        if (/^\s*(?:\/\*[\s\S]*?\*\/\s*)?["']use server["']/.test(head)) {
+          found.push(path.relative(repoRoot, full).split(path.sep).join("/"));
+        }
+      }
+    }
+  };
+  for (const root of roots) walk(path.join(repoRoot, root));
+  return found.sort();
+}
+
+const ACTION_FILES = serverActionFiles();
 
 /**
  * Call shapes that constitute a gate.
@@ -42,6 +70,11 @@ const ACTION_FILES = [
 const GATE_PATTERNS = [
   /\bassertPermission\s*\(/,
   /\bgetWorkspaceSessionContext\s*\(\s*["']/,
+  // The blob-store twin of the above (store.ts:270): it redirects away rather
+  // than throwing, which inside a server action means a NEXT_REDIRECT that
+  // aborts before any write. Only counts WITH a permission argument — called
+  // bare it resolves a session and authorizes nothing.
+  /\bgetWorkspaceContext\s*\(\s*["']/,
   /\bassertAssignedContactForOutreach\s*\(/,
   /\bresolveCrmMutationUserId\s*\(/,
   /\bassertCrmMutationAllowed\s*\(/,
@@ -64,7 +97,11 @@ const DELEGATE_MODULES = [
   "lib/phase1/provider-connections.ts",
   "lib/phase1/provider-connection-service.ts",
   "lib/phase1/tile-layouts.ts",
-  "lib/growth/approval-orchestration.ts"
+  "lib/growth/approval-orchestration.ts",
+  // The provider job actions are updateState wrappers whose callback is the
+  // gate: createProviderExecutionJob delegates to createProviderJob, which
+  // asserts manage_workspace inside the transaction (provider-jobs.ts:62).
+  "lib/phase1/provider-jobs.ts"
 ];
 
 /** Gate shapes that only appear in delegates, not in action bodies. */
@@ -124,7 +161,12 @@ function topLevelFunctions(file: string): ActionFn[] {
   const lines = readFileSync(absolute, "utf8").split(/\r?\n/);
   const starts: Array<{ name: string; exported: boolean; line: number }> = [];
   lines.forEach((line, index) => {
-    const match = line.match(/^(export\s+)?(?:async\s+)?function\s+(\w+)/);
+    // ANY top-level declaration ends the previous body, not just `function`.
+    // Splitting on `function` alone let a body run into a following
+    // `export const foo = async () => {}` and inherit that function's gate.
+    const match = line.match(
+      /^(export\s+)?(?:default\s+)?(?:async\s+)?(?:function|const|let|var|class)\s+(\w+)/
+    );
     if (match) starts.push({ name: match[2], exported: Boolean(match[1]), line: index });
   });
   return starts.map((start, index) => ({
@@ -141,12 +183,27 @@ const allActions = ACTION_FILES.flatMap(topLevelFunctions).filter(
   (fn) => fn.exported && /^export\s+async\s+function/.test(fn.body)
 );
 
-/** name → body, for every exported function in the delegate modules. */
-const delegateBodies = new Map<string, string>(
-  DELEGATE_MODULES.flatMap(topLevelFunctions)
-    .filter((fn) => fn.exported)
-    .map((fn) => [fn.name, fn.body] as const)
-);
+/** Every exported function in the cross-module delegates: name → body. */
+const exportedDelegates: ActionFn[] = DELEGATE_MODULES.flatMap(topLevelFunctions).filter((fn) => fn.exported);
+
+/**
+ * Same-file helpers, resolved per file — never globally.
+ *
+ * Plenty of actions are a two-line dispatcher over a local helper that holds the
+ * gate: searchCrmRecordsAction branches into `searchViaPrisma`, and the five
+ * waterfall template actions all call `findEditableTemplate`, which is not even
+ * exported. Treating those as ungated would mean five allowlist entries whose
+ * stated reason is "the sweep cannot see one function call", which devalues
+ * every real entry next to them.
+ *
+ * Keyed by file because a global name index would let a gated `findTemplate` in
+ * one module vouch for an ungated same-named helper in another — the sweep would
+ * report a gate that does not exist on that path. Local means local.
+ */
+const localFunctions = new Map<string, ActionFn[]>();
+for (const file of [...ACTION_FILES, ...DELEGATE_MODULES]) {
+  localFunctions.set(file, topLevelFunctions(file));
+}
 
 /**
  * Gated directly, or through the delegate chain.
@@ -155,14 +212,17 @@ const delegateBodies = new Map<string, string>(
  * `saveProviderConnection` (a thin updateState wrapper), which calls
  * `saveProviderConnectionConfig`, which is where assertPermission lives.
  */
-function isGated(source: string, depth = 2): boolean {
+function isGated(source: string, file: string, depth = 2): boolean {
   const code = stripComments(source);
   if (DELEGATE_GATE_PATTERNS.some((pattern) => pattern.test(code))) return true;
   if (depth <= 0) return false;
-  for (const [name, body] of delegateBodies) {
+
+  const candidates = [...(localFunctions.get(file) ?? []), ...exportedDelegates];
+  for (const candidate of candidates) {
+    if (candidate.body === source) continue; // don't recurse into itself
     // Word-boundary call match, so `foo(` does not match `notFoo(`.
-    if (!new RegExp(`\\b${name}\\s*\\(`).test(code)) continue;
-    if (isGated(body, depth - 1)) return true;
+    if (!new RegExp(`\\b${candidate.name}\\s*\\(`).test(code)) continue;
+    if (isGated(candidate.body, candidate.file, depth - 1)) return true;
   }
   return false;
 }
@@ -177,7 +237,7 @@ describe("server action authorization sweep", () => {
 
   it("gates every exported action, or names it in the allowlist with a reason", () => {
     const ungated = allActions
-      .filter((action) => !isGated(action.body))
+      .filter((action) => !isGated(action.body, action.file))
       .filter((action) => !(action.name in ALLOWED_UNGATED))
       .map((action) => `${action.file} → ${action.name}`);
 
@@ -197,11 +257,34 @@ describe("server action authorization sweep", () => {
     // allowlist, so the list keeps meaning "deliberately ungated".
     const nowGated = Object.keys(ALLOWED_UNGATED).filter((name) => {
       const action = allActions.find((candidate) => candidate.name === name);
-      return action ? isGated(action.body) : false;
+      return action ? isGated(action.body, action.file) : false;
     });
     expect(nowGated, "these are allowlisted but now gate themselves — remove them from ALLOWED_UNGATED").toEqual(
       []
     );
+  });
+
+  /**
+   * The sweep is only worth its green tick if it can still go red, and the
+   * dangerous direction is a FALSE gate — an ungated action reported as safe.
+   * Both cases below produced exactly that during development.
+   */
+  it("does not accept a gate that is only mentioned in a comment", () => {
+    expect(isGated("// assertPermission(session, \"manage_crm\");\nreturn 1;", "app/actions.ts")).toBe(false);
+    expect(isGated("/* assertPermission(session, \"manage_crm\"); */\nreturn 1;", "app/actions.ts")).toBe(false);
+  });
+
+  it("resolves local helpers only within their own file", () => {
+    // findEditableTemplate is a private helper that asserts manage_waterfalls,
+    // and the five template actions rely on it — so from inside its own file a
+    // call to it IS a gate.
+    const call = "findEditableTemplate(state, session, templateId);";
+    expect(isGated(call, "lib/phase1/waterfall-template-service.ts")).toBe(true);
+
+    // ...and from anywhere else it is not. A global name index would let this
+    // helper vouch for an identically named, ungated helper in another module,
+    // which is the false-gate this scoping exists to prevent.
+    expect(isGated(call, "app/actions.ts")).toBe(false);
   });
 
   it("requires a written reason for every exception", () => {

@@ -87,7 +87,8 @@ export function FocusWorkspace({
   callerLabel = null,
   lineBlockReason = null,
   autoStart = false,
-  dailyCallPlan
+  dailyCallPlan,
+  queueTruncated = false
 }: {
   leads: FocusLead[];
   initialLeadId?: string;
@@ -95,6 +96,13 @@ export function FocusWorkspace({
   callerLabel?: string | null;
   lineBlockReason?: string | null;
   autoStart?: boolean;
+  /**
+   * The assigned-book fetch hit its bound, so the queue is a prefix of this
+   * SDR's assignments. Shown rather than swallowed: the ordering is
+   * newest-assigned first, so what is missing is the OLDEST work — the part an
+   * SDR is least likely to notice is gone and most likely to be overdue.
+   */
+  queueTruncated?: boolean;
   dailyCallPlan?: {
     target: number;
     completedToday: number;
@@ -288,6 +296,14 @@ export function FocusWorkspace({
       {/* ───────────── Queue rail ───────────── */}
       <aside className="flex min-h-0 w-[300px] shrink-0 flex-col overflow-hidden border-r border-co-border bg-co-surface [@media(max-width:1380px)]:w-[264px]">
         <div className="flex flex-col gap-2 border-b border-co-border p-3">
+          {queueTruncated ? (
+            <div
+              role="status"
+              className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+            >
+              Showing your most recent assignments only — older ones are not in this queue.
+            </div>
+          ) : null}
           {dailyCallPlan ? (
             <div className="flex items-center justify-between rounded-md border border-co-border bg-co-sunken-2 px-2.5 py-2 text-[11px]">
               <span className="font-extrabold text-co-ink">
