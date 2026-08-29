@@ -231,11 +231,15 @@ export async function decideApproval(
     }
 
     // Expiry binds EVERY approval type, and it binds here at the repository so no
-    // caller can route around it (rule 5). An expiresAt is set precisely on the
-    // approvals that gate spend — PROVIDER_RUN, ENRICHMENT_RUN, PAID_VERIFICATION —
-    // where the whole point is that a stale cost estimate must not stay actionable;
-    // it was previously checked only on the NICHE_TEST path in the orchestrator,
-    // which is the one type that does NOT gate a paid call.
+    // caller can route around it (rule 5). It was previously checked only on the
+    // orchestrator's NICHE_TEST path — the one type that gates no paid call.
+    //
+    // Forward defence: nothing sets expiresAt today. The only createApproval call
+    // site is the niche-brief repository, which passes none, so this is inert on
+    // current data. It starts mattering when CRM-2/CRM-4 raise the approvals that
+    // DO gate spend — PROVIDER_RUN, ENRICHMENT_RUN, PAID_VERIFICATION — where the
+    // whole point of a deadline is that a stale cost estimate stops being
+    // actionable.
     //
     // Declining is deliberately still allowed above: expiry must not strand a row
     // as permanently undecidable.

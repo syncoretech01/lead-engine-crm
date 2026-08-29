@@ -487,3 +487,80 @@ describe("decideApproval — expiry", () => {
     ).rejects.toThrow(/already expired/);
   });
 });
+
+/**
+ * Expiry crossing the two-person rule. The first approver beats the deadline and
+ * the approval holds at `pending` with `firstApprovedBy` recorded; the second
+ * arrives after it. The deadline has to win — the second approval is the one that
+ * actually authorises the spend, and by then the estimate is stale.
+ */
+describe("decideApproval — expiry across the two-person rule", () => {
+  const T2_LOCAL = 50_000;
+  const deadline = new Date(Date.now() + 60 * 60_000);
+
+  it("holds the first approval, then refuses the second one placed after expiry", async () => {
+    const db = fakeDb({ t2: T2_LOCAL });
+    const row = await createApproval(
+      {
+        workspaceId: WS,
+        payload: payloadCosting(T2_LOCAL),
+        requestedBy: "usr_1",
+        idempotencyKey: "t2-expiry-1",
+        expiresAt: deadline
+      },
+      db as never
+    );
+
+    const first = await decideApproval(
+      { workspaceId: WS, approvalId: row.id, decision: "approve", actorId: "usr_2" },
+      db as never
+    );
+    expect(first.outcome).toBe("awaiting_second_approver");
+
+    const second = await decideApproval(
+      {
+        workspaceId: WS,
+        approvalId: row.id,
+        decision: "approve",
+        actorId: "usr_3",
+        now: new Date(deadline.getTime() + 1000)
+      },
+      db as never
+    );
+    expect(second.outcome).toBe("expired");
+    // Still pending, still holding the first approver — not silently approved.
+    expect(second.outcome === "expired" && second.approval.status).toBe("pending");
+    expect(second.outcome === "expired" && second.approval.decidedBy).toBeNull();
+    expect(second.outcome === "expired" && second.approval.firstApprovedBy).toBe("usr_2");
+  });
+
+  it("lets the second approver decline after expiry, so the row is not stranded", async () => {
+    const db = fakeDb({ t2: T2_LOCAL });
+    const row = await createApproval(
+      {
+        workspaceId: WS,
+        payload: payloadCosting(T2_LOCAL),
+        requestedBy: "usr_1",
+        idempotencyKey: "t2-expiry-2",
+        expiresAt: deadline
+      },
+      db as never
+    );
+    await decideApproval(
+      { workspaceId: WS, approvalId: row.id, decision: "approve", actorId: "usr_2" },
+      db as never
+    );
+
+    const declined = await decideApproval(
+      {
+        workspaceId: WS,
+        approvalId: row.id,
+        decision: "decline",
+        actorId: "usr_3",
+        now: new Date(deadline.getTime() + 1000)
+      },
+      db as never
+    );
+    expect(declined.outcome === "decided" && declined.approval.status).toBe("declined");
+  });
+});

@@ -5,7 +5,7 @@ An MVP scaffold for the lead acquisition engine and Salesforce-style CRM describ
 ## What is included
 
 - Next.js + TypeScript app shell
-- Locked production architecture decisions in `docs/PRODUCTION_ARCHITECTURE.md`
+- Deployed architecture in [`docs/AWS_MIGRATION.md`](docs/AWS_MIGRATION.md); scope and the golden rules in [`CLAUDE.md`](CLAUDE.md)
 - Operational command center
 - Prisma/PostgreSQL persistence: an AppState snapshot plus a normalized-table projection sync
 - Demo workspace, users, roles, RBAC checks, and audit logs
@@ -70,7 +70,7 @@ npm run prisma:migrate:deploy
 
 ## Production architecture direction
 
-Production runs on AWS: one EC2 instance behind Caddy plus RDS PostgreSQL (`docs/AWS_MIGRATION.md`, `deploy/aws/`). Telephony/SMS is RingCentral and transactional email is Amazon SES, both live. Cold outbound is owned by Mailshake, not this repo (`CLAUDE.md` anti-scope). Background jobs run in an in-process worker, not Redis (`docs/BACKGROUND_JOBS.md`).
+Production runs on AWS: one EC2 instance behind Caddy plus RDS PostgreSQL (`docs/AWS_MIGRATION.md`, `deploy/aws/`). Telephony/SMS is RingCentral and transactional email is Amazon SES, both live. Cold outbound is owned by Mailshake, not this repo (`CLAUDE.md` anti-scope). Background jobs run in a separate `syncore-worker` systemd unit on the same instance — interval CLI ticks, not a Redis-backed queue (`docs/BACKGROUND_JOBS.md`).
 
 `docs/PRODUCTION_ARCHITECTURE.md` predates the AWS migration and names components this repo does not use; `CLAUDE.md` and `docs/AWS_MIGRATION.md` are authoritative where they disagree.
 

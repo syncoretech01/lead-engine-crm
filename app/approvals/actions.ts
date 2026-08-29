@@ -60,8 +60,10 @@ export async function decideApprovalAction(
       return {
         ok: false,
         error:
-          "This approval has expired — the estimate it was raised on is stale. " +
-          "Edit it to create a revision with current numbers, or decline it."
+          "This approval has expired — the estimate it was raised on is stale, so it " +
+          "can no longer be approved. Decline it and raise a new one with current " +
+          "numbers: editing is refused past expiry too, and a revision would inherit " +
+          "the same deadline."
       };
 
     case "awaiting_second_approver":

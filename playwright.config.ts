@@ -34,7 +34,16 @@ export default defineConfig({
       // Everything built from CRM-1 onward. Failures fail the build.
       name: "blocking",
       testDir: "./tests/e2e",
-      testIgnore: "**/legacy/**",
+      // Anchored to the ONE legacy directory, as a RegExp on purpose. A string
+      // pattern here would be both unanchored (Playwright prefixes `**/`, so a
+      // nested tests/e2e/campaigns/legacy/ would be excluded from blocking while
+      // sitting outside the legacy project's testDir — collected by nobody) and
+      // case-insensitive (minimatch runs with nocase, so tests/e2e/Legacy/ would
+      // vanish on Linux while looking fine on a case-insensitive Windows disk).
+      // Either way a spec would run in NEITHER lane and the suite would still be
+      // green — the exact silent-advisory failure this split exists to end.
+      // tests/unit/e2e-lane-coverage.test.ts proves the two lanes partition the tree.
+      testIgnore: /[\\/]tests[\\/]e2e[\\/]legacy[\\/]/,
       use: { ...devices["Desktop Chrome"] }
     },
     {

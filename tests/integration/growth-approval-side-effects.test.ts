@@ -428,18 +428,23 @@ describe.skipIf(!enabled)("NICHE_TEST approval side effects (real Postgres)", ()
       data: { status: "superseded" }
     });
 
-    await expectApplicationError(
-      decideApprovalWithSideEffects(
-        {
-          workspaceId: expired.workspaceId,
-          approvalId: expired.approval.id,
-          decision: "approve",
-          actorId: "usr_late"
-        },
-        { now: new Date("2026-07-29T00:00:00.000Z") }
-      ),
-      "APPROVAL_EXPIRED"
+    // Expiry is reported as an outcome now, not thrown: it moved out of the
+    // orchestrator's NICHE_TEST-only branch into decideApproval, so every
+    // approval type gets the same answer in the same shape. The property under
+    // test is unchanged — an expired approval is not decided and applies nothing.
+    const expiredDecision = await decideApprovalWithSideEffects(
+      {
+        workspaceId: expired.workspaceId,
+        approvalId: expired.approval.id,
+        decision: "approve",
+        actorId: "usr_late"
+      },
+      { now: new Date("2026-07-29T00:00:00.000Z") }
     );
+    expect(expiredDecision.outcome).toBe("expired");
+    const stillPending = await prisma.approval.findUniqueOrThrow({ where: { id: expired.approval.id } });
+    expect(stillPending.status).toBe("pending");
+    expect(stillPending.decidedBy).toBeNull();
     const final = await decideApprovalWithSideEffects({
       workspaceId: superseded.workspaceId,
       approvalId: superseded.approval.id,
