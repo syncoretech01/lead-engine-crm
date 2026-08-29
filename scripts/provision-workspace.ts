@@ -1,3 +1,4 @@
+import { assertPasswordPolicy } from "@/lib/phase1/auth-service";
 import { randomInt } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -84,6 +85,9 @@ function resolveAccounts(raw: RawConfig): ResolvedAccount[] {
 
     const hasPassword = typeof account.password === "string" && account.password.trim().length > 0;
     const plaintextPassword = hasPassword ? (account.password as string) : generatePassword();
+    // An operator-supplied password takes the same server-side policy as every
+    // other path — provisioning must not be the way to seed a weak credential.
+    assertPasswordPolicy(plaintextPassword);
 
     return {
       name,
