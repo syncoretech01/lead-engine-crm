@@ -277,7 +277,8 @@ private repo and is not published to npmjs.org).
 - The canonical docs committed to the repo root, and this file.
 
 **Baseline at CRM-0:** 92 test files / 455 tests / 0 failed / 0 skipped · 77 models + 8 enums ·
-`upsertOrder` 70 entries · 6 live adapters registered (`ringcentral` absent).
+`upsertOrder` 70 entries · 5 live adapters registered (`ringcentral` absent; `amazon_ses` deliberately
+unregistered — see below).
 
 ### CRM-1 — the spine (in closure)
 

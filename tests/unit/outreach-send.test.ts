@@ -119,6 +119,35 @@ describe("outreach send planning", () => {
     expect(() => buildCampaignSendBatch(state, "workspace-syncore", "campaign-a", { batchSize: 1 })).toThrow(/rule 8/);
   });
 
+  it("refuses a live batch whose RENDERED body carries a link the template did not (rule 8)", () => {
+    // The template scan cannot see this: {{company}} substitutes the account
+    // name in after it has passed, and a local-business import routinely carries
+    // a website in that field. The direct path was moved to a post-render scan;
+    // this is the same class on the campaign path.
+    const state = outreachState({ liveSes: true });
+    const step = state.sequenceSteps.find((item) => item.sequenceId === state.campaignSequences[0].id);
+    if (step) step.bodyTemplate = "Hi {{first_name}}, quick question about {{company}}.";
+    for (const company of state.companies) {
+      company.name = "www.acme-deals.test";
+    }
+
+    expect(() => buildCampaignSendBatch(state, "workspace-syncore", "campaign-a", { batchSize: 1 })).toThrow(
+      /www\.acme-deals\.test/
+    );
+  });
+
+  it("does not refuse a rendered body whose only link is the unsubscribe URL", () => {
+    // The other direction: the renderer appends the unsubscribe link itself, and
+    // an operator may also place the token inline with punctuation after it.
+    const state = outreachState({ liveSes: true });
+    const step = state.sequenceSteps.find((item) => item.sequenceId === state.campaignSequences[0].id);
+    if (step) step.bodyTemplate = "Hi {{first_name}}. To opt out, visit {{unsubscribe_url}}.";
+
+    const batch = buildCampaignSendBatch(state, "workspace-syncore", "campaign-a", { batchSize: 1 });
+
+    expect(batch.recipients.length).toBeGreaterThan(0);
+  });
+
   it("records partial sends as active without completing the campaign", () => {
     const state = outreachState({ liveSes: true });
     const result = recordCampaignSendResults(state, "workspace-syncore", "campaign-a", "user-nora", [

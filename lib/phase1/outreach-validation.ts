@@ -23,18 +23,16 @@ function mailboxDomain(value: string): string {
   return email.split("@")[1]?.trim().toLowerCase() ?? "";
 }
 
-/** Why this From/Reply-To pair may not be used for a LIVE cold send, or null. */
-export function coldSendMailboxBlockReason(input: {
-  fromEnv: string | undefined;
-  from: string;
-  replyTo: string;
-}): string | null {
-  if (!input.fromEnv?.trim()) {
-    return (
-      "SYNCORE_OUTREACH_FROM is not set. Live cold email must be sent from a deliberately " +
-      "configured lookalike-domain mailbox — never the built-in default."
-    );
-  }
+/**
+ * Why this From/Reply-To pair is barred from a LIVE cold send, or null.
+ *
+ * Split out from the campaign check below because there are TWO live cold-send
+ * paths and only one of them reads SYNCORE_OUTREACH_FROM. The SDR bulk sender
+ * builds its From from the rep's own identity, so it needs the domain half of
+ * rule 13 without the env-var half — and shipping the env check alone left that
+ * path sending cold mail from the primary domain with the rule believed enforced.
+ */
+export function coldSendDomainBlockReason(input: { from: string; replyTo: string }): string | null {
   for (const [label, mailbox] of [["From", input.from], ["Reply-To", input.replyTo]] as const) {
     const domain = mailboxDomain(mailbox);
     if (domain === PROTECTED_COLD_SEND_DOMAIN || domain.endsWith(`.${PROTECTED_COLD_SEND_DOMAIN}`)) {
@@ -47,17 +45,71 @@ export function coldSendMailboxBlockReason(input: {
   return null;
 }
 
-// http(s) URLs and www. forms. Deliberately NOT matching protocol-relative or
-// naked domains ("syncore.com") — too false-positive-prone against ordinary
-// prose, and spam filters key on resolvable anchors/URLs, which these catch.
-const LINK_PATTERN = /(https?:\/\/[^\s<>")]+|\bwww\.[a-z0-9-]+\.[a-z]{2,}[^\s<>")]*)/gi;
+/** Why this From/Reply-To pair may not be used for a LIVE cold send, or null. */
+export function coldSendMailboxBlockReason(input: {
+  fromEnv: string | undefined;
+  from: string;
+  replyTo: string;
+}): string | null {
+  if (!input.fromEnv?.trim()) {
+    return (
+      "SYNCORE_OUTREACH_FROM is not set. Live cold email must be sent from a deliberately " +
+      "configured lookalike-domain mailbox — never the built-in default."
+    );
+  }
+  return coldSendDomainBlockReason(input);
+}
 
-/** Links found in a cold touch-1 template, with the unsubscribe token exempt. */
-export function findColdTouchLinks(template: string): string[] {
-  const withoutComplianceTokens = template
-    .replaceAll("{{unsubscribe_url}}", " ")
-    .replaceAll("{{physical_address}}", " ");
-  return [...new Set(withoutComplianceTokens.match(LINK_PATTERN) ?? [])];
+// http(s) URLs, protocol-relative URLs, and www. forms. Naked domains
+// ("syncore.com") are deliberately NOT matched — too false-positive-prone
+// against ordinary prose. Protocol-relative IS matched: "//book.acme.test/demo"
+// renders as a live anchor in every mail client, so excluding it left a link
+// shape that passes the rule while behaving exactly like the links it forbids.
+const LINK_PATTERN = /(https?:\/\/[^\s<>")]+|(?<![:\w])\/\/[a-z0-9-]+\.[a-z]{2,}[^\s<>")]*|\bwww\.[a-z0-9-]+\.[a-z]{2,}[^\s<>")]*)/gi;
+
+/**
+ * Sentence punctuation that a writer puts AFTER a URL, not inside it.
+ *
+ * LINK_PATTERN's negated class excludes `)`, `>`, `"` and whitespace but not
+ * these, so "visit {{unsubscribe_url}}." matched the URL WITH the full stop —
+ * which then did not equal the exempt string, and blocked an entirely
+ * legitimate cold touch while telling the operator to remove the unsubscribe
+ * link the same message said did not count. Trimmed before the comparison, so
+ * the exemption survives ordinary prose. This cannot re-open the userinfo
+ * bypass: that one ends in a path segment, not punctuation.
+ *
+ * What makes the trim safe rather than lucky: both exempt URLs end in the
+ * unsubscribe token, whose alphabet is [A-Za-z0-9_-]{24} — disjoint from these
+ * characters — so a genuine exempt URL can never be shortened into a different
+ * string. If the unsubscribe URL format ever stops ending in that token, this
+ * interaction has to be re-checked.
+ */
+const TRAILING_SENTENCE_PUNCTUATION = /[.,;:!?'*\]]+$/;
+
+/**
+ * Links found in a cold touch 1, with the compliance links exempt.
+ *
+ * @param exemptUrls literal URLs to ignore — pass the RENDERED unsubscribe links
+ *   when scanning rendered output, since by then the {{unsubscribe_url}} token
+ *   has already been substituted and the token strip below cannot see it.
+ */
+export function findColdTouchLinks(template: string, exemptUrls: string[] = []): string[] {
+  const scanned = template.replaceAll("{{unsubscribe_url}}", " ").replaceAll("{{physical_address}}", " ");
+  const exempt = new Set(exemptUrls.filter(Boolean));
+  // Exempt by WHOLE-LINK equality, never by stripping the URL out of the text.
+  // The exempt URL is itself a valid URL prefix, so a substring strip let a
+  // template append to it: "{{unsubscribe_url}}@evil.test/pwn" renders one link
+  // whose authority is evil.test (everything before the "@" is userinfo), and
+  // removing the exempt prefix left "@evil.test/pwn", which matches nothing.
+  // Matching first and comparing whole links means an appended-to unsubscribe
+  // URL is a different link, and gets reported.
+  return [
+    ...new Set(
+      (scanned.match(LINK_PATTERN) ?? [])
+        .map((link) => link.replace(TRAILING_SENTENCE_PUNCTUATION, ""))
+        .filter((link) => link && !exempt.has(link))
+    )
+  ];
 }
 
 /** Throws when a cold touch-1 subject/body template carries a link (rule 8). */

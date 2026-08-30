@@ -2198,6 +2198,10 @@ export async function sendDirectEmailAction(formData: FormData) {
       action: plan.credentialOk ? "direct_email_live" : "direct_email_not_sent",
       newValue: {
         ...summary,
+        // Flattened to a string so the reason survives into a queryable audit
+        // row. Both of these actions return void, so this is the ONLY place a
+        // rule-13 block or a suppression is visible after the click.
+        skippedReasons: summary.skippedReasons.map((entry) => `${entry.count}x ${entry.reason}`).join(" | "),
         totalRequested: plan.totalRequested,
         reason: plan.credentialOk ? undefined : plan.reason
       }
@@ -2265,6 +2269,10 @@ export async function sendAssignedBulkEmailAction(formData: FormData) {
       action: plan.credentialOk ? "sdr_bulk_email_live" : "sdr_bulk_email_not_sent",
       newValue: {
         ...summary,
+        // Flattened to a string so the reason survives into a queryable audit
+        // row. This action returns void, so this is the ONLY place a rule-13
+        // block or a suppression is visible after the click.
+        skippedReasons: summary.skippedReasons.map((entry) => `${entry.count}x ${entry.reason}`).join(" | "),
         totalRequested: plan.totalRequested,
         audience: plan.audience,
         ownerUserId: plan.ownerUserId,

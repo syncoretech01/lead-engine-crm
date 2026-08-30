@@ -1,6 +1,6 @@
 import { resolveLiveProviderCredential } from "@/lib/phase1/provider-live-execution";
 import { outreachBatchSize, outreachFrom, outreachMailingAddress, outreachReplyTo } from "@/lib/phase1/outreach-config";
-import { assertNoLinksInColdTouchOne, coldSendMailboxBlockReason } from "@/lib/phase1/outreach-validation";
+import { assertNoLinksInColdTouchOne, coldSendMailboxBlockReason, findColdTouchLinks } from "@/lib/phase1/outreach-validation";
 import { createEmailEvent, refreshCampaignMetrics } from "@/lib/phase1/outreach";
 import { startPerformanceTimer, timeAsync } from "@/lib/phase1/performance";
 import { buildOneClickUnsubscribeUrl, buildUnsubscribeUrl } from "@/lib/phase1/unsubscribe-token";
@@ -179,6 +179,11 @@ export function buildCampaignSendBatch(
   if (mailboxBlock) {
     throw new Error(mailboxBlock);
   }
+  // Template scan first: it fails the whole batch on an operator-authored link,
+  // which is the clearest error to give. The per-recipient scan below then
+  // catches what the template alone cannot see — merge tokens substitute a
+  // company name in, and a local-business import routinely carries a website
+  // there, so "{{company}}" can smuggle a link past a template-only check.
   assertNoLinksInColdTouchOne(
     sequenceBundle.step?.subject ?? "",
     sequenceBundle.step?.bodyTemplate ?? ""
@@ -195,6 +200,22 @@ export function buildCampaignSendBatch(
       unsubscribeUrl,
       physicalAddress
     });
+
+    const renderedLinks = findColdTouchLinks(`${rendered.subject}\n${rendered.text}`, [
+      unsubscribeUrl,
+      oneClick
+    ]);
+    if (renderedLinks.length > 0) {
+      // Names the contact because the cause is usually that contact's data — a
+      // company name carrying a website — but does NOT assert it: the same check
+      // fires on anything the template renders, so pointing only at merge fields
+      // would send the operator looking in the wrong place.
+      throw new Error(
+        `Cold touch 1 must not contain links (golden rule 8) — the email to ${contact.email} renders: ` +
+          `${renderedLinks.join(", ")}. Check the touch-1 template and that contact's merge fields ` +
+          "(an account name containing a website is the usual cause)."
+      );
+    }
 
     return {
       campaignId,

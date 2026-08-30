@@ -35,6 +35,27 @@ describe("auth flow helpers", () => {
     expect(safeNextPath(String.raw`/\evil.test/path?a=b`)).toBe("/");
   });
 
+  // The class the origin check alone does NOT catch. These inputs stay on-origin
+  // through the parser — a leading "/." keeps it in path state, so no authority
+  // is ever parsed — and dot-segment removal then collapses the path to
+  // "//evil.test". Returning the parser's normalised pathname handed the caller
+  // a protocol-relative URL, which resolves off-origin when the absolute
+  // Location is built. Verified end to end: "/..//evil.test" produced a final
+  // redirect of https://evil.test/.
+  it("rejects dot-segment forms that NORMALISE into a protocol-relative path", () => {
+    expect(safeNextPath("/..//evil.test")).toBe("/");
+    expect(safeNextPath("/.//evil.test")).toBe("/");
+    expect(safeNextPath("/../..//evil.test")).toBe("/");
+    expect(safeNextPath("/foo/../..//evil.test")).toBe("/");
+    expect(safeNextPath("/..//evil.test/path?a=b")).toBe("/");
+  });
+
+  // Dot segments that resolve to an ordinary in-app path are fine — the defect
+  // is the protocol-relative RESULT, not the presence of "..".
+  it("keeps dot-segment paths that normalise to a real in-app destination", () => {
+    expect(safeNextPath("/crm/../sdr/queue")).toBe("/sdr/queue");
+  });
+
   it("rejects tab, LF and CR forms the URL parser strips before parsing", () => {
     expect(safeNextPath("/\t/evil.test")).toBe("/");
     expect(safeNextPath("/\n/evil.test")).toBe("/");
@@ -52,6 +73,10 @@ describe("auth flow helpers", () => {
   // whatever comes out must resolve back onto this origin.
   it("never yields a value that resolves off-origin", () => {
     const base = "https://app.syncoretech.com";
+    // Every escape shape found so far. This list is the weak part of the test —
+    // it is a fixed table calling itself a property — so a new class goes in
+    // here as well as in its own case above. The dot-segment forms were live at
+    // HEAD while this test passed, which is exactly that failure.
     const hostile = [
       "//evil.test",
       "https://evil.test",
@@ -60,6 +85,17 @@ describe("auth flow helpers", () => {
       "/\t/evil.test",
       "/\n/evil.test",
       "/\r/evil.test",
+      "/..//evil.test",
+      "/.//evil.test",
+      "/../..//evil.test",
+      "/foo/../..//evil.test",
+      "/..//evil.test/path?a=b",
+      "/..///evil.test",
+      "/%2f/evil.test",
+      "/%5c%5cevil.test",
+      "/..%2f%2fevil.test",
+      "/@evil.test",
+      "/\t/..//evil.test",
       "/crm/contacts?owner=sam"
     ];
     for (const candidate of hostile) {
