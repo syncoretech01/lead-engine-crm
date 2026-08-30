@@ -96,6 +96,7 @@ export default async function FocusPage({
       lineBlockReason={lineBlockReason}
       autoStart={sp.start === "1"}
       dailyCallPlan={model?.dailyCallPlan}
+      queueTruncated={model?.truncated ?? false}
     />
   );
 }

@@ -12,6 +12,11 @@ export type FocusContextItem = {
   opportunities: FocusOpp[];
 };
 
+// How many tasks / opportunities the dossier shows for one contact. Also the
+// per-contact multiplier for the queries' row bound, so the two cannot drift
+// into fetching rows nothing can render.
+const DOSSIER_ROWS_PER_CONTACT = 8;
+
 const STAGE_LABEL: Record<string, string> = {
   PROSPECTING: "Prospecting",
   QUALIFIED: "Qualified",
@@ -44,11 +49,21 @@ export async function readFocusContext(
   }
 
   const { prisma } = await import("@/lib/prisma");
+  // Both reads are fed every contact on the page, so with the directory bound at
+  // 5,000 they were the largest unbounded queries in a /sdr/focus render. The
+  // dossier keeps DOSSIER_ROWS_PER_CONTACT of each per contact (see the slices
+  // below), so that many times the contact count is the most that can ever be
+  // displayed. The bound is global while the cap is per contact, so in principle
+  // one contact with thousands of tasks could crowd out later ones — it would
+  // take DOSSIER_ROWS_PER_CONTACT × the whole page's contacts on a single
+  // record, and the alternative is no bound at all.
+  const rowBound = ids.length * DOSSIER_ROWS_PER_CONTACT;
   const [opportunities, tasks] = await Promise.all([
     prisma.opportunity.findMany({
       where: { workspaceId, contactId: { in: ids } },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      select: { contactId: true, name: true, stage: true, amountCents: true, expectedCloseDate: true }
+      select: { contactId: true, name: true, stage: true, amountCents: true, expectedCloseDate: true },
+      take: rowBound
     }),
     prisma.task.findMany({
       // The app writes "Open"/"Overdue" (crm.ts taskStatuses) and Prisma string
@@ -64,7 +79,8 @@ export async function readFocusContext(
         ]
       },
       orderBy: [{ dueAt: "asc" }, { id: "asc" }],
-      select: { contactId: true, title: true, dueAt: true }
+      select: { contactId: true, title: true, dueAt: true },
+      take: rowBound
     })
   ]);
 
@@ -96,8 +112,8 @@ export async function readFocusContext(
     map.set(id, {
       openOpportunity: openOpp ? `${openOpp.name} · ${STAGE_LABEL[openOpp.stage] ?? openOpp.stage} · ${money(openOpp.amountCents)}` : "",
       openWork: firstTask ? `${firstTask.title} · ${firstTask.dueLabel}` : "",
-      tasks: contactTasks.slice(0, 8),
-      opportunities: opps.slice(0, 8)
+      tasks: contactTasks.slice(0, DOSSIER_ROWS_PER_CONTACT),
+      opportunities: opps.slice(0, DOSSIER_ROWS_PER_CONTACT)
     });
   }
 

@@ -74,6 +74,11 @@ export async function retryProviderExecutionJob(providerJobId: string) {
 export async function getProviderExecutionJobSnapshot(providerJobId: string) {
   const state = await readState();
   const session = await getSession(state);
+  // Every other action in this file gates on manage_workspace; this one is a
+  // read and was missed. Being read-only does not make it safe to leave open:
+  // the snapshot carries provider run parameters, costs and error payloads, so
+  // an SDR calling it directly reads the workspace's provider spend.
+  assertPermission(session, "manage_workspace");
   return providerJobSnapshot(state, session.workspace.id, providerJobId);
 }
 

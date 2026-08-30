@@ -1,4 +1,5 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
+import { DIRECTORY_FETCH_LIMIT } from "@/lib/phase1/directory-bounds";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
 import type { LeadGrade, LeadStatus, Priority, Session } from "@/lib/phase1/types";
 
@@ -33,6 +34,14 @@ export type CrmContactsReadModel = {
   /** Every contact in scope (assigned or unassigned), not capped by the directory
    *  list limit — powers the "Total Contacts" tile. */
   totalContacts: number;
+  /**
+   * The directory fetch hit its bound, so `contacts` is a prefix of the book and
+   * the rest is unreachable in the table. Surfaced in the UI: the failure this
+   * exists to prevent is not the cap, it is the cap being SILENT — the ordering
+   * is newest-first, so what disappears is the established book an SDR is
+   * actively working, with nothing on screen to say so.
+   */
+  truncated: boolean;
 };
 
 // The records directory currently paginates, sorts, and searches client-side.
@@ -40,10 +49,15 @@ export type CrmContactsReadModel = {
 // (including Sam's 791-contact import) is not silently truncated at 500 rows.
 // True server-side pagination should replace this bounded fetch as books grow.
 //
-// NOTE: with the newest-first ordering below, this cap now drops the OLDEST
-// contacts rather than the lowest-scoring ones. Acme sits at ~1.8k of 2k — the
-// next sizeable import is what forces real pagination.
-export const CRM_CONTACT_DIRECTORY_LIMIT = 2_000;
+// NOTE: with the newest-first ordering below, this bound drops the OLDEST
+// contacts rather than the lowest-scoring ones — the established book an SDR is
+// actively working.
+//
+// The shared bound (see lib/phase1/directory-bounds.ts), re-exported under the
+// name callers already use. It moved from 2,000 once the live workspace crossed
+// it: 2,116 contacts meant the directory was already dropping the ~116 OLDEST
+// with nothing on screen to say so.
+export const CRM_CONTACT_DIRECTORY_LIMIT = DIRECTORY_FETCH_LIMIT;
 
 export async function readFastCrmContactsModel(
   session: Session,
@@ -59,15 +73,43 @@ export async function readFastCrmContactsModel(
     workspaceId,
     ...(scopedContactIds ? { id: { in: scopedContactIds } } : {})
   };
-  const [contacts, taskRows, opportunityRows, activityRows, openTaskCount, totalContacts] = await Promise.all([
+  const [fetchedContacts, taskRows, opportunityRows, activityRows, openTaskCount, totalContacts] = await Promise.all([
     prisma.contact.findMany({
       where: contactWhere,
-      include: { company: true },
+      // Explicit select, not `include: { company: true }`: that pulled every
+      // scalar on both models, including the sourceLineage provenance JSON on
+      // each, which the mapper below never reads — roughly a fifth of the
+      // fetched bytes, parsed into objects and then discarded. Matches how
+      // crm-overview-read-model already queries the same two tables.
+      select: {
+        id: true,
+        fullName: true,
+        title: true,
+        email: true,
+        phone: true,
+        companyId: true,
+        grade: true,
+        score: true,
+        priority: true,
+        status: true,
+        segment: true,
+        owner: true,
+        verification: true,
+        enrichmentCoverage: true,
+        confidence: true,
+        isSuppressed: true,
+        notes: true,
+        company: { select: { name: true, rootDomain: true } }
+      },
       // Newest first. Score-first buried a freshly imported list at the bottom
       // whenever it graded below the existing book, which is exactly when an SDR
       // most needs to find it. Score is still a sortable column in the table.
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      take: CRM_CONTACT_DIRECTORY_LIMIT
+      // One more than the bound, so "is there anything past the bound" is a fact
+      // rather than an inference. At exactly the limit `>=` claimed truncation
+      // when nothing was missing, and the banner read "Showing the 5,000 most
+      // recent contacts of 5,000."
+      take: CRM_CONTACT_DIRECTORY_LIMIT + 1
     }),
     prisma.task.findMany({
       where: {
@@ -102,6 +144,8 @@ export async function readFastCrmContactsModel(
     }),
     prisma.contact.count({ where: contactWhere })
   ]);
+  const truncated = fetchedContacts.length > CRM_CONTACT_DIRECTORY_LIMIT;
+  const contacts = truncated ? fetchedContacts.slice(0, CRM_CONTACT_DIRECTORY_LIMIT) : fetchedContacts;
   const taskCounts = countByContact(taskRows.map((row) => row.contactId));
   const opportunityCounts = countByContact(opportunityRows.map((row) => row.contactId));
   const latestActivity = new Map<string, { title: string; occurredAt: string }>();
@@ -145,7 +189,11 @@ export async function readFastCrmContactsModel(
       };
     }),
     openTaskCount,
-    totalContacts
+    totalContacts,
+    // Derived from the fetch, not from totalContacts: an SDR-scoped session sees
+    // a filtered subset, so "fewer rows than the workspace total" is normal for
+    // them and is not truncation.
+    truncated
   };
 }
 

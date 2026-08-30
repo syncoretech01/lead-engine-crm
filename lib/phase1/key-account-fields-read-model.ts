@@ -23,19 +23,34 @@ export async function readKeyAccountFields(
   }
 
   const { prisma } = await import("@/lib/prisma");
-  const [fields, values] = await Promise.all([
-    prisma.customField.findMany({
-      where: { workspaceId },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: { id: true, name: true }
-    }),
-    prisma.customFieldValue.findMany({
-      where: { workspaceId, objectId: { in: ids } },
-      select: { objectId: true, customFieldId: true, value: true }
-    })
-  ]);
+  const fields = await prisma.customField.findMany({
+    where: { workspaceId },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, name: true }
+  });
+  if (fields.length === 0) return map;
 
-  if (fields.length === 0 || values.length === 0) return map;
+  // Sequenced rather than run alongside the fields query so this one can be
+  // bounded by the number of rows that can possibly match. A value is unique per
+  // (objectId, customFieldId), so ids × fields IS the maximum — this cannot drop
+  // a row that would have been rendered, it only stops an unbounded read.
+  //
+  // Worth bounding because the caller feeds it every company on the page: with
+  // the directory bound at 5,000 and a workspace defining 20 fields, an
+  // unbounded read is 100,000 rows to populate a card that shows 12.
+  const values = await prisma.customFieldValue.findMany({
+    where: { workspaceId, objectId: { in: ids } },
+    select: { objectId: true, customFieldId: true, value: true },
+    // Ordered because `take` without one is a nondeterministic LIMIT in
+    // Postgres. The uniqueness argument above says the bound should never bite,
+    // but CustomFieldValue.workspaceId and CustomField.workspaceId are separate
+    // columns with nothing tying them, so if it ever does the dropped rows would
+    // otherwise be arbitrary — a card that renders differently on each load.
+    orderBy: [{ objectId: "asc" }, { customFieldId: "asc" }],
+    take: ids.length * fields.length
+  });
+
+  if (values.length === 0) return map;
 
   // value keyed by `${accountId}::${fieldId}` for ordered, per-account assembly.
   const valueByObjectField = new Map<string, string>();
