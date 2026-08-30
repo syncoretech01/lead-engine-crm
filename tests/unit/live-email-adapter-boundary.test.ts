@@ -65,18 +65,22 @@ describe("sender identity spoofing", () => {
 
   it("drops the curated display name along with its disallowed address", () => {
     // The name is spelled differently but normalises to the curated alias
-    // (case and whitespace are collapsed), which is what makes the two branches
+    // (case is collapsed), which is what makes the two branches
     // observable: with the curated entry discarded the user's own spelling is
     // used, and if the curated name were allowed to win it would read
     // "Bobby Jones". Without this distinction the fallback is untestable — every
     // other name that matches an alias is already identical to it.
+    //
+    // Lowercase rather than odd whitespace on purpose: a double space is
+    // invisible in review, and one auto-format that collapses it would make this
+    // test silently vacuous.
     const identity = resolveUserSenderIdentity(
-      { name: "BOBBY  JONES", email: "bobby.jones@syncore-reach.test" },
+      { name: "bobby jones", email: "bobby.jones@syncore-reach.test" },
       { SYNCORE_ALLOWED_SENDER_DOMAINS: "syncore-reach.test" } as unknown as NodeJS.ProcessEnv
     );
 
-    expect(identity?.displayName).toBe("BOBBY  JONES");
-    expect(identity?.mailbox).toBe("BOBBY  JONES <bobby.jones@syncore-reach.test>");
+    expect(identity?.displayName).toBe("bobby jones");
+    expect(identity?.mailbox).toBe("bobby jones <bobby.jones@syncore-reach.test>");
   });
 
   it("lets a curated rep send from a standard firstname.lastname lookalike address", () => {

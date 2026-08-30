@@ -77,6 +77,12 @@ const LINK_PATTERN = /(https?:\/\/[^\s<>")]+|(?<![:\w])\/\/[a-z0-9-]+\.[a-z]{2,}
  * link the same message said did not count. Trimmed before the comparison, so
  * the exemption survives ordinary prose. This cannot re-open the userinfo
  * bypass: that one ends in a path segment, not punctuation.
+ *
+ * What makes the trim safe rather than lucky: both exempt URLs end in the
+ * unsubscribe token, whose alphabet is [A-Za-z0-9_-]{24} — disjoint from these
+ * characters — so a genuine exempt URL can never be shortened into a different
+ * string. If the unsubscribe URL format ever stops ending in that token, this
+ * interaction has to be re-checked.
  */
 const TRAILING_SENTENCE_PUNCTUATION = /[.,;:!?'*\]]+$/;
 
