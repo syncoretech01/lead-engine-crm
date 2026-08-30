@@ -992,7 +992,10 @@ export function followUpSourceRowsSnapshot(
   workspaceId: string,
   ownerUserId?: string
 ): FollowUpSourceRow[] {
+  // refreshSlaStatuses still runs so the STORED column advances for anything
+  // else reading it, but the rows below no longer depend on it having run.
   refreshSlaStatuses(state, workspaceId);
+  const nowIso = new Date().toISOString();
   return state.followUpReminders
     .filter(
       (reminder) =>
@@ -1018,7 +1021,17 @@ export function followUpSourceRowsSnapshot(
         title: reminder.title,
         channel: reminder.channel,
         dueAt: reminder.dueAt,
-        status: reminder.status,
+        // Belt and braces, and symmetry with the prisma builder. This path was
+        // NOT broken: refreshSlaStatuses above already rewrites the column live
+        // and snooze-aware (:241), which is exactly why the defect only ever
+        // showed on the prisma fast path, where nothing refreshes anything.
+        // Deriving it here too means the row no longer depends on a read having
+        // mutated state first.
+        status:
+          reminder.status === "Completed"
+            ? reminder.status
+            : reminderStatusForDueAt(reminder.snoozedUntil ?? reminder.dueAt, nowIso),
+        snoozedUntil: reminder.snoozedUntil,
         origin: reminder.origin,
         createdAt: reminder.createdAt,
         contactName: displayContactName(contact),

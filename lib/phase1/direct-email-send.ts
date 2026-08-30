@@ -9,7 +9,7 @@ import {
   type SendOutcome
 } from "@/lib/phase1/outreach-send";
 import { resolveLiveProviderCredential } from "@/lib/phase1/provider-live-execution";
-import { recordFirstTouch } from "@/lib/phase1/sdr";
+import { calculateSlaStatus, recordFirstTouch } from "@/lib/phase1/sdr";
 import { coldSendDomainBlockReason, findColdTouchLinks } from "@/lib/phase1/outreach-validation";
 import { resolveUserSenderIdentity, senderIdentityBlockReason } from "@/lib/phase1/sender-identities";
 import { buildOneClickUnsubscribeUrl, buildUnsubscribeUrl } from "@/lib/phase1/unsubscribe-token";
@@ -404,12 +404,27 @@ export function assignedBulkEmailContactIds(
         );
       }
       if (input.audience === "due_or_overdue") {
+        // Both halves live. The stored-column read was redundant with the date
+        // comparison beside it (it could only over-include), but leaving it made
+        // the filter and the sort disagree about what "overdue" means.
         const dueAt = assignment.firstTouchedAt ? assignment.followUpDueAt : assignment.firstTouchDueAt;
-        return assignment.slaStatus === "Overdue" || Boolean(dueAt && Date.parse(dueAt) <= Date.parse(now));
+        return (
+          calculateSlaStatus(assignment, now) === "Overdue" ||
+          Boolean(dueAt && Date.parse(dueAt) <= Date.parse(now))
+        );
       }
       return true;
     })
-    .sort((a, b) => assignmentWeight(state, input.workspaceId, a.contactId, a.slaStatus) - assignmentWeight(state, input.workspaceId, b.contactId, b.slaStatus))
+    // Live SLA, not the stored column. The sort runs BEFORE the slice, so a
+    // stale verdict does not just mis-order the batch — it changes WHICH leads
+    // get emailed: an assignment that lapsed since the last write sorts as
+    // weight 2 instead of 0 and falls past the limit, silently unemailed, while
+    // a less urgent one takes its place.
+    .sort(
+      (a, b) =>
+        assignmentWeight(state, input.workspaceId, a.contactId, calculateSlaStatus(a, now)) -
+        assignmentWeight(state, input.workspaceId, b.contactId, calculateSlaStatus(b, now))
+    )
     .slice(0, Math.max(0, input.limit))
     .map((assignment) => assignment.contactId);
 }

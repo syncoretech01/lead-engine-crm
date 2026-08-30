@@ -138,6 +138,43 @@ describe("direct SDR email send planning", () => {
     });
   });
 
+  /**
+   * The bulk-email audience is sorted by SLA urgency and THEN sliced to the send
+   * limit, so a stale verdict does not merely mis-order the batch — it changes
+   * which leads get emailed at all. The stored slaStatus column only advances on
+   * a write, and this path runs off a raw readState() that never refreshes it.
+   */
+  it("orders the bulk audience by LIVE sla, not the stored column", () => {
+    const state = directState({ liveSes: true });
+    // Both assignments are stored "On track". Only contact-b has actually
+    // lapsed — which the column has not caught up with.
+    const lapsed = new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString();
+    const upcoming = new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString();
+    state.sdrAssignments = state.sdrAssignments.map((assignment) => ({
+      ...assignment,
+      status: "Assigned" as const,
+      slaStatus: "On track" as const,
+      firstTouchedAt: undefined,
+      firstTouchDueAt: assignment.contactId === "contact-b" ? lapsed : upcoming
+    }));
+
+    const selected = assignedBulkEmailContactIds(state, {
+      workspaceId,
+      audience: "all_assigned",
+      limit: 1
+    });
+
+    // With the stale column both weigh the same and the tie falls to input
+    // order, so contact-a wins and the genuinely overdue lead goes unemailed.
+    expect(selected).toEqual(["contact-b"]);
+  });
+
+  // No test for the due_or_overdue FILTER: the live date comparison already
+  // beside the stored read covers the same rows, so the filter answers
+  // identically either way and any test of it passes without the fix. The
+  // stored read was removed there for consistency with the sort, not for
+  // correctness.
+
   it("selects assigned bulk email contacts by owner and audience", () => {
     const state = directState({ liveSes: true });
     state.contacts[0].priority = "P1";
