@@ -182,7 +182,20 @@ function applyWrapupOutcomeToTrackedCall(call: TrackedCall, summary: SdrSessionW
     call.callStatus = "Connected";
     if (summary.outcome === "Meeting booked") call.disposition = "Meeting booked";
     else if (summary.outcome === "Not interested") call.disposition = "Not interested";
-    else if (call.disposition === "No answer") call.disposition = "Interested";
+    // Asking not to be contacted is the strongest possible statement of not
+    // being interested. It previously fell through to "Interested".
+    else if (summary.outcome === "Do not contact") call.disposition = "Not interested";
+    // Everything else that connected — "Connected", "Follow-up required",
+    // "Qualified", and any outcome this function does not recognise — keeps the
+    // placeholder disposition. That is the honest answer: the call connected,
+    // and the rep asserted nothing about interest.
+    //
+    // The removed branch promoted the placeholder to "Interested" for exactly
+    // those cases, so a rep clicking "Connected" — or "Do not contact" — minted
+    // an Interested disposition nobody recorded, into the metric managers steer
+    // by. dispositionLabel (app/crm/calls/page.tsx) already renders a connected
+    // call with a placeholder disposition as "Connected", so no new vocabulary
+    // is needed to say "we spoke, nothing classified".
   }
 }
 

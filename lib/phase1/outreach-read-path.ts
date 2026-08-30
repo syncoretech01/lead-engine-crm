@@ -1,3 +1,4 @@
+import { callDispositionValue } from "@/lib/phase1/fast-read-utils";
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import type {
   AppState,
@@ -377,19 +378,6 @@ function callDirectionValue(value: string): CallDirection {
 function trackedCallStatusValue(value: string): TrackedCallStatus {
   const values: TrackedCallStatus[] = ["Dialed", "Connected", "No answer", "Voicemail", "Busy", "Failed"];
   return values.includes(value as TrackedCallStatus) ? value as TrackedCallStatus : "Dialed";
-}
-
-function callDispositionValue(value: string): CallDisposition {
-  const values: CallDisposition[] = [
-    "Interested",
-    "Not interested",
-    "Left voicemail",
-    "No answer",
-    "Bad number",
-    "Meeting booked"
-  ];
-
-  return values.includes(value as CallDisposition) ? value as CallDisposition : "No answer";
 }
 
 function recordingConsentValue(value: string): RecordingConsentStatus {
