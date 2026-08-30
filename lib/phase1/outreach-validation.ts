@@ -68,6 +68,19 @@ export function coldSendMailboxBlockReason(input: {
 const LINK_PATTERN = /(https?:\/\/[^\s<>")]+|(?<![:\w])\/\/[a-z0-9-]+\.[a-z]{2,}[^\s<>")]*|\bwww\.[a-z0-9-]+\.[a-z]{2,}[^\s<>")]*)/gi;
 
 /**
+ * Sentence punctuation that a writer puts AFTER a URL, not inside it.
+ *
+ * LINK_PATTERN's negated class excludes `)`, `>`, `"` and whitespace but not
+ * these, so "visit {{unsubscribe_url}}." matched the URL WITH the full stop —
+ * which then did not equal the exempt string, and blocked an entirely
+ * legitimate cold touch while telling the operator to remove the unsubscribe
+ * link the same message said did not count. Trimmed before the comparison, so
+ * the exemption survives ordinary prose. This cannot re-open the userinfo
+ * bypass: that one ends in a path segment, not punctuation.
+ */
+const TRAILING_SENTENCE_PUNCTUATION = /[.,;:!?'*\]]+$/;
+
+/**
  * Links found in a cold touch 1, with the compliance links exempt.
  *
  * @param exemptUrls literal URLs to ignore — pass the RENDERED unsubscribe links
@@ -84,7 +97,13 @@ export function findColdTouchLinks(template: string, exemptUrls: string[] = []):
   // removing the exempt prefix left "@evil.test/pwn", which matches nothing.
   // Matching first and comparing whole links means an appended-to unsubscribe
   // URL is a different link, and gets reported.
-  return [...new Set((scanned.match(LINK_PATTERN) ?? []).filter((link) => !exempt.has(link)))];
+  return [
+    ...new Set(
+      (scanned.match(LINK_PATTERN) ?? [])
+        .map((link) => link.replace(TRAILING_SENTENCE_PUNCTUATION, ""))
+        .filter((link) => link && !exempt.has(link))
+    )
+  ];
 }
 
 /** Throws when a cold touch-1 subject/body template carries a link (rule 8). */

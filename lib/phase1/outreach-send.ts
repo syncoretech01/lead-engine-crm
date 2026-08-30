@@ -206,9 +206,14 @@ export function buildCampaignSendBatch(
       oneClick
     ]);
     if (renderedLinks.length > 0) {
+      // Names the contact because the cause is usually that contact's data — a
+      // company name carrying a website — but does NOT assert it: the same check
+      // fires on anything the template renders, so pointing only at merge fields
+      // would send the operator looking in the wrong place.
       throw new Error(
-        `Cold touch 1 must not contain links (golden rule 8) — ${contact.email} renders: ` +
-          `${renderedLinks.join(", ")}. Check the merge fields on that contact's account.`
+        `Cold touch 1 must not contain links (golden rule 8) — the email to ${contact.email} renders: ` +
+          `${renderedLinks.join(", ")}. Check the touch-1 template and that contact's merge fields ` +
+          "(an account name containing a website is the usual cause)."
       );
     }
 

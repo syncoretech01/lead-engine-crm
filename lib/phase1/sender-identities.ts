@@ -96,16 +96,6 @@ export function senderIdentityBlockReason(user: Pick<User, "name" | "email">) {
   return `No approved sending email is configured for ${user.name}.`;
 }
 
-export function knownSenderIdentityViews(env: NodeJS.ProcessEnv = process.env): SenderIdentity[] {
-  return knownSenderIdentities
-    .filter((identity) => isAllowedSenderEmail(identity.email, env))
-    .map((identity) => ({
-      displayName: identity.displayName,
-      email: identity.email,
-      mailbox: formatMailbox(identity.displayName, identity.email),
-      replyTo: senderReplyTo(identity.email, env)
-    }));
-}
 
 function senderReplyTo(email: string, env: NodeJS.ProcessEnv) {
   return env.SYNCORE_SDR_REPLY_TO?.trim() || email;

@@ -525,6 +525,11 @@ function hasEverBeenEmailed(state: AppState, workspaceId: string, contactId: str
       // that array), and recordEmailEventAction, available to any manager. Any
       // of them would have marked an untouched contact warm and turned both
       // rules off for it.
+      //
+      // This reads the blob, where the column is faithful. Do NOT re-point it at
+      // outreach-read-path.ts: emailEventFromPrisma there HARDCODES provider to
+      // "Syncore Mail Local", so this guard would fail open — silently, with
+      // every contact reading cold.
       event.provider === "Amazon SES"
   );
 }
