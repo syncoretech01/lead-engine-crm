@@ -7,6 +7,7 @@ import { updateAuthState } from "@/lib/phase1/store";
 import { appendWorkspaceAudit, systemActorForWorkspace } from "@/lib/phase1/tenant-isolation";
 import { processEmailWebhook } from "@/lib/phase1/webhooks";
 import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
+import { readBoundedText, WEBHOOK_MAX_BODY_BYTES } from "@/lib/phase1/request-body-limit";
 
 export const runtime = "nodejs";
 
@@ -32,7 +33,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const body = await request.text();
+  const bounded = await readBoundedText(request, WEBHOOK_MAX_BODY_BYTES);
+  if (!bounded.ok) {
+    return NextResponse.json({ error: bounded.error }, { status: bounded.status });
+  }
+  const body = bounded.text;
   let message: SnsMessage;
   try {
     message = JSON.parse(body) as SnsMessage;

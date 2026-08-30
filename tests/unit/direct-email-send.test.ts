@@ -157,7 +157,10 @@ describe("direct SDR email send planning", () => {
   });
 
   it("records successful direct sends as SES events and marks the SDR assignment touched", () => {
-    const state = directState({ liveSes: true });
+    // A genuine first touch, so it must go out from a lookalike domain (rule 13)
+    // — which is the configuration this path is supposed to run under in prod.
+    process.env.SYNCORE_ALLOWED_SENDER_DOMAINS = "syncore-reach.test";
+    const state = directState({ liveSes: true, cold: true, senderDomain: "syncore-reach.test" });
     const plan = buildDirectEmailSendPlan(state, {
       workspaceId,
       actor: knownUser("bobby"),
@@ -183,7 +186,7 @@ describe("direct SDR email send planning", () => {
       eventType: "Sent",
       provider: "Amazon SES",
       messageId: "ses-message-1",
-      senderEmail: "sam@syncoretech.com",
+      senderEmail: "sam@syncore-reach.test",
       rawPayload: {
         directRequestId: "direct-req-2",
         directEmailMode: "sdr_bulk",
@@ -195,6 +198,110 @@ describe("direct SDR email send planning", () => {
       touchCount: 1
     });
     expect(state.followUpReminders).toHaveLength(1);
+  });
+
+  /**
+   * Golden rules 8 and 13 on the SECOND live cold-send path.
+   *
+   * The campaign sender got these guards; this one did not, and every rep
+   * identity resolves to the primary domain by default — so every bulk send to a
+   * pre-touch contact was cold-sending from syncoretech.com with the rule
+   * believed enforced. These are the tests that would have caught that.
+   */
+  describe("cold-send rules on the SDR path", () => {
+    it("refuses a cold first touch from the primary domain (rule 13)", () => {
+      const state = directState({ liveSes: true, cold: true });
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "cold-1",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Hello",
+        body: "Hi {{first_name}}"
+      });
+
+      expect(plan.recipients).toHaveLength(0);
+      expect(plan.skipped[0].reason).toContain("syncoretech.com");
+      expect(plan.skipped[0].reason).toContain("golden rule 13");
+    });
+
+    it("still sends to an already-contacted lead from the primary domain", () => {
+      // The rule binds cold touch 1, not the follow-up conversation. Blocking
+      // warm replies would take the whole SDR workflow down with it.
+      const state = directState({ liveSes: true, cold: false });
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "warm-1",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Following up",
+        body: "Circling back, {{first_name}}."
+      });
+
+      expect(plan.recipients).toHaveLength(1);
+      expect(plan.recipients[0].from).toBe("Sam Carter <sam@syncoretech.com>");
+    });
+
+    it("refuses a cold bulk touch carrying a link (rule 8)", () => {
+      process.env.SYNCORE_ALLOWED_SENDER_DOMAINS = "syncore-reach.test";
+      const state = directState({ liveSes: true, cold: true, senderDomain: "syncore-reach.test" });
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "cold-link-1",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Quick question",
+        body: "Hi {{first_name}}, see https://syncore-reach.test/demo for details."
+      });
+
+      expect(plan.recipients).toHaveLength(0);
+      expect(plan.skipped[0].reason).toContain("golden rule 8");
+      expect(plan.skipped[0].reason).toContain("https://syncore-reach.test/demo");
+    });
+
+    it("does not count the auto-appended unsubscribe link against rule 8", () => {
+      process.env.SYNCORE_ALLOWED_SENDER_DOMAINS = "syncore-reach.test";
+      const state = directState({ liveSes: true, cold: true, senderDomain: "syncore-reach.test" });
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "cold-clean-1",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Quick question",
+        body: "Hi {{first_name}}, worth a chat? {{unsubscribe_url}}"
+      });
+
+      expect(plan.recipients).toHaveLength(1);
+      // The renderer still appends the real unsubscribe link.
+      expect(plan.recipients[0].text).toContain("/unsubscribe/contact-a?s=");
+    });
+
+    it("leaves a 1:1 email alone — rule 8 binds AUTOMATED touch 1", () => {
+      process.env.SYNCORE_ALLOWED_SENDER_DOMAINS = "syncore-reach.test";
+      const state = directState({ liveSes: true, cold: true, senderDomain: "syncore-reach.test" });
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        // 1:1 sends from the ACTOR, not the assigned rep, so the actor is the
+        // one that has to be on the lookalike domain here.
+        actor: { ...knownUser("sam"), email: "sam@syncore-reach.test" },
+        requestId: "one-to-one-link",
+        mode: "one_to_one",
+        contactIds: ["contact-a"],
+        subject: "As promised",
+        body: "Here is the deck: https://syncore-reach.test/deck"
+      });
+
+      expect(plan.recipients).toHaveLength(1);
+    });
   });
 
   it("explains why a contact is blocked before sending", () => {
@@ -231,7 +338,16 @@ describe("direct SDR email send planning", () => {
   });
 });
 
-function directState(options: { liveSes: boolean }): AppState {
+/**
+ * @param cold          leave the assignments pre-touch, so the send is cold
+ *                      touch 1 and golden rules 8 and 13 bind. Defaults to
+ *                      false: most of these tests are about sender identity and
+ *                      unsubscribe headers, which apply to warm sends too, and a
+ *                      cold fixture would make them fail for an unrelated reason.
+ * @param senderDomain  move the reps onto a lookalike domain, the configuration
+ *                      rule 13 actually requires for cold sending.
+ */
+function directState(options: { liveSes: boolean; cold?: boolean; senderDomain?: string }): AppState {
   const state = createSeedState();
   state.users.push(knownUser("bobby"), knownUser("sam"));
   state.workspaceMembers.push(
@@ -241,9 +357,15 @@ function directState(options: { liveSes: boolean }): AppState {
   state.companies = [company("company-a")];
   state.contacts = [baseContact("contact-a"), baseContact("contact-b")];
   state.sdrAssignments = [
-    assignment("assign-a", "contact-a", "user-sam"),
-    assignment("assign-b", "contact-b", "user-sam")
+    assignment("assign-a", "contact-a", "user-sam", options.cold ?? false),
+    assignment("assign-b", "contact-b", "user-sam", options.cold ?? false)
   ];
+  if (options.senderDomain) {
+    state.users = state.users.map((user) => ({
+      ...user,
+      email: user.email.replace(/@.*$/, `@${options.senderDomain}`)
+    }));
+  }
   state.followUpReminders = [];
   state.tasks = [];
   state.outreachCampaigns = [];
@@ -310,7 +432,7 @@ function baseContact(id: string): Contact {
   };
 }
 
-function assignment(id: string, contactId: string, assignedSdrId: string): SdrAssignment {
+function assignment(id: string, contactId: string, assignedSdrId: string, cold = false): SdrAssignment {
   return {
     id,
     workspaceId,
@@ -323,9 +445,11 @@ function assignment(id: string, contactId: string, assignedSdrId: string): SdrAs
     assignedAt: "2026-01-01T00:00:00.000Z",
     firstTouchDueAt: "2026-01-01T12:00:00.000Z",
     followUpDueAt: undefined,
-    status: "Assigned",
+    // Pre-touch (cold) vs already contacted (warm) — the distinction rules 8
+    // and 13 turn on.
+    status: cold ? "Assigned" : "Contacted",
     slaStatus: "On track",
-    touchCount: 0,
+    touchCount: cold ? 0 : 1,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z"
   };

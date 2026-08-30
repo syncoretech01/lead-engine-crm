@@ -188,6 +188,16 @@ export function safeNextPath(value: string) {
   }
 
   const pathname = resolved.pathname;
+  // Check what we RETURN, not only what came in. The origin gate above passes
+  // "/..//evil.test": the leading "/." keeps the parser in path state, so no
+  // authority is parsed and the origin never moves — but dot-segment removal
+  // then collapses the path to "//evil.test", which is protocol-relative and
+  // resolves off-origin the moment the caller builds an absolute Location from
+  // it. "/.//", "/../..//" and "/foo/../..//" all normalise the same way, so
+  // this rejects the shape rather than the inputs that produce it.
+  if (!pathname.startsWith("/") || pathname.startsWith("//")) {
+    return "/";
+  }
   if (pathname === "/auth" || pathname.startsWith("/api/") || isPublicAuthPath(pathname)) {
     return "/";
   }

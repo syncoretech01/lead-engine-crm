@@ -4,6 +4,7 @@ import { resolvePublicUrl } from "@/app/auth/route-response";
 import { suppressContact } from "@/lib/phase1/compliance";
 import { outreachEmailWriteTables } from "@/lib/phase1/normalized-write-tables";
 import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
+import { readBoundedText, UNSUBSCRIBE_MAX_BODY_BYTES } from "@/lib/phase1/request-body-limit";
 import { updateAuthState } from "@/lib/phase1/store";
 import { appendWorkspaceAudit, systemActorForWorkspace } from "@/lib/phase1/tenant-isolation";
 import { verifyShortUnsubscribeToken, verifyUnsubscribeToken } from "@/lib/phase1/unsubscribe-token";
@@ -30,7 +31,13 @@ export async function POST(request: Request) {
   const token = url.searchParams.get("t") ?? "";
   const shortContactId = url.searchParams.get("c") ?? "";
   const shortToken = url.searchParams.get("s") ?? "";
-  const body = await request.text().catch(() => "");
+  const bounded = await readBoundedText(request, UNSUBSCRIBE_MAX_BODY_BYTES).catch(
+    () => ({ ok: true, text: "" }) as const
+  );
+  if (!bounded.ok) {
+    return NextResponse.json({ error: bounded.error }, { status: bounded.status });
+  }
+  const body = bounded.text;
   const bodyParams = new URLSearchParams(body);
   const shouldRedirect = bodyParams.get("redirect") === "1";
   const verified = resolveUnsubscribeRequest(token, shortContactId, shortToken);

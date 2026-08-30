@@ -53,7 +53,14 @@ export function resolveUserSenderIdentity(
   // it can send as themselves without being hardcoded here. Who is *allowed* to
   // send is enforced separately by the send_direct_outreach permission.
   const displayName = (known?.displayName ?? user.name).trim();
-  const email = known ? normalizeEmail(known.email) : normalizedEmail;
+  // The curated address only wins while it is on an allowed domain. It is
+  // matched by NAME as well as email, so without this check a rep in the list
+  // above is pinned to their hardcoded @syncoretech.com address even after the
+  // operator moves them to a lookalike domain and allow-lists it — which would
+  // make golden rule 13 unsatisfiable for exactly the three identities that do
+  // the sending. Curate the display name; let the allow-list decide the domain.
+  const knownEmail = known ? normalizeEmail(known.email) : "";
+  const email = knownEmail && isAllowedSenderEmail(knownEmail, env) ? knownEmail : normalizedEmail;
 
   if (!email || !isAllowedSenderEmail(email, env)) {
     return undefined;

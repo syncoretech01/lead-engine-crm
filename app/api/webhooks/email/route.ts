@@ -8,6 +8,7 @@ import {
 } from "@/lib/phase1/tenant-isolation";
 import { processEmailWebhook, verifyWebhookSignature } from "@/lib/phase1/webhooks";
 import { checkRateLimit, clientIpFromHeaders, rateLimitingEnabled } from "@/lib/phase1/rate-limit";
+import { readBoundedText, WEBHOOK_MAX_BODY_BYTES } from "@/lib/phase1/request-body-limit";
 
 export async function POST(request: Request) {
   if (rateLimitingEnabled()) {
@@ -23,7 +24,11 @@ export async function POST(request: Request) {
     }
   }
 
-  const body = await request.text();
+  const bounded = await readBoundedText(request, WEBHOOK_MAX_BODY_BYTES);
+  if (!bounded.ok) {
+    return NextResponse.json({ error: bounded.error }, { status: bounded.status });
+  }
+  const body = bounded.text;
   const signature = request.headers.get("x-syncore-signature");
 
   if (!verifyWebhookSignature(body, signature)) {

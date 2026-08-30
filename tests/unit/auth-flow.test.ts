@@ -35,6 +35,27 @@ describe("auth flow helpers", () => {
     expect(safeNextPath(String.raw`/\evil.test/path?a=b`)).toBe("/");
   });
 
+  // The class the origin check alone does NOT catch. These inputs stay on-origin
+  // through the parser — a leading "/." keeps it in path state, so no authority
+  // is ever parsed — and dot-segment removal then collapses the path to
+  // "//evil.test". Returning the parser's normalised pathname handed the caller
+  // a protocol-relative URL, which resolves off-origin when the absolute
+  // Location is built. Verified end to end: "/..//evil.test" produced a final
+  // redirect of https://evil.test/.
+  it("rejects dot-segment forms that NORMALISE into a protocol-relative path", () => {
+    expect(safeNextPath("/..//evil.test")).toBe("/");
+    expect(safeNextPath("/.//evil.test")).toBe("/");
+    expect(safeNextPath("/../..//evil.test")).toBe("/");
+    expect(safeNextPath("/foo/../..//evil.test")).toBe("/");
+    expect(safeNextPath("/..//evil.test/path?a=b")).toBe("/");
+  });
+
+  // Dot segments that resolve to an ordinary in-app path are fine — the defect
+  // is the protocol-relative RESULT, not the presence of "..".
+  it("keeps dot-segment paths that normalise to a real in-app destination", () => {
+    expect(safeNextPath("/crm/../sdr/queue")).toBe("/sdr/queue");
+  });
+
   it("rejects tab, LF and CR forms the URL parser strips before parsing", () => {
     expect(safeNextPath("/\t/evil.test")).toBe("/");
     expect(safeNextPath("/\n/evil.test")).toBe("/");
