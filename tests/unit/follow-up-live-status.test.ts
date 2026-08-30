@@ -93,8 +93,12 @@ describe("follow-up status is computed live on the prisma fast path", () => {
     });
 
     it("does not call a snoozed follow-up overdue", async () => {
+      // The stored column says "Overdue" and the snooze says otherwise, so this
+      // fails BOTH ways it can be got wrong: copying the column, and deriving
+      // from dueAt without honouring the snooze. With a fixture stored as "Open"
+      // it would have passed against a reverted mapper and proved only half.
       prismaMocks.followUpReminderFindMany.mockResolvedValue([
-        prismaReminder({ snoozedUntil: new Date(future()) })
+        prismaReminder({ status: "Overdue", snoozedUntil: new Date(future()) })
       ]);
 
       const model = await readFastFollowUpsModel(session, workspaceId);

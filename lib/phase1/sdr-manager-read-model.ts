@@ -222,7 +222,12 @@ export async function readFastSdrManagerModel(
       dueAt: optionalIso(dueAt),
       dueLabel: timerLabel(optionalIso(dueAt), Date.parse(nowIso)),
       reminderTitle: activeReminder?.title,
-      reminderStatus: activeReminder?.status
+      // Live, matching the status derived above in this same mapper.
+      reminderStatus: activeReminder
+        ? activeReminder.status === "Completed"
+          ? activeReminder.status
+          : reminderStatusForDueAt((activeReminder.snoozedUntil ?? activeReminder.dueAt).toISOString(), nowIso)
+        : undefined
     } satisfies FastManagerAssignmentView;
   });
   const mappedTeams = teams.map((team) => ({

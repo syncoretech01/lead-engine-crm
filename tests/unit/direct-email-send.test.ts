@@ -169,11 +169,25 @@ describe("direct SDR email send planning", () => {
     expect(selected).toEqual(["contact-b"]);
   });
 
-  // No test for the due_or_overdue FILTER: the live date comparison already
-  // beside the stored read covers the same rows, so the filter answers
-  // identically either way and any test of it passes without the fix. The
-  // stored read was removed there for consistency with the sort, not for
-  // correctness.
+  it("excludes a lead the stale column calls Overdue but whose due date is in the future", () => {
+    // This case is why the stored read had to go, and it was very nearly missed:
+    // the first version of this change assumed the column could only ever agree
+    // with the date beside it. It cannot. A follow-up pushed out without a
+    // refreshing write leaves the column saying "Overdue" while the lead is not
+    // due for another day — and the batch emailed it anyway.
+    const state = directState({ liveSes: true });
+    state.sdrAssignments = state.sdrAssignments.map((assignment) => ({
+      ...assignment,
+      status: "Contacted" as const,
+      slaStatus: "Overdue" as const,
+      firstTouchedAt: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      followUpDueAt: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString()
+    }));
+
+    expect(
+      assignedBulkEmailContactIds(state, { workspaceId, audience: "due_or_overdue", limit: 10 })
+    ).toEqual([]);
+  });
 
   it("selects assigned bulk email contacts by owner and audience", () => {
     const state = directState({ liveSes: true });

@@ -944,7 +944,13 @@ export function assignmentViews(state: AppState, workspaceId: string) {
           Date.parse(viewsNow)
         ),
         reminderTitle: reminder?.title,
-        reminderStatus: reminder?.status
+        // Safe today (every caller refreshes first), derived anyway so it does
+        // not depend on that having happened.
+        reminderStatus: reminder
+          ? reminder.status === "Completed"
+            ? reminder.status
+            : reminderStatusForDueAt(reminder.snoozedUntil ?? reminder.dueAt, new Date().toISOString())
+          : undefined
       };
     })
     .sort((a, b) => sortByUrgency(a.slaStatus, b.slaStatus) || Date.parse(a.dueAt ?? a.assignedAt) - Date.parse(b.dueAt ?? b.assignedAt));
