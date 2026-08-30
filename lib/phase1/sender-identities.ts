@@ -58,20 +58,25 @@ export function resolveUserSenderIdentity(
   // moves them to a lookalike domain and allow-lists it — which makes golden
   // rule 13 unsatisfiable for exactly the three identities that do the sending.
   //
-  // When the curated address is NOT allowed, falling through to the user's own
-  // address has to answer a second question: is this the same person on a new
-  // domain, or someone else wearing their name? `name` is self-service
-  // (app/settings/actions.ts), so a plain fallback would let anyone who renames
-  // themselves "Bobby Jones" send as Bobby Jones from their own allowed address.
-  // The mailbox local part decides it: "sam" moving to sam@lookalike is the same
-  // person; "mallory" claiming Bobby's name is not.
+  // When the curated address is NOT allowed, the whole curated entry is
+  // discarded — name included — and the user sends as themselves. Keeping the
+  // curated display name while rejecting its address would lend "Bobby Jones" to
+  // whoever set that profile name.
+  //
+  // An earlier version tried to tell "same person, new domain" from "someone
+  // wearing their name" by comparing the mailbox local part. It cannot: the
+  // curated entries are matched by NAME, and firstname.lastname@ is the most
+  // common corporate convention there is, so bobby.jones@lookalike was refused
+  // outright — locking out all three of the people who actually send, on the
+  // exact deploy that is supposed to unblock them.
+  //
+  // The residual is that display names are self-service, so a user can set their
+  // name to a colleague's. That is true of every non-curated user already; the
+  // real gates are the domain allow-list here and the send_direct_outreach
+  // permission, not the display string.
   const knownEmail = known ? normalizeEmail(known.email) : "";
   const curatedAllowed = Boolean(knownEmail) && isAllowedSenderEmail(knownEmail, env);
-  if (known && !curatedAllowed && mailboxLocalPart(knownEmail) !== mailboxLocalPart(normalizedEmail)) {
-    return undefined;
-  }
-
-  const displayName = (known?.displayName ?? user.name).trim();
+  const displayName = (curatedAllowed ? known!.displayName : user.name).trim();
   const email = curatedAllowed ? knownEmail : normalizedEmail;
 
   if (!email || !isAllowedSenderEmail(email, env)) {
@@ -131,7 +136,3 @@ function sanitizeDisplayName(value: string) {
   return value.replace(/[<>"\r\n]/g, "").trim();
 }
 
-/** The mailbox name, i.e. everything before the "@". */
-function mailboxLocalPart(email: string) {
-  return email.split("@")[0]?.trim().toLowerCase() ?? "";
-}

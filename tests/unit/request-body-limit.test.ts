@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AUTH_FORM_MAX_BODY_BYTES,
+  readBoundedFormData,
   readBoundedText,
   UNSUBSCRIBE_MAX_BODY_BYTES,
   WEBHOOK_MAX_BODY_BYTES
@@ -96,6 +98,82 @@ describe("bounded request body reads", () => {
     await expect(readBoundedText(overLimit.request, UNSUBSCRIBE_MAX_BODY_BYTES)).resolves.toMatchObject({
       ok: false,
       status: 413
+    });
+  });
+
+  /**
+   * readBoundedFormData is new code on four unauthenticated routes and had no
+   * coverage at all — a no-op reimplementation left every other test here green.
+   */
+  describe("bounded formData", () => {
+    function formRequest(body: string, contentType = "application/x-www-form-urlencoded") {
+      return new Request("https://app.test/auth/login", {
+        method: "POST",
+        headers: { "content-type": contentType },
+        body
+      });
+    }
+
+    it("parses a normal urlencoded login body", async () => {
+      const body = new URLSearchParams({
+        email: "sam+sdr@syncoretech.com",
+        password: "a b&c=d%20e",
+        next: "/crm/contacts?owner=sam"
+      }).toString();
+
+      const result = await readBoundedFormData(formRequest(body), AUTH_FORM_MAX_BODY_BYTES);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Round-tripping through a string must not mangle the reserved characters
+      // a real password contains.
+      expect(result.formData.get("email")).toBe("sam+sdr@syncoretech.com");
+      expect(result.formData.get("password")).toBe("a b&c=d%20e");
+      expect(result.formData.get("next")).toBe("/crm/contacts?owner=sam");
+    });
+
+    it("preserves non-ASCII field values", async () => {
+      const body = new URLSearchParams({ password: "pässwörd-✓-😀" }).toString();
+
+      const result = await readBoundedFormData(formRequest(body), AUTH_FORM_MAX_BODY_BYTES);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.formData.get("password")).toBe("pässwörd-✓-😀");
+    });
+
+    it("parses multipart text fields with the boundary intact", async () => {
+      const boundary = "----syncoretest";
+      const body =
+        `--${boundary}\r\n` +
+        'Content-Disposition: form-data; name="email"\r\n\r\n' +
+        "sam@syncoretech.com\r\n" +
+        `--${boundary}--\r\n`;
+
+      const result = await readBoundedFormData(
+        formRequest(body, `multipart/form-data; boundary=${boundary}`),
+        AUTH_FORM_MAX_BODY_BYTES
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.formData.get("email")).toBe("sam@syncoretech.com");
+    });
+
+    it("refuses an oversized form body without parsing it", async () => {
+      const body = new URLSearchParams({ password: "x".repeat(AUTH_FORM_MAX_BODY_BYTES) }).toString();
+
+      const result = await readBoundedFormData(formRequest(body), AUTH_FORM_MAX_BODY_BYTES);
+
+      expect(result).toMatchObject({ ok: false, status: 413 });
+    });
+
+    it("leaves room for a realistic login well under the bound", () => {
+      const realistic = new URLSearchParams({
+        email: "someone.with.a.long.address@syncoretech.com",
+        password: "a".repeat(128),
+        next: "/crm/contacts?owner=someone&view=all"
+      }).toString();
+
+      expect(new TextEncoder().encode(realistic).byteLength).toBeLessThan(AUTH_FORM_MAX_BODY_BYTES / 4);
     });
   });
 

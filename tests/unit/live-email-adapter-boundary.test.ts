@@ -42,18 +42,37 @@ describe("live provider adapter boundary", () => {
 });
 
 describe("sender identity spoofing", () => {
-  it("does not lend a curated display name to an arbitrary allowed address", () => {
-    // `name` is self-service (app/settings/actions.ts), and the curated list is
-    // matched by NAME as well as email. Letting the curated display name survive
-    // while its address is rejected would let any rep send as "Bobby Jones".
+  it("never lends the curated ADDRESS to someone matched only by name", () => {
     const identity = resolveUserSenderIdentity(
       { name: "Bobby Jones", email: "mallory@syncore-reach.test" },
       { SYNCORE_ALLOWED_SENDER_DOMAINS: "syncore-reach.test" } as unknown as NodeJS.ProcessEnv
     );
 
-    // Refused outright: the curated address is not allowed here, and the
-    // mailbox name does not match, so this is not Bobby on a new domain.
-    expect(identity).toBeUndefined();
+    // The address is the thing that must never be borrowed: mail must not leave
+    // as bobby@ because someone typed his name into their profile.
+    expect(identity?.email).toBe("mallory@syncore-reach.test");
+    expect(identity?.email).not.toBe("bobby@syncoretech.com");
+
+    // KNOWN RESIDUAL, accepted deliberately: the display name is the user's own
+    // profile name, and profile names are self-service, so this mailbox reads
+    // "Bobby Jones <mallory@…>". Every non-curated user could already do that.
+    // The alternative — refusing when a name matches a curated identity whose
+    // address differs — locked out bobby.jones@lookalike, i.e. all three of the
+    // people who actually send, on the exact deploy meant to unblock them. The
+    // real gates are the domain allow-list and send_direct_outreach.
+    expect(identity?.mailbox).toBe("Bobby Jones <mallory@syncore-reach.test>");
+  });
+
+  it("lets a curated rep send from a standard firstname.lastname lookalike address", () => {
+    // The regression the local-part comparison caused. firstname.lastname@ is
+    // the most common corporate convention there is.
+    for (const email of ["bobby.jones@syncore-reach.test", "b.jones@syncore-reach.test", "bobby+ops@syncore-reach.test"]) {
+      const identity = resolveUserSenderIdentity(
+        { name: "Bobby Jones", email },
+        { SYNCORE_ALLOWED_SENDER_DOMAINS: "syncore-reach.test" } as unknown as NodeJS.ProcessEnv
+      );
+      expect(identity?.email, `${email} should be able to send`).toBe(email);
+    }
   });
 
   it("still uses the curated identity when its own address is allowed", () => {

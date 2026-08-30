@@ -514,7 +514,18 @@ function markSdrAssignmentTouched(
 function hasEverBeenEmailed(state: AppState, workspaceId: string, contactId: string): boolean {
   return state.emailEvents.some(
     (event) =>
-      event.workspaceId === workspaceId && event.contactId === contactId && event.eventType === "Sent"
+      event.workspaceId === workspaceId &&
+      event.contactId === contactId &&
+      event.eventType === "Sent" &&
+      // Provider-attested only. A bare `eventType === "Sent"` trusts three things
+      // that send no mail and all default to provider "Syncore Mail Local":
+      // simulateCampaignSend (the fallback whenever SES is not live),
+      // seedOutreachEvents (which migrateState runs on any READ of a workspace
+      // with no email events — and the SDR reset/delete scripts empty exactly
+      // that array), and recordEmailEventAction, available to any manager. Any
+      // of them would have marked an untouched contact warm and turned both
+      // rules off for it.
+      event.provider === "Amazon SES"
   );
 }
 

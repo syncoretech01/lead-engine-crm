@@ -75,13 +75,16 @@ const LINK_PATTERN = /(https?:\/\/[^\s<>")]+|(?<![:\w])\/\/[a-z0-9-]+\.[a-z]{2,}
  *   has already been substituted and the token strip below cannot see it.
  */
 export function findColdTouchLinks(template: string, exemptUrls: string[] = []): string[] {
-  let scanned = template.replaceAll("{{unsubscribe_url}}", " ").replaceAll("{{physical_address}}", " ");
-  for (const url of exemptUrls) {
-    if (url) {
-      scanned = scanned.replaceAll(url, " ");
-    }
-  }
-  return [...new Set(scanned.match(LINK_PATTERN) ?? [])];
+  const scanned = template.replaceAll("{{unsubscribe_url}}", " ").replaceAll("{{physical_address}}", " ");
+  const exempt = new Set(exemptUrls.filter(Boolean));
+  // Exempt by WHOLE-LINK equality, never by stripping the URL out of the text.
+  // The exempt URL is itself a valid URL prefix, so a substring strip let a
+  // template append to it: "{{unsubscribe_url}}@evil.test/pwn" renders one link
+  // whose authority is evil.test (everything before the "@" is userinfo), and
+  // removing the exempt prefix left "@evil.test/pwn", which matches nothing.
+  // Matching first and comparing whole links means an appended-to unsubscribe
+  // URL is a different link, and gets reported.
+  return [...new Set((scanned.match(LINK_PATTERN) ?? []).filter((link) => !exempt.has(link)))];
 }
 
 /** Throws when a cold touch-1 subject/body template carries a link (rule 8). */

@@ -381,6 +381,50 @@ describe("direct SDR email send planning", () => {
       expect(plan.skipped[0].reason).toContain("www.acme-deals.test");
     });
 
+    it("catches a link appended to the exempt unsubscribe URL", () => {
+      // {{unsubscribe_url}} is a documented token, so no guessing is needed:
+      // appending "@evil.test/pwn" to it renders ONE url whose authority is
+      // evil.test — everything before the "@" is userinfo. Stripping the exempt
+      // URL as a substring left "@evil.test/pwn", which matched nothing.
+      process.env.SYNCORE_ALLOWED_SENDER_DOMAINS = "syncore-reach.test";
+      const state = directState({ liveSes: true, cold: true, senderDomain: "syncore-reach.test" });
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "userinfo-smuggle",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Quick question",
+        body: "Hi {{first_name}}, worth a chat? {{unsubscribe_url}}@evil.test/pwn"
+      });
+
+      expect(plan.recipients).toHaveLength(0);
+      expect(plan.skipped[0].reason).toContain("evil.test");
+    });
+
+    it("does not accept a simulated or seeded send as prior contact", () => {
+      // simulateCampaignSend, seedOutreachEvents (which runs on any READ of a
+      // workspace with no email events) and recordEmailEventAction all write
+      // eventType "Sent" with provider "Syncore Mail Local" and send no mail.
+      // Trusting those marks an untouched contact warm and turns both rules off.
+      const state = directState({ liveSes: true, cold: true });
+      state.emailEvents = [{ ...sentEvent("email-sim", "contact-a", "sim"), provider: "Syncore Mail Local" }];
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "simulated-history",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Hello",
+        body: "Hi {{first_name}}"
+      });
+
+      expect(plan.recipients).toHaveLength(0);
+      expect(plan.skipped[0].reason).toContain("golden rule 13");
+    });
+
     it("carries the skip reason into the send summary", () => {
       // Without this the rep clicks Send and sees nothing: both actions return
       // void, and the audit row said only "skipped: 2".

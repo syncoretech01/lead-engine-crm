@@ -111,7 +111,7 @@ to the same assumption appears in a comment at `store.ts:1181`.
 
 ## Registered live provider adapters
 
-`lib/providers/register-live-adapters.ts` — **6 registered**, all behind the double gate
+`lib/providers/register-live-adapters.ts` — **5 registered**, all behind the double gate
 (`SYNCORE_ENABLE_LIVE_PROVIDERS=true` **and** connection `executionMode:"live"`):
 
 | Adapter | Operations |
@@ -121,9 +121,17 @@ to the same assumption appears in a comment at `store.ts:1181`.
 | `apollo` | `find_email` |
 | `apify_maps` | `discover_companies` |
 | `apify_harvest` | `discover_contacts` |
-| `amazon_ses` | `send_transactional_email` |
 
 `ringcentral` is **written but not registered** — confirmed absent from this file.
+
+`amazon_ses` was registered here for `send_transactional_email` and has been **deliberately
+removed**. The registry is reachable from the generic provider-job path, which hands a job’s
+`inputSummary` to the matched adapter verbatim, and from the waterfall executor where the
+operation is operator-selectable — so the entry made it possible to send real mail with no
+suppression check, no `List-Unsubscribe` header, no physical address (CAN-SPAM) and no golden-rule
+8/13 cold-send check. All three real senders (`direct-email-send`, `outreach-send`,
+`transactional-email-service`) import `amazonSesSendEmail` directly, so the registration bought
+nothing. Both registry callers fail closed on a missing adapter.
 
 > Note for CRM-3: `millionverifier` is registered here but per golden rule 7 the CRM must never
 > execute it. It stays dormant; the Hub runs MV. Registration alone performs no network call.
