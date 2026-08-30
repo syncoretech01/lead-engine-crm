@@ -949,7 +949,7 @@ export function assignmentViews(state: AppState, workspaceId: string) {
         reminderStatus: reminder
           ? reminder.status === "Completed"
             ? reminder.status
-            : reminderStatusForDueAt(reminder.snoozedUntil ?? reminder.dueAt, new Date().toISOString())
+            : reminderStatusForDueAt(reminder.snoozedUntil ?? reminder.dueAt, viewsNow)
           : undefined
       };
     })
