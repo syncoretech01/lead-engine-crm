@@ -211,7 +211,10 @@ export const sdrAssignmentRowSelect = {
     where: { status: { not: "Completed" } },
     orderBy: [{ dueAt: "asc" }, { id: "asc" }],
     take: 1,
-    select: { title: true, status: true }
+    // dueAt/snoozedUntil are here because reminderStatus is DERIVED from them,
+    // not copied off the status column — the explicit select is what forces that
+    // dependency to be stated rather than silently satisfied by `include`.
+    select: { title: true, status: true, dueAt: true, snoozedUntil: true }
   }
 } satisfies Prisma.SdrAssignmentSelect;
 
@@ -311,8 +314,15 @@ export function mapSdrAssignmentRow(
     teamName: assignment.assignedTeam?.name ?? "No team",
     dueAt: dueAt?.toISOString(),
     dueLabel: timerLabel(dueAt?.toISOString(), Date.parse(now)),
+    // Live, like the status derived above — these two sat 139 lines apart with
+    // one deriving and one copying the column. Nothing renders reminderStatus
+    // today, so this is closing the class rather than fixing a live symptom.
+    reminderStatus: activeReminder
+      ? activeReminder.status === "Completed"
+        ? activeReminder.status
+        : reminderStatusForDueAt((activeReminder.snoozedUntil ?? activeReminder.dueAt).toISOString(), now)
+      : undefined,
     reminderTitle: activeReminder?.title,
-    reminderStatus: activeReminder?.status,
     emailEligible: Boolean(
       leadContact &&
         email &&

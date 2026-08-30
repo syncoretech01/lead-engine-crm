@@ -1,5 +1,6 @@
 import { resolveStorageDriver } from "@/lib/phase1/storage-driver";
 import { displayContactName } from "@/lib/phase1/lead-data-quality";
+import { reminderStatusForDueAt } from "@/lib/phase1/sdr";
 import type { FollowUpOrigin, Session } from "@/lib/phase1/types";
 
 /**
@@ -16,7 +17,22 @@ export type FollowUpSourceRow = {
   title: string;
   channel: string;
   dueAt: string;
+  /**
+   * Computed live from the due date by BOTH builders — never copied off the
+   * stored FollowUpReminder.status column.
+   *
+   * That column only advances as a side effect of a write (refreshSlaStatuses),
+   * so on a read-only morning it still says "Open" for a follow-up that lapsed
+   * overnight. Because the due LABEL beside it is computed live, the same row
+   * contradicted itself: a blue "info" badge reading "14h overdue", under an
+   * Overdue tile reading 0.
+   *
+   * Derived once here rather than at the five places that read it, so the shared
+   * grouping below is correct by construction on both drivers.
+   */
   status: string;
+  /** Carried so status can honour a snooze — a snoozed follow-up is not overdue. */
+  snoozedUntil?: string;
   origin?: FollowUpOrigin;
   createdAt: string;
   contactName: string;
@@ -200,6 +216,8 @@ export async function readFastFollowUpsModel(
         })
   ]);
 
+  // One clock for the whole read, so every row agrees.
+  const nowIso = new Date().toISOString();
   const sourceRows = reminders.map((reminder) => {
     const crmContact = reminder.contact;
     const leadContact = crmContact?.contact;
@@ -215,7 +233,14 @@ export async function readFastFollowUpsModel(
       title: reminder.title,
       channel: reminder.channel,
       dueAt: reminder.dueAt.toISOString(),
-      status: reminder.status,
+      // Live, and snooze-aware — the same derivation the SDR queue already uses
+      // (sdr-queue-read-model.ts). A completed reminder keeps its terminal
+      // status, but the query above already excludes those.
+      status:
+        reminder.status === "Completed"
+          ? reminder.status
+          : reminderStatusForDueAt((reminder.snoozedUntil ?? reminder.dueAt).toISOString(), nowIso),
+      snoozedUntil: reminder.snoozedUntil?.toISOString(),
       origin: reminder.origin === "sdr" || reminder.origin === "system" ? reminder.origin : undefined,
       createdAt: reminder.createdAt.toISOString(),
       contactName: displayContactName({

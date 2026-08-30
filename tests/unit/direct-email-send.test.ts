@@ -138,6 +138,57 @@ describe("direct SDR email send planning", () => {
     });
   });
 
+  /**
+   * The bulk-email audience is sorted by SLA urgency and THEN sliced to the send
+   * limit, so a stale verdict does not merely mis-order the batch — it changes
+   * which leads get emailed at all. The stored slaStatus column only advances on
+   * a write, and this path runs off a raw readState() that never refreshes it.
+   */
+  it("orders the bulk audience by LIVE sla, not the stored column", () => {
+    const state = directState({ liveSes: true });
+    // Both assignments are stored "On track". Only contact-b has actually
+    // lapsed — which the column has not caught up with.
+    const lapsed = new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString();
+    const upcoming = new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString();
+    state.sdrAssignments = state.sdrAssignments.map((assignment) => ({
+      ...assignment,
+      status: "Assigned" as const,
+      slaStatus: "On track" as const,
+      firstTouchedAt: undefined,
+      firstTouchDueAt: assignment.contactId === "contact-b" ? lapsed : upcoming
+    }));
+
+    const selected = assignedBulkEmailContactIds(state, {
+      workspaceId,
+      audience: "all_assigned",
+      limit: 1
+    });
+
+    // With the stale column both weigh the same and the tie falls to input
+    // order, so contact-a wins and the genuinely overdue lead goes unemailed.
+    expect(selected).toEqual(["contact-b"]);
+  });
+
+  it("excludes a lead the stale column calls Overdue but whose due date is in the future", () => {
+    // This case is why the stored read had to go, and it was very nearly missed:
+    // the first version of this change assumed the column could only ever agree
+    // with the date beside it. It cannot. A follow-up pushed out without a
+    // refreshing write leaves the column saying "Overdue" while the lead is not
+    // due for another day — and the batch emailed it anyway.
+    const state = directState({ liveSes: true });
+    state.sdrAssignments = state.sdrAssignments.map((assignment) => ({
+      ...assignment,
+      status: "Contacted" as const,
+      slaStatus: "Overdue" as const,
+      firstTouchedAt: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      followUpDueAt: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString()
+    }));
+
+    expect(
+      assignedBulkEmailContactIds(state, { workspaceId, audience: "due_or_overdue", limit: 10 })
+    ).toEqual([]);
+  });
+
   it("selects assigned bulk email contacts by owner and audience", () => {
     const state = directState({ liveSes: true });
     state.contacts[0].priority = "P1";
