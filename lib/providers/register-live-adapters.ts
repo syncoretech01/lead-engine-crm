@@ -1,4 +1,3 @@
-import { amazonSesSendEmail } from "@/lib/providers/adapters/amazon-ses";
 import { apifyHarvestDiscoverContacts, apifyMapsDiscoverCompanies } from "@/lib/providers/adapters/apify";
 import { apolloFindEmail } from "@/lib/providers/adapters/apollo";
 import { hunterFindEmail, hunterVerifyEmail } from "@/lib/providers/adapters/hunter";
@@ -14,9 +13,19 @@ let registered = false;
  * is harmless on its own — an adapter only performs a network call when its
  * connection is in live mode and SYNCORE_ENABLE_LIVE_PROVIDERS is on.
  *
- * Amazon SES is registered for send_transactional_email (M3, Phase A); outreach
- * campaign sending + bounce/complaint webhooks follow. RingCentral is still
- * pending (telephony/SMS — see docs/PROVIDER_INTEGRATION_PLAN.md).
+ * Amazon SES is deliberately NOT registered. Every legitimate sender —
+ * direct-email-send, outreach-send, transactional-email-service — imports
+ * amazonSesSendEmail directly, so the registry entry bought nothing and cost a
+ * great deal: it made send_transactional_email reachable from the GENERIC job
+ * path (provider-live-execution.ts hands a ProviderJob's inputSummary to the
+ * matched adapter verbatim) and from the waterfall executor, where the operation
+ * is operator-selectable. Either route would have sent real mail with none of
+ * the guarantees the three real senders provide — no suppression check, no
+ * List-Unsubscribe header, no physical address (CAN-SPAM), and no golden-rule
+ * 8/13 cold-send check. Email leaves through a path that owns those rules, or it
+ * does not leave. Both callers already fail cleanly on a missing adapter.
+ *
+ * RingCentral is still pending (telephony/SMS — see docs/PROVIDER_INTEGRATION_PLAN.md).
  */
 export function ensureLiveProviderAdaptersRegistered(): void {
   if (registered) return;
@@ -26,7 +35,6 @@ export function ensureLiveProviderAdaptersRegistered(): void {
   registerLiveProviderAdapter({ id: "apollo", operations: { find_email: apolloFindEmail } });
   registerLiveProviderAdapter({ id: "apify_maps", operations: { discover_companies: apifyMapsDiscoverCompanies } });
   registerLiveProviderAdapter({ id: "apify_harvest", operations: { discover_contacts: apifyHarvestDiscoverContacts } });
-  registerLiveProviderAdapter({ id: "amazon_ses", operations: { send_transactional_email: amazonSesSendEmail } });
 }
 
 /** Test-only: reset the one-time guard so a cleared registry can re-register. */

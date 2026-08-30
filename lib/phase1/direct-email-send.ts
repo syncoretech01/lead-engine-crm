@@ -68,6 +68,15 @@ export type DirectEmailSendSummary = {
   sent: number;
   failed: number;
   skipped: number;
+  /**
+   * Why each skipped contact was skipped, deduplicated with a count.
+   *
+   * A bare count told the rep nothing: a cold send blocked by golden rule 13
+   * looked identical to a suppressed contact, and both server actions return
+   * void, so the click produced no error, no toast, and an audit row saying only
+   * "skipped: 2". The reason is the whole point of skipping rather than throwing.
+   */
+  skippedReasons: Array<{ reason: string; count: number }>;
 };
 
 export function buildDirectEmailSendPlan(
@@ -95,14 +104,10 @@ export function buildDirectEmailSendPlan(
   const physicalAddress = outreachMailingAddress();
   const recipients: DirectEmailRecipient[] = [];
 
-  // Rule 8 applies to the operator-written template, and only to an AUTOMATED
-  // cold touch 1 — a 1:1 mail a rep types to one person is neither automated nor
-  // necessarily a first touch. Computed once: the template does not vary by
-  // recipient, but whether a given contact is a cold first touch does.
-  const coldTouchLinks =
-    input.mode === "sdr_bulk"
-      ? [...findColdTouchLinks(input.subject), ...findColdTouchLinks(input.body)]
-      : [];
+  // Rule 8 binds AUTOMATED cold touch 1 — a 1:1 mail a rep types to one person
+  // is not automated, and blocking a link there would stop a rep sending the
+  // deck they just promised on a call. Rule 13 has no such carve-out.
+  const enforceNoLinks = input.mode === "sdr_bulk";
 
   for (const contact of contacts) {
     const blockReason = directEmailBlockReason(contact, state);
@@ -123,37 +128,6 @@ export function buildDirectEmailSendPlan(
       continue;
     }
 
-    // Golden rules 8 and 13, enforced on the SECOND live cold-send path.
-    //
-    // This plan only ever reaches a live send (findLiveSesConnection below), and
-    // recordFirstTouch marks these contacts Contacted — so a pre-touch recipient
-    // here IS cold touch 1. The campaign sender got these guards; this one did
-    // not, and every rep identity resolves to the primary domain by default
-    // (sender-identities.ts), so the rule was being violated on every bulk send.
-    //
-    // Skipped rather than thrown: the rules bind cold first touches, so a warm
-    // reply in the same batch still goes out, and the reason lands in the send
-    // summary and the audit row instead of an opaque error digest.
-    if (isColdFirstTouch(state, input.workspaceId, contact.id, input.mode)) {
-      const domainReason = coldSendDomainBlockReason({
-        from: senderIdentity.mailbox,
-        replyTo: senderIdentity.replyTo
-      });
-      if (domainReason) {
-        skipped.push({ contactId: contact.id, reason: domainReason });
-        continue;
-      }
-      if (coldTouchLinks.length > 0) {
-        skipped.push({
-          contactId: contact.id,
-          reason:
-            `Cold touch 1 must not contain links (golden rule 8) — remove: ${coldTouchLinks.join(", ")}. ` +
-            "The unsubscribe link is added automatically and does not count."
-        });
-        continue;
-      }
-    }
-
     const unsubscribeUrl = buildUnsubscribeUrl(input.workspaceId, contact.id);
     const oneClick = buildOneClickUnsubscribeUrl(input.workspaceId, contact.id);
     const rendered = renderDirectEmail({
@@ -166,6 +140,46 @@ export function buildDirectEmailSendPlan(
       physicalAddress,
       signature: senderUser.emailSignature
     });
+
+    // Golden rules 8 and 13, enforced on the SECOND live cold-send path. This
+    // plan only ever reaches a live send (findLiveSesConnection below), so a
+    // recipient who has never been emailed IS cold touch 1. The campaign sender
+    // got these guards; this one did not, and every rep identity resolves to the
+    // primary domain by default (sender-identities.ts), so the rule was being
+    // violated on every bulk send.
+    //
+    // Checked AFTER rendering, deliberately. Scanning the operator's template
+    // missed two ways a link reaches a cold touch 1: the rep's self-service
+    // emailSignature, which the renderer appends (a calendly link is exactly
+    // what reps put there), and merge tokens — a local-business import routinely
+    // carries a website in the company name, so "{{company}}" substitutes one in.
+    // The unsubscribe link the renderer adds is exempt; it is legally required.
+    //
+    // Skipped rather than thrown: the rules bind cold first touches, so a warm
+    // reply in the same batch still goes out, and the reason is carried through
+    // to the audit row rather than becoming an opaque error digest.
+    if (!hasEverBeenEmailed(state, input.workspaceId, contact.id)) {
+      const domainReason = coldSendDomainBlockReason({
+        from: senderIdentity.mailbox,
+        replyTo: senderIdentity.replyTo
+      });
+      if (domainReason) {
+        skipped.push({ contactId: contact.id, reason: domainReason });
+        continue;
+      }
+      if (enforceNoLinks) {
+        const links = findColdTouchLinks(`${rendered.subject}\n${rendered.text}`, [unsubscribeUrl, oneClick]);
+        if (links.length > 0) {
+          skipped.push({
+            contactId: contact.id,
+            reason:
+              `Cold touch 1 must not contain links (golden rule 8) — remove: ${links.join(", ")}. ` +
+              "The unsubscribe link is added automatically and does not count."
+          });
+          continue;
+        }
+      }
+    }
 
     recipients.push({
       requestId: input.requestId,
@@ -346,7 +360,17 @@ export function recordDirectEmailSendResults(
     sent += 1;
   }
 
-  return { sent, failed, skipped: input.skipped.length };
+  const reasonCounts = new Map<string, number>();
+  for (const skip of input.skipped) {
+    reasonCounts.set(skip.reason, (reasonCounts.get(skip.reason) ?? 0) + 1);
+  }
+
+  return {
+    sent,
+    failed,
+    skipped: input.skipped.length,
+    skippedReasons: [...reasonCounts.entries()].map(([reason, count]) => ({ reason, count }))
+  };
 }
 
 export function assignedBulkEmailContactIds(
@@ -468,30 +492,30 @@ function markSdrAssignmentTouched(
 }
 
 /**
- * Statuses that mean nobody has reached this contact yet.
+ * Has this contact ever actually been sent an email?
  *
- * Deliberately the same set touchOutcomeForStatus below promotes to "Contacted"
- * — the two answer the same question ("is this the first touch?") and must not
- * drift apart, or a send would record a first touch it did not treat as cold.
+ * "Cold touch 1" is a fact about the EMAIL channel, and the only trustworthy
+ * record of it is the sent events themselves.
+ *
+ * The obvious-looking signals on SdrAssignment are both unusable. `touchCount`
+ * and `firstTouchedAt` are FABRICATED at assignment time (sdr.ts:172-174): any
+ * lead whose status maps to something other than "Assigned" — "New" and
+ * "Working" both do — is created with touchCount 1 and a firstTouchedAt dated a
+ * day BEFORE it was assigned. A predicate built on either one answers "warm" for
+ * most genuinely cold leads, which is exactly how the first version of this
+ * guard failed to fire. `touchCount` is also channel-agnostic: recordFirstTouch
+ * increments it for a logged phone call (sdr.ts:407), and one unanswered dial
+ * does not make the first email a warm reply.
+ *
+ * Erring toward cold is the safe direction. A contact imported with prior
+ * history we never recorded reads as cold and costs one skipped send; the other
+ * way costs the primary domain's reputation.
  */
-const PRE_TOUCH_STATUSES = new Set<SdrLeadStatus>(["New", "Assigned", "Working"]);
-
-function isColdFirstTouch(
-  state: AppState,
-  workspaceId: string,
-  contactId: string,
-  mode: DirectEmailMode
-): boolean {
-  const assignment = state.sdrAssignments.find(
-    (item) => item.workspaceId === workspaceId && item.contactId === contactId
+function hasEverBeenEmailed(state: AppState, workspaceId: string, contactId: string): boolean {
+  return state.emailEvents.some(
+    (event) =>
+      event.workspaceId === workspaceId && event.contactId === contactId && event.eventType === "Sent"
   );
-  // Every bulk audience is assignment-derived, so a missing assignment here is a
-  // shape nobody expects. Treat it as cold: the cost of being wrong is one
-  // skipped send, against burning the primary domain's reputation.
-  if (!assignment) {
-    return mode === "sdr_bulk";
-  }
-  return assignment.touchCount === 0 && PRE_TOUCH_STATUSES.has(assignment.status);
 }
 
 function touchOutcomeForStatus(status: SdrLeadStatus): SdrLeadStatus {

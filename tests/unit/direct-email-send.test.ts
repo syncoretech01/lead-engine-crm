@@ -180,7 +180,7 @@ describe("direct SDR email send planning", () => {
       skipped: plan.skipped
     });
 
-    expect(summary).toEqual({ sent: 1, failed: 0, skipped: 0 });
+    expect(summary).toMatchObject({ sent: 1, failed: 0, skipped: 0, skippedReasons: [] });
     expect(state.emailEvents[0]).toMatchObject({
       contactId: "contact-a",
       eventType: "Sent",
@@ -227,7 +227,7 @@ describe("direct SDR email send planning", () => {
       expect(plan.skipped[0].reason).toContain("golden rule 13");
     });
 
-    it("still sends to an already-contacted lead from the primary domain", () => {
+    it("still sends to an already-EMAILED lead from the primary domain", () => {
       // The rule binds cold touch 1, not the follow-up conversation. Blocking
       // warm replies would take the whole SDR workflow down with it.
       const state = directState({ liveSes: true, cold: false });
@@ -282,6 +282,132 @@ describe("direct SDR email send planning", () => {
       expect(plan.recipients).toHaveLength(1);
       // The renderer still appends the real unsubscribe link.
       expect(plan.recipients[0].text).toContain("/unsubscribe/contact-a?s=");
+    });
+
+    // The bypasses that made the first version of this guard fail to fire on
+    // most real cold leads. Each was demonstrated end to end before it was fixed.
+    it("treats a lead as cold even when the assignment claims touchCount 1", () => {
+      // sdr.ts:172 FABRICATES touchCount 1 and a firstTouchedAt dated a day
+      // before assignment for any lead whose status is not "Assigned" — "New"
+      // and "Working" both qualify. A predicate built on either field answers
+      // "warm" for a lead nobody has ever contacted.
+      const state = directState({ liveSes: true, cold: true });
+      state.sdrAssignments[0] = {
+        ...state.sdrAssignments[0],
+        status: "New",
+        touchCount: 1,
+        firstTouchedAt: "2025-12-31T13:00:00.000Z"
+      };
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "fabricated-touch",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Hello",
+        body: "Hi {{first_name}}"
+      });
+
+      expect(plan.recipients).toHaveLength(0);
+      expect(plan.skipped[0].reason).toContain("golden rule 13");
+    });
+
+    it("treats a lead as cold when the only prior touch was a phone call", () => {
+      // recordFirstTouch is channel-agnostic, so an unanswered dial bumps
+      // touchCount and flips the status to Contacted. One dial does not make the
+      // first EMAIL a warm reply.
+      const state = directState({ liveSes: true, cold: true });
+      state.sdrAssignments[0] = {
+        ...state.sdrAssignments[0],
+        status: "Contacted",
+        touchCount: 1,
+        firstTouchedAt: "2026-02-01T10:00:00.000Z"
+      };
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "dialed-then-emailed",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Following up on my call",
+        body: "Hi {{first_name}}"
+      });
+
+      expect(plan.recipients).toHaveLength(0);
+      expect(plan.skipped[0].reason).toContain("golden rule 13");
+    });
+
+    it("catches a link the rep's signature appends after the template passes", () => {
+      process.env.SYNCORE_ALLOWED_SENDER_DOMAINS = "syncore-reach.test";
+      const state = directState({ liveSes: true, cold: true, senderDomain: "syncore-reach.test" });
+      state.users = state.users.map((user) =>
+        user.id === "user-sam" ? { ...user, emailSignature: "Sam | Book time: https://calendly.com/sam" } : user
+      );
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "signature-link",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Quick question",
+        body: "Hi {{first_name}}, worth a chat?"
+      });
+
+      expect(plan.recipients).toHaveLength(0);
+      expect(plan.skipped[0].reason).toContain("https://calendly.com/sam");
+    });
+
+    it("catches a link smuggled in through a merge token", () => {
+      // Local-business CSV imports routinely carry a website in the name field,
+      // and {{company}} substitutes it in AFTER a template-only scan has passed.
+      process.env.SYNCORE_ALLOWED_SENDER_DOMAINS = "syncore-reach.test";
+      const state = directState({ liveSes: true, cold: true, senderDomain: "syncore-reach.test" });
+      state.companies[0] = { ...state.companies[0], name: "www.acme-deals.test" };
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "token-link",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a"],
+        subject: "Question about {{company}}",
+        body: "Hi {{first_name}}, worth a chat?"
+      });
+
+      expect(plan.recipients).toHaveLength(0);
+      expect(plan.skipped[0].reason).toContain("www.acme-deals.test");
+    });
+
+    it("carries the skip reason into the send summary", () => {
+      // Without this the rep clicks Send and sees nothing: both actions return
+      // void, and the audit row said only "skipped: 2".
+      const state = directState({ liveSes: true, cold: true });
+
+      const plan = buildDirectEmailSendPlan(state, {
+        workspaceId,
+        actor: knownUser("sam"),
+        requestId: "reason-surfaced",
+        mode: "sdr_bulk",
+        contactIds: ["contact-a", "contact-b"],
+        subject: "Hello",
+        body: "Hi {{first_name}}"
+      });
+
+      const summary = recordDirectEmailSendResults(state, {
+        workspaceId,
+        actorUserId: "user-sam",
+        recipients: plan.recipients,
+        outcomes: [],
+        skipped: plan.skipped
+      });
+
+      expect(summary.skipped).toBe(2);
+      expect(summary.skippedReasons).toHaveLength(1);
+      expect(summary.skippedReasons[0]).toMatchObject({ count: 2 });
+      expect(summary.skippedReasons[0].reason).toContain("golden rule 13");
     });
 
     it("leaves a 1:1 email alone — rule 8 binds AUTOMATED touch 1", () => {
@@ -339,11 +465,17 @@ describe("direct SDR email send planning", () => {
 });
 
 /**
- * @param cold          leave the assignments pre-touch, so the send is cold
- *                      touch 1 and golden rules 8 and 13 bind. Defaults to
+ * @param cold          make this a genuine cold touch 1 — no prior email in the
+ *                      history — so golden rules 8 and 13 bind. Defaults to
  *                      false: most of these tests are about sender identity and
  *                      unsubscribe headers, which apply to warm sends too, and a
  *                      cold fixture would make them fail for an unrelated reason.
+ *
+ *                      Warm means a prior SENT EmailEvent, not an assignment
+ *                      status. The assignment fields cannot carry this: sdr.ts
+ *                      fabricates touchCount/firstTouchedAt at assignment time,
+ *                      and a logged phone call increments touchCount without an
+ *                      email ever having been sent.
  * @param senderDomain  move the reps onto a lookalike domain, the configuration
  *                      rule 13 actually requires for cold sending.
  */
@@ -369,7 +501,11 @@ function directState(options: { liveSes: boolean; cold?: boolean; senderDomain?:
   state.followUpReminders = [];
   state.tasks = [];
   state.outreachCampaigns = [];
-  state.emailEvents = [];
+  // A prior send is what makes a contact warm. Given a distinct request id so it
+  // does not also trip the per-request idempotency skip.
+  state.emailEvents = options.cold
+    ? []
+    : [sentEvent("email-history-a", "contact-a", "historic-req"), sentEvent("email-history-b", "contact-b", "historic-req")];
   state.smsEvents = [];
   state.providerConnections = options.liveSes ? [sesConnection()] : [];
   return state;

@@ -26,6 +26,18 @@ export const WEBHOOK_MAX_BODY_BYTES = 1024 * 1024;
 /** A List-Unsubscribe POST is a few bytes. This is already absurdly generous. */
 export const UNSUBSCRIBE_MAX_BODY_BYTES = 64 * 1024;
 
+/**
+ * The pre-auth auth forms: an email, a password, a token, a next path.
+ *
+ * These are the routes the rate limiter cannot protect — it lives inside
+ * submitLoginForm, which cannot run until request.formData() has already put the
+ * whole body in the heap.
+ */
+export const AUTH_FORM_MAX_BODY_BYTES = 16 * 1024;
+
+/** Small JSON bodies on cookie-gated API routes. */
+export const JSON_API_MAX_BODY_BYTES = 64 * 1024;
+
 export type BoundedBodyResult =
   | { ok: true; text: string }
   | { ok: false; status: 413; error: string };
@@ -80,4 +92,34 @@ export async function readBoundedText(request: Request, maxBytes: number): Promi
   }
 
   return { ok: true, text: new TextDecoder().decode(joined) };
+}
+
+export type BoundedFormResult =
+  | { ok: true; formData: FormData }
+  | { ok: false; status: 413; error: string };
+
+/**
+ * A byte-bounded `request.formData()`.
+ *
+ * Reads under the cap first, then re-parses the buffered body through a throwaway
+ * Request so the platform's own multipart/urlencoded parsing still applies —
+ * hand-rolling URLSearchParams here would silently mis-handle multipart.
+ *
+ * The round trip goes through a string, which would corrupt binary file parts.
+ * That is fine for every caller: the pre-auth auth forms accept no uploads, and
+ * a client that sends one gets fields that fail validation rather than anything
+ * dangerous. File uploads belong on a route that authenticates first.
+ */
+export async function readBoundedFormData(request: Request, maxBytes: number): Promise<BoundedFormResult> {
+  const bounded = await readBoundedText(request, maxBytes);
+  if (!bounded.ok) {
+    return bounded;
+  }
+  const contentType = request.headers.get("content-type") ?? "application/x-www-form-urlencoded";
+  const replayed = new Request(request.url, {
+    method: "POST",
+    headers: { "content-type": contentType },
+    body: bounded.text
+  });
+  return { ok: true, formData: await replayed.formData() };
 }

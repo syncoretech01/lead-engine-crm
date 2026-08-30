@@ -73,6 +73,10 @@ describe("auth flow helpers", () => {
   // whatever comes out must resolve back onto this origin.
   it("never yields a value that resolves off-origin", () => {
     const base = "https://app.syncoretech.com";
+    // Every escape shape found so far. This list is the weak part of the test —
+    // it is a fixed table calling itself a property — so a new class goes in
+    // here as well as in its own case above. The dot-segment forms were live at
+    // HEAD while this test passed, which is exactly that failure.
     const hostile = [
       "//evil.test",
       "https://evil.test",
@@ -81,6 +85,17 @@ describe("auth flow helpers", () => {
       "/\t/evil.test",
       "/\n/evil.test",
       "/\r/evil.test",
+      "/..//evil.test",
+      "/.//evil.test",
+      "/../..//evil.test",
+      "/foo/../..//evil.test",
+      "/..//evil.test/path?a=b",
+      "/..///evil.test",
+      "/%2f/evil.test",
+      "/%5c%5cevil.test",
+      "/..%2f%2fevil.test",
+      "/@evil.test",
+      "/\t/..//evil.test",
       "/crm/contacts?owner=sam"
     ];
     for (const candidate of hostile) {

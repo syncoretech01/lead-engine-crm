@@ -60,17 +60,28 @@ export function coldSendMailboxBlockReason(input: {
   return coldSendDomainBlockReason(input);
 }
 
-// http(s) URLs and www. forms. Deliberately NOT matching protocol-relative or
-// naked domains ("syncore.com") — too false-positive-prone against ordinary
-// prose, and spam filters key on resolvable anchors/URLs, which these catch.
-const LINK_PATTERN = /(https?:\/\/[^\s<>")]+|\bwww\.[a-z0-9-]+\.[a-z]{2,}[^\s<>")]*)/gi;
+// http(s) URLs, protocol-relative URLs, and www. forms. Naked domains
+// ("syncore.com") are deliberately NOT matched — too false-positive-prone
+// against ordinary prose. Protocol-relative IS matched: "//book.acme.test/demo"
+// renders as a live anchor in every mail client, so excluding it left a link
+// shape that passes the rule while behaving exactly like the links it forbids.
+const LINK_PATTERN = /(https?:\/\/[^\s<>")]+|(?<![:\w])\/\/[a-z0-9-]+\.[a-z]{2,}[^\s<>")]*|\bwww\.[a-z0-9-]+\.[a-z]{2,}[^\s<>")]*)/gi;
 
-/** Links found in a cold touch-1 template, with the unsubscribe token exempt. */
-export function findColdTouchLinks(template: string): string[] {
-  const withoutComplianceTokens = template
-    .replaceAll("{{unsubscribe_url}}", " ")
-    .replaceAll("{{physical_address}}", " ");
-  return [...new Set(withoutComplianceTokens.match(LINK_PATTERN) ?? [])];
+/**
+ * Links found in a cold touch 1, with the compliance links exempt.
+ *
+ * @param exemptUrls literal URLs to ignore — pass the RENDERED unsubscribe links
+ *   when scanning rendered output, since by then the {{unsubscribe_url}} token
+ *   has already been substituted and the token strip below cannot see it.
+ */
+export function findColdTouchLinks(template: string, exemptUrls: string[] = []): string[] {
+  let scanned = template.replaceAll("{{unsubscribe_url}}", " ").replaceAll("{{physical_address}}", " ");
+  for (const url of exemptUrls) {
+    if (url) {
+      scanned = scanned.replaceAll(url, " ");
+    }
+  }
+  return [...new Set(scanned.match(LINK_PATTERN) ?? [])];
 }
 
 /** Throws when a cold touch-1 subject/body template carries a link (rule 8). */

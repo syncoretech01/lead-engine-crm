@@ -47,20 +47,32 @@ export function resolveUserSenderIdentity(
       identity.nameAliases.some((name) => normalizeName(name) === normalizedName)
   );
 
-  // Use a curated display name/email when we have one, otherwise the user's own
-  // name + email. Either way the sending address must be on an allowed
-  // (SES-verified) domain — that domain check is the real gate, so any member on
-  // it can send as themselves without being hardcoded here. Who is *allowed* to
-  // send is enforced separately by the send_direct_outreach permission.
-  const displayName = (known?.displayName ?? user.name).trim();
-  // The curated address only wins while it is on an allowed domain. It is
-  // matched by NAME as well as email, so without this check a rep in the list
-  // above is pinned to their hardcoded @syncoretech.com address even after the
-  // operator moves them to a lookalike domain and allow-lists it — which would
-  // make golden rule 13 unsatisfiable for exactly the three identities that do
-  // the sending. Curate the display name; let the allow-list decide the domain.
+  // The sending address must be on an allowed (SES-verified) domain — that
+  // domain check is the real gate, so any member on it can send as themselves
+  // without being hardcoded here. Who is *allowed* to send is enforced
+  // separately by the send_direct_outreach permission.
+  //
+  // The curated identity only wins while its address is on an allowed domain.
+  // It is matched by NAME as well as email, so pinning to the hardcoded address
+  // unconditionally would keep a rep on @syncoretech.com even after the operator
+  // moves them to a lookalike domain and allow-lists it — which makes golden
+  // rule 13 unsatisfiable for exactly the three identities that do the sending.
+  //
+  // When the curated address is NOT allowed, falling through to the user's own
+  // address has to answer a second question: is this the same person on a new
+  // domain, or someone else wearing their name? `name` is self-service
+  // (app/settings/actions.ts), so a plain fallback would let anyone who renames
+  // themselves "Bobby Jones" send as Bobby Jones from their own allowed address.
+  // The mailbox local part decides it: "sam" moving to sam@lookalike is the same
+  // person; "mallory" claiming Bobby's name is not.
   const knownEmail = known ? normalizeEmail(known.email) : "";
-  const email = knownEmail && isAllowedSenderEmail(knownEmail, env) ? knownEmail : normalizedEmail;
+  const curatedAllowed = Boolean(knownEmail) && isAllowedSenderEmail(knownEmail, env);
+  if (known && !curatedAllowed && mailboxLocalPart(knownEmail) !== mailboxLocalPart(normalizedEmail)) {
+    return undefined;
+  }
+
+  const displayName = (known?.displayName ?? user.name).trim();
+  const email = curatedAllowed ? knownEmail : normalizedEmail;
 
   if (!email || !isAllowedSenderEmail(email, env)) {
     return undefined;
@@ -117,4 +129,9 @@ function normalizeName(value: string) {
 
 function sanitizeDisplayName(value: string) {
   return value.replace(/[<>"\r\n]/g, "").trim();
+}
+
+/** The mailbox name, i.e. everything before the "@". */
+function mailboxLocalPart(email: string) {
+  return email.split("@")[0]?.trim().toLowerCase() ?? "";
 }
