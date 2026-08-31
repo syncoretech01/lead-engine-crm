@@ -84,8 +84,18 @@ describe("SDR call outcome vocabulary", () => {
       "utf8"
     );
     const block = dock.slice(dock.indexOf("const OUTCOMES: OutcomeDef[]"), dock.indexOf("const LEAD_STATUSES"));
-    const ids = [...block.matchAll(/\{\s*id:\s*"([^"]+)"/g)].map((match) => match[1]);
+    // Match each ENTRY, then find its id anywhere inside — not `{ id:`. The
+    // brace-anchored form was bypassable by field order alone: an entry written
+    // `{ status: "Working", id: "Sounded keen", … }` was invisible, so the dock
+    // could grow a button that makes assertSdrCallOutcome throw and discard the
+    // whole wrap-up, with CI green.
+    const entries = [...block.matchAll(/\{[^{}]*\}/g)].map((match) => match[0]);
+    const ids = entries
+      .map((entry) => entry.match(/\bid:\s*"([^"]+)"/)?.[1])
+      .filter((id): id is string => Boolean(id));
 
+    // Every entry must yield an id, or the extraction is silently dropping one.
+    expect(ids).toHaveLength(entries.length);
     expect(ids.length).toBeGreaterThan(0);
     expect(ids).toEqual([...SDR_CALL_OUTCOMES]);
   });
@@ -116,10 +126,11 @@ describe("wrap-up disposition never inflates", () => {
     expect(wrapUp("Do not contact").disposition).toBe("Not interested");
   });
 
-  it("does not mark Follow-up required or Qualified as Interested", () => {
-    for (const outcome of ["Follow-up required", "Qualified"]) {
-      expect(wrapUp(outcome).disposition, `${outcome} must not assert interest`).not.toBe("Interested");
-    }
+  it("does not mark Follow-up required as Interested", () => {
+    // Qualified is deliberately NOT in this list — see the call-wins test below.
+    // An earlier version of this fix lumped the two together and recorded a
+    // qualified call as unclassified, which drops a genuine win.
+    expect(wrapUp("Follow-up required").disposition).not.toBe("Interested");
   });
 
   it("still records the outcomes that genuinely carry a disposition", () => {
@@ -128,5 +139,22 @@ describe("wrap-up disposition never inflates", () => {
     expect(wrapUp("Voicemail", false).disposition).toBe("Left voicemail");
     expect(wrapUp("Wrong number", false).disposition).toBe("Bad number");
     expect(wrapUp("Hang Up").disposition).toBe("Hung up");
+  });
+
+  it("says connected-unclassified explicitly rather than leaving the placeholder", () => {
+    // Three of the four surfaces that render a disposition read it WITHOUT
+    // consulting callStatus, so leaving the dial-time placeholder made the AI
+    // summariser narrate "a no answer call lasting 7 minutes" and /outreach/events
+    // badge "No answer" directly above "Connected, 7 min".
+    for (const outcome of ["Connected", "Follow-up required"]) {
+      expect(wrapUp(outcome).disposition, outcome).toBe("Connected");
+    }
+  });
+
+  it("keeps Qualified in the call-wins metric", () => {
+    // Recording a qualified call as unclassified would be a different lie in the
+    // opposite direction, and drops a genuine win out of the metric at
+    // app/outreach/events/page.tsx.
+    expect(wrapUp("Qualified").disposition).toBe("Interested");
   });
 });

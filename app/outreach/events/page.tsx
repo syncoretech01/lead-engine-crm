@@ -765,7 +765,10 @@ export default async function OutreachEventsPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="disposition" className={fieldLabelClass}>Disposition</label>
-              <select id="disposition" name="disposition" defaultValue="Interested" className={fieldClass}>
+              {/* Defaults to the neutral member, never the most favourable one:
+                  a user who fills in the rest of the form and submits without
+                  touching this select would otherwise record "Interested". */}
+              <select id="disposition" name="disposition" defaultValue="Connected" className={fieldClass}>
                 {callDispositions.map((disposition) => (
                   <option key={disposition} value={disposition}>
                     {disposition}

@@ -389,6 +389,7 @@ export function trackedCallStatusValue(value: string | null | undefined): Tracke
 
 export function callDispositionValue(value: string | null | undefined): CallDisposition {
   const dispositions: CallDisposition[] = [
+    "Connected",
     "Interested",
     "Not interested",
     "Left voicemail",
