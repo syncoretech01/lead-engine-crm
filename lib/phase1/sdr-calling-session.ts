@@ -180,9 +180,28 @@ function applyWrapupOutcomeToTrackedCall(call: TrackedCall, summary: SdrSessionW
     call.disposition = "Hung up";
   } else if (summary.connected) {
     call.callStatus = "Connected";
+    // Every connected outcome gets an explicit disposition. The branch this
+    // replaced had a final `else` that promoted the dial-time "No answer"
+    // placeholder to "Interested", so four of the dock's eleven outcomes minted
+    // an interest nobody recorded — into the one number managers steer by.
     if (summary.outcome === "Meeting booked") call.disposition = "Meeting booked";
     else if (summary.outcome === "Not interested") call.disposition = "Not interested";
-    else if (call.disposition === "No answer") call.disposition = "Interested";
+    // Asking not to be contacted is the strongest statement of not being
+    // interested there is. It previously read as "Interested".
+    else if (summary.outcome === "Do not contact") call.disposition = "Not interested";
+    // Qualified IS interest — the rep just established the lead meets the
+    // criteria. Leaving it unclassified would be a different lie in the
+    // opposite direction, and would drop a genuine win out of the call-wins
+    // metric (app/outreach/events/page.tsx).
+    else if (summary.outcome === "Qualified") call.disposition = "Interested";
+    // "Connected", "Follow-up required", and anything this function does not
+    // recognise: we spoke, nothing further was classified. Said explicitly
+    // rather than by leaving the placeholder, because three of the four
+    // surfaces that render a disposition read it WITHOUT consulting callStatus
+    // — the AI summariser would have narrated "a no answer call lasting 7
+    // minutes", and /outreach/events would have badged "No answer" directly
+    // above "Connected, 7 min".
+    else call.disposition = "Connected";
   }
 }
 

@@ -12,6 +12,21 @@ export function StatusPill({ label, tone = "default" }: StatusPillProps) {
 export function statusTone(label: string): StatusPillProps["tone"] {
   const normalized = label.toLowerCase();
 
+  // Substring matching, so NEGATIONS have to be caught before the positives:
+  // "Not interested" contains "interested" and was rendering the same green
+  // pill as "Meeting booked" — on /outreach/events, in the panel whose headline
+  // number is call wins.
+  if (normalized.includes("not interested") || normalized.includes("do not contact")) {
+    return "danger";
+  }
+
+  // A call that merely connected is a fact, not an outcome. It shares this
+  // vocabulary with "Interested" and "Meeting booked", and colouring it the same
+  // green makes the glance say something the number does not.
+  if (normalized === "connected") {
+    return "info";
+  }
+
   if (
     normalized.includes("active") ||
     normalized.includes("ready") ||

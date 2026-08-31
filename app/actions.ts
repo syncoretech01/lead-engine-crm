@@ -173,6 +173,7 @@ import {
   refreshSlaStatuses,
   sdrLeadStatuses
 } from "@/lib/phase1/sdr";
+import { assertSdrCallOutcome } from "@/lib/phase1/sdr-call-outcomes";
 import { ownedCrmRecordScope } from "@/lib/phase1/queries";
 import { resetUserTileLayout, saveUserTileLayout } from "@/lib/phase1/tile-layouts";
 import { createSeedState } from "@/lib/phase1/seed";
@@ -1304,7 +1305,8 @@ export async function saveCallWrapupAction(input: {
   assignmentId: string;
   contactId: string;
   companyId: string;
-  /** Call disposition label (Connected, No answer, Voicemail, …) — for the audit. */
+  /** One of SDR_CALL_OUTCOMES. Validated below — an unknown value is rejected,
+   *  not coerced, because coercing is how it used to become "Interested". */
   outcome: string;
   /** The SdrLeadStatus to set on the assignment. */
   leadStatus: string;
@@ -1328,6 +1330,10 @@ export async function saveCallWrapupAction(input: {
   const created: string[] = [];
   const requestId = input.requestId?.trim().slice(0, 200);
   try {
+    // Rejected before the transaction opens: the mapper branches on this string,
+    // so an unrecognised value would reach its final else rather than fail.
+    assertSdrCallOutcome(input.outcome);
+
     await updateState(
       (state, session) => {
         assertPermission(session, "manage_sdr");

@@ -49,6 +49,7 @@ export const emailEventTypes: EmailEventType[] = [
 export const smsEventStatuses: SmsEventStatus[] = ["Sent", "Delivered", "Failed", "Replied", "Opt-out"];
 export const trackedCallStatuses: TrackedCallStatus[] = ["Dialed", "Connected", "No answer", "Voicemail", "Busy", "Failed"];
 export const callDispositions: CallDisposition[] = [
+  "Connected",
   "Interested",
   "Not interested",
   "Left voicemail",
@@ -886,7 +887,11 @@ function seedOutreachEvents(state: AppState, workspaceId: string, now: string) {
       sdrUserId: ownerUserIdForName(state, callContact.owner),
       direction: "Outbound",
       callStatus: "Connected",
-      disposition: "Interested",
+      // The demo call connected; nothing about it says the lead was interested.
+      // ensureOutreachDefaults runs this on any read of a workspace with no
+      // email events, so a fabricated "Interested" counted toward call wins for
+      // every newly bootstrapped workspace.
+      disposition: "Connected",
       durationSeconds: 384,
       recordingConsent: "Granted",
       recordingConsentSource: "Demo call disclosure",

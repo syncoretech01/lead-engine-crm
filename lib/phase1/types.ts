@@ -1016,6 +1016,13 @@ export type TrackedCallStatus = "Dialed" | "Connected" | "No answer" | "Voicemai
 export type TrackedCallLiveState = "initiated" | "ringing" | "connected" | "completed" | "failed";
 export type RecordingConsentStatus = "Granted" | "Denied" | "Unknown" | "Not recorded";
 export type CallDisposition =
+  // "We spoke, and nothing further was classified." The union had no way to say
+  // that, so the wrap-up mapper reached for "Interested" instead — inflating the
+  // one number managers steer by. Without this member the only alternative is
+  // leaving the dial-time "No answer" placeholder on a call that plainly
+  // connected, which reads as a contradiction anywhere the disposition is
+  // rendered without also consulting callStatus.
+  | "Connected"
   | "Interested"
   | "Not interested"
   | "Left voicemail"
