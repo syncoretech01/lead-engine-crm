@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import { recordSdrCallingSessionWrapup } from "@/lib/phase1/sdr-calling-session";
 import { SDR_CALL_OUTCOMES, assertSdrCallOutcome, isSdrCallOutcome } from "@/lib/phase1/sdr-call-outcomes";
-import { createSeedState } from "@/lib/phase1/seed";
 import type { AppState, TrackedCall } from "@/lib/phase1/types";
 
 const startedAt = "2026-07-20T13:00:00.000Z";
@@ -31,13 +30,24 @@ function placedCall(workspaceId: string, sdrUserId: string, contactId: string, c
   };
 }
 
-/** Wrap one call up with the given outcome and hand back the resulting record. */
+const workspaceId = "workspace-1";
+const sdrUserId = "user-sam";
+const contactId = "contact-1";
+
+/**
+ * Wrap one call up with the given outcome and hand back the resulting record.
+ *
+ * Deliberately NOT createSeedState(): recordSdrCallingSessionWrapup touches
+ * exactly two arrays (`sdrCallingSessions` and `trackedCalls` — grep the module),
+ * so building the full seed per call was pure waste. It was also slow enough to
+ * blow the 15s test timeout under parallel load once five of these ran in one
+ * test — a flake that looked like an assertion failure and was not.
+ */
 function wrapUp(outcome: string, connected = true): TrackedCall {
-  const state: AppState = createSeedState();
-  const workspaceId = state.workspaces[0].id;
-  const sdrUserId = state.workspaceMembers.find((member) => member.role === "SDR")!.userId;
-  const contact = state.contacts.find((item) => item.workspaceId === workspaceId)!;
-  state.trackedCalls.unshift(placedCall(workspaceId, sdrUserId, contact.id, contact.companyId));
+  const state = {
+    sdrCallingSessions: [],
+    trackedCalls: [placedCall(workspaceId, sdrUserId, contactId, "company-1")]
+  } as unknown as AppState;
 
   recordSdrCallingSessionWrapup(state, {
     id: "session-outcome-test",
@@ -46,7 +56,7 @@ function wrapUp(outcome: string, connected = true): TrackedCall {
     startedAt,
     now: "2026-07-20T13:03:30.000Z",
     summary: {
-      contactId: contact.id,
+      contactId,
       outcome,
       connected,
       followUp: false,
