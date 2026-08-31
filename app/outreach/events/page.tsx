@@ -755,7 +755,10 @@ export default async function OutreachEventsPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="callStatus" className={fieldLabelClass}>Status</label>
-              <select id="callStatus" name="callStatus" defaultValue="Connected" className={fieldClass}>
+              {/* "Dialed", not "Connected": this field feeds the connect rate, so a
+                  user who submits without touching it would otherwise record a
+                  connect nobody made. */}
+              <select id="callStatus" name="callStatus" defaultValue="Dialed" className={fieldClass}>
                 {trackedCallStatuses.map((status) => (
                   <option key={status} value={status}>
                     {status}
